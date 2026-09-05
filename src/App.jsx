@@ -1,13 +1,17 @@
 import { useState, useEffect, useMemo } from "react";
 import { loadState, saveState } from "./storage.js";
+import { getSession, onAuthChange, signOut } from "./auth.js";
 import { computeLedger, computeBudget } from "./engine/compute.js";
 import { upsertItem, deleteItem, findItem, itemsByName, swapOrder, togglePaidOverride } from "./engine/mutate.js";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import EventForm from "./components/EventForm.jsx";
+import SignIn from "./components/SignIn.jsx";
 
 export default function App() {
-  const [state, setState] = useState(loadState);
+  // undefined = still checking for a session, null = signed out, object = signed in
+  const [session, setSession] = useState(undefined);
+  const [state, setState] = useState(null); // null until this user's data has loaded
   const [tab, setTab] = useState("ledger");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // raw rule/one-off being edited
@@ -42,42 +46,84 @@ export default function App() {
     setState((s) => togglePaidOverride(s, itemId, monthKey));
   }
 
-  // persist on every change
-  useEffect(() => { saveState(state); }, [state]);
-
-  // apply dark mode class to <html>
+  // resolve the auth session once, then keep listening for sign-in/out
   useEffect(() => {
+    getSession().then(setSession);
+    return onAuthChange(setSession);
+  }, []);
+
+  // default to the system color scheme before we know the user's saved theme
+  // (covers the splash/sign-in screens, which render before `state` exists)
+  useEffect(() => {
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.classList.toggle("dark", prefersDark);
+  }, []);
+
+  // Load this user's state once signed in; clear it again on sign-out. Keyed
+  // on the user id specifically (not the whole `session` object) so this does
+  // NOT re-run on Supabase's periodic token refresh — that would reload from
+  // the server and silently clobber any not-yet-saved (debounced) local edit.
+  useEffect(() => {
+    if (!session) { setState(null); return; }
+    let cancelled = false;
+    loadState(session.user.id).then((s) => { if (!cancelled) setState(s); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
+
+  // Persist on every change, once loaded. Same reasoning as above: keyed on
+  // the user id, not the whole session object.
+  useEffect(() => {
+    if (!session || !state) return;
+    saveState(session.user.id, state);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, session?.user?.id]);
+
+  // apply dark mode class to <html> from the user's saved preference
+  useEffect(() => {
+    if (!state) return;
     const root = document.documentElement;
     if (state.settings.theme === "dark") root.classList.add("dark");
     else root.classList.remove("dark");
-  }, [state.settings.theme]);
+  }, [state]);
 
   const setSettings = (patch) =>
     setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
 
-  // computed views (recompute whenever state changes)
+  // computed views (recompute whenever state changes); harmless empty shape while loading
   const ledger = useMemo(
-    () => computeLedger(state, state.settings.ledgerHorizon),
+    () => (state ? computeLedger(state, state.settings.ledgerHorizon) : { rows: [], endingBalance: 0 }),
     [state]
   );
   const budget = useMemo(
-    () => computeBudget(state, state.settings.budgetHorizon),
+    () => (state ? computeBudget(state, state.settings.budgetHorizon) : []),
     [state]
   );
+
+  if (session === undefined || (session && !state)) return <Splash />;
+  if (!session) return <SignIn />;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Header */}
       <header className="border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold tracking-tight">Budget</h1>
-        <button
-          onClick={() =>
-            setSettings({ theme: state.settings.theme === "dark" ? "light" : "dark" })
-          }
-          className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
-        >
-          {state.settings.theme === "dark" ? "☀ Light" : "🌙 Dark"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() =>
+              setSettings({ theme: state.settings.theme === "dark" ? "light" : "dark" })
+            }
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+          >
+            {state.settings.theme === "dark" ? "☀ Light" : "🌙 Dark"}
+          </button>
+          <button
+            onClick={() => signOut()}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
       {/* Check-in bar */}
@@ -157,6 +203,14 @@ export default function App() {
           onDelete={editing ? () => removeItem(editing.id) : undefined}
         />
       )}
+    </div>
+  );
+}
+
+function Splash() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 dark:bg-gray-950 dark:text-gray-400 text-sm">
+      Loading…
     </div>
   );
 }
