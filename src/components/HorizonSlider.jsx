@@ -12,7 +12,7 @@ export default function HorizonSlider({ label, anchor, horizon, onChange }) {
     month: "short", year: "numeric",
   });
   return (
-    <div className="flex items-center gap-3 text-sm">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       <span className="text-gray-500 whitespace-nowrap">{label}</span>
       <input
         type="range"
@@ -20,7 +20,7 @@ export default function HorizonSlider({ label, anchor, horizon, onChange }) {
         max={MAX_MONTHS}
         value={months}
         onChange={(e) => onChange(addMonthsISO(anchor, Number(e.target.value)))}
-        className="w-40 accent-gray-900 dark:accent-white"
+        className="w-28 sm:w-40 accent-gray-900 dark:accent-white"
       />
       <span className="font-medium whitespace-nowrap">{horizonLabel}</span>
       <span className="text-gray-400 whitespace-nowrap">({months} mo)</span>

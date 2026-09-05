@@ -71,13 +71,13 @@ export default function QuickEntry({ onAdd, onRemove, onClose }) {
   }
 
   const field =
-    "px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
+    "px-2 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 mb-3">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">
-          Quick entry <span className="text-gray-400 font-normal">— Enter to add, keeps going</span>
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 sm:p-4 mb-3">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300 truncate">
+          Quick entry <span className="hidden sm:inline text-gray-400 font-normal">— Enter to add, keeps going</span>
         </h2>
         <button
           onClick={onClose}
@@ -94,7 +94,7 @@ export default function QuickEntry({ onAdd, onRemove, onClose }) {
               type="button"
               key={m}
               onClick={() => setMode(m)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium capitalize transition ${
+              className={`px-2.5 py-2 sm:py-1.5 rounded-lg text-xs font-medium capitalize transition ${
                 mode === m
                   ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
                   : "border border-gray-300 dark:border-gray-700"
@@ -155,7 +155,7 @@ export default function QuickEntry({ onAdd, onRemove, onClose }) {
 
         <button
           type="submit"
-          className="px-3 py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90"
+          className="px-3 py-2 sm:py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90"
         >
           Add
         </button>
@@ -179,7 +179,7 @@ export default function QuickEntry({ onAdd, onRemove, onClose }) {
                   <span>{money(it.amount)}</span>
                   <button
                     onClick={() => undo(it.id)}
-                    className="text-gray-300 hover:text-expense text-xs"
+                    className="text-gray-300 hover:text-expense text-sm sm:text-xs px-1 -m-1"
                     title="Remove"
                   >
                     ✕

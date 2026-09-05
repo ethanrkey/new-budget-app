@@ -126,21 +126,22 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Header */}
-      <header className="border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">Budget</h1>
-        <div className="flex items-center gap-3">
+      <header className="border-b border-gray-200 dark:border-gray-800 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+        <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Budget</h1>
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <ExportMenu ledger={ledger} budget={budget} />
           <button
             onClick={() =>
               setSettings({ theme: state.settings.theme === "dark" ? "light" : "dark" })
             }
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
           >
-            {state.settings.theme === "dark" ? "☀ Light" : "🌙 Dark"}
+            {state.settings.theme === "dark" ? "☀" : "🌙"}
+            <span className="hidden sm:inline">{state.settings.theme === "dark" ? " Light" : " Dark"}</span>
           </button>
           <button
             onClick={() => signOut()}
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
           >
             Sign out
           </button>
@@ -148,48 +149,50 @@ export default function App() {
       </header>
 
       {/* Check-in bar */}
-      <div className="px-6 py-3 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/40 flex flex-wrap items-center gap-3 text-sm">
+      <div className="px-3 sm:px-6 py-3 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/40 flex flex-wrap items-center gap-2 sm:gap-3 text-sm">
         <span className="font-medium">Current TD balance:</span>
         <span className="text-gray-500">$</span>
         <input
           type="number"
           value={state.settings.checkInBalance}
           onChange={(e) => setSettings({ checkInBalance: Number(e.target.value) })}
-          className="w-28 px-2 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+          className="w-24 sm:w-28 px-2 py-1.5 sm:py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
         />
-        <span className="font-medium ml-2">as of</span>
-        <input
-          type="date"
-          value={state.settings.checkInDate}
-          onChange={(e) => setSettings({ checkInDate: e.target.value })}
-          className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-        />
+        <span className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium ml-2">as of</span>
+          <input
+            type="date"
+            value={state.settings.checkInDate}
+            onChange={(e) => setSettings({ checkInDate: e.target.value })}
+            className="px-2 py-1.5 sm:py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+          />
+        </span>
       </div>
 
       {/* Global add — sits just above the tab navigation */}
-      <div className="px-6 pt-4 flex items-center gap-2">
+      <div className="px-3 sm:px-6 pt-4 flex items-center gap-2 flex-wrap">
         <button
           onClick={openAddModal}
-          className="text-sm px-3 py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-medium hover:opacity-90"
+          className="text-sm px-3 py-2 sm:py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-medium hover:opacity-90"
         >
           + Add transaction
         </button>
         <button
           onClick={() => (quickEntryOpen ? setQuickEntryOpen(false) : openQuickEntry())}
-          className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+          className="text-sm px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
         >
           {quickEntryOpen ? "Close quick entry" : "⚡ Quick entry"}
         </button>
       </div>
 
       {quickEntryOpen && (
-        <div className="px-6 pt-3">
+        <div className="px-3 sm:px-6 pt-3">
           <QuickEntry onAdd={addItem} onRemove={removeItem} onClose={() => setQuickEntryOpen(false)} />
         </div>
       )}
 
       {/* Tabs */}
-      <nav className="px-6 pt-3 flex gap-2">
+      <nav className="px-3 sm:px-6 pt-3 flex gap-2">
         {["ledger", "budget"].map((t) => (
           <button
             key={t}
@@ -206,7 +209,7 @@ export default function App() {
       </nav>
 
       {/* Content */}
-      <main className="px-6 pb-16">
+      <main className="px-3 sm:px-6 pb-16">
         {tab === "ledger" ? (
           <LedgerView
             state={state}

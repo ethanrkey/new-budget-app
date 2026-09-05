@@ -32,7 +32,7 @@ export default function BudgetView({ budget, settings, setSettings, onEditName, 
 
   if (budget.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-4">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4">
         {horizonControl && <div className="mb-4">{horizonControl}</div>}
         <div className="text-center text-gray-400 py-12">No data yet — add transactions.</div>
       </div>
@@ -108,7 +108,7 @@ export default function BudgetView({ budget, settings, setSettings, onEditName, 
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-4 overflow-x-auto">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4 overflow-x-auto">
       {horizonControl && <div className="mb-4">{horizonControl}</div>}
       <table className="text-sm border-collapse min-w-full">
         <thead>
@@ -189,14 +189,14 @@ function DataRow({
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${isDragging ? "opacity-30" : ""} ${isDragOver ? "border-t-2 border-t-gray-900 dark:border-t-white" : ""}`}
     >
-      <td className="py-1.5 px-3 sticky left-0 bg-white dark:bg-gray-900 whitespace-nowrap">
+      <td className="py-2 sm:py-1.5 px-3 sticky left-0 bg-white dark:bg-gray-900 whitespace-nowrap">
         <span className="inline-flex items-center gap-1">
           {reorderable && (
-            <span className="inline-flex flex-col opacity-0 group-hover:opacity-100 transition -my-1">
+            <span className="inline-flex flex-col opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition -my-1">
               <button onClick={onMoveUp} disabled={!onMoveUp} title="Move up"
-                className="leading-none text-[9px] text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-20 disabled:hover:text-gray-400">▲</button>
+                className="leading-none text-xs sm:text-[9px] px-1 text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-20 disabled:hover:text-gray-400">▲</button>
               <button onClick={onMoveDown} disabled={!onMoveDown} title="Move down"
-                className="leading-none text-[9px] text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-20 disabled:hover:text-gray-400">▼</button>
+                className="leading-none text-xs sm:text-[9px] px-1 text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 disabled:opacity-20 disabled:hover:text-gray-400">▼</button>
             </span>
           )}
           {onLabelClick ? (
@@ -213,7 +213,7 @@ function DataRow({
         const show = hideZero ? v !== 0 : true;
         const color = colorClass ?? (muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "");
         return (
-          <td key={c.key} className={`py-1.5 px-3 text-right ${color}`}>
+          <td key={c.key} className={`py-2 sm:py-1.5 px-3 text-right ${color}`}>
             {show && v !== 0 ? money(v) : muted && v === 0 ? "$0.00" : ""}
           </td>
         );

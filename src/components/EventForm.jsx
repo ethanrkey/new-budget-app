@@ -38,9 +38,9 @@ export default function EventForm({ onSave, onCancel, onDelete, initial }) {
   const label = "block text-xs font-medium text-gray-500 mb-1";
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onCancel}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onCancel}>
       <div
-        className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-800"
+        className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold mb-4">{initial ? "Edit" : "Add"} transaction</h2>
@@ -68,7 +68,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial }) {
             <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="Rent, Paycheck, ..." />
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
               <label className={label}>Amount</label>
               <input className={field} type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
@@ -100,7 +100,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial }) {
                   ))}
                 </select>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
                   <label className={label}>Start</label>
                   <input className={field} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -131,7 +131,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial }) {
             ) : (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="text-sm text-gray-400 hover:text-expense"
+                className="text-sm text-gray-400 hover:text-expense py-1.5 px-2"
               >
                 Delete
               </button>

@@ -12,13 +12,13 @@ export default function LedgerView({ state, setSettings, ledger, onEditItem, onD
   const groups = groupByMonth(ledger.rows);
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-4">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4">
       {/* toolbar */}
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           <button
             onClick={() => setSettings({ showCumulative: !showCum })}
-            className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             {showCum ? "Hide" : "Show"} savings columns
           </button>
@@ -37,7 +37,7 @@ export default function LedgerView({ state, setSettings, ledger, onEditItem, onD
         </div>
       </div>
 
-      {/* table */}
+      {/* table — scrolls horizontally on narrow screens */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">
           <thead>
@@ -90,19 +90,19 @@ function FragmentGroup({ group, showCum, onEdit, onDelete, onTogglePaid }) {
         const canMarkPaid = isBill && r.date.slice(0, 7) === CURRENT_MONTH;
         return (
           <tr key={r.id} className="border-b border-gray-100 dark:border-gray-800/60 group">
-            <td className="py-1.5 pr-3 text-gray-500 whitespace-nowrap">
+            <td className="py-2 sm:py-1.5 pr-3 text-gray-500 whitespace-nowrap">
               {canMarkPaid && (
                 <input
                   type="checkbox"
                   checked={!!r.paidOverride}
                   onChange={() => onTogglePaid(r.id, r.date.slice(0, 7))}
                   title="Mark paid this month"
-                  className="mr-1.5 align-middle opacity-0 group-hover:opacity-100 checked:opacity-100 transition cursor-pointer"
+                  className="mr-1.5 align-middle h-4 w-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 checked:opacity-100 transition cursor-pointer"
                 />
               )}
               {dayOf(r.date)}
             </td>
-            <td className={`py-1.5 pr-3 ${isBill ? "text-bill font-medium" : ""} ${r.paidOverride ? "opacity-40" : ""}`}>
+            <td className={`py-2 sm:py-1.5 pr-3 ${isBill ? "text-bill font-medium" : ""} ${r.paidOverride ? "opacity-40" : ""}`}>
               <button
                 onClick={() => onEdit(r.id)}
                 className="text-left hover:underline decoration-dotted underline-offset-2"
@@ -112,23 +112,23 @@ function FragmentGroup({ group, showCum, onEdit, onDelete, onTogglePaid }) {
               </button>
               {r.paidOverride && <span className="ml-1.5 text-xs text-gray-400">· paid</span>}
             </td>
-            <td className="py-1.5 pr-3 text-right text-income">
+            <td className="py-2 sm:py-1.5 pr-3 text-right text-income">
               {r.direction === "in" ? money(r.amount) : ""}
             </td>
-            <td className={`py-1.5 pr-3 text-right text-expense ${r.paidOverride ? "line-through opacity-40" : ""}`}>
+            <td className={`py-2 sm:py-1.5 pr-3 text-right text-expense ${r.paidOverride ? "line-through opacity-40" : ""}`}>
               {r.direction === "out" ? money(r.amount) : ""}
             </td>
-            <td className={`py-1.5 pr-3 text-right font-medium ${r.negative ? "text-expense" : ""}`}>
+            <td className={`py-2 sm:py-1.5 pr-3 text-right font-medium ${r.negative ? "text-expense" : ""}`}>
               {money(r.balance)}
             </td>
-            <td className={`py-1.5 text-right slide-col text-roth ${showCum ? "open" : ""}`}>{stepCell(r, "roth")}</td>
-            <td className={`py-1.5 text-right slide-col text-saved ${showCum ? "open" : ""}`}>{stepCell(r, "saved")}</td>
-            <td className={`py-1.5 text-right slide-col text-brokerage ${showCum ? "open" : ""}`}>{stepCell(r, "brokerage")}</td>
-            <td className={`py-1.5 text-right slide-col text-loans ${showCum ? "open" : ""}`}>{stepCell(r, "loans")}</td>
-            <td className="py-1.5 text-right">
+            <td className={`py-2 sm:py-1.5 text-right slide-col text-roth ${showCum ? "open" : ""}`}>{stepCell(r, "roth")}</td>
+            <td className={`py-2 sm:py-1.5 text-right slide-col text-saved ${showCum ? "open" : ""}`}>{stepCell(r, "saved")}</td>
+            <td className={`py-2 sm:py-1.5 text-right slide-col text-brokerage ${showCum ? "open" : ""}`}>{stepCell(r, "brokerage")}</td>
+            <td className={`py-2 sm:py-1.5 text-right slide-col text-loans ${showCum ? "open" : ""}`}>{stepCell(r, "loans")}</td>
+            <td className="py-2 sm:py-1.5 text-right">
               <button
                 onClick={() => onDelete(r.id)}
-                className="text-gray-300 hover:text-expense opacity-0 group-hover:opacity-100 transition text-xs"
+                className="text-gray-300 hover:text-expense opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition text-sm sm:text-xs px-1.5 py-1 -m-1"
                 title="Delete"
               >
                 ✕
