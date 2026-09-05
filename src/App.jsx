@@ -7,6 +7,7 @@ import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import EventForm from "./components/EventForm.jsx";
 import QuickEntry from "./components/QuickEntry.jsx";
+import ExportMenu from "./components/ExportMenu.jsx";
 import SignIn from "./components/SignIn.jsx";
 
 export default function App() {
@@ -128,6 +129,7 @@ export default function App() {
       <header className="border-b border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold tracking-tight">Budget</h1>
         <div className="flex items-center gap-3">
+          <ExportMenu ledger={ledger} budget={budget} />
           <button
             onClick={() =>
               setSettings({ theme: state.settings.theme === "dark" ? "light" : "dark" })
