@@ -56,3 +56,33 @@ function nextOrder(state) {
   const all = [...state.recurring, ...state.oneoffs];
   return all.reduce((m, x) => Math.max(m, x.order ?? 0), -1) + 1;
 }
+
+// Swap the `order` of every item named nameA with every item named nameB —
+// used by the Budget's manual up/down reordering (names are 1:1 with an item
+// in normal use).
+export function swapOrder(state, nameA, nameB) {
+  const orderOf = (name) =>
+    (state.recurring.find((it) => it.name === name) ||
+      state.oneoffs.find((it) => it.name === name))?.order ?? 0;
+  const orderA = orderOf(nameA);
+  const orderB = orderOf(nameB);
+  const swap = (it) => {
+    if (it.name === nameA) return { ...it, order: orderB };
+    if (it.name === nameB) return { ...it, order: orderA };
+    return it;
+  };
+  return {
+    ...state,
+    recurring: state.recurring.map(swap),
+    oneoffs: state.oneoffs.map(swap),
+  };
+}
+
+// Toggle a "paid this month" override for an item. `monthKey` is "YYYY-MM".
+export function togglePaidOverride(state, itemId, monthKey) {
+  const current = state.paidOverrides?.[monthKey] || [];
+  const next = current.includes(itemId)
+    ? current.filter((id) => id !== itemId)
+    : [...current, itemId];
+  return { ...state, paidOverrides: { ...state.paidOverrides, [monthKey]: next } };
+}

@@ -9,7 +9,10 @@ export function computeLedger(state, horizonISO) {
   const cum = { roth: 0, saved: 0, brokerage: 0, loans: 0 };
 
   const rows = events.map((e) => {
-    bal += e.direction === "in" ? e.amount : -e.amount;
+    // a paid-override zeroes this event's effect on the balance, but it still
+    // shows in the ledger (struck through) so the row stays visible
+    const delta = e.paidOverride ? 0 : e.amount;
+    bal += e.direction === "in" ? delta : -delta;
 
     // step the matching tracker column — the category IS the tracker
     let stepped = null;
@@ -60,8 +63,14 @@ export function computeBudget(state, horizonISO) {
       const key = e.date.slice(0, 7);
       if (!byMonth[key]) continue;
       const b = byMonth[key];
-      const signed = e.direction === "in" ? e.amount : -e.amount;
-      b.items[e.name] = { val: (b.items[e.name]?.val || 0) + signed, category: e.category };
+      // a paid-override drops this instance's contribution (already handled this month)
+      const amount = e.paidOverride ? 0 : e.amount;
+      const signed = e.direction === "in" ? amount : -amount;
+      b.items[e.name] = {
+        val: (b.items[e.name]?.val || 0) + signed,
+        category: e.category,
+        order: e.order,
+      };
       // take-home is the SUM of every paycheck event landing in this month
       // (2 biweekly = 2x, a 3-payday month = 3x), independent of how they're named.
       if (e.category === "income" && PAY_RE.test(e.name)) {
@@ -83,10 +92,10 @@ export function computeBudget(state, horizonISO) {
       for (const [name, obj] of Object.entries(b.items)) {
         if (obj.category === "income") {
           if (!PAY_RE.test(name)) otherIn += obj.val;
-          incomeItems[name] = obj.val;
+          incomeItems[name] = { val: obj.val, order: obj.order };
         } else {
           out += -obj.val;
-          expenseItems[name] = { val: -obj.val, category: obj.category };
+          expenseItems[name] = { val: -obj.val, category: obj.category, order: obj.order };
         }
       }
 
@@ -117,8 +126,8 @@ export function computeBudget(state, horizonISO) {
   
 function incomeItemsExceptPay(incomeItems) {
     const out = {};
-    for (const [name, val] of Object.entries(incomeItems)) {
-      if (!PAY_RE.test(name)) out[name] = val;
+    for (const [name, obj] of Object.entries(incomeItems)) {
+      if (!PAY_RE.test(name)) out[name] = obj;
     }
     return out;
 }

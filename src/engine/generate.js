@@ -9,6 +9,8 @@ export function buildEvents(state, horizonISO) {
   const events = [];
   const horizon = parse(horizonISO);
 
+  const paidOverrides = state.paidOverrides || {};
+
   // 1) expand each recurring rule
   for (const rule of state.recurring) {
     const start = parse(rule.startDate);
@@ -19,7 +21,7 @@ export function buildEvents(state, horizonISO) {
     let guard = 0;
     while (d <= stop && guard < 2000) {
       guard++;
-      events.push(makeEvent(rule, iso(d)));
+      events.push(makeEvent(rule, iso(d), paidOverrides));
       d = advance(d, rule);
     }
   }
@@ -27,7 +29,7 @@ export function buildEvents(state, horizonISO) {
   // 2) add one-offs within horizon
   for (const o of state.oneoffs) {
     if (parse(o.date) <= horizon) {
-      events.push(makeEvent(o, o.date));
+      events.push(makeEvent(o, o.date, paidOverrides));
     }
   }
 
@@ -40,14 +42,22 @@ export function buildEvents(state, horizonISO) {
   return events;
 }
 
-function makeEvent(src, date) {
+// `paidOverrides` is `{ "YYYY-MM": [itemId,...] }` — bills checked off as already
+// paid for that month. The event still appears (so it stays visible), but its
+// magnitude is zeroed so it stops moving the balance / budget totals again.
+function makeEvent(src, date, paidOverrides) {
   const dir = CATEGORIES[src.category]?.direction ?? "out";
+  const monthKey = date.slice(0, 7);
+  const paidOverride =
+    src.category === "bill" && (paidOverrides?.[monthKey]?.includes(src.id) ?? false);
   return {
     id: src.id + "@" + date,
     name: src.name,
     amount: Math.abs(src.amount),
     direction: dir,
     category: src.category,
+    order: src.order,
+    paidOverride,
     date,
   };
 }

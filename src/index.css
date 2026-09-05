@@ -16,7 +16,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* smooth slide for the cumulative columns toggle later */
+/* Ledger cumulative columns (Roth/Saved/Brokerage/Loans): collapsed to zero
+   width by default, slide out from the right of the Balance column when the
+   "Show savings columns" toggle is on. */
 .slide-col {
-  transition: all 0.25s ease;
+  width: 0;
+  min-width: 0;
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: width 0.25s ease, max-width 0.25s ease, padding 0.25s ease, opacity 0.2s ease;
+}
+.slide-col.open {
+  width: 6.5rem;
+  max-width: 6.5rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  opacity: 1;
 }

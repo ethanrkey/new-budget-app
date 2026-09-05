@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { loadState, saveState } from "./storage.js";
 import { computeLedger, computeBudget } from "./engine/compute.js";
-import { upsertItem, deleteItem, findItem, itemsByName } from "./engine/mutate.js";
+import { upsertItem, deleteItem, findItem, itemsByName, swapOrder, togglePaidOverride } from "./engine/mutate.js";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import EventForm from "./components/EventForm.jsx";
@@ -34,6 +34,12 @@ export default function App() {
   function editByName(name) {
     const matches = itemsByName(state, name);
     if (matches.length === 1) setEditing(matches[0]);
+  }
+  function reorderNames(nameA, nameB) {
+    setState((s) => swapOrder(s, nameA, nameB));
+  }
+  function togglePaid(itemId, monthKey) {
+    setState((s) => togglePaidOverride(s, itemId, monthKey));
   }
 
   // persist on every change
@@ -129,9 +135,16 @@ export default function App() {
             ledger={ledger}
             onEditItem={editById}
             onDeleteItem={removeItem}
+            onTogglePaid={togglePaid}
           />
         ) : (
-          <BudgetView budget={budget} onEditName={editByName} />
+          <BudgetView
+            budget={budget}
+            settings={state.settings}
+            setSettings={setSettings}
+            onEditName={editByName}
+            onReorder={reorderNames}
+          />
         )}
       </main>
 

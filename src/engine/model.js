@@ -51,6 +51,12 @@ export const CATEGORIES = {
     d.setMonth(d.getMonth() + n);
     return d.toISOString().slice(0, 10);
   }
+  // whole months between two ISO dates, by calendar month (not day-precise)
+  export function monthsDiff(aISO, bISO) {
+    const a = new Date(aISO.slice(0, 7) + "-01T00:00:00");
+    const b = new Date(bISO.slice(0, 7) + "-01T00:00:00");
+    return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+  }
   export function uid() {
     return Math.random().toString(36).slice(2, 10);
   }
