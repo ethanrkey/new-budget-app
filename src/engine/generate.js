@@ -33,13 +33,24 @@ export function buildEvents(state, horizonISO) {
     }
   }
 
-  // 3) sort by date; income before expense on the same day
-  events.sort((a, b) => {
+  // 3) drop anything strictly BEFORE the check-in date — it's already
+  //    reflected in checkInBalance, so counting it again would double it up.
+  //    (Same-day events are kept: a brand-new item defaults to today's date,
+  //    same as checkInDate, and must still show up.) This is also what makes
+  //    the "live month" convention work with no special-casing: once
+  //    already-past events are gone, take-home for the check-in month
+  //    naturally sums to just the paychecks not yet received, and a bill
+  //    already due earlier this month drops out of the totals on its own.
+  const checkInDate = state.settings.checkInDate;
+  const kept = events.filter((e) => e.date >= checkInDate);
+
+  // 4) sort by date; income before expense on the same day
+  kept.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
     return (b.direction === "in") - (a.direction === "in");
   });
 
-  return events;
+  return kept;
 }
 
 // `paidOverrides` is `{ "YYYY-MM": [itemId,...] }` — bills checked off as already
