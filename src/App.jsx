@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { loadState, saveState } from "./storage.js";
 import { getSession, onAuthChange, signOut } from "./auth.js";
 import { computeLedger, computeBudget } from "./engine/compute.js";
-import { upsertItem, deleteItem, findItem, itemsByName, swapOrder, togglePaidOverride } from "./engine/mutate.js";
+import { upsertItem, deleteItem, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride } from "./engine/mutate.js";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import EventForm from "./components/EventForm.jsx";
@@ -57,6 +57,9 @@ export default function App() {
   }
   function reorderNames(nameA, nameB) {
     setState((s) => swapOrder(s, nameA, nameB));
+  }
+  function reorderDrop(names, name, beforeName) {
+    setState((s) => reorderList(s, names, name, beforeName));
   }
   function togglePaid(itemId, monthKey) {
     setState((s) => togglePaidOverride(s, itemId, monthKey));
@@ -218,6 +221,7 @@ export default function App() {
             setSettings={setSettings}
             onEditName={editByName}
             onReorder={reorderNames}
+            onReorderDrop={reorderDrop}
           />
         )}
       </main>

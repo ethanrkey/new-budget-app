@@ -78,6 +78,26 @@ export function swapOrder(state, nameA, nameB) {
   };
 }
 
+// Move the item named `name` to sit immediately before the item named
+// `beforeName` (or to the end of the group, if `beforeName` is null),
+// renumbering `order` sequentially across exactly this list of names — used
+// by drag-and-drop. `names` must be the full ordered list of the group being
+// reordered within (a section, or a Saving/Debt category cluster) so the
+// drag never crosses into a different group.
+export function reorderList(state, names, name, beforeName) {
+  const rest = names.filter((n) => n !== name);
+  const insertAt = beforeName ? rest.indexOf(beforeName) : rest.length;
+  const next = insertAt < 0 ? [...rest, name] : [...rest.slice(0, insertAt), name, ...rest.slice(insertAt)];
+
+  const orderOf = new Map(next.map((n, i) => [n, i]));
+  const patch = (it) => (orderOf.has(it.name) ? { ...it, order: orderOf.get(it.name) } : it);
+  return {
+    ...state,
+    recurring: state.recurring.map(patch),
+    oneoffs: state.oneoffs.map(patch),
+  };
+}
+
 // Toggle a "paid this month" override for an item. `monthKey` is "YYYY-MM".
 export function togglePaidOverride(state, itemId, monthKey) {
   const current = state.paidOverrides?.[monthKey] || [];

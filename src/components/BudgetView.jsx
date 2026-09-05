@@ -1,20 +1,26 @@
+import { useState } from "react";
 import HorizonSlider from "./HorizonSlider.jsx";
+import { BUDGET_SECTIONS, computeBudgetLayout } from "../engine/budgetLayout.js";
 
 const money = (n) =>
   (n < 0 ? "-" : "") +
   Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-const SECTIONS = [
-  { key: "bill", label: "FIXED / RECURRING", cats: ["bill"] },
-  { key: "saving", label: "SAVING / DEBT", cats: ["roth", "saved", "brokerage", "loans"] },
-  { key: "oneoff", label: "ONE-OFF / SEASONAL", cats: ["oneoff"] },
-];
+// Tailwind's JIT scanner only picks up literal class-name strings, not
+// runtime-built ones (`text-${category}` would silently emit no CSS on its
+// own) — spell each one out so this file doesn't depend on some other file
+// happening to reference the same classes literally.
+const CATEGORY_COLOR_CLASS = {
+  roth: "text-roth",
+  saved: "text-saved",
+  brokerage: "text-brokerage",
+  loans: "text-loans",
+};
 
-// category -> section key
-const CAT_TO_SECTION = {};
-for (const sec of SECTIONS) for (const c of sec.cats) CAT_TO_SECTION[c] = sec.key;
+export default function BudgetView({ budget, settings, setSettings, onEditName, onReorder, onReorderDrop }) {
+  const [dragName, setDragName] = useState(null);
+  const [overName, setOverName] = useState(null);
 
-export default function BudgetView({ budget, settings, setSettings, onEditName, onReorder }) {
   const horizonControl = settings && setSettings ? (
     <HorizonSlider
       label="Project through"
@@ -33,40 +39,73 @@ export default function BudgetView({ budget, settings, setSettings, onEditName, 
     );
   }
 
-  // collect item names per section (across all months, preserve first-seen order)
-  const sectionItems = {};
-  for (const sec of SECTIONS) sectionItems[sec.key] = [];
-  const otherIncomeNames = [];
-  const nameCat = {};   // item name -> its category
-  const nameOrder = {}; // item name -> its manual order
-
-  for (const col of budget) {
-    for (const [name, obj] of Object.entries(col.expenseItems)) {
-      const secKey = CAT_TO_SECTION[obj.category] || "oneoff";
-      if (!sectionItems[secKey].includes(name)) sectionItems[secKey].push(name);
-      nameCat[name] = obj.category;
-      nameOrder[name] = obj.order ?? 0;
-    }
-    for (const [name, obj] of Object.entries(col.otherInItems || {})) {
-      if (!otherIncomeNames.includes(name)) otherIncomeNames.push(name);
-      nameOrder[name] = obj.order ?? 0;
-    }
-  }
-
-  otherIncomeNames.sort((a, b) => nameOrder[a] - nameOrder[b]);
-  sectionItems.bill.sort((a, b) => nameOrder[a] - nameOrder[b]);
-  sectionItems.oneoff.sort((a, b) => nameOrder[a] - nameOrder[b]);
-  // SAVING / DEBT: cluster by category (roth, saved, brokerage, loans), order within each
-  const savingCats = SECTIONS.find((s) => s.key === "saving").cats;
-  sectionItems.saving.sort((a, b) => {
-    const catDiff = savingCats.indexOf(nameCat[a]) - savingCats.indexOf(nameCat[b]);
-    return catDiff !== 0 ? catDiff : nameOrder[a] - nameOrder[b];
-  });
-  // reorder arrows move within the same category cluster, never across
-  const savingGroups = savingCats.map((cat) => sectionItems.saving.filter((n) => nameCat[n] === cat));
+  const { otherIncomeNames, sectionItems, savingGroups, nameCat } = computeBudgetLayout(budget);
 
   const th = "py-2 px-3 text-right font-semibold whitespace-nowrap";
   const editRow = (name) => onEditName && (() => onEditName(name));
+
+  // Per-name arrow (▲▼) + drag-and-drop wiring, scoped to exactly `names` —
+  // a drag can never be dropped into a different group (section, or Saving/
+  // Debt category cluster) because the drop handler only accepts a drag
+  // whose source is a member of its own `names` list.
+  function rowMeta(names) {
+    return names.map((name, i) => {
+      const dragProps = onReorderDrop
+        ? {
+            draggable: true,
+            onDragStart: (e) => {
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", name);
+              setDragName(name);
+            },
+            onDragOver: (e) => {
+              if (dragName && names.includes(dragName)) {
+                e.preventDefault();
+                if (overName !== name) setOverName(name);
+              }
+            },
+            onDragLeave: () => setOverName((o) => (o === name ? null : o)),
+            onDrop: (e) => {
+              e.preventDefault();
+              const from = dragName;
+              setDragName(null);
+              setOverName(null);
+              if (!from || from === name || !names.includes(from)) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const dropAfter = e.clientY - rect.top > rect.height / 2;
+              const idx = names.indexOf(name);
+              onReorderDrop(names, from, dropAfter ? names[idx + 1] ?? null : name);
+            },
+            onDragEnd: () => { setDragName(null); setOverName(null); },
+          }
+        : undefined;
+
+      return {
+        name,
+        up: onReorder && i > 0 ? () => onReorder(name, names[i - 1]) : null,
+        down: onReorder && i < names.length - 1 ? () => onReorder(name, names[i + 1]) : null,
+        dragProps,
+        isDragging: dragName === name,
+        isDragOver: overName === name && dragName !== name,
+      };
+    });
+  }
+
+  function renderSection(sec) {
+    const names = sectionItems[sec.key];
+    if (!names.length) return null;
+    return (
+      <>
+        <SectionHeader label={sec.label} span={budget.length + 1} />
+        {rowMeta(names).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
+          <DataRow key={name} label={name} cols={budget}
+            pick={(c) => c.expenseItems[name]?.val || 0} tone="expense" hideZero
+            onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
+            dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
+        ))}
+      </>
+    );
+  }
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-4 overflow-x-auto">
@@ -86,30 +125,29 @@ export default function BudgetView({ budget, settings, setSettings, onEditName, 
           <DataRow label="Starting point" cols={budget} pick={(c) => c.startingPoint} muted />
           <DataRow label="Take-home" cols={budget} pick={(c) => c.takeHome} tone="income" />
           <DataRow label="TD checking" cols={budget} pick={(c) => c.tdChecking} tone="income" hideZero />
-          {withMoves(otherIncomeNames, onReorder).map(({ name, up, down }) => (
+          {rowMeta(otherIncomeNames).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
             <DataRow key={name} label={name} cols={budget} tone="income"
               pick={(c) => c.otherInItems?.[name]?.val || 0} hideZero
-              onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down} />
+              onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
+              dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
           ))}
           <TotalRow label="TOTAL IN" cols={budget} pick={(c) => c.totalIn} tone="income" fill="income" />
 
-          {/* FIXED / RECURRING, ONE-OFF / SEASONAL: simple per-section ordering */}
-          {[SECTIONS[0], SECTIONS[2]].map((sec) =>
-            sectionItems[sec.key].length ? (
-              <FragmentSection key={sec.key} sec={sec} names={sectionItems[sec.key]}
-                budget={budget} onEditName={onEditName} onReorder={onReorder} />
-            ) : null
-          )}
+          {/* FIXED / RECURRING, ONE-OFF / SEASONAL */}
+          {renderSection(BUDGET_SECTIONS[0])}
+          {renderSection(BUDGET_SECTIONS[2])}
 
-          {/* SAVING / DEBT: one header, rows clustered by category, reorder within a category */}
+          {/* SAVING / DEBT: one header, rows clustered by category (own color each),
+              reorder — arrows or drag — never crosses a category cluster */}
           {sectionItems.saving.length ? (
             <>
               <SectionHeader label="SAVING / DEBT" span={budget.length + 1} />
               {savingGroups.map((names) =>
-                withMoves(names, onReorder).map(({ name, up, down }) => (
+                rowMeta(names).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
                   <DataRow key={name} label={name} cols={budget}
-                    pick={(c) => c.expenseItems[name]?.val || 0} tone="expense" hideZero
-                    onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down} />
+                    pick={(c) => c.expenseItems[name]?.val || 0} colorClass={CATEGORY_COLOR_CLASS[nameCat[name]]} hideZero
+                    onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
+                    dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
                 ))
               )}
             </>
@@ -122,29 +160,6 @@ export default function BudgetView({ budget, settings, setSettings, onEditName, 
         </tbody>
       </table>
     </div>
-  );
-}
-
-// pair each name with move-up/move-down callbacks against its neighbor, or
-// null at the ends / when reordering isn't wired up
-function withMoves(names, onReorder) {
-  return names.map((name, i) => ({
-    name,
-    up: onReorder && i > 0 ? () => onReorder(name, names[i - 1]) : null,
-    down: onReorder && i < names.length - 1 ? () => onReorder(name, names[i + 1]) : null,
-  }));
-}
-
-function FragmentSection({ sec, names, budget, onEditName, onReorder }) {
-  return (
-    <>
-      <SectionHeader label={sec.label} span={budget.length + 1} />
-      {withMoves(names, onReorder).map(({ name, up, down }) => (
-        <DataRow key={name} label={name} cols={budget}
-          pick={(c) => c.expenseItems[name]?.val || 0} tone="expense" hideZero
-          onLabelClick={onEditName && (() => onEditName(name))} onMoveUp={up} onMoveDown={down} />
-      ))}
-    </>
   );
 }
 
@@ -161,10 +176,19 @@ function SectionHeader({ label, span, tone }) {
   );
 }
 
-function DataRow({ label, cols, pick, tone, muted, hideZero, onLabelClick, onMoveUp, onMoveDown }) {
+function DataRow({
+  label, cols, pick, tone, muted, hideZero, onLabelClick, onMoveUp, onMoveDown,
+  colorClass, dragProps, isDragging, isDragOver,
+}) {
   const reorderable = onMoveUp !== undefined;
+  const draggable = !!dragProps?.draggable;
   return (
-    <tr className="border-b border-gray-100 dark:border-gray-800/50 group">
+    <tr
+      {...dragProps}
+      className={`border-b border-gray-100 dark:border-gray-800/50 group ${
+        draggable ? "cursor-grab active:cursor-grabbing" : ""
+      } ${isDragging ? "opacity-30" : ""} ${isDragOver ? "border-t-2 border-t-gray-900 dark:border-t-white" : ""}`}
+    >
       <td className="py-1.5 px-3 sticky left-0 bg-white dark:bg-gray-900 whitespace-nowrap">
         <span className="inline-flex items-center gap-1">
           {reorderable && (
@@ -187,7 +211,7 @@ function DataRow({ label, cols, pick, tone, muted, hideZero, onLabelClick, onMov
       {cols.map((c) => {
         const v = pick(c);
         const show = hideZero ? v !== 0 : true;
-        const color = muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "";
+        const color = colorClass ?? (muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "");
         return (
           <td key={c.key} className={`py-1.5 px-3 text-right ${color}`}>
             {show && v !== 0 ? money(v) : muted && v === 0 ? "$0.00" : ""}
