@@ -6,6 +6,7 @@ import { upsertItem, deleteItem, findItem, itemsByName, swapOrder, togglePaidOve
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import EventForm from "./components/EventForm.jsx";
+import QuickEntry from "./components/QuickEntry.jsx";
 import SignIn from "./components/SignIn.jsx";
 
 export default function App() {
@@ -15,14 +16,29 @@ export default function App() {
   const [tab, setTab] = useState("ledger");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // raw rule/one-off being edited
+  const [quickEntryOpen, setQuickEntryOpen] = useState(false);
 
   const formOpen = adding || editing != null;
   const closeForm = () => { setAdding(false); setEditing(null); };
+
+  function openAddModal() {
+    setQuickEntryOpen(false);
+    setEditing(null);
+    setAdding(true);
+  }
+  function openQuickEntry() {
+    closeForm();
+    setQuickEntryOpen(true);
+  }
 
   // create or update, then close the form
   function saveItem(evt) {
     setState((s) => upsertItem(s, evt));
     closeForm();
+  }
+  // quick entry: add without closing anything (the panel stays open)
+  function addItem(evt) {
+    setState((s) => upsertItem(s, evt));
   }
   function removeItem(id) {
     setState((s) => deleteItem(s, id));
@@ -146,14 +162,26 @@ export default function App() {
       </div>
 
       {/* Global add — sits just above the tab navigation */}
-      <div className="px-6 pt-4">
+      <div className="px-6 pt-4 flex items-center gap-2">
         <button
-          onClick={() => { setEditing(null); setAdding(true); }}
+          onClick={openAddModal}
           className="text-sm px-3 py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-medium hover:opacity-90"
         >
           + Add transaction
         </button>
+        <button
+          onClick={() => (quickEntryOpen ? setQuickEntryOpen(false) : openQuickEntry())}
+          className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+        >
+          {quickEntryOpen ? "Close quick entry" : "⚡ Quick entry"}
+        </button>
       </div>
+
+      {quickEntryOpen && (
+        <div className="px-6 pt-3">
+          <QuickEntry onAdd={addItem} onRemove={removeItem} onClose={() => setQuickEntryOpen(false)} />
+        </div>
+      )}
 
       {/* Tabs */}
       <nav className="px-6 pt-3 flex gap-2">
