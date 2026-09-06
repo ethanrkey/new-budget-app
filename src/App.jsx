@@ -9,6 +9,7 @@ import EventForm from "./components/EventForm.jsx";
 import QuickEntry from "./components/QuickEntry.jsx";
 import ExportMenu from "./components/ExportMenu.jsx";
 import ImportCSV from "./components/ImportCSV.jsx";
+import WipeData from "./components/WipeData.jsx";
 import SignIn from "./components/SignIn.jsx";
 
 export default function App() {
@@ -52,6 +53,12 @@ export default function App() {
   // multi-select delete (Ledger) — one atomic removal, no form to close
   function removeItems(ids) {
     setState((s) => deleteItems(s, ids));
+  }
+  // A deliberate full clear-out is the one legitimate case for saving an
+  // empty state — it's a normal setState like any other mutation here, so it
+  // isn't affected by (and doesn't need to route around) the load-error fix.
+  function wipeData() {
+    setState((s) => ({ ...s, recurring: [], oneoffs: [], paidOverrides: {} }));
   }
 
   // open the edit form for a ledger row id ("<itemId>@<date>") or bare item id
@@ -217,6 +224,7 @@ export default function App() {
             className="px-2 py-1.5 sm:py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
           />
         </span>
+        <WipeData onWipe={wipeData} />
       </div>
 
       {/* Global add — sits just above the tab navigation */}
