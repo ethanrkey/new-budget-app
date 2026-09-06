@@ -14,6 +14,8 @@ export default function App() {
   // undefined = still checking for a session, null = signed out, object = signed in
   const [session, setSession] = useState(undefined);
   const [state, setState] = useState(null); // null until this user's data has loaded
+  const [loadError, setLoadError] = useState(null); // set instead of `state` on a failed load
+  const [retryTick, setRetryTick] = useState(0);
   const [tab, setTab] = useState("ledger");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // raw rule/one-off being edited
@@ -83,19 +85,30 @@ export default function App() {
   // on the user id specifically (not the whole `session` object) so this does
   // NOT re-run on Supabase's periodic token refresh — that would reload from
   // the server and silently clobber any not-yet-saved (debounced) local edit.
+  //
+  // A failed load sets `loadError` and leaves `state` at null — it does NOT
+  // fall back to some default/blank object. That matters: the save effect
+  // below only ever runs once `state` is non-null, so a load failure blocks
+  // every autosave until a load actually succeeds. (A real incident: this
+  // used to fall back to a blank state on error, which then got autosaved
+  // straight over real cloud data on nothing more than a transient error.)
   useEffect(() => {
-    if (!session) { setState(null); return; }
+    if (!session) { setState(null); setLoadError(null); return; }
     let cancelled = false;
-    loadState(session.user.id).then((s) => { if (!cancelled) setState(s); });
+    setLoadError(null);
+    loadState(session.user.id)
+      .then((s) => { if (!cancelled) setState(s); })
+      .catch((err) => { if (!cancelled) { console.error(err); setLoadError(err); } });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id]);
+  }, [session?.user?.id, retryTick]);
 
   // Persist on every change, once loaded. Same reasoning as above: keyed on
-  // the user id, not the whole session object.
+  // the user id, not the whole session object. Guarded on `state` being set,
+  // which (per above) never happens after a load error.
   useEffect(() => {
     if (!session || !state) return;
-    saveState(session.user.id, state);
+    saveState(session.user.id, state).catch((err) => console.error("save failed", err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, session?.user?.id]);
 
@@ -120,8 +133,10 @@ export default function App() {
     [state]
   );
 
-  if (session === undefined || (session && !state)) return <Splash />;
+  if (session === undefined) return <Splash />;
   if (!session) return <SignIn />;
+  if (loadError) return <LoadError message={loadError.message} onRetry={() => setRetryTick((t) => t + 1)} />;
+  if (!state) return <Splash />;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
@@ -248,6 +263,29 @@ function Splash() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500 dark:bg-gray-950 dark:text-gray-400 text-sm">
       Loading…
+    </div>
+  );
+}
+
+// Shown instead of the app on a failed load. Deliberately a dead end, not a
+// fallback to some default state — nothing here ever calls setState, so
+// there is nothing for the autosave effect to write. Only a successful retry
+// (or reloading the page) gets you back into the app.
+function LoadError({ message, onRetry }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
+      <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-xl border border-gray-200 dark:border-gray-800 text-center">
+        <p className="text-expense font-semibold mb-2">Could not load your data</p>
+        <p className="text-sm text-gray-500 mb-4">
+          {message} — nothing was changed or saved. Safe to retry.
+        </p>
+        <button
+          onClick={onRetry}
+          className="px-4 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90"
+        >
+          Retry
+        </button>
+      </div>
     </div>
   );
 }

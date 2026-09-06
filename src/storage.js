@@ -41,7 +41,28 @@ function readLocalBackup() {
   }
 }
 
+function isEmptyState(state) {
+  return (state?.recurring?.length ?? 0) === 0 && (state?.oneoffs?.length ?? 0) === 0;
+}
+
 async function writeState(userId, state) {
+  // Defense in depth: if this write would erase previously-saved data, that's
+  // suspicious enough to log loudly even though we don't block it outright —
+  // a deliberate full clear-out (delete every item one by one) is a legitimate
+  // state too, and silently refusing to persist it would be its own data-loss
+  // bug. The real fix is below: loadState() can no longer manufacture a fake
+  // empty state that flows into an autosave in the first place.
+  if (isEmptyState(state)) {
+    const { data: existing } = await supabase
+      .from("budget_states").select("state").eq("user_id", userId).maybeSingle();
+    if (existing?.state && !isEmptyState(existing.state)) {
+      console.error(
+        "⚠️ Saving an EMPTY state over a cloud row that currently has data. " +
+        "This is allowed (e.g. you deleted everything on purpose) but is logged " +
+        "here in case it's not what you intended."
+      );
+    }
+  }
   const { error } = await supabase
     .from("budget_states")
     .upsert({ user_id: userId, state, updated_at: new Date().toISOString() });
@@ -51,6 +72,15 @@ async function writeState(userId, state) {
 // Load this user's state. On their very first sign-in (no row yet), imports
 // whatever this browser has sitting in localStorage from before the Supabase
 // switch, so nothing already entered gets lost — then clears that local copy.
+//
+// IMPORTANT: on any query error, this THROWS rather than falling back to a
+// blank/local-backup state. A silent fallback here previously produced a
+// blank-looking-but-legitimate state object that flowed straight into the
+// autosave effect and upserted over real cloud data on a transient error —
+// that's exactly how a real user's budget got wiped. The caller (App.jsx)
+// must catch this, show an error, and leave `state` unset — the save effect
+// only ever runs once `state` is set, so a caught load error blocks every
+// autosave until a load actually succeeds.
 export async function loadState(userId) {
   const { data, error } = await supabase
     .from("budget_states")
@@ -59,12 +89,13 @@ export async function loadState(userId) {
     .maybeSingle();
 
   if (error) {
-    console.error("loadState failed, falling back to this browser's local backup", error);
-    return normalize(readLocalBackup());
+    throw new Error(`Failed to load your data from Supabase: ${error.message}`);
   }
 
   if (data?.state) return normalize(data.state);
 
+  // Confirmed (not inferred from an error) — no row exists yet for this user.
+  // Safe to treat as a brand-new account and import any local backup.
   const imported = normalize(readLocalBackup());
   await writeState(userId, imported);
   try { localStorage.removeItem(LOCAL_KEY); } catch { /* ignore */ }
@@ -72,9 +103,16 @@ export async function loadState(userId) {
 }
 
 let saveTimer = null;
-// Debounced: several rapid state changes (e.g. typing) collapse into one write.
+// Debounced: several rapid state changes (e.g. typing) collapse into one
+// write. Returns a promise for the write that actually ends up firing (a
+// call superseded by a later one before its timer elapses never settles) so
+// callers can detect a failed save.
 export function saveState(userId, state) {
-  if (!userId) return;
+  if (!userId) return Promise.resolve();
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => writeState(userId, state), SAVE_DEBOUNCE_MS);
+  return new Promise((resolve, reject) => {
+    saveTimer = setTimeout(() => {
+      writeState(userId, state).then(resolve, reject);
+    }, SAVE_DEBOUNCE_MS);
+  });
 }
