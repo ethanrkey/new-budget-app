@@ -8,6 +8,7 @@ import BudgetView from "./components/BudgetView.jsx";
 import EventForm from "./components/EventForm.jsx";
 import QuickEntry from "./components/QuickEntry.jsx";
 import ExportMenu from "./components/ExportMenu.jsx";
+import ImportCSV from "./components/ImportCSV.jsx";
 import SignIn from "./components/SignIn.jsx";
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // raw rule/one-off being edited
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const formOpen = adding || editing != null;
   const closeForm = () => { setAdding(false); setEditing(null); };
@@ -66,6 +68,21 @@ export default function App() {
   }
   function togglePaid(itemId, monthKey) {
     setState((s) => togglePaidOverride(s, itemId, monthKey));
+  }
+  // Merge parsed CSV items into current state via upsertItem (one at a time,
+  // so `order` is assigned safely off whatever's already there — no chance
+  // of colliding with existing items' order values).
+  function importCSV(parsed) {
+    setState((s) => {
+      let next = s;
+      for (const item of [...parsed.recurring, ...parsed.oneoffs]) {
+        next = upsertItem(next, item);
+      }
+      if (parsed.checkInBalance != null) {
+        next = { ...next, settings: { ...next.settings, checkInBalance: parsed.checkInBalance } };
+      }
+      return next;
+    });
   }
 
   // resolve the auth session once, then keep listening for sign-in/out
@@ -144,6 +161,13 @@ export default function App() {
       <header className="border-b border-gray-200 dark:border-gray-800 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
         <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Budget</h1>
         <div className="flex items-center gap-1.5 sm:gap-3">
+          <button
+            onClick={() => setImportOpen(true)}
+            title="Import CSV"
+            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+          >
+            ⬆<span className="hidden sm:inline"> Import CSV</span>
+          </button>
           <ExportMenu ledger={ledger} budget={budget} />
           <button
             onClick={() =>
@@ -254,6 +278,10 @@ export default function App() {
           onCancel={closeForm}
           onDelete={editing ? () => removeItem(editing.id) : undefined}
         />
+      )}
+
+      {importOpen && (
+        <ImportCSV onImport={importCSV} onClose={() => setImportOpen(false)} />
       )}
     </div>
   );
