@@ -146,7 +146,10 @@ function FragmentGroup({ group, showCum, colCount, selectMode, selected, onToggl
         const canMarkPaid = isBill && r.date.slice(0, 7) === CURRENT_MONTH;
         const itemId = baseId(r.id);
         return (
-          <tr key={r.id} className="border-b border-gray-100 dark:border-gray-800/60 group">
+          <tr
+            key={r.id}
+            className="border-b border-gray-100 dark:border-gray-800/60 group hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+          >
             {selectMode && (
               <td className="py-2 sm:py-1.5 pr-1">
                 <input
