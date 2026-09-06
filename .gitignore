@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Personal financial data — never commit real transaction exports/imports
+*.csv
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

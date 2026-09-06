@@ -69,12 +69,19 @@ export default function App() {
   function togglePaid(itemId, monthKey) {
     setState((s) => togglePaidOverride(s, itemId, monthKey));
   }
-  // Merge parsed CSV items into current state via upsertItem (one at a time,
-  // so `order` is assigned safely off whatever's already there — no chance
-  // of colliding with existing items' order values).
-  function importCSV(parsed) {
+  // Merge (or, if `replace`, wipe first then load) parsed CSV items into
+  // current state via upsertItem one at a time, so `order` is assigned
+  // safely off whatever's already there (empty, in the replace case) — no
+  // chance of colliding with existing items' order values. This is a normal
+  // user-initiated state change like any other add/edit — it goes through
+  // the same autosave path, which is exactly what the loadState fix
+  // protects: that fix only ever blocks a save that followed a FAILED load,
+  // and no load is happening here.
+  function importCSV(parsed, replace) {
     setState((s) => {
-      let next = s;
+      let next = replace
+        ? { ...s, recurring: [], oneoffs: [], paidOverrides: {} }
+        : s;
       for (const item of [...parsed.recurring, ...parsed.oneoffs]) {
         next = upsertItem(next, item);
       }

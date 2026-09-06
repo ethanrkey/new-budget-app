@@ -1,17 +1,36 @@
 import { useRef, useState } from "react";
 import { parseBudgetCSV } from "../engine/csvImport.js";
+import { parseLedgerCSV } from "../engine/ledgerCsvImport.js";
 
 const money = (n) =>
   Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-// A Budget-CSV importer, mainly built for restoring a Budget export after
-// data loss. Parses on file selection, shows exactly what it found (and
-// every guess it had to make) before anything touches state — nothing is
-// imported until you press Import.
+// Auto-detects which export format a file is and parses accordingly:
+// - Budget grid (engine/csv.js budgetToCSV): header row starts with a blank
+//   cell, then month labels. Lossy — monthly totals only.
+// - Clean per-transaction ledger (Date/Item/Direction/Amount columns, any
+//   order): far more accurate — real dates, exact amounts.
+function detectAndParse(text) {
+  const firstCell = (text.split(/\r\n|\n/)[0] || "").split(",")[0].replace(/^"|"$/g, "").trim();
+  return firstCell === ""
+    ? { format: "budget", ...parseBudgetCSV(text) }
+    : { format: "ledger", ...parseLedgerCSV(text) };
+}
+
+const FORMAT_LABEL = {
+  budget: "Budget grid export (lossy — monthly totals only)",
+  ledger: "Per-transaction export (real dates, exact amounts)",
+};
+
+// Parses on file selection, shows exactly what it found (counts, format
+// detected, every guess it had to make) before anything touches state —
+// nothing is imported until Import is clicked. Replace vs. merge is an
+// explicit, off-by-default choice since replacing is destructive.
 export default function ImportCSV({ onImport, onClose }) {
   const [parsed, setParsed] = useState(null);
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState("");
+  const [replace, setReplace] = useState(false);
   const [done, setDone] = useState(false);
   const fileRef = useRef(null);
 
@@ -23,14 +42,14 @@ export default function ImportCSV({ onImport, onClose }) {
     setParsed(null);
     try {
       const text = await file.text();
-      setParsed(parseBudgetCSV(text));
+      setParsed(detectAndParse(text));
     } catch (err) {
       setError(err.message);
     }
   }
 
   function confirmImport() {
-    onImport(parsed);
+    onImport(parsed, replace);
     setDone(true);
   }
 
@@ -42,12 +61,12 @@ export default function ImportCSV({ onImport, onClose }) {
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold mb-1">Import Budget CSV</h2>
+        <h2 className="text-lg font-semibold mb-1">Import CSV</h2>
 
         {done ? (
           <>
             <p className="text-sm text-income mb-4">
-              Imported {totalItems} item{totalItems === 1 ? "" : "s"} from {fileName}.
+              {replace ? "Replaced your data with" : "Imported"} {totalItems} item{totalItems === 1 ? "" : "s"} from {fileName}.
             </p>
             <button
               onClick={onClose}
@@ -59,9 +78,9 @@ export default function ImportCSV({ onImport, onClose }) {
         ) : (
           <>
             <p className="text-xs text-gray-500 mb-4">
-              Rebuilds recurring rules and one-off transactions from a Budget export (not a Ledger
-              export). This is a best-effort reconstruction from monthly totals — review the notes
-              below before importing.
+              Accepts either a Budget export (monthly grid — lossy, best-effort reconstruction) or a
+              clean Date/Item/Direction/Amount transaction export (accurate — real dates, exact
+              amounts). Detected automatically from the file.
             </p>
 
             <input
@@ -77,6 +96,7 @@ export default function ImportCSV({ onImport, onClose }) {
             {parsed && (
               <div className="space-y-3 mb-4">
                 <div className="text-sm bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-1">{FORMAT_LABEL[parsed.format]}</p>
                   <p><span className="font-medium">{parsed.recurring.length}</span> recurring rule{parsed.recurring.length === 1 ? "" : "s"}</p>
                   <p><span className="font-medium">{parsed.oneoffs.length}</span> one-off transaction{parsed.oneoffs.length === 1 ? "" : "s"}</p>
                   {parsed.checkInBalance != null && (
@@ -94,6 +114,20 @@ export default function ImportCSV({ onImport, onClose }) {
                 {totalItems === 0 && (
                   <p className="text-sm text-gray-400">No items found in this file.</p>
                 )}
+
+                <label className="flex items-start gap-2 text-sm bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-lg p-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={replace}
+                    onChange={(e) => setReplace(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-expense">Replace all current data</span> instead
+                    of merging — deletes every existing recurring rule and one-off first. Leave
+                    unchecked to add these on top of what you already have.
+                  </span>
+                </label>
               </div>
             )}
 
@@ -106,7 +140,7 @@ export default function ImportCSV({ onImport, onClose }) {
                 disabled={!parsed || totalItems === 0}
                 className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40"
               >
-                Import {totalItems > 0 ? totalItems : ""} item{totalItems === 1 ? "" : "s"}
+                {replace ? "Replace with" : "Import"} {totalItems > 0 ? totalItems : ""} item{totalItems === 1 ? "" : "s"}
               </button>
             </div>
           </>
