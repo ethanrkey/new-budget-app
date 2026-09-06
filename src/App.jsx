@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { loadState, saveState } from "./storage.js";
 import { getSession, onAuthChange, signOut } from "./auth.js";
 import { computeLedger, computeBudget } from "./engine/compute.js";
-import { upsertItem, deleteItem, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride } from "./engine/mutate.js";
+import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride } from "./engine/mutate.js";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import EventForm from "./components/EventForm.jsx";
@@ -48,6 +48,10 @@ export default function App() {
   function removeItem(id) {
     setState((s) => deleteItem(s, id));
     closeForm();
+  }
+  // multi-select delete (Ledger) — one atomic removal, no form to close
+  function removeItems(ids) {
+    setState((s) => deleteItems(s, ids));
   }
 
   // open the edit form for a ledger row id ("<itemId>@<date>") or bare item id
@@ -263,6 +267,7 @@ export default function App() {
             ledger={ledger}
             onEditItem={editById}
             onDeleteItem={removeItem}
+            onDeleteMany={removeItems}
             onTogglePaid={togglePaid}
           />
         ) : (

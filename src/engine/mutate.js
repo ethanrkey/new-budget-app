@@ -38,6 +38,18 @@ export function deleteItem(state, id) {
   };
 }
 
+// Remove several items (recurring rules and/or one-offs) at once, by id —
+// used by multi-select delete. One atomic state update instead of N separate
+// deleteItem calls.
+export function deleteItems(state, ids) {
+  const idSet = new Set(ids);
+  return {
+    ...state,
+    recurring: state.recurring.filter((r) => !idSet.has(r.id)),
+    oneoffs: state.oneoffs.filter((o) => !idSet.has(o.id)),
+  };
+}
+
 // Find the raw item behind a given id (ledger row ids are "<itemId>@<date>").
 export function findItem(state, id) {
   return (
