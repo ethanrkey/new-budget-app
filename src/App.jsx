@@ -10,6 +10,7 @@ import QuickEntry from "./components/QuickEntry.jsx";
 import ExportMenu from "./components/ExportMenu.jsx";
 import ImportCSV from "./components/ImportCSV.jsx";
 import WipeData from "./components/WipeData.jsx";
+import Onboarding from "./components/Onboarding.jsx";
 import SignIn from "./components/SignIn.jsx";
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
   const [editing, setEditing] = useState(null); // raw rule/one-off being edited
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const formOpen = adding || editing != null;
   const closeForm = () => { setAdding(false); setEditing(null); };
@@ -102,6 +104,27 @@ export default function App() {
       return next;
     });
   }
+
+  // Onboarding answers reuse the exact same {recurring, oneoffs,
+  // checkInBalance} shape the CSV importers produce, so they commit through
+  // the same importCSV() path — no separate data pipeline to keep in sync.
+  // Always marks hasSeenOnboarding, whether reached by finishing or by
+  // "Skip setup" — that's what a completed OR skipped run means, and it's
+  // what stops this from auto-popping again (see the effect below).
+  function completeOnboarding(result) {
+    importCSV(result, false);
+    setSettings({ hasSeenOnboarding: true });
+    setShowOnboarding(false);
+  }
+
+  // Auto-show once per account: only when hasSeenOnboarding is false, which
+  // (per storage's migration) only happens for a genuinely new account that
+  // has never completed or skipped it — never re-triggered by an empty state
+  // alone (e.g. after Wipe Data), since that flag isn't touched by a wipe.
+  useEffect(() => {
+    if (state && !state.settings.hasSeenOnboarding) setShowOnboarding(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.settings?.hasSeenOnboarding]);
 
   // resolve the auth session once, then keep listening for sign-in/out
   useEffect(() => {
@@ -241,6 +264,12 @@ export default function App() {
         >
           {quickEntryOpen ? "Close quick entry" : "⚡ Quick entry"}
         </button>
+        <button
+          onClick={() => setShowOnboarding(true)}
+          className="text-sm px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+        >
+          🎓 Tutorial
+        </button>
       </div>
 
       {quickEntryOpen && (
@@ -302,6 +331,10 @@ export default function App() {
 
       {importOpen && (
         <ImportCSV onImport={importCSV} onClose={() => setImportOpen(false)} />
+      )}
+
+      {showOnboarding && (
+        <Onboarding initialBalance={state.settings.checkInBalance || null} onComplete={completeOnboarding} />
       )}
     </div>
   );

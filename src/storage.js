@@ -3,34 +3,10 @@
 // migration logic is unchanged from the localStorage era; only the transport
 // changed, per the architecture principle in PROJECT_SPEC.md.
 import { supabase } from "./supabase.js";
-import { blankState, TRACKER_CATEGORIES } from "./engine/model.js";
+import { normalize } from "./engine/stateShape.js";
 
 const LOCAL_KEY = "budget-app-state-v1"; // legacy localStorage key, for one-time import
 const SAVE_DEBOUNCE_MS = 500;
-
-function normalize(parsed) {
-  // merge onto blank so new fields always exist
-  const base = blankState();
-  return {
-    ...base,
-    ...parsed,
-    settings: { ...base.settings, ...(parsed.settings || {}) },
-    recurring: (parsed.recurring || []).map(migrateItem),
-    oneoffs: (parsed.oneoffs || []).map(migrateItem),
-    paidOverrides: parsed.paidOverrides || {},
-  };
-}
-
-// One-time migration: the old model had a preset `savings` category plus a
-// separate `tracker` field. Now the category IS the tracker. Promote a set
-// tracker to the category, fold leftover `savings` into `saved`, drop `tracker`.
-function migrateItem(item) {
-  const { tracker, ...rest } = item;
-  let category = rest.category;
-  if (TRACKER_CATEGORIES.includes(tracker)) category = tracker;
-  else if (category === "savings") category = "saved";
-  return { ...rest, category };
-}
 
 function readLocalBackup() {
   try {

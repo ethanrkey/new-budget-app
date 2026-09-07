@@ -29,6 +29,7 @@ export const CATEGORIES = {
         ledgerHorizon: addMonthsISO(todayISO(), 12), // default: ~12 months out
         theme: "light",
         showCumulative: false,
+        hasSeenOnboarding: false, // one-time welcome wizard; see storage.js's migration
       },
       recurring: [], // rules that auto-generate events
       oneoffs: [],   // individual dated events
