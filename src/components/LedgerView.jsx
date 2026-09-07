@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { groupByMonth } from "../engine/compute.js";
-import { todayISO } from "../engine/model.js";
+import { todayISO, paletteColor } from "../engine/model.js";
 import HorizonSlider from "./HorizonSlider.jsx";
 import InfoTip from "./InfoTip.jsx";
 
@@ -9,13 +9,18 @@ const money = (n) =>
 
 const CURRENT_MONTH = todayISO().slice(0, 7);
 
-export default function LedgerView({ state, setSettings, ledger, onEditItem, onDeleteItem, onDeleteMany, onTogglePaid, onOpenOnboarding }) {
-  const showCum = state.settings.showCumulative;
+export default function LedgerView({
+  state, setSettings, ledger, trackerCategories = [], isDark,
+  onEditItem, onDeleteItem, onDeleteMany, onTogglePaid, onOpenOnboarding, onOpenCategoryManager,
+}) {
+  const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
+  const visibleIds = new Set(state.settings.visibleTrackerCategoryIds || []);
   const groups = groupByMonth(ledger.rows);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
   const [confirming, setConfirming] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
 
   function toggleSelectMode() {
     setSelectMode((v) => !v);
@@ -35,21 +40,61 @@ export default function LedgerView({ state, setSettings, ledger, onEditItem, onD
     setSelected(new Set());
     setConfirming(false);
   }
+  function toggleColumnVisible(id) {
+    const next = visibleIds.has(id)
+      ? [...visibleIds].filter((x) => x !== id)
+      : [...visibleIds, id];
+    setSettings({ visibleTrackerCategoryIds: next });
+  }
 
-  const colCount = selectMode ? 11 : 10;
+  const colCount = 6 + sortedCats.length + (selectMode ? 1 : 0);
+  const anyOpen = sortedCats.some((c) => visibleIds.has(c.id));
 
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4">
       {/* toolbar */}
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <button
-            onClick={() => setSettings({ showCumulative: !showCum })}
-            className="px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            {showCum ? "Hide" : "Show"} savings columns
-          </button>
-          <InfoTip text="Running totals for Roth, Saved, Brokerage, and Loans — each column adds up every transaction in that category over time, so you can see the balance build (or pay down) as you go." />
+          <div className="relative">
+            <button
+              onClick={() => setColumnsOpen((v) => !v)}
+              className="px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Savings columns{anyOpen ? ` (${[...visibleIds].length})` : ""} ▾
+            </button>
+            {columnsOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setColumnsOpen(false)} />
+                <div className="absolute left-0 mt-1 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-20 p-2">
+                  {sortedCats.length === 0 ? (
+                    <p className="text-xs text-gray-400 px-2 py-1.5">No categories yet.</p>
+                  ) : (
+                    sortedCats.map((c) => (
+                      <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-sm">
+                        <input
+                          type="checkbox"
+                          checked={visibleIds.has(c.id)}
+                          onChange={() => toggleColumnVisible(c.id)}
+                          className="h-4 w-4"
+                        />
+                        <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: paletteColor(c.color, isDark) }} />
+                        <span className="truncate">{c.name}</span>
+                      </label>
+                    ))
+                  )}
+                  {onOpenCategoryManager && (
+                    <button
+                      onClick={() => { setColumnsOpen(false); onOpenCategoryManager(); }}
+                      className="mt-1 w-full text-left px-2 py-1.5 rounded text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 border-t border-gray-100 dark:border-gray-800"
+                    >
+                      ⚙ Manage categories…
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <InfoTip text="Running totals for your own savings/debt/investment categories — each column adds up every transaction in that category over time, so you can see the balance build (or pay down) as you go. Pick which ones show here." />
           <HorizonSlider
             label="Project through"
             anchor={state.settings.checkInDate}
@@ -102,10 +147,15 @@ export default function LedgerView({ state, setSettings, ledger, onEditItem, onD
               <th className="py-2 pr-3 font-medium text-right">In</th>
               <th className="py-2 pr-3 font-medium text-right">Out</th>
               <th className="py-2 pr-3 font-medium text-right">Balance</th>
-              <th className={`py-2 font-medium text-right slide-col text-roth ${showCum ? "open" : ""}`}>Roth</th>
-              <th className={`py-2 font-medium text-right slide-col text-saved ${showCum ? "open" : ""}`}>Saved</th>
-              <th className={`py-2 font-medium text-right slide-col text-brokerage ${showCum ? "open" : ""}`}>Broker.</th>
-              <th className={`py-2 font-medium text-right slide-col text-loans ${showCum ? "open" : ""}`}>Loans</th>
+              {sortedCats.map((c) => (
+                <th
+                  key={c.id}
+                  className={`py-2 font-medium text-right slide-col ${visibleIds.has(c.id) ? "open" : ""}`}
+                  style={{ color: paletteColor(c.color, isDark) }}
+                >
+                  {c.name}
+                </th>
+              ))}
               <th className="py-2 font-medium"></th>
             </tr>
           </thead>
@@ -114,7 +164,9 @@ export default function LedgerView({ state, setSettings, ledger, onEditItem, onD
               <FragmentGroup
                 key={g.label}
                 group={g}
-                showCum={showCum}
+                sortedCats={sortedCats}
+                visibleIds={visibleIds}
+                isDark={isDark}
                 colCount={colCount}
                 selectMode={selectMode}
                 selected={selected}
@@ -150,7 +202,7 @@ export default function LedgerView({ state, setSettings, ledger, onEditItem, onD
   );
 }
 
-function FragmentGroup({ group, showCum, colCount, selectMode, selected, onToggleSelected, onEdit, onDelete, onTogglePaid }) {
+function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, selectMode, selected, onToggleSelected, onEdit, onDelete, onTogglePaid }) {
   return (
     <>
       <tr className="bg-gray-50 dark:bg-gray-850">
@@ -162,6 +214,9 @@ function FragmentGroup({ group, showCum, colCount, selectMode, selected, onToggl
         const isBill = r.category === "bill";
         const canMarkPaid = isBill && r.date.slice(0, 7) === CURRENT_MONTH;
         const itemId = baseId(r.id);
+        // an optional per-item color override (recurring items/bills too, not
+        // just tracker categories) beats the default bill-purple/plain text
+        const nameStyle = r.color != null ? { color: paletteColor(r.color, isDark) } : undefined;
         return (
           <tr
             key={r.id}
@@ -189,11 +244,12 @@ function FragmentGroup({ group, showCum, colCount, selectMode, selected, onToggl
               )}
               {dayOf(r.date)}
             </td>
-            <td className={`py-2 sm:py-1.5 pr-3 ${isBill ? "text-bill font-medium" : ""} ${r.paidOverride ? "opacity-40" : ""}`}>
+            <td className={`py-2 sm:py-1.5 pr-3 ${!nameStyle && isBill ? "text-bill font-medium" : ""} ${r.paidOverride ? "opacity-40" : ""}`}>
               <button
                 onClick={() => onEdit(r.id)}
                 className="text-left hover:underline decoration-dotted underline-offset-2"
                 title="Edit"
+                style={nameStyle}
               >
                 {r.name}
               </button>
@@ -208,10 +264,15 @@ function FragmentGroup({ group, showCum, colCount, selectMode, selected, onToggl
             <td className={`py-2 sm:py-1.5 pr-3 text-right font-medium ${r.negative ? "text-expense" : ""}`}>
               {money(r.balance)}
             </td>
-            <td className={`py-2 sm:py-1.5 text-right slide-col text-roth ${showCum ? "open" : ""}`}>{stepCell(r, "roth")}</td>
-            <td className={`py-2 sm:py-1.5 text-right slide-col text-saved ${showCum ? "open" : ""}`}>{stepCell(r, "saved")}</td>
-            <td className={`py-2 sm:py-1.5 text-right slide-col text-brokerage ${showCum ? "open" : ""}`}>{stepCell(r, "brokerage")}</td>
-            <td className={`py-2 sm:py-1.5 text-right slide-col text-loans ${showCum ? "open" : ""}`}>{stepCell(r, "loans")}</td>
+            {sortedCats.map((c) => (
+              <td
+                key={c.id}
+                className={`py-2 sm:py-1.5 text-right slide-col ${visibleIds.has(c.id) ? "open" : ""}`}
+                style={{ color: paletteColor(c.color, isDark) }}
+              >
+                {stepCell(r, c.id)}
+              </td>
+            ))}
             <td className="py-2 sm:py-1.5 text-right">
               <button
                 onClick={() => onDelete(r.id)}

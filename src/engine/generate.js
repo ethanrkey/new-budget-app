@@ -67,6 +67,7 @@ function makeEvent(src, date, paidOverrides) {
     amount: Math.abs(src.amount),
     direction: dir,
     category: src.category,
+    color: src.color ?? null, // optional per-item palette-index override
     order: src.order,
     paidOverride,
     date,

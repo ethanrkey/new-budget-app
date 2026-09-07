@@ -16,12 +16,14 @@ const CADENCE_LABEL = {
 // you can keep typing without touching the mouse. Supports one-off and
 // recurring both. This is additive to the full Add/Edit modal, not a
 // replacement — precise stuff (end dates, editing) still goes through that.
-export default function QuickEntry({ onAdd, onRemove, onClose }) {
+export default function QuickEntry({ onAdd, onRemove, onClose, trackerCategories = [] }) {
   const [mode, setMode] = useState("oneoff");
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("bill");
   const [date, setDate] = useState(todayISO());
+  const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
+  const categoryLabel = (id) => CATEGORIES[id]?.label ?? trackerCategories.find((c) => c.id === id)?.name ?? id;
   const [cadence, setCadence] = useState("monthly");
   const [startDate, setStartDate] = useState(todayISO());
   const [endDate, setEndDate] = useState("");
@@ -125,6 +127,13 @@ export default function QuickEntry({ onAdd, onRemove, onClose }) {
           {Object.entries(CATEGORIES).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}
+          {sortedCats.length > 0 && (
+            <optgroup label="Savings / Debt / Investments">
+              {sortedCats.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
 
         {mode === "oneoff" ? (
@@ -171,7 +180,7 @@ export default function QuickEntry({ onAdd, onRemove, onClose }) {
                 <span className="truncate">
                   {it.name}{" "}
                   <span className="text-gray-400">
-                    — {CATEGORIES[it.category]?.label}
+                    — {categoryLabel(it.category)}
                     {it.cadence ? ` · ${CADENCE_LABEL[it.cadence]}` : ` · ${it.date}`}
                   </span>
                 </span>

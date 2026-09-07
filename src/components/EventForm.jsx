@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.js";
+import ColorSwatches from "./ColorSwatches.jsx";
 
-export default function EventForm({ onSave, onCancel, onDelete, initial }) {
+export default function EventForm({ onSave, onCancel, onDelete, initial, trackerCategories = [], isDark }) {
   const [mode, setMode] = useState(initial?.cadence ? "recurring" : "oneoff");
   const [name, setName] = useState(initial?.name ?? "");
   const [amount, setAmount] = useState(initial?.amount ?? "");
   const [category, setCategory] = useState(initial?.category ?? "bill");
+  const [color, setColor] = useState(initial?.color ?? null);
   const [date, setDate] = useState(initial?.date ?? todayISO());
   const [cadence, setCadence] = useState(initial?.cadence ?? "monthly");
   const [startDate, setStartDate] = useState(initial?.startDate ?? todayISO());
   const [endDate, setEndDate] = useState(initial?.endDate ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
 
   function submit() {
     if (!name || amount === "" || isNaN(Number(amount))) return;
@@ -19,6 +22,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial }) {
       name: name.trim(),
       amount: Math.abs(Number(amount)),
       category,
+      color,
       order: initial?.order,
     };
     if (mode === "recurring") {
@@ -79,8 +83,20 @@ export default function EventForm({ onSave, onCancel, onDelete, initial }) {
                 {Object.entries(CATEGORIES).map(([k, v]) => (
                   <option key={k} value={k}>{v.label}</option>
                 ))}
+                {sortedCats.length > 0 && (
+                  <optgroup label="Savings / Debt / Investments">
+                    {sortedCats.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className={label}>Color (optional)</label>
+            <ColorSwatches value={color} onChange={setColor} isDark={isDark} allowNone noneLabel="Use the category's color" />
           </div>
 
           {mode === "oneoff" ? (

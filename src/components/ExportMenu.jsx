@@ -14,20 +14,20 @@ function downloadCSV(filename, csvString) {
   URL.revokeObjectURL(url);
 }
 
-export default function ExportMenu({ ledger, budget }) {
+export default function ExportMenu({ ledger, budget, trackerCategories = [] }) {
   const [open, setOpen] = useState(false);
 
   function exportLedger() {
-    downloadCSV(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger));
+    downloadCSV(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories));
     setOpen(false);
   }
   function exportBudget() {
-    downloadCSV(`budget-${todayISO()}.csv`, budgetToCSV(budget));
+    downloadCSV(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories));
     setOpen(false);
   }
   function exportBoth() {
-    downloadCSV(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger));
-    downloadCSV(`budget-${todayISO()}.csv`, budgetToCSV(budget));
+    downloadCSV(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories));
+    downloadCSV(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories));
     setOpen(false);
   }
 

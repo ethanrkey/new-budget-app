@@ -1,6 +1,7 @@
 // ---- Pure state transitions for create / update / delete of budget items ----
 // UI-free so the future iOS app reuses them. An "item" is a RecurringRule (has
 // a `cadence`) or a OneOff (has a `date`).
+import { uid } from "./model.js";
 
 // Insert a new item or replace an existing one (matched by id).
 // - No type change  -> replace in place, preserving list position.
@@ -107,6 +108,48 @@ export function reorderList(state, names, name, beforeName) {
     ...state,
     recurring: state.recurring.map(patch),
     oneoffs: state.oneoffs.map(patch),
+  };
+}
+
+// ---- Tracker category (savings/debt/investment) CRUD ----
+// Deleting a category never touches items that reference it — an orphaned
+// category id just renders as a neutral "Uncategorized" (see
+// budgetLayout.js / CATEGORY_PALETTE's fallback color) rather than blocking
+// the delete or silently reassigning someone's data.
+
+export function addCategory(state, name, color) {
+  const order = state.trackerCategories.length
+    ? Math.max(...state.trackerCategories.map((c) => c.order)) + 1
+    : 0;
+  return { ...state, trackerCategories: [...state.trackerCategories, { id: uid(), name, color, order }] };
+}
+
+export function updateCategory(state, id, patch) {
+  return {
+    ...state,
+    trackerCategories: state.trackerCategories.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+  };
+}
+
+export function deleteCategory(state, id) {
+  return { ...state, trackerCategories: state.trackerCategories.filter((c) => c.id !== id) };
+}
+
+// Swap a category's order with its immediate neighbor (direction -1 or +1) —
+// simple up/down reordering, same spirit as the Budget's row arrows.
+export function moveCategory(state, id, direction) {
+  const sorted = [...state.trackerCategories].sort((a, b) => a.order - b.order);
+  const i = sorted.findIndex((c) => c.id === id);
+  const j = i + direction;
+  if (i < 0 || j < 0 || j >= sorted.length) return state;
+  const a = sorted[i], b = sorted[j];
+  return {
+    ...state,
+    trackerCategories: state.trackerCategories.map((c) => {
+      if (c.id === a.id) return { ...c, order: b.order };
+      if (c.id === b.id) return { ...c, order: a.order };
+      return c;
+    }),
   };
 }
 

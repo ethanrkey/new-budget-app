@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { loadState, saveState } from "./storage.js";
 import { getSession, onAuthChange, signOut } from "./auth.js";
 import { computeLedger, computeBudget } from "./engine/compute.js";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride } from "./engine/mutate.js";
+import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory } from "./engine/mutate.js";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import EventForm from "./components/EventForm.jsx";
@@ -12,6 +12,7 @@ import ImportCSV from "./components/ImportCSV.jsx";
 import WipeData from "./components/WipeData.jsx";
 import Onboarding from "./components/Onboarding.jsx";
 import SignIn from "./components/SignIn.jsx";
+import CategoryManager from "./components/CategoryManager.jsx";
 
 export default function App() {
   // undefined = still checking for a session, null = signed out, object = signed in
@@ -25,6 +26,7 @@ export default function App() {
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
 
   const formOpen = adding || editing != null;
   const closeForm = () => { setAdding(false); setEditing(null); };
@@ -81,6 +83,20 @@ export default function App() {
   }
   function togglePaid(itemId, monthKey) {
     setState((s) => togglePaidOverride(s, itemId, monthKey));
+  }
+  // Tracker category (savings/debt/investment) CRUD — deleting one never
+  // touches items still tagged with it (see mutate.js's addCategory et al.).
+  function addTrackerCategory(name, color) {
+    setState((s) => addCategory(s, name, color));
+  }
+  function updateTrackerCategory(id, patch) {
+    setState((s) => updateCategory(s, id, patch));
+  }
+  function deleteTrackerCategory(id) {
+    setState((s) => deleteCategory(s, id));
+  }
+  function moveTrackerCategory(id, direction) {
+    setState((s) => moveCategory(s, id, direction));
   }
   // Merge (or, if `replace`, wipe first then load) parsed CSV items into
   // current state via upsertItem one at a time, so `order` is assigned
@@ -196,6 +212,8 @@ export default function App() {
   if (loadError) return <LoadError message={loadError.message} onRetry={() => setRetryTick((t) => t + 1)} />;
   if (!state) return <Splash />;
 
+  const isDark = state.settings.theme === "dark";
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Header */}
@@ -209,7 +227,14 @@ export default function App() {
           >
             ⬆<span className="hidden sm:inline"> Import CSV</span>
           </button>
-          <ExportMenu ledger={ledger} budget={budget} />
+          <ExportMenu ledger={ledger} budget={budget} trackerCategories={state.trackerCategories} />
+          <button
+            onClick={() => setCategoryManagerOpen(true)}
+            title="Manage savings/debt categories"
+            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+          >
+            ⚙<span className="hidden sm:inline"> Categories</span>
+          </button>
           <button
             onClick={() =>
               setSettings({ theme: state.settings.theme === "dark" ? "light" : "dark" })
@@ -274,7 +299,7 @@ export default function App() {
 
       {quickEntryOpen && (
         <div className="px-3 sm:px-6 pt-3">
-          <QuickEntry onAdd={addItem} onRemove={removeItem} onClose={() => setQuickEntryOpen(false)} />
+          <QuickEntry onAdd={addItem} onRemove={removeItem} onClose={() => setQuickEntryOpen(false)} trackerCategories={state.trackerCategories} />
         </div>
       )}
 
@@ -302,17 +327,22 @@ export default function App() {
             state={state}
             setSettings={setSettings}
             ledger={ledger}
+            trackerCategories={state.trackerCategories}
+            isDark={isDark}
             onEditItem={editById}
             onDeleteItem={removeItem}
             onDeleteMany={removeItems}
             onTogglePaid={togglePaid}
             onOpenOnboarding={() => setShowOnboarding(true)}
+            onOpenCategoryManager={() => setCategoryManagerOpen(true)}
           />
         ) : (
           <BudgetView
             budget={budget}
             settings={state.settings}
             setSettings={setSettings}
+            trackerCategories={state.trackerCategories}
+            isDark={isDark}
             onEditName={editByName}
             onReorder={reorderNames}
             onReorderDrop={reorderDrop}
@@ -325,6 +355,8 @@ export default function App() {
         <EventForm
           key={editing?.id ?? "new"}
           initial={editing ?? undefined}
+          trackerCategories={state.trackerCategories}
+          isDark={isDark}
           onSave={saveItem}
           onCancel={closeForm}
           onDelete={editing ? () => removeItem(editing.id) : undefined}
@@ -332,11 +364,23 @@ export default function App() {
       )}
 
       {importOpen && (
-        <ImportCSV onImport={importCSV} onClose={() => setImportOpen(false)} />
+        <ImportCSV onImport={importCSV} onClose={() => setImportOpen(false)} trackerCategories={state.trackerCategories} />
       )}
 
       {showOnboarding && (
         <Onboarding initialBalance={state.settings.checkInBalance || null} onComplete={completeOnboarding} />
+      )}
+
+      {categoryManagerOpen && (
+        <CategoryManager
+          categories={state.trackerCategories}
+          isDark={isDark}
+          onAdd={addTrackerCategory}
+          onUpdate={updateTrackerCategory}
+          onDelete={deleteTrackerCategory}
+          onMove={moveTrackerCategory}
+          onClose={() => setCategoryManagerOpen(false)}
+        />
       )}
     </div>
   );

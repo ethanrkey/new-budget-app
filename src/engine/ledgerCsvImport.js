@@ -67,13 +67,21 @@ function parseAmount(raw) {
   return Number.isFinite(n) ? Math.abs(n) : null;
 }
 
-function guessCategory(name, direction, isRecurring) {
+// Guess which of the user's OWN tracker categories a saving/debt/investment
+// transaction belongs to, by matching its name against a keyword and then
+// against the user's category NAMES — a clean per-transaction CSV never
+// records the real category id either, so this is still a guess, just a
+// better-informed one than a hardcoded 4-category list. Falls back to the
+// user's first category, or the legacy "saved" id if they have none.
+function guessCategory(name, direction, isRecurring, trackerCategories) {
   if (direction === "in") return "income";
   const n = name.toLowerCase();
-  if (/roth|\bira\b/.test(n)) return "roth";
-  if (/everbank|emergency|\bsaving/.test(n)) return "saved";
-  if (/brokerage|\binvest|\bstock|\betf\b/.test(n)) return "brokerage";
-  if (/student loan|\bloan/.test(n)) return "loans";
+  const find = (re) => trackerCategories.find((c) => re.test(c.name.toLowerCase()));
+  const fallback = () => trackerCategories[0]?.id ?? "saved";
+  if (/roth|\bira\b/.test(n)) return find(/roth|ira/)?.id ?? fallback();
+  if (/everbank|emergency|\bsaving/.test(n)) return find(/saved|savings/)?.id ?? fallback();
+  if (/brokerage|\binvest|\bstock|\betf\b/.test(n)) return find(/brokerage|invest|stock/)?.id ?? fallback();
+  if (/student loan|\bloan/.test(n)) return find(/loan|debt/)?.id ?? fallback();
   return isRecurring ? "bill" : "oneoff";
 }
 
@@ -153,8 +161,10 @@ function detectCadence(group) {
 // Returns { recurring, oneoffs, checkInBalance, warnings }. `checkInBalance`
 // is always null here — this format has no running-balance concept, unlike
 // the Budget grid's "TD checking" row — kept in the return shape so the
-// import UI can render both formats' results identically.
-export function parseLedgerCSV(text) {
+// import UI can render both formats' results identically. `trackerCategories`
+// is the importing user's own list — used to guess which category a
+// saving/debt/investment row belongs to (see guessCategory above).
+export function parseLedgerCSV(text, trackerCategories = []) {
   const rows = parseCSV(text);
   if (rows.length < 2) throw new Error("This file is empty or has no data rows.");
 
@@ -208,7 +218,7 @@ export function parseLedgerCSV(text) {
     if (qualifies) {
       const first = group[0];
       const last = group[group.length - 1];
-      const category = guessCategory(name, first.direction, true);
+      const category = guessCategory(name, first.direction, true, trackerCategories);
       const amount = amountMode.value;
       const amountVaried = amountMode.count < group.length;
 
@@ -243,7 +253,7 @@ export function parseLedgerCSV(text) {
         warnings.push(`"${name}": doesn't look like a clean recurring schedule → imported as ${group.length} separate one-offs.`);
       }
       for (const t of group) {
-        oneoffs.push({ id: uid(), name, amount: t.amount, category: guessCategory(name, t.direction, false), date: t.date });
+        oneoffs.push({ id: uid(), name, amount: t.amount, category: guessCategory(name, t.direction, false, trackerCategories), date: t.date });
       }
     }
   }

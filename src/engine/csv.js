@@ -14,23 +14,31 @@ function fmt(n) {
   return n || n === 0 ? Number(n).toFixed(2) : "";
 }
 
+function categoryLabel(cat, trackerCategories) {
+  if (CATEGORIES[cat]) return CATEGORIES[cat].label;
+  return trackerCategories.find((c) => c.id === cat)?.name ?? cat;
+}
+
 // Every ledger row, one per line: date, item, category, in/out, running
-// balance, and the four cumulative tracker columns (blank except on the row
-// that steps them) — matches what's shown on screen with the columns open.
-export function ledgerToCSV(ledger) {
-  const lines = [csvRow(["Date", "Item", "Category", "In", "Out", "Balance", "Roth", "Saved", "Brokerage", "Loans"])];
+// balance, and one cumulative-tracker column per user-defined category
+// (blank except on the row that steps it) — matches what's shown on screen
+// with the columns open. `trackerCategories` is the user's own list (order
+// = column order); pass it explicitly so an export always matches whoever's
+// data it came from, not some hardcoded set.
+export function ledgerToCSV(ledger, trackerCategories = []) {
+  // `.order` is the source of truth for column sequence, not array
+  // position — see budgetLayout.js's identical note.
+  const cats = [...trackerCategories].sort((a, b) => a.order - b.order);
+  const lines = [csvRow(["Date", "Item", "Category", "In", "Out", "Balance", ...cats.map((c) => c.name)])];
   for (const r of ledger.rows) {
     lines.push(csvRow([
       r.date,
       r.name,
-      CATEGORIES[r.category]?.label ?? r.category,
+      categoryLabel(r.category, cats),
       r.direction === "in" ? fmt(r.amount) : "",
       r.direction === "out" ? fmt(r.amount) : "",
       fmt(r.balance),
-      r.stepped?.key === "roth" ? fmt(r.stepped.value) : "",
-      r.stepped?.key === "saved" ? fmt(r.stepped.value) : "",
-      r.stepped?.key === "brokerage" ? fmt(r.stepped.value) : "",
-      r.stepped?.key === "loans" ? fmt(r.stepped.value) : "",
+      ...cats.map((c) => (r.stepped?.key === c.id ? fmt(r.stepped.value) : "")),
     ]));
   }
   return lines.join("\r\n");
@@ -39,9 +47,9 @@ export function ledgerToCSV(ledger) {
 // The monthly grid, exactly as sectioned/ordered on screen (same
 // computeBudgetLayout() BudgetView renders from) — one row per line, one
 // column per month.
-export function budgetToCSV(budget) {
+export function budgetToCSV(budget, trackerCategories = []) {
   if (budget.length === 0) return "";
-  const layout = computeBudgetLayout(budget);
+  const layout = computeBudgetLayout(budget, trackerCategories);
   const lines = [csvRow(["", ...budget.map((c) => c.label)])];
   const row = (label, pick) => lines.push(csvRow([label, ...budget.map((c) => fmt(pick(c)))]));
 

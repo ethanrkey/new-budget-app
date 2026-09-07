@@ -1,23 +1,13 @@
 import { useState } from "react";
 import HorizonSlider from "./HorizonSlider.jsx";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../engine/budgetLayout.js";
+import { paletteColor } from "../engine/model.js";
 
 const money = (n) =>
   (n < 0 ? "-" : "") +
   Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-// Tailwind's JIT scanner only picks up literal class-name strings, not
-// runtime-built ones (`text-${category}` would silently emit no CSS on its
-// own) — spell each one out so this file doesn't depend on some other file
-// happening to reference the same classes literally.
-const CATEGORY_COLOR_CLASS = {
-  roth: "text-roth",
-  saved: "text-saved",
-  brokerage: "text-brokerage",
-  loans: "text-loans",
-};
-
-export default function BudgetView({ budget, settings, setSettings, onEditName, onReorder, onReorderDrop, onOpenOnboarding }) {
+export default function BudgetView({ budget, settings, setSettings, trackerCategories = [], isDark, onEditName, onReorder, onReorderDrop, onOpenOnboarding }) {
   const [dragName, setDragName] = useState(null);
   const [overName, setOverName] = useState(null);
 
@@ -61,7 +51,15 @@ export default function BudgetView({ budget, settings, setSettings, onEditName, 
     );
   }
 
-  const { otherIncomeNames, sectionItems, savingGroups, nameCat } = computeBudgetLayout(budget);
+  const { otherIncomeNames, sectionItems, savingGroups, nameCat } = computeBudgetLayout(budget, trackerCategories);
+  // Dynamic per-category color, resolved to a hex (Tailwind's JIT scanner
+  // only picks up literal class-name strings, never a runtime-built
+  // `text-${id}`) — an orphaned/deleted category id falls back to gray via
+  // paletteColor's own fallback rather than crashing.
+  const colorForCat = (catId) => {
+    const cat = trackerCategories.find((c) => c.id === catId);
+    return paletteColor(cat?.color, isDark);
+  };
 
   const th = "py-2 px-3 text-right font-semibold whitespace-nowrap";
   const editRow = (name) => onEditName && (() => onEditName(name));
@@ -167,7 +165,7 @@ export default function BudgetView({ budget, settings, setSettings, onEditName, 
               {savingGroups.map((names) =>
                 rowMeta(names).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
                   <DataRow key={name} label={name} cols={budget}
-                    pick={(c) => c.expenseItems[name]?.val || 0} colorClass={CATEGORY_COLOR_CLASS[nameCat[name]]} hideZero
+                    pick={(c) => c.expenseItems[name]?.val || 0} colorHex={colorForCat(nameCat[name])} hideZero
                     onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
                     dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
                 ))
@@ -200,7 +198,7 @@ function SectionHeader({ label, span, tone }) {
 
 function DataRow({
   label, cols, pick, tone, muted, hideZero, onLabelClick, onMoveUp, onMoveDown,
-  colorClass, dragProps, isDragging, isDragOver,
+  colorHex, dragProps, isDragging, isDragOver,
 }) {
   const reorderable = onMoveUp !== undefined;
   const draggable = !!dragProps?.draggable;
@@ -233,9 +231,9 @@ function DataRow({
       {cols.map((c) => {
         const v = pick(c);
         const show = hideZero ? v !== 0 : true;
-        const color = colorClass ?? (muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "");
+        const colorClass = colorHex ? "" : muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "";
         return (
-          <td key={c.key} className={`py-2 sm:py-1.5 px-3 text-right ${color}`}>
+          <td key={c.key} className={`py-2 sm:py-1.5 px-3 text-right ${colorClass}`} style={colorHex ? { color: colorHex } : undefined}>
             {show && v !== 0 ? money(v) : muted && v === 0 ? "$0.00" : ""}
           </td>
         );

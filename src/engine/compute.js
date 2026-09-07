@@ -1,12 +1,15 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.js";
-import { TRACKER_CATEGORIES } from "./model.js";
+import { CATEGORIES } from "./model.js";
 
 // LEDGER: every event with a running TD balance + stepped cumulative trackers.
 export function computeLedger(state, horizonISO) {
   const events = buildEvents(state, horizonISO);
   let bal = Number(state.settings.checkInBalance) || 0;
-  const cum = { roth: 0, saved: 0, brokerage: 0, loans: 0 };
+  // One running total per user-defined tracker category (id -> cumulative $).
+  // Anything not in the fixed CATEGORIES is a tracker category by definition.
+  const cum = {};
+  for (const c of state.trackerCategories || []) cum[c.id] = 0;
 
   const rows = events.map((e) => {
     // a paid-override zeroes this event's effect on the balance, but it still
@@ -16,7 +19,7 @@ export function computeLedger(state, horizonISO) {
 
     // step the matching tracker column — the category IS the tracker
     let stepped = null;
-    if (TRACKER_CATEGORIES.includes(e.category)) {
+    if (!CATEGORIES[e.category] && e.category in cum) {
       cum[e.category] += e.amount;
       stepped = { key: e.category, value: round(cum[e.category]) };
     }

@@ -16,9 +16,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Ledger cumulative columns (Roth/Saved/Brokerage/Loans): collapsed to zero
-   width by default, slide out from the right of the Balance column when the
-   "Show savings columns" toggle is on. */
+/* Ledger cumulative tracker columns (the user's own savings/debt/investment
+   categories): collapsed to zero width by default, slide out from the right
+   of the Balance column for whichever ones are checked in the "Savings
+   columns" picker. */
 .slide-col {
   width: 0;
   min-width: 0;

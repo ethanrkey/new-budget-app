@@ -10,11 +10,11 @@ const money = (n) =>
 //   cell, then month labels. Lossy — monthly totals only.
 // - Clean per-transaction ledger (Date/Item/Direction/Amount columns, any
 //   order): far more accurate — real dates, exact amounts.
-function detectAndParse(text) {
+function detectAndParse(text, trackerCategories) {
   const firstCell = (text.split(/\r\n|\n/)[0] || "").split(",")[0].replace(/^"|"$/g, "").trim();
   return firstCell === ""
-    ? { format: "budget", ...parseBudgetCSV(text) }
-    : { format: "ledger", ...parseLedgerCSV(text) };
+    ? { format: "budget", ...parseBudgetCSV(text, trackerCategories) }
+    : { format: "ledger", ...parseLedgerCSV(text, trackerCategories) };
 }
 
 const FORMAT_LABEL = {
@@ -26,7 +26,7 @@ const FORMAT_LABEL = {
 // detected, every guess it had to make) before anything touches state —
 // nothing is imported until Import is clicked. Replace vs. merge is an
 // explicit, off-by-default choice since replacing is destructive.
-export default function ImportCSV({ onImport, onClose }) {
+export default function ImportCSV({ onImport, onClose, trackerCategories = [] }) {
   const [parsed, setParsed] = useState(null);
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState("");
@@ -42,7 +42,7 @@ export default function ImportCSV({ onImport, onClose }) {
     setParsed(null);
     try {
       const text = await file.text();
-      setParsed(detectAndParse(text));
+      setParsed(detectAndParse(text, trackerCategories));
     } catch (err) {
       setError(err.message);
     }

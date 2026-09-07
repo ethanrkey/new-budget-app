@@ -11,12 +11,19 @@ const SECTION_HEADERS = new Set(["INCOME", "FIXED / RECURRING", "SAVING / DEBT",
 const SKIP_ROWS = new Set(["Starting point", "TOTAL IN", "TOTAL OUT", "MONTHLY NET", "CUMULATIVE NET"]);
 const MONTH_NUM = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
 
-function guessSavingCategory(name) {
+// Guess which of the user's OWN tracker categories a Saving/Debt row
+// belongs to, by matching its name against a keyword and then against the
+// user's category NAMES (the CSV only records the section, never the real
+// category id) — falls back to their first category, or the legacy "saved"
+// id if they somehow have none at all.
+function guessSavingCategory(name, trackerCategories) {
   const n = name.toLowerCase();
-  if (/roth|ira/.test(n)) return "roth";
-  if (/loan|debt/.test(n)) return "loans";
-  if (/brokerage|invest|stock|etf/.test(n)) return "brokerage";
-  return "saved"; // catch-all default
+  const find = (re) => trackerCategories.find((c) => re.test(c.name.toLowerCase()));
+  const fallback = () => trackerCategories[0]?.id ?? "saved";
+  if (/roth|ira/.test(n)) return find(/roth|ira/)?.id ?? fallback();
+  if (/loan|debt/.test(n)) return find(/loan|debt/)?.id ?? fallback();
+  if (/brokerage|invest|stock|etf/.test(n)) return find(/brokerage|invest|stock/)?.id ?? fallback();
+  return find(/saved|savings/)?.id ?? fallback(); // catch-all default
 }
 
 // Minimal RFC 4180 line parser — quoted fields, doubled "" for an embedded
@@ -59,7 +66,9 @@ function addMonthsToKey(key, n) {
 
 // Returns { recurring, oneoffs, checkInBalance, warnings }. Throws if the
 // file doesn't look like a Budget export at all (unparseable header).
-export function parseBudgetCSV(text) {
+// `trackerCategories` is the importing user's own list — used to guess which
+// category a Saving/Debt row belongs to (see guessSavingCategory above).
+export function parseBudgetCSV(text, trackerCategories = []) {
   const rows = parseCSV(text);
   if (rows.length < 2) throw new Error("This file is empty or has no data rows.");
 
@@ -97,7 +106,7 @@ export function parseBudgetCSV(text) {
       section === "INCOME" ? "income" :
       section === "FIXED / RECURRING" ? "bill" :
       section === "ONE-OFF / SEASONAL" ? "oneoff" :
-      guessSavingCategory(name);
+      guessSavingCategory(name, trackerCategories);
 
     if (section === "SAVING / DEBT") {
       warnings.push(`"${name}" → category "${category}" is a guess (the CSV doesn't record which Saving/Debt sub-category a row was) — please verify.`);
