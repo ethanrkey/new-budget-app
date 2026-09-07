@@ -17,7 +17,7 @@ const CATEGORY_COLOR_CLASS = {
   loans: "text-loans",
 };
 
-export default function BudgetView({ budget, settings, setSettings, onEditName, onReorder, onReorderDrop }) {
+export default function BudgetView({ budget, settings, setSettings, onEditName, onReorder, onReorderDrop, onOpenOnboarding }) {
   const [dragName, setDragName] = useState(null);
   const [overName, setOverName] = useState(null);
 
@@ -27,14 +27,36 @@ export default function BudgetView({ budget, settings, setSettings, onEditName, 
       anchor={settings.checkInDate}
       horizon={settings.budgetHorizon}
       onChange={(iso) => setSettings({ budgetHorizon: iso })}
+      help="How many months of columns the Budget grid shows. Independent from the Ledger's own horizon — you can project the Budget further (or less far) than the Ledger."
     />
   ) : null;
 
-  if (budget.length === 0) {
+  // `budget` always has one column per horizon month regardless of whether
+  // there's any actual data — checking .length === 0 alone almost never
+  // fires. What actually means "nothing here yet" is every month totaling
+  // zero both ways (true for an empty array too, so this subsumes that case).
+  const isEmpty = budget.every((c) => c.totalIn === 0 && c.totalOut === 0);
+
+  if (isEmpty) {
     return (
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4">
         {horizonControl && <div className="mb-4">{horizonControl}</div>}
-        <div className="text-center text-gray-400 py-12">No data yet — add transactions.</div>
+        <div className="text-center py-12 px-4">
+          <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto text-sm">
+            The Budget groups every transaction into a monthly grid — income, fixed bills, savings
+            &amp; debt, one-offs — with running totals, so a whole month is visible at a glance. It
+            fills in automatically as you add recurring rules and one-off transactions on the
+            Ledger tab.
+          </p>
+          <div className="flex items-center justify-center gap-3 mt-4">
+            <button
+              onClick={onOpenOnboarding}
+              className="text-sm px-3 py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-medium hover:opacity-90"
+            >
+              Run setup wizard
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

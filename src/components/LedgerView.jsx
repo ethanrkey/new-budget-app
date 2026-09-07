@@ -2,13 +2,14 @@ import { useState } from "react";
 import { groupByMonth } from "../engine/compute.js";
 import { todayISO } from "../engine/model.js";
 import HorizonSlider from "./HorizonSlider.jsx";
+import InfoTip from "./InfoTip.jsx";
 
 const money = (n) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 const CURRENT_MONTH = todayISO().slice(0, 7);
 
-export default function LedgerView({ state, setSettings, ledger, onEditItem, onDeleteItem, onDeleteMany, onTogglePaid }) {
+export default function LedgerView({ state, setSettings, ledger, onEditItem, onDeleteItem, onDeleteMany, onTogglePaid, onOpenOnboarding }) {
   const showCum = state.settings.showCumulative;
   const groups = groupByMonth(ledger.rows);
 
@@ -41,18 +42,20 @@ export default function LedgerView({ state, setSettings, ledger, onEditItem, onD
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4">
       {/* toolbar */}
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <button
             onClick={() => setSettings({ showCumulative: !showCum })}
             className="px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             {showCum ? "Hide" : "Show"} savings columns
           </button>
+          <InfoTip text="Running totals for Roth, Saved, Brokerage, and Loans — each column adds up every transaction in that category over time, so you can see the balance build (or pay down) as you go." />
           <HorizonSlider
             label="Project through"
             anchor={state.settings.checkInDate}
             horizon={state.settings.ledgerHorizon}
             onChange={(iso) => setSettings({ ledgerHorizon: iso })}
+            help="How far into the future the Ledger generates transactions. Independent from the Budget's own horizon — you can project the Ledger further (or less far) than the Budget."
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -124,8 +127,22 @@ export default function LedgerView({ state, setSettings, ledger, onEditItem, onD
           </tbody>
         </table>
         {ledger.rows.length === 0 && (
-          <div className="text-center text-gray-400 py-12">
-            No transactions yet. Add one, or set up recurring items.
+          <div className="text-center py-12 px-4">
+            <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto text-sm">
+              The Ledger is your day-by-day transaction log — every paycheck and bill, in order, with a
+              running balance. Nothing has been added yet: a <strong>one-off</strong> is a single
+              transaction (a gift, a repair), while a <strong>recurring rule</strong> (rent, a paycheck,
+              a subscription) generates its own dated transactions automatically, every month or pay
+              period, from here forward.
+            </p>
+            <div className="flex items-center justify-center gap-3 mt-4">
+              <button
+                onClick={onOpenOnboarding}
+                className="text-sm px-3 py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-medium hover:opacity-90"
+              >
+                Run setup wizard
+              </button>
+            </div>
           </div>
         )}
       </div>

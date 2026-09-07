@@ -306,6 +306,7 @@ export default function App() {
             onDeleteItem={removeItem}
             onDeleteMany={removeItems}
             onTogglePaid={togglePaid}
+            onOpenOnboarding={() => setShowOnboarding(true)}
           />
         ) : (
           <BudgetView
@@ -315,6 +316,7 @@ export default function App() {
             onEditName={editByName}
             onReorder={reorderNames}
             onReorderDrop={reorderDrop}
+            onOpenOnboarding={() => setShowOnboarding(true)}
           />
         )}
       </main>
