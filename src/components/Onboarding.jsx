@@ -7,6 +7,7 @@ const COPY = {
   paycheck: {
     title: "What's your take-home pay?",
     sub: "We'll set this up as a recurring paycheck so your Ledger and Budget stay current on their own.",
+    note: "Have more than one income source (a second job, side income, a partner's paycheck)? Add just one here — you can add the rest afterward with Quick Entry or the + Add button.",
   },
   rent: {
     title: "What's your rent or mortgage?",
@@ -167,6 +168,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
                 {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
+            <p className="text-xs text-gray-400">{COPY.paycheck.note}</p>
             <StepButtons onSkip={goNext} onContinue={submitPaycheck} />
           </div>
         )}

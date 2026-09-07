@@ -268,7 +268,7 @@ export default function App() {
           onClick={() => setShowOnboarding(true)}
           className="text-sm px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
         >
-          🎓 Tutorial
+          🚀 Quick Setup
         </button>
       </div>
 
