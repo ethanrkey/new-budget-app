@@ -12,4 +12,14 @@ if (!url || !anonKey) {
   );
 }
 
-export const supabase = createClient(url, anonKey);
+export const supabase = createClient(url, anonKey, {
+  auth: {
+    // Stay signed in across reloads/reopens until an explicit Sign Out —
+    // these are actually the SDK's own defaults in a browser, but made
+    // explicit here so it's not left to an implicit default that could
+    // change, and so it's obvious this was a deliberate choice.
+    persistSession: true, // session (and refresh token) saved to localStorage
+    autoRefreshToken: true, // silently refresh the access token before it expires
+    detectSessionInUrl: true, // required to complete the Google OAuth redirect back
+  },
+});
