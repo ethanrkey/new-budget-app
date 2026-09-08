@@ -56,6 +56,7 @@ export default function Dashboard({
                   key={cat.id}
                   category={cat}
                   isDark={isDark}
+                  asOf={asOf}
                   progress={computeDebtCategoryProgress(state, cat.id, asOf)}
                   history={computeDebtCategoryHistory(state, cat.id)}
                   contributionsByYear={computeContributionsByYear(state, cat.id, asOf)}
@@ -69,6 +70,7 @@ export default function Dashboard({
                   key={cat.id}
                   category={cat}
                   isDark={isDark}
+                  asOf={asOf}
                   progress={computeCategoryProgress(state, cat.id, asOf)}
                   history={computeCategoryHistory(state, cat.id)}
                   contributionsByYear={computeContributionsByYear(state, cat.id, asOf)}
@@ -208,9 +210,14 @@ function ContributionsStat({ label, byYear, currentYear }) {
   );
 }
 
-function FundBalanceRow({ category, isDark, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot }) {
+function FundBalanceRow({ category, isDark, asOf, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot }) {
   const color = paletteColor(category.color, isDark);
-  const currentYear = todayISO().slice(0, 4);
+  // The app's own "now" (checkInDate), NOT the real device clock — same
+  // anchor everything else here uses. Using todayISO() instead was a real
+  // bug: contributionsByYear is keyed off checkInDate too, so any drift
+  // between the two showed "Contributed <wrong year>: $0.00" (easy to
+  // mistake for the stat not being there at all).
+  const currentYear = asOf.slice(0, 4);
 
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
@@ -246,9 +253,9 @@ function FundBalanceRow({ category, isDark, progress, history, contributionsByYe
 // A debt category's "expected" is the sum of every configured loan's own
 // amortization schedule (rate + original amount), not a contribution
 // cumulative — a payment REDUCES what's owed, it doesn't accumulate.
-function DebtCategoryRow({ category, isDark, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot, onEditItem }) {
+function DebtCategoryRow({ category, isDark, asOf, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot, onEditItem }) {
   const color = paletteColor(category.color, isDark);
-  const currentYear = todayISO().slice(0, 4);
+  const currentYear = asOf.slice(0, 4); // see FundBalanceRow's comment — same fix
 
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">

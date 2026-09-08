@@ -244,7 +244,7 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               )}
               {dayOf(r.date)}
             </td>
-            <td className={`py-2 sm:py-1.5 pr-3 ${!nameStyle && isBill ? "text-bill font-medium" : ""} ${r.paidOverride ? "opacity-40" : ""}`}>
+            <td className={`py-2 sm:py-1.5 pr-3 ${isBill ? "font-medium" : ""} ${r.paidOverride ? "opacity-40" : ""}`}>
               <button
                 onClick={() => onEdit(r.id)}
                 className="text-left hover:underline decoration-dotted underline-offset-2"
