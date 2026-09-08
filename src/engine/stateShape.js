@@ -27,11 +27,28 @@ function migrateItem(item) {
 // feature replaces.
 export function legacyTrackerCategories() {
   return [
-    { id: "roth", name: "Roth", color: 5, order: 0 },           // Indigo
-    { id: "saved", name: "Saved", color: 2, order: 1 },         // Teal
-    { id: "brokerage", name: "Brokerage", color: 0, order: 2 }, // Blue
-    { id: "loans", name: "Loans", color: 3, order: 3 },         // Gold
+    { id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" },           // Indigo
+    { id: "saved", name: "Saved", color: 2, order: 1, kind: "asset" },         // Teal
+    { id: "brokerage", name: "Brokerage", color: 0, order: 2, kind: "asset" }, // Blue
+    { id: "loans", name: "Loans", color: 3, order: 3, kind: "debt" },          // Gold
   ];
+}
+
+// Migration: `kind` (asset/debt — see model.js) predates the loan-
+// amortization feature, so it's missing from BOTH a category that just came
+// out of legacyTrackerCategories() in an OLDER build (before this function
+// added `kind` above) and any custom category a user already created via
+// CategoryManager before this feature existed. Infer it rather than default
+// everything to "asset": the exact legacy "loans" id, or a name that clearly
+// reads as debt, becomes "debt" — anything else defaults to "asset", the
+// safer direction (a real debt just keeps behaving like it did before this
+// feature existed — cumulative-payments based — until you flip it in
+// Categories; misclassifying a real asset as debt would silently feed it
+// through the wrong math with no such fallback).
+function inferCategoryKind(cat) {
+  if (cat.kind) return cat.kind;
+  if (cat.id === "loans" || /\b(debt|loans?|credit card)\b/i.test(cat.name)) return "debt";
+  return "asset";
 }
 
 // Merge a raw loaded/imported object onto blankState() so every field always
@@ -58,10 +75,15 @@ export function normalize(parsed) {
   // their legacy 4 preserved as real, editable categories (same ids, so no
   // item needs its `category` rewritten); a genuinely new account keeps
   // blankState()'s fresh 3 defaults.
-  const trackerCategories =
+  const trackerCategoriesRaw =
     parsed.trackerCategories === undefined
       ? (hasData ? legacyTrackerCategories() : base.trackerCategories)
       : parsed.trackerCategories;
+  // Always backfill `kind`, even for an already-migrated custom list — see
+  // inferCategoryKind's comment above for why this can't just be folded
+  // into the branch above (a user who already has a real trackerCategories
+  // array saved from before `kind` existed still needs it added).
+  const trackerCategories = trackerCategoriesRaw.map((c) => ({ ...c, kind: inferCategoryKind(c) }));
 
   return {
     ...base,

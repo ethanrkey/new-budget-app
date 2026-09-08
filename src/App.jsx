@@ -95,8 +95,8 @@ export default function App() {
   }
   // Tracker category (savings/debt/investment) CRUD — deleting one never
   // touches items still tagged with it (see mutate.js's addCategory et al.).
-  function addTrackerCategory(name, color) {
-    setState((s) => addCategory(s, name, color));
+  function addTrackerCategory(name, color, kind) {
+    setState((s) => addCategory(s, name, color, kind));
   }
   function updateTrackerCategory(id, patch) {
     setState((s) => updateCategory(s, id, patch));
@@ -383,6 +383,7 @@ export default function App() {
             onDeleteSnapshot={deleteSnapshot}
             onSetMonthlyActual={logMonthlyActual}
             onDeleteMonthlyActual={clearMonthlyActual}
+            onEditItem={editById}
           />
         )}
       </main>

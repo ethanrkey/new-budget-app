@@ -117,11 +117,11 @@ export function reorderList(state, names, name, beforeName) {
 // budgetLayout.js / CATEGORY_PALETTE's fallback color) rather than blocking
 // the delete or silently reassigning someone's data.
 
-export function addCategory(state, name, color) {
+export function addCategory(state, name, color, kind = "asset") {
   const order = state.trackerCategories.length
     ? Math.max(...state.trackerCategories.map((c) => c.order)) + 1
     : 0;
-  return { ...state, trackerCategories: [...state.trackerCategories, { id: uid(), name, color, order }] };
+  return { ...state, trackerCategories: [...state.trackerCategories, { id: uid(), name, color, order, kind }] };
 }
 
 export function updateCategory(state, id, patch) {

@@ -13,12 +13,16 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
   const [startDate, setStartDate] = useState(initial?.startDate ?? todayISO());
   const [endDate, setEndDate] = useState(initial?.endDate ?? "");
   const [variable, setVariable] = useState(initial?.variable ?? false);
+  const [interestRate, setInterestRate] = useState(initial?.interestRate ?? "");
+  const [originalPrincipal, setOriginalPrincipal] = useState(initial?.originalPrincipal ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
-  // "Track actual vs. budgeted" only makes sense for a monthly bill — a
-  // fixed rent payment doesn't vary, and the Dashboard's monthly-actuals
-  // model has no meaningful slot for a weekly/biweekly/yearly cadence.
-  const showVariableToggle = mode === "recurring" && category === "bill" && cadence === "monthly";
+  // "Track actual vs. budgeted" applies to any recurring bill, any cadence —
+  // a biweekly/weekly variable bill's logged monthly total just splits
+  // evenly across however many instances land in that month (generate.js).
+  const showVariableToggle = mode === "recurring" && category === "bill";
+  const selectedCat = sortedCats.find((c) => c.id === category);
+  const isDebtCategory = mode === "recurring" && selectedCat?.kind === "debt";
 
   function submit() {
     if (!name || amount === "" || isNaN(Number(amount))) return;
@@ -38,6 +42,8 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
         endDate: endDate || null,
         dayOfMonth: new Date(startDate + "T00:00:00").getDate(),
         variable: showVariableToggle ? variable : false,
+        interestRate: isDebtCategory && interestRate !== "" ? Math.abs(Number(interestRate)) : null,
+        originalPrincipal: isDebtCategory && originalPrincipal !== "" ? Math.abs(Number(originalPrincipal)) : null,
       });
     } else {
       onSave({ ...base, date });
@@ -132,6 +138,24 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
                   <input className={field} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
                 </div>
               </div>
+              {isDebtCategory && (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1">
+                    <label className={label}>Interest rate (APR %)</label>
+                    <input className={field} type="number" step="0.01" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} placeholder="e.g. 5.5" />
+                  </div>
+                  <div className="flex-1">
+                    <label className={label}>Original loan amount</label>
+                    <input className={field} type="number" step="0.01" value={originalPrincipal} onChange={(e) => setOriginalPrincipal(e.target.value)} placeholder="e.g. 12000" />
+                  </div>
+                </div>
+              )}
+              {isDebtCategory && (
+                <p className="text-xs text-gray-400 -mt-1">
+                  Set both to include this loan in the Dashboard&apos;s amortized debt total. Leave blank
+                  and it just won&apos;t count toward that total yet.
+                </p>
+              )}
               {showVariableToggle && (
                 <label className="flex items-start gap-2 text-sm bg-gray-50 dark:bg-gray-800/60 rounded-lg p-3 cursor-pointer">
                   <input

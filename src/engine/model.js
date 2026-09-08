@@ -37,18 +37,23 @@ export const CATEGORIES = {
     return isDark ? entry.dark : entry.light;
   }
 
-  // A tracker category shape (for reference): { id, name, color, order }
+  // A tracker category shape (for reference): { id, name, color, order, kind }
   // `color` is an index into CATEGORY_PALETTE. `id` is what an item's
-  // `category` field holds for a savings/debt/investment item.
+  // `category` field holds for a savings/debt/investment item. `kind` is
+  // "asset" (default — Savings, Investments: balance accumulates from
+  // contributions) or "debt" (Loans, credit cards: the Dashboard's
+  // "expected" instead comes from amortizing each of its items' own
+  // interest rate/original amount, via engine/loans.js — a payment REDUCES
+  // what's owed, it doesn't accumulate like a deposit).
 
   // The 3 starting categories for a brand-new account (no prior data) — see
   // stateShape.js for the migration that instead seeds an EXISTING user's
   // legacy roth/saved/brokerage/loans as their own editable categories.
   export function defaultTrackerCategories() {
     return [
-      { id: uid(), name: "Savings",     color: 2, order: 0 }, // Teal
-      { id: uid(), name: "Investments", color: 5, order: 1 }, // Indigo
-      { id: uid(), name: "Debt",        color: 1, order: 2 }, // Orange
+      { id: uid(), name: "Savings",     color: 2, order: 0, kind: "asset" }, // Teal
+      { id: uid(), name: "Investments", color: 5, order: 1, kind: "asset" }, // Indigo
+      { id: uid(), name: "Debt",        color: 1, order: 2, kind: "debt"  }, // Orange
     ];
   }
 
@@ -80,11 +85,20 @@ export const CATEGORIES = {
   }
 
   // A recurring rule shape (for reference):
-  // { id, name, amount, category, cadence, dayOfMonth, startDate, endDate|null, order, color|null, variable|undefined }
-  // `variable` (bill-category, monthly-cadence rules only) marks the amount
-  // as an estimate rather than a fixed number — enables logging a real
-  // monthly total in monthlyActuals from the Dashboard (electric, groceries,
-  // gas: the estimate is never exact, unlike rent).
+  // { id, name, amount, category, cadence, dayOfMonth, startDate, endDate|null, order,
+  //   color|null, variable|undefined, interestRate|null, originalPrincipal|null }
+  // `variable` (bill-category rules only) marks the amount as an estimate
+  // rather than a fixed number — enables logging a real monthly total in
+  // monthlyActuals from the Dashboard (electric, groceries, gas: the
+  // estimate is never exact, unlike rent). Any cadence works — a biweekly
+  // variable bill's logged total splits evenly across however many
+  // instances land in that month (see generate.js).
+  // `interestRate` (APR, as a percent e.g. 5.5) and `originalPrincipal`
+  // (the loan's starting balance) apply only to a recurring rule tagged
+  // with a DEBT-kind tracker category — together they let engine/loans.js
+  // amortize this specific loan's expected remaining balance. Either can be
+  // left null/unset; an unconfigured loan is simply skipped in the
+  // category's cumulative debt total until both are filled in.
 
   // A one-off shape:
   // { id, name, amount, category, date, order, color|null }

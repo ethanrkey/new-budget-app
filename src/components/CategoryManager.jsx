@@ -13,6 +13,7 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(0);
+  const [newKind, setNewKind] = useState("asset");
 
   function startEdit(cat) {
     setEditingId(cat.id);
@@ -26,7 +27,7 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
   function addNew() {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    onAdd(trimmed, newColor);
+    onAdd(trimmed, newColor, newKind);
     setNewName("");
     setNewColor((c) => (c + 1) % 8);
   }
@@ -78,6 +79,8 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
                   style={{ backgroundColor: paletteColor(cat.color, isDark) }}
                   className="h-5 w-5 rounded-full shrink-0 ring-offset-2 dark:ring-offset-gray-900 hover:ring-2 hover:ring-gray-400 transition"
                 />
+
+                <KindPill kind={cat.kind} onClick={() => onUpdate(cat.id, { kind: cat.kind === "debt" ? "asset" : "debt" })} />
 
                 {editingId === cat.id ? (
                   <input
@@ -141,6 +144,7 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") addNew(); }}
             />
+            <KindPill kind={newKind} onClick={() => setNewKind((k) => (k === "debt" ? "asset" : "debt"))} />
             <button
               onClick={addNew}
               disabled={!newName.trim()}
@@ -153,5 +157,26 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
         </div>
       </div>
     </div>
+  );
+}
+
+// Asset/Debt toggle — affects how the Dashboard calculates "expected" for
+// this category (contributions-based vs. amortized off each loan's own
+// interest rate). Click to flip.
+function KindPill({ kind, onClick }) {
+  const isDebt = kind === "debt";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Asset (savings/investments accumulate) or Debt (loans amortize down) — affects the Dashboard's math"
+      className={`text-[10px] font-medium px-1.5 py-1 rounded shrink-0 transition ${
+        isDebt
+          ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+          : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+      }`}
+    >
+      {isDebt ? "Debt" : "Asset"}
+    </button>
   );
 }

@@ -3,6 +3,31 @@ import { CATEGORIES } from "./model.js";
 
 function iso(d) { return d.toISOString().slice(0, 10); }
 function parse(isoStr) { return new Date(isoStr + "T00:00:00"); }
+function round(n) { return Math.round(n * 100) / 100; }
+
+// Every date a recurring rule fires, from its own startDate up to
+// `horizonISO` (respecting its own endDate). Exported so callers that need
+// to know a rule's occurrences WITHOUT generating full events can reuse the
+// exact same expansion logic — engine/progress.js's cadence-aware "expected"
+// for a variable bill (a biweekly item can land 2 or 3 times in a given
+// month, same "2 vs 3 paydays" thing that's already true for paychecks) and
+// engine/loans.js's amortization schedule both do this.
+export function occurrenceDates(rule, horizonISO) {
+  const horizon = parse(horizonISO);
+  const start = parse(rule.startDate);
+  const end = rule.endDate ? parse(rule.endDate) : horizon;
+  const stop = end < horizon ? end : horizon;
+
+  const dates = [];
+  let d = new Date(start);
+  let guard = 0;
+  while (d <= stop && guard < 2000) {
+    guard++;
+    dates.push(iso(d));
+    d = advance(d, rule);
+  }
+  return dates;
+}
 
 // Generate EVERY event (recurring expanded + one-offs) up to `horizonISO`,
 // with NO live-month filtering — unlike buildEvents below, this doesn't drop
@@ -17,25 +42,29 @@ export function buildAllEvents(state, horizonISO) {
   const paidOverrides = state.paidOverrides || {};
   const monthlyActuals = state.monthlyActuals || {};
 
-  // 1) expand each recurring rule
+  // 1) expand each recurring rule. A logged monthly actual is a TOTAL for
+  //    the month, not a per-instance amount — so for a weekly/biweekly rule
+  //    that fires more than once in that month (gas, groceries bought every
+  //    couple weeks), split it evenly across however many instances
+  //    actually land there, rather than assuming exactly one (which only
+  //    monthly-cadence rules guarantee).
   for (const rule of state.recurring) {
-    const start = parse(rule.startDate);
-    const end = rule.endDate ? parse(rule.endDate) : horizon;
-    const stop = end < horizon ? end : horizon;
-
-    let d = new Date(start);
-    let guard = 0;
-    while (d <= stop && guard < 2000) {
-      guard++;
-      events.push(makeEvent(rule, iso(d), paidOverrides, monthlyActuals));
-      d = advance(d, rule);
+    const dates = occurrenceDates(rule, horizonISO);
+    const countByMonth = new Map();
+    for (const dt of dates) {
+      const mk = dt.slice(0, 7);
+      countByMonth.set(mk, (countByMonth.get(mk) || 0) + 1);
+    }
+    for (const dt of dates) {
+      const countInMonth = countByMonth.get(dt.slice(0, 7));
+      events.push(makeEvent(rule, dt, paidOverrides, monthlyActuals, countInMonth));
     }
   }
 
   // 2) add one-offs within horizon
   for (const o of state.oneoffs) {
     if (parse(o.date) <= horizon) {
-      events.push(makeEvent(o, o.date, paidOverrides, monthlyActuals));
+      events.push(makeEvent(o, o.date, paidOverrides, monthlyActuals, 1));
     }
   }
 
@@ -68,20 +97,20 @@ export function buildEvents(state, horizonISO) {
 // paid for that month. The event still appears (so it stays visible), but its
 // magnitude is zeroed so it stops moving the balance / budget totals again.
 //
-// `monthlyActuals` is `{ [itemId]: { "YYYY-MM": amount } }` — the real amount
-// for a variable bill (electric, groceries: the estimate is never exact) in a
-// given month, logged from the Dashboard, independent of any specific dated
-// instance. Once logged, it REPLACES the rule's flat estimate for every event
-// that month (there's normally just one, since this only applies to monthly-
-// cadence bills — see EventForm's `variable` toggle) so forward projections
-// compound off the real number instead of a stale guess the moment it's known.
-function makeEvent(src, date, paidOverrides, monthlyActuals) {
+// `monthlyActuals` is `{ [itemId]: { "YYYY-MM": amount } }` — the real TOTAL
+// for a variable bill (electric, groceries, gas: the estimate is never
+// exact) in a given month, logged from the Dashboard, independent of any
+// specific dated instance. Once logged, it REPLACES the rule's flat
+// estimate — split evenly across `countInMonth` instances when the rule
+// fires more than once that month — so forward projections compound off
+// the real number instead of a stale guess the moment it's known.
+function makeEvent(src, date, paidOverrides, monthlyActuals, countInMonth = 1) {
   const dir = CATEGORIES[src.category]?.direction ?? "out";
   const monthKey = date.slice(0, 7);
   const paidOverride =
     src.category === "bill" && (paidOverrides?.[monthKey]?.includes(src.id) ?? false);
   const actual = monthlyActuals?.[src.id]?.[monthKey];
-  const amount = actual != null ? Math.abs(actual) : Math.abs(src.amount);
+  const amount = actual != null ? Math.abs(round(actual / countInMonth)) : Math.abs(src.amount);
   return {
     id: src.id + "@" + date,
     name: src.name,

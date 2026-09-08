@@ -7,13 +7,22 @@
 //    that would just be today's Ledger stepping, which answers a different
 //    question ("how much have I moved since checkInDate reset"), not "what
 //    should actually be in this account right now."
-// 2. Variable-bill variance: a flat expected amount (the rule's own
-//    estimate) vs. whatever real total was logged in monthlyActuals for a
-//    given month — no transaction summation needed, since the estimate IS a
-//    single number per month by construction.
-import { buildAllEvents } from "./generate.js";
+// 2. Variable-bill variance: expected = the rule's flat per-occurrence
+//    estimate times however many times it actually fires that month (a
+//    biweekly/weekly bill can land 2 or 3 times in a given month — same
+//    "2 vs 3 paydays" reality already true for paychecks) vs. whatever real
+//    total was logged in monthlyActuals.
+import { buildAllEvents, occurrenceDates } from "./generate.js";
 
 function round(n) { return Math.round(n * 100) / 100; }
+
+// The last real day of `monthKey` ("YYYY-MM"), for bounding an occurrence
+// scan to exactly one month.
+function endOfMonth(monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  const d = new Date(y, m, 0); // day 0 of next month = last day of this one
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 function sortedSnapshots(state, categoryId) {
   return [...(state.balanceSnapshots?.[categoryId] || [])].sort((a, b) =>
@@ -73,17 +82,36 @@ export function computeCategoryHistory(state, categoryId) {
   });
 }
 
-// One variable bill's expected-vs-actual for one month. `expected` is
-// always the rule's flat estimate — a variable bill has no per-month
-// forecast beyond that single number.
+// One variable bill's expected-vs-actual for one month. `expected` is the
+// rule's flat per-occurrence estimate times however many times it actually
+// fires in that specific month — not always 1, now that variable bills can
+// be any cadence, not just monthly.
 export function computeMonthVariance(item, monthlyActuals, monthKey) {
+  const occurrences = occurrenceDates(item, endOfMonth(monthKey)).filter((d) => d.slice(0, 7) === monthKey).length;
+  const expected = round(item.amount * occurrences);
   const actual = monthlyActuals?.[item.id]?.[monthKey];
   return {
     monthKey,
-    expected: item.amount,
+    occurrences,
+    expected,
     actual: actual ?? null,
-    delta: actual != null ? round(actual - item.amount) : null,
+    delta: actual != null ? round(actual - expected) : null,
   };
+}
+
+// Sum of a category's transactions grouped by calendar year, through
+// `asOfISO` — a growth-independent number (unlike a market-exposed
+// account's balance) that tells you how much you've actually put in
+// (or, for a debt category, paid down) regardless of what the balance
+// itself is doing. { "2026": 3600, "2025": 6000, ... }, most recent first.
+export function computeContributionsByYear(state, categoryId, asOfISO) {
+  const events = buildAllEvents(state, asOfISO).filter((e) => e.category === categoryId && e.date <= asOfISO);
+  const byYear = {};
+  for (const e of events) {
+    const y = e.date.slice(0, 4);
+    byYear[y] = round((byYear[y] || 0) + e.amount);
+  }
+  return Object.fromEntries(Object.entries(byYear).sort((a, b) => (a[0] < b[0] ? 1 : -1)));
 }
 
 // The last `count` months as "YYYY-MM" keys, ending at (and including)

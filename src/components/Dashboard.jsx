@@ -1,9 +1,17 @@
 import { useState } from "react";
-import { computeCategoryProgress, computeCategoryHistory, computeMonthVariance, lastMonthKeys } from "../engine/progress.js";
+import { computeCategoryProgress, computeCategoryHistory, computeMonthVariance, computeContributionsByYear, lastMonthKeys } from "../engine/progress.js";
+import { computeDebtCategoryProgress, computeDebtCategoryHistory } from "../engine/loans.js";
 import { paletteColor, todayISO } from "../engine/model.js";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
+
+const CADENCE_LABEL = {
+  weekly: "every week",
+  biweekly: "every 2 weeks",
+  monthly: "monthly",
+  yearly: "yearly",
+};
 
 function monthLabel(key) {
   const [y, m] = key.split("-").map(Number);
@@ -11,14 +19,15 @@ function monthLabel(key) {
 }
 
 // Reconciles the forecast against reality: actual fund balances you log
-// yourself (vs. what the transaction log alone would project), and actual
-// vs. budgeted for bills flagged "variable" (electric, groceries, gas —
-// amounts that are never exact). Ledger/Budget stay pure forecasting tools;
-// this is the only place actuals live.
+// yourself (vs. what the transaction log alone would project), actual vs.
+// budgeted for bills flagged "variable" (electric, groceries, gas — amounts
+// that are never exact), and amortized debt payoff. Ledger/Budget stay pure
+// forecasting tools; this is the only place actuals live.
 export default function Dashboard({
   state, isDark,
   onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot,
   onSetMonthlyActual, onDeleteMonthlyActual,
+  onEditItem,
 }) {
   const sortedCats = [...state.trackerCategories].sort((a, b) => a.order - b.order);
   const variableItems = state.recurring.filter((r) => r.variable);
@@ -31,7 +40,9 @@ export default function Dashboard({
         <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">Fund balances</h2>
         <p className="text-xs text-gray-400 mb-4">
           &quot;Expected&quot; projects your last logged balance forward using every transaction since —
-          log a fresh balance any time you check the real account to see how close the forecast is.
+          log a fresh balance any time you check the real account. For a market-exposed account
+          (Roth, Brokerage), the gap you see is mostly real growth/loss, not tracking error — that&apos;s
+          what &quot;Contributed&quot; is for: a number the market can&apos;t move.
         </p>
         {sortedCats.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">
@@ -39,18 +50,34 @@ export default function Dashboard({
           </p>
         ) : (
           <div className="space-y-3">
-            {sortedCats.map((cat) => (
-              <FundBalanceRow
-                key={cat.id}
-                category={cat}
-                isDark={isDark}
-                progress={computeCategoryProgress(state, cat.id, asOf)}
-                history={computeCategoryHistory(state, cat.id)}
-                onAddSnapshot={(amount, date) => onAddSnapshot(cat.id, amount, date)}
-                onUpdateSnapshot={(snapshotId, patch) => onUpdateSnapshot(cat.id, snapshotId, patch)}
-                onDeleteSnapshot={(snapshotId) => onDeleteSnapshot(cat.id, snapshotId)}
-              />
-            ))}
+            {sortedCats.map((cat) =>
+              cat.kind === "debt" ? (
+                <DebtCategoryRow
+                  key={cat.id}
+                  category={cat}
+                  isDark={isDark}
+                  progress={computeDebtCategoryProgress(state, cat.id, asOf)}
+                  history={computeDebtCategoryHistory(state, cat.id)}
+                  contributionsByYear={computeContributionsByYear(state, cat.id, asOf)}
+                  onAddSnapshot={(amount, date) => onAddSnapshot(cat.id, amount, date)}
+                  onUpdateSnapshot={(snapshotId, patch) => onUpdateSnapshot(cat.id, snapshotId, patch)}
+                  onDeleteSnapshot={(snapshotId) => onDeleteSnapshot(cat.id, snapshotId)}
+                  onEditItem={onEditItem}
+                />
+              ) : (
+                <FundBalanceRow
+                  key={cat.id}
+                  category={cat}
+                  isDark={isDark}
+                  progress={computeCategoryProgress(state, cat.id, asOf)}
+                  history={computeCategoryHistory(state, cat.id)}
+                  contributionsByYear={computeContributionsByYear(state, cat.id, asOf)}
+                  onAddSnapshot={(amount, date) => onAddSnapshot(cat.id, amount, date)}
+                  onUpdateSnapshot={(snapshotId, patch) => onUpdateSnapshot(cat.id, snapshotId, patch)}
+                  onDeleteSnapshot={(snapshotId) => onDeleteSnapshot(cat.id, snapshotId)}
+                />
+              )
+            )}
           </div>
         )}
       </section>
@@ -85,11 +112,12 @@ export default function Dashboard({
   );
 }
 
-function FundBalanceRow({ category, isDark, progress, history, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot }) {
+// Shared "log a balance" + history controls, used by both FundBalanceRow and
+// DebtCategoryRow — only the header content above it differs.
+function BalanceLogControls({ history, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot }) {
   const [showHistory, setShowHistory] = useState(false);
   const [draftAmount, setDraftAmount] = useState("");
   const [draftDate, setDraftDate] = useState(todayISO());
-  const color = paletteColor(category.color, isDark);
 
   function submitNew() {
     if (draftAmount === "" || isNaN(Number(draftAmount))) return;
@@ -99,30 +127,7 @@ function FundBalanceRow({ category, isDark, progress, history, onAddSnapshot, on
   }
 
   return (
-    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
-          <span className="font-medium">{category.name}</span>
-        </div>
-        <div className="flex items-center gap-4 text-sm flex-wrap">
-          <span className="text-gray-500">
-            Expected now:{" "}
-            <span className="font-semibold text-gray-800 dark:text-gray-100">{money(progress.expectedNow)}</span>
-          </span>
-          <span className="text-gray-500">
-            {progress.latest ? (
-              <>
-                Last logged: <span className="font-semibold" style={{ color }}>{money(progress.latest.amount)}</span>{" "}
-                ({progress.latest.date})
-              </>
-            ) : (
-              "No balance logged yet"
-            )}
-          </span>
-        </div>
-      </div>
-
+    <>
       <div className="flex flex-wrap items-end gap-2 mt-3">
         <div>
           <label className="block text-xs text-gray-400 mb-1">Log a balance</label>
@@ -169,6 +174,134 @@ function FundBalanceRow({ category, isDark, progress, history, onAddSnapshot, on
           ))}
         </div>
       )}
+    </>
+  );
+}
+
+// Compact "Contributed/Paid this year" stat + an expandable by-year
+// breakdown — a growth-independent number to sit next to Expected/Actual,
+// which for a market-exposed account can otherwise look like a tracking
+// error when it's really just the market moving.
+function ContributionsStat({ label, byYear, currentYear }) {
+  const [expanded, setExpanded] = useState(false);
+  const years = Object.keys(byYear);
+  if (years.length === 0) return null;
+  return (
+    <span className="text-gray-500">
+      {label} {currentYear}:{" "}
+      <span className="font-semibold text-gray-800 dark:text-gray-100">{money(byYear[currentYear] || 0)}</span>
+      {years.length > 1 && (
+        <button onClick={() => setExpanded((v) => !v)} className="ml-1.5 text-xs underline decoration-dotted underline-offset-2 text-gray-400">
+          {expanded ? "hide" : "all years"}
+        </button>
+      )}
+      {expanded && (
+        <span className="block text-xs mt-1 space-y-0.5">
+          {years.map((y) => (
+            <span key={y} className="block">
+              {y}: {money(byYear[y])}
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function FundBalanceRow({ category, isDark, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot }) {
+  const color = paletteColor(category.color, isDark);
+  const currentYear = todayISO().slice(0, 4);
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
+          <span className="font-medium">{category.name}</span>
+        </div>
+        <div className="flex items-center gap-4 text-sm flex-wrap">
+          <span className="text-gray-500">
+            Expected now:{" "}
+            <span className="font-semibold text-gray-800 dark:text-gray-100">{money(progress.expectedNow)}</span>
+          </span>
+          <span className="text-gray-500">
+            {progress.latest ? (
+              <>
+                Last logged: <span className="font-semibold" style={{ color }}>{money(progress.latest.amount)}</span>{" "}
+                ({progress.latest.date})
+              </>
+            ) : (
+              "No balance logged yet"
+            )}
+          </span>
+          <ContributionsStat label="Contributed" byYear={contributionsByYear} currentYear={currentYear} />
+        </div>
+      </div>
+
+      <BalanceLogControls history={history} onAddSnapshot={onAddSnapshot} onUpdateSnapshot={onUpdateSnapshot} onDeleteSnapshot={onDeleteSnapshot} />
+    </div>
+  );
+}
+
+// A debt category's "expected" is the sum of every configured loan's own
+// amortization schedule (rate + original amount), not a contribution
+// cumulative — a payment REDUCES what's owed, it doesn't accumulate.
+function DebtCategoryRow({ category, isDark, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot, onEditItem }) {
+  const color = paletteColor(category.color, isDark);
+  const currentYear = todayISO().slice(0, 4);
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
+          <span className="font-medium">{category.name}</span>
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Debt</span>
+        </div>
+        <div className="flex items-center gap-4 text-sm flex-wrap">
+          <span className="text-gray-500">
+            Expected remaining:{" "}
+            <span className="font-semibold text-gray-800 dark:text-gray-100">{money(progress.expectedNow)}</span>
+          </span>
+          <span className="text-gray-500">
+            {progress.latest ? (
+              <>
+                Last logged: <span className="font-semibold" style={{ color }}>{money(progress.latest.amount)}</span>{" "}
+                ({progress.latest.date})
+              </>
+            ) : (
+              "No balance logged yet"
+            )}
+          </span>
+          <ContributionsStat label="Paid" byYear={contributionsByYear} currentYear={currentYear} />
+        </div>
+      </div>
+
+      {progress.loans.length > 1 && (
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+          {progress.loans.map((l) => (
+            <span key={l.id}>{l.name}: <span className="font-medium text-gray-700 dark:text-gray-300">{money(l.balance)}</span></span>
+          ))}
+        </div>
+      )}
+
+      {progress.unconfigured.length > 0 && (
+        <div className="mt-2 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-lg p-2 text-amber-800 dark:text-amber-300">
+          Not counted in the total yet (needs an interest rate + original amount):{" "}
+          {progress.unconfigured.map((loan, i) => (
+            <span key={loan.id}>
+              {i > 0 && ", "}
+              {onEditItem ? (
+                <button onClick={() => onEditItem(loan.id)} className="underline decoration-dotted underline-offset-2">{loan.name}</button>
+              ) : (
+                loan.name
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <BalanceLogControls history={history} onAddSnapshot={onAddSnapshot} onUpdateSnapshot={onUpdateSnapshot} onDeleteSnapshot={onDeleteSnapshot} />
     </div>
   );
 }
@@ -239,10 +372,13 @@ function HistoryRow({ entry, onUpdate, onDelete }) {
 }
 
 function VariableSpendingRow({ item, monthKeys, monthlyActuals, onSet, onDelete }) {
+  // Cadence-aware label — a biweekly/weekly item's `amount` is per
+  // occurrence, not a monthly figure, so "budgeted $X/mo" would be wrong.
+  const cadenceLabel = CADENCE_LABEL[item.cadence] || item.cadence;
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
       <div className="font-medium mb-2">
-        {item.name} <span className="text-gray-400 font-normal text-sm">— budgeted {money(item.amount)}/mo</span>
+        {item.name} <span className="text-gray-400 font-normal text-sm">— budgeted {money(item.amount)} {cadenceLabel}</span>
       </div>
       <div className="overflow-x-auto">
         <table className="text-sm border-collapse w-full">
@@ -277,7 +413,10 @@ function MonthRow({ item, monthKey, monthlyActuals, onSet, onDelete }) {
 
   return (
     <tr className="border-t border-gray-100 dark:border-gray-800/60">
-      <td className="py-1.5 pr-3">{monthLabel(monthKey)}</td>
+      <td className="py-1.5 pr-3">
+        {monthLabel(monthKey)}
+        {v.occurrences > 1 && <span className="text-gray-400 text-xs"> ({v.occurrences}×)</span>}
+      </td>
       <td className="py-1.5 pr-3 text-right text-gray-500">{money(v.expected)}</td>
       <td className="py-1.5 pr-3 text-right">
         <input
