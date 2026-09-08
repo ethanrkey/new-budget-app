@@ -71,5 +71,9 @@ export function normalize(parsed) {
     oneoffs,
     paidOverrides: parsed.paidOverrides || {},
     trackerCategories,
+    // Brand-new fields, no legacy shape to fold in — an existing account
+    // simply never had any actuals logged yet, same as paidOverrides above.
+    balanceSnapshots: parsed.balanceSnapshots || {},
+    monthlyActuals: parsed.monthlyActuals || {},
   };
 }

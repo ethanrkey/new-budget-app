@@ -71,11 +71,20 @@ export const CATEGORIES = {
       oneoffs: [],   // individual dated events
       paidOverrides: {}, // { "YYYY-MM": [ruleId,...] } — bills marked paid (feature 9)
       trackerCategories: defaultTrackerCategories(),
+      // Real, actual-world numbers you log yourself — never generated from
+      // transactions — used to reconcile the forecast against reality (the
+      // Dashboard tab). See engine/progress.js for how these are used.
+      balanceSnapshots: {}, // { [trackerCategoryId]: [{ id, date, amount }, ...] } — actual balance check-ins
+      monthlyActuals: {},   // { [itemId]: { "YYYY-MM": amount } } — real spend for a variable bill's month
     };
   }
 
   // A recurring rule shape (for reference):
-  // { id, name, amount, category, cadence, dayOfMonth, startDate, endDate|null, order, color|null }
+  // { id, name, amount, category, cadence, dayOfMonth, startDate, endDate|null, order, color|null, variable|undefined }
+  // `variable` (bill-category, monthly-cadence rules only) marks the amount
+  // as an estimate rather than a fixed number — enables logging a real
+  // monthly total in monthlyActuals from the Dashboard (electric, groceries,
+  // gas: the estimate is never exact, unlike rent).
 
   // A one-off shape:
   // { id, name, amount, category, date, order, color|null }

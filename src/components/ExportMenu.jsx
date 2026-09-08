@@ -2,8 +2,8 @@ import { useState } from "react";
 import { ledgerToCSV, budgetToCSV } from "../engine/csv.js";
 import { todayISO } from "../engine/model.js";
 
-function downloadCSV(filename, csvString) {
-  const blob = new Blob(["\uFEFF" + csvString], { type: "text/csv;charset=utf-8;" }); // BOM so Excel opens it as UTF-8
+function download(filename, contentString, mimeType) {
+  const blob = new Blob(["﻿" + contentString], { type: mimeType }); // BOM so Excel opens CSV as UTF-8
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -14,20 +14,30 @@ function downloadCSV(filename, csvString) {
   URL.revokeObjectURL(url);
 }
 
-export default function ExportMenu({ ledger, budget, trackerCategories = [] }) {
+export default function ExportMenu({ ledger, budget, trackerCategories = [], state }) {
   const [open, setOpen] = useState(false);
 
   function exportLedger() {
-    downloadCSV(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories));
+    download(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories), "text/csv;charset=utf-8;");
     setOpen(false);
   }
   function exportBudget() {
-    downloadCSV(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories));
+    download(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories), "text/csv;charset=utf-8;");
     setOpen(false);
   }
   function exportBoth() {
-    downloadCSV(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories));
-    downloadCSV(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories));
+    download(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories), "text/csv;charset=utf-8;");
+    download(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories), "text/csv;charset=utf-8;");
+    setOpen(false);
+  }
+  // The Ledger/Budget CSVs are transaction/monthly-grid shaped and don't have
+  // a natural column for fund-balance snapshots or variable-bill monthly
+  // actuals (they're not transactions). This exports the ENTIRE raw state —
+  // including trackerCategories, balanceSnapshots, monthlyActuals, all of
+  // it — as JSON, so nothing new is left un-backed-up. It also round-trips
+  // perfectly (no lossy reconstruction the way CSV re-import needs).
+  function exportBackup() {
+    download(`budget-backup-${todayISO()}.json`, JSON.stringify(state, null, 2), "application/json;charset=utf-8;");
     setOpen(false);
   }
 
@@ -45,10 +55,19 @@ export default function ExportMenu({ ledger, budget, trackerCategories = [] }) {
         <>
           {/* click-outside catcher */}
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-20 overflow-hidden">
+          <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-20 overflow-hidden">
             <button onClick={exportLedger} className={item}>Ledger</button>
             <button onClick={exportBudget} className={item}>Budget</button>
             <button onClick={exportBoth} className={`${item} border-t border-gray-100 dark:border-gray-800`}>Both</button>
+            {state && (
+              <button
+                onClick={exportBackup}
+                className={`${item} border-t border-gray-100 dark:border-gray-800`}
+                title="Everything, including fund balances and variable-bill actuals — round-trips perfectly"
+              >
+                Full backup (JSON)
+              </button>
+            )}
           </div>
         </>
       )}

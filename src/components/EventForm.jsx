@@ -12,8 +12,13 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
   const [cadence, setCadence] = useState(initial?.cadence ?? "monthly");
   const [startDate, setStartDate] = useState(initial?.startDate ?? todayISO());
   const [endDate, setEndDate] = useState(initial?.endDate ?? "");
+  const [variable, setVariable] = useState(initial?.variable ?? false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
+  // "Track actual vs. budgeted" only makes sense for a monthly bill — a
+  // fixed rent payment doesn't vary, and the Dashboard's monthly-actuals
+  // model has no meaningful slot for a weekly/biweekly/yearly cadence.
+  const showVariableToggle = mode === "recurring" && category === "bill" && cadence === "monthly";
 
   function submit() {
     if (!name || amount === "" || isNaN(Number(amount))) return;
@@ -32,6 +37,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
         startDate,
         endDate: endDate || null,
         dayOfMonth: new Date(startDate + "T00:00:00").getDate(),
+        variable: showVariableToggle ? variable : false,
       });
     } else {
       onSave({ ...base, date });
@@ -126,6 +132,21 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
                   <input className={field} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
                 </div>
               </div>
+              {showVariableToggle && (
+                <label className="flex items-start gap-2 text-sm bg-gray-50 dark:bg-gray-800/60 rounded-lg p-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={variable}
+                    onChange={(e) => setVariable(e.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>
+                    <span className="font-medium">Track actual vs. budgeted</span> — the amount above is
+                    just an estimate (electric, groceries, gas). Log the real monthly total from the
+                    Dashboard once you know it.
+                  </span>
+                </label>
+              )}
             </>
           )}
         </div>

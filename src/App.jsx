@@ -2,9 +2,14 @@ import { useState, useEffect, useMemo } from "react";
 import { loadState, saveState } from "./storage.js";
 import { getSession, onAuthChange, signOut } from "./auth.js";
 import { computeLedger, computeBudget } from "./engine/compute.js";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory } from "./engine/mutate.js";
+import {
+  upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride,
+  addCategory, updateCategory, deleteCategory, moveCategory,
+  addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
+} from "./engine/mutate.js";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
+import Dashboard from "./components/Dashboard.jsx";
 import EventForm from "./components/EventForm.jsx";
 import QuickEntry from "./components/QuickEntry.jsx";
 import ExportMenu from "./components/ExportMenu.jsx";
@@ -61,8 +66,12 @@ export default function App() {
   // A deliberate full clear-out is the one legitimate case for saving an
   // empty state — it's a normal setState like any other mutation here, so it
   // isn't affected by (and doesn't need to route around) the load-error fix.
+  // Clears monthlyActuals too (they're keyed to items that no longer exist),
+  // but deliberately leaves balanceSnapshots alone — those are your own
+  // logged real-world account balances, not forecast data, and Wipe Data
+  // should never quietly delete something you can't get back.
   function wipeData() {
-    setState((s) => ({ ...s, recurring: [], oneoffs: [], paidOverrides: {} }));
+    setState((s) => ({ ...s, recurring: [], oneoffs: [], paidOverrides: {}, monthlyActuals: {} }));
   }
 
   // open the edit form for a ledger row id ("<itemId>@<date>") or bare item id
@@ -97,6 +106,23 @@ export default function App() {
   }
   function moveTrackerCategory(id, direction) {
     setState((s) => moveCategory(s, id, direction));
+  }
+  // Dashboard: fund-balance snapshots + variable-bill monthly actuals — both
+  // fully editable/deletable after the fact (see mutate.js).
+  function addSnapshot(categoryId, amount, date) {
+    setState((s) => addBalanceSnapshot(s, categoryId, amount, date));
+  }
+  function updateSnapshot(categoryId, snapshotId, patch) {
+    setState((s) => updateBalanceSnapshot(s, categoryId, snapshotId, patch));
+  }
+  function deleteSnapshot(categoryId, snapshotId) {
+    setState((s) => deleteBalanceSnapshot(s, categoryId, snapshotId));
+  }
+  function logMonthlyActual(itemId, monthKey, amount) {
+    setState((s) => setMonthlyActual(s, itemId, monthKey, amount));
+  }
+  function clearMonthlyActual(itemId, monthKey) {
+    setState((s) => deleteMonthlyActual(s, itemId, monthKey));
   }
   // Merge (or, if `replace`, wipe first then load) parsed CSV items into
   // current state via upsertItem one at a time, so `order` is assigned
@@ -227,7 +253,7 @@ export default function App() {
           >
             ⬆<span className="hidden sm:inline"> Import CSV</span>
           </button>
-          <ExportMenu ledger={ledger} budget={budget} trackerCategories={state.trackerCategories} />
+          <ExportMenu ledger={ledger} budget={budget} trackerCategories={state.trackerCategories} state={state} />
           <button
             onClick={() => setCategoryManagerOpen(true)}
             title="Manage savings/debt categories"
@@ -305,7 +331,7 @@ export default function App() {
 
       {/* Tabs */}
       <nav className="px-3 sm:px-6 pt-3 flex gap-2">
-        {["ledger", "budget"].map((t) => (
+        {["ledger", "budget", "dashboard"].map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -336,7 +362,7 @@ export default function App() {
             onOpenOnboarding={() => setShowOnboarding(true)}
             onOpenCategoryManager={() => setCategoryManagerOpen(true)}
           />
-        ) : (
+        ) : tab === "budget" ? (
           <BudgetView
             budget={budget}
             settings={state.settings}
@@ -347,6 +373,16 @@ export default function App() {
             onReorder={reorderNames}
             onReorderDrop={reorderDrop}
             onOpenOnboarding={() => setShowOnboarding(true)}
+          />
+        ) : (
+          <Dashboard
+            state={state}
+            isDark={isDark}
+            onAddSnapshot={addSnapshot}
+            onUpdateSnapshot={updateSnapshot}
+            onDeleteSnapshot={deleteSnapshot}
+            onSetMonthlyActual={logMonthlyActual}
+            onDeleteMonthlyActual={clearMonthlyActual}
           />
         )}
       </main>

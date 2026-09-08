@@ -161,3 +161,58 @@ export function togglePaidOverride(state, itemId, monthKey) {
     : [...current, itemId];
   return { ...state, paidOverrides: { ...state.paidOverrides, [monthKey]: next } };
 }
+
+// ---- Fund-balance snapshots (Dashboard "actual" balances) ----
+// Every logged value is fully editable/deletable after the fact — these are
+// corrections to your own record-keeping, not an append-only audit log.
+
+export function addBalanceSnapshot(state, categoryId, amount, date) {
+  const list = state.balanceSnapshots?.[categoryId] || [];
+  return {
+    ...state,
+    balanceSnapshots: { ...state.balanceSnapshots, [categoryId]: [...list, { id: uid(), date, amount }] },
+  };
+}
+
+export function updateBalanceSnapshot(state, categoryId, snapshotId, patch) {
+  const list = state.balanceSnapshots?.[categoryId] || [];
+  return {
+    ...state,
+    balanceSnapshots: {
+      ...state.balanceSnapshots,
+      [categoryId]: list.map((s) => (s.id === snapshotId ? { ...s, ...patch } : s)),
+    },
+  };
+}
+
+export function deleteBalanceSnapshot(state, categoryId, snapshotId) {
+  const list = state.balanceSnapshots?.[categoryId] || [];
+  return {
+    ...state,
+    balanceSnapshots: { ...state.balanceSnapshots, [categoryId]: list.filter((s) => s.id !== snapshotId) },
+  };
+}
+
+// ---- Monthly actuals (Dashboard "actual vs. budgeted" for variable bills) ----
+// Keyed by (itemId, monthKey) rather than any specific dated ledger row —
+// deliberately: a variable bill's real total (especially something like
+// groceries, an aggregate of many purchases) doesn't correspond to one
+// meaningful date the way a fixed bill's due date does. Already fully
+// editable/deletable by construction (setting the same key again replaces
+// it; there's no separate "list of entries" to prune).
+
+export function setMonthlyActual(state, itemId, monthKey, amount) {
+  return {
+    ...state,
+    monthlyActuals: {
+      ...state.monthlyActuals,
+      [itemId]: { ...(state.monthlyActuals?.[itemId] || {}), [monthKey]: amount },
+    },
+  };
+}
+
+export function deleteMonthlyActual(state, itemId, monthKey) {
+  const forItem = { ...(state.monthlyActuals?.[itemId] || {}) };
+  delete forItem[monthKey];
+  return { ...state, monthlyActuals: { ...state.monthlyActuals, [itemId]: forItem } };
+}
