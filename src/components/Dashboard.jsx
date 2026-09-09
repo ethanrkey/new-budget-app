@@ -27,7 +27,7 @@ export default function Dashboard({
   state, isDark,
   onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot,
   onSetMonthlyActual, onDeleteMonthlyActual,
-  onEditItem,
+  onEditItem, onAddLoan,
 }) {
   const sortedCats = [...state.trackerCategories].sort((a, b) => a.order - b.order);
   const variableItems = state.recurring.filter((r) => r.variable);
@@ -64,6 +64,7 @@ export default function Dashboard({
                   onUpdateSnapshot={(snapshotId, patch) => onUpdateSnapshot(cat.id, snapshotId, patch)}
                   onDeleteSnapshot={(snapshotId) => onDeleteSnapshot(cat.id, snapshotId)}
                   onEditItem={onEditItem}
+                  onAddLoan={onAddLoan}
                 />
               ) : (
                 <FundBalanceRow
@@ -253,9 +254,15 @@ function FundBalanceRow({ category, isDark, asOf, progress, history, contributio
 // A debt category's "expected" is the sum of every configured loan's own
 // amortization schedule (rate + original amount), not a contribution
 // cumulative — a payment REDUCES what's owed, it doesn't accumulate.
-function DebtCategoryRow({ category, isDark, asOf, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot, onEditItem }) {
+function DebtCategoryRow({ category, isDark, asOf, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot, onEditItem, onAddLoan }) {
   const color = paletteColor(category.color, isDark);
   const currentYear = asOf.slice(0, 4); // see FundBalanceRow's comment — same fix
+  // Nothing configured yet in this category (whether that's zero loan
+  // items at all, or some exist but none has a rate + original amount
+  // set) — "Expected remaining" would just be a hollow $0.00 next to a
+  // real logged balance, which reads as broken math rather than "not set
+  // up." Show a plain setup prompt in its place instead.
+  const isUnconfigured = progress.loans.length === 0;
 
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
@@ -266,10 +273,14 @@ function DebtCategoryRow({ category, isDark, asOf, progress, history, contributi
           <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Debt</span>
         </div>
         <div className="flex items-center gap-4 text-sm flex-wrap">
-          <span className="text-gray-500">
-            Expected remaining:{" "}
-            <span className="font-semibold text-gray-800 dark:text-gray-100">{money(progress.expectedNow)}</span>
-          </span>
+          {isUnconfigured ? (
+            <span className="text-amber-700 dark:text-amber-400 font-medium">Not set up yet</span>
+          ) : (
+            <span className="text-gray-500">
+              Expected remaining:{" "}
+              <span className="font-semibold text-gray-800 dark:text-gray-100">{money(progress.expectedNow)}</span>
+            </span>
+          )}
           <span className="text-gray-500">
             {progress.latest ? (
               <>
@@ -292,20 +303,55 @@ function DebtCategoryRow({ category, isDark, asOf, progress, history, contributi
         </div>
       )}
 
-      {progress.unconfigured.length > 0 && (
-        <div className="mt-2 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-lg p-2 text-amber-800 dark:text-amber-300">
-          Not counted in the total yet (needs an interest rate + original amount):{" "}
-          {progress.unconfigured.map((loan, i) => (
-            <span key={loan.id}>
-              {i > 0 && ", "}
-              {onEditItem ? (
-                <button onClick={() => onEditItem(loan.id)} className="underline decoration-dotted underline-offset-2">{loan.name}</button>
-              ) : (
-                loan.name
+      {isUnconfigured ? (
+        <div className="mt-2 text-sm bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-lg p-3 text-amber-800 dark:text-amber-300">
+          {progress.unconfigured.length > 0 ? (
+            <>
+              Set up this loan first — {progress.unconfigured.map((loan, i) => (
+                <span key={loan.id}>
+                  {i > 0 && ", "}
+                  {onEditItem ? (
+                    <button onClick={() => onEditItem(loan.id)} className="font-medium underline decoration-dotted underline-offset-2">{loan.name}</button>
+                  ) : (
+                    <span className="font-medium">{loan.name}</span>
+                  )}
+                </span>
+              ))}{" "}
+              {progress.unconfigured.length === 1 ? "has" : "have"} no interest rate or original amount set. Open{" "}
+              {progress.unconfigured.length === 1 ? "it" : "one"}, and you&apos;ll see &quot;Interest rate (APR %)&quot; and
+              &quot;Original loan amount&quot; fields — fill those in to calculate an expected payoff.
+            </>
+          ) : (
+            <>
+              No loan added to this category yet — logging a balance above just records the number, it can&apos;t be
+              compared to anything until a loan exists here.
+              {onAddLoan && (
+                <button
+                  onClick={() => onAddLoan(category.id)}
+                  className="block mt-2 px-3 py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium"
+                >
+                  + Add a loan
+                </button>
               )}
-            </span>
-          ))}
+            </>
+          )}
         </div>
+      ) : (
+        progress.unconfigured.length > 0 && (
+          <div className="mt-2 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-lg p-2 text-amber-800 dark:text-amber-300">
+            Also in this category, not yet counted in the total (needs an interest rate + original amount):{" "}
+            {progress.unconfigured.map((loan, i) => (
+              <span key={loan.id}>
+                {i > 0 && ", "}
+                {onEditItem ? (
+                  <button onClick={() => onEditItem(loan.id)} className="underline decoration-dotted underline-offset-2">{loan.name}</button>
+                ) : (
+                  loan.name
+                )}
+              </span>
+            ))}
+          </div>
+        )
       )}
 
       <BalanceLogControls history={history} onAddSnapshot={onAddSnapshot} onUpdateSnapshot={onUpdateSnapshot} onDeleteSnapshot={onDeleteSnapshot} />
@@ -357,9 +403,13 @@ function HistoryRow({ entry, onUpdate, onDelete }) {
           >
             {money(entry.amount)}
           </button>
-          <span className={`text-xs ${entry.variance === 0 ? "text-gray-400" : entry.variance > 0 ? "text-income" : "text-expense"}`}>
-            (expected {money(entry.expected)}, {entry.variance > 0 ? "+" : ""}{money(entry.variance)})
-          </span>
+          {entry.expected == null ? (
+            <span className="text-xs text-gray-400">(no loan configured yet — this is just logged, not compared to anything)</span>
+          ) : (
+            <span className={`text-xs ${entry.variance === 0 ? "text-gray-400" : entry.variance > 0 ? "text-income" : "text-expense"}`}>
+              (expected {money(entry.expected)}, {entry.variance > 0 ? "+" : ""}{money(entry.variance)})
+            </span>
+          )}
           <span className="ml-auto" />
           {confirmDelete ? (
             <span className="text-xs text-expense whitespace-nowrap">

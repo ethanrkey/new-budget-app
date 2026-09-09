@@ -2,11 +2,15 @@ import { useState } from "react";
 import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.js";
 import ColorSwatches from "./ColorSwatches.jsx";
 
-export default function EventForm({ onSave, onCancel, onDelete, initial, trackerCategories = [], isDark }) {
-  const [mode, setMode] = useState(initial?.cadence ? "recurring" : "oneoff");
+export default function EventForm({ onSave, onCancel, onDelete, initial, trackerCategories = [], isDark, presetCategory }) {
+  // presetCategory (e.g. from the Dashboard's "+ Add a loan" shortcut on an
+  // unconfigured Debt category) pre-selects that category and nudges the
+  // form straight to Recurring — a loan payment has to be, so there's no
+  // reason to make the user pick that themselves too.
+  const [mode, setMode] = useState(initial?.cadence || presetCategory ? "recurring" : "oneoff");
   const [name, setName] = useState(initial?.name ?? "");
   const [amount, setAmount] = useState(initial?.amount ?? "");
-  const [category, setCategory] = useState(initial?.category ?? "bill");
+  const [category, setCategory] = useState(initial?.category ?? presetCategory ?? "bill");
   const [color, setColor] = useState(initial?.color ?? null);
   const [date, setDate] = useState(initial?.date ?? todayISO());
   const [cadence, setCadence] = useState(initial?.cadence ?? "monthly");

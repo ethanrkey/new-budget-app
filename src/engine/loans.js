@@ -81,11 +81,17 @@ export function computeDebtCategoryProgress(state, categoryId, asOfISO) {
 // Debt equivalent of computeCategoryHistory. Unlike the asset version, every
 // snapshot (including the first) has a real "expected" to compare against —
 // the amortization schedule needs no prior snapshot to anchor it, so there's
-// no "first snapshot has nothing to compare to" special case here.
+// no "first snapshot has nothing to compare to" special case here. EXCEPT
+// when nothing in this category is configured yet (no loan has both a rate
+// and an original amount) — there `total` is trivially 0, and a variance
+// against that isn't a real number, it's noise. `expected`/`variance` come
+// back null in that case so the UI shows "not set up yet" instead of a
+// bogus "(expected $0.00, +$2,000.00)".
 export function computeDebtCategoryHistory(state, categoryId) {
   const snaps = sortedSnapshots(state, categoryId);
   return snaps.map((snap) => {
-    const expected = computeDebtCategoryExpected(state, categoryId, snap.date).total;
-    return { ...snap, expected, variance: round(snap.amount - expected) };
+    const debt = computeDebtCategoryExpected(state, categoryId, snap.date);
+    if (debt.loans.length === 0) return { ...snap, expected: null, variance: null };
+    return { ...snap, expected: debt.total, variance: round(snap.amount - debt.total) };
   });
 }

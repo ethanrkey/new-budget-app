@@ -32,13 +32,18 @@ export default function App() {
   const [importOpen, setImportOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+  const [addPresetCategory, setAddPresetCategory] = useState(null); // e.g. Dashboard's "+ Add a loan" shortcut
 
   const formOpen = adding || editing != null;
-  const closeForm = () => { setAdding(false); setEditing(null); };
+  const closeForm = () => { setAdding(false); setEditing(null); setAddPresetCategory(null); };
 
-  function openAddModal() {
+  // `presetCategory` pre-selects a category in the Add form (used by the
+  // Dashboard's "+ Add a loan" shortcut on an unconfigured Debt category) —
+  // optional, everything else about a normal Add is unchanged.
+  function openAddModal(presetCategory = null) {
     setQuickEntryOpen(false);
     setEditing(null);
+    setAddPresetCategory(presetCategory);
     setAdding(true);
   }
   function openQuickEntry() {
@@ -304,7 +309,7 @@ export default function App() {
       {/* Global add — sits just above the tab navigation */}
       <div className="px-3 sm:px-6 pt-4 flex items-center gap-2 flex-wrap">
         <button
-          onClick={openAddModal}
+          onClick={() => openAddModal()}
           className="text-sm px-3 py-2 sm:py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-medium hover:opacity-90"
         >
           + Add transaction
@@ -384,6 +389,7 @@ export default function App() {
             onSetMonthlyActual={logMonthlyActual}
             onDeleteMonthlyActual={clearMonthlyActual}
             onEditItem={editById}
+            onAddLoan={openAddModal}
           />
         )}
       </main>
@@ -392,6 +398,7 @@ export default function App() {
         <EventForm
           key={editing?.id ?? "new"}
           initial={editing ?? undefined}
+          presetCategory={addPresetCategory}
           trackerCategories={state.trackerCategories}
           isDark={isDark}
           onSave={saveItem}
