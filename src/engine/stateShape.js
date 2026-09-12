@@ -4,7 +4,7 @@
 // from plain Node) — and so it stays reusable if storage.js's backend ever
 // changes again, per the same "keep it swappable" principle storage.js
 // itself follows.
-import { blankState } from "./model.js";
+import { blankState, defaultAccounts, PRIMARY_ACCOUNT_ID } from "./model.js";
 
 // One-time migration: very old data had a separate `tracker` field and/or a
 // preset `savings` category. Promote any set `tracker` straight to the
@@ -85,17 +85,53 @@ export function normalize(parsed) {
   // array saved from before `kind` existed still needs it added).
   const trackerCategories = trackerCategoriesRaw.map((c) => ({ ...c, kind: inferCategoryKind(c) }));
 
+  // Migration: `accounts` predates this state — build the one checking
+  // account straight from the legacy settings.checkInBalance/checkInDate,
+  // so the balance and its verified date carry over to the cent/day. If
+  // accounts already exist they pass through untouched (idempotent — this
+  // runs on every load). An empty array is treated as absent too; Phase 1
+  // has no way to delete the only account, so that can only be corruption.
+  const accounts =
+    !Array.isArray(parsed.accounts) || parsed.accounts.length === 0
+      ? defaultAccounts(Number(settings.checkInBalance) || 0, settings.checkInDate)
+      : parsed.accounts;
+  const primaryId = accounts[0].id ?? PRIMARY_ACCOUNT_ID;
+  // Every transaction belongs to an account. Pre-migration items have no
+  // accountId — they all belonged to the one implicit checking account.
+  const stamp = (it) => (it.accountId ? it : { ...it, accountId: primaryId });
+
+  // Seed the account's balance history with the balance it already has, so
+  // the Phase 2 chart starts from the verified figure rather than empty.
+  // Only when there's no history at all — never appended on later loads.
+  // The seed id is DETERMINISTIC (not uid()) so normalize stays a pure
+  // function of its input: two devices migrating the same legacy state
+  // produce byte-identical results, and the harness can assert exact
+  // equality across independent runs.
+  const accountSnapshots = { ...(parsed.accountSnapshots || {}) };
+  if (!accountSnapshots[primaryId]?.length) {
+    accountSnapshots[primaryId] = [{ id: `seed-${primaryId}`, date: accounts[0].balanceAsOf, amount: accounts[0].balance }];
+  }
+
+  // Rollback safety net (one release): settings.checkInBalance/checkInDate
+  // MIRROR accounts[0] so an older build, if Vercel is rolled back, still
+  // reads the right balance. accounts[0] is the source of truth; the mirror
+  // is derived from it here, never the other way around post-migration.
+  settings.checkInBalance = accounts[0].balance;
+  settings.checkInDate = accounts[0].balanceAsOf;
+
   return {
     ...base,
     ...parsed,
     settings,
-    recurring,
-    oneoffs,
+    accounts,
+    recurring: recurring.map(stamp),
+    oneoffs: oneoffs.map(stamp),
     paidOverrides: parsed.paidOverrides || {},
     trackerCategories,
     // Brand-new fields, no legacy shape to fold in — an existing account
     // simply never had any actuals logged yet, same as paidOverrides above.
     balanceSnapshots: parsed.balanceSnapshots || {},
     monthlyActuals: parsed.monthlyActuals || {},
+    accountSnapshots,
   };
 }

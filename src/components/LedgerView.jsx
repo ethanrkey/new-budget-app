@@ -97,7 +97,7 @@ export default function LedgerView({
           <InfoTip text="Running totals for your own savings/debt/investment categories — each column adds up every transaction in that category over time, so you can see the balance build (or pay down) as you go. Pick which ones show here." />
           <HorizonSlider
             label="Project through"
-            anchor={state.settings.checkInDate}
+            anchor={todayISO()}
             horizon={state.settings.ledgerHorizon}
             onChange={(iso) => setSettings({ ledgerHorizon: iso })}
             help="How far into the future the Ledger generates transactions. Independent from the Budget's own horizon — you can project the Ledger further (or less far) than the Budget."
@@ -233,15 +233,21 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               </td>
             )}
             <td className="py-2 sm:py-1.5 pr-3 text-gray-500 whitespace-nowrap">
-              {canMarkPaid && (
-                <input
-                  type="checkbox"
-                  checked={!!r.paidOverride}
-                  onChange={() => onTogglePaid(r.id, r.date.slice(0, 7))}
-                  title="Mark paid this month"
-                  className="mr-1.5 align-middle h-4 w-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 checked:opacity-100 transition cursor-pointer"
-                />
-              )}
+              {/* Fixed-width slot on EVERY row (empty when not applicable) so
+                  the date text starts at the same x on paid-eligible and
+                  ordinary rows alike — the checkbox used to be rendered
+                  inline only on eligible rows, shifting those dates right. */}
+              <span className="inline-block w-5 mr-1 align-middle">
+                {canMarkPaid && (
+                  <input
+                    type="checkbox"
+                    checked={!!r.paidOverride}
+                    onChange={() => onTogglePaid(r.id, r.date.slice(0, 7))}
+                    title="Mark paid this month"
+                    className="align-middle h-4 w-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 checked:opacity-100 transition cursor-pointer"
+                  />
+                )}
+              </span>
               {dayOf(r.date)}
             </td>
             <td className={`py-2 sm:py-1.5 pr-3 ${r.paidOverride ? "opacity-40" : ""}`}>

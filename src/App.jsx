@@ -7,7 +7,9 @@ import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
+  updateAccountBalance,
 } from "./engine/mutate.js";
+import { primaryAccount } from "./engine/model.js";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import Dashboard from "./components/Dashboard.jsx";
@@ -15,7 +17,9 @@ import EventForm from "./components/EventForm.jsx";
 import QuickEntry from "./components/QuickEntry.jsx";
 import ExportMenu from "./components/ExportMenu.jsx";
 import ImportCSV from "./components/ImportCSV.jsx";
-import WipeData from "./components/WipeData.jsx";
+import AccountStrip from "./components/AccountStrip.jsx";
+import UpdateBalanceModal from "./components/UpdateBalanceModal.jsx";
+import SettingsModal from "./components/SettingsModal.jsx";
 import Onboarding from "./components/Onboarding.jsx";
 import SignIn from "./components/SignIn.jsx";
 import CategoryManager from "./components/CategoryManager.jsx";
@@ -34,6 +38,8 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [addPresetCategory, setAddPresetCategory] = useState(null); // e.g. Dashboard's "+ Add a loan" shortcut
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [updateBalanceOpen, setUpdateBalanceOpen] = useState(false);
 
   const formOpen = adding || editing != null;
   const closeForm = () => { setAdding(false); setEditing(null); setAddPresetCategory(null); };
@@ -146,8 +152,13 @@ export default function App() {
       for (const item of [...parsed.recurring, ...parsed.oneoffs]) {
         next = upsertItem(next, item);
       }
+      // A Budget-grid CSV carries a balance but no verification date (it's
+      // "as of the export," which we can't know) — keep the current as-of
+      // date and just move the balance, through the same atomic path as a
+      // manual update so the history snapshot + rollback mirror stay in sync.
       if (parsed.checkInBalance != null) {
-        next = { ...next, settings: { ...next.settings, checkInBalance: parsed.checkInBalance } };
+        const acct = primaryAccount(next);
+        next = updateAccountBalance(next, acct.id, parsed.checkInBalance, acct.balanceAsOf);
       }
       return next;
     });
@@ -159,6 +170,15 @@ export default function App() {
   // setState like any other mutation, going through the same autosave path.
   function restoreBackup(restoredState) {
     setState(() => restoredState);
+  }
+
+  // The "Update balance" confirm — the ONLY path that moves the account's
+  // verified balance. One atomic transition (balance + as-of + history
+  // snapshot + rollback mirror), see mutate.js. Nothing is written while the
+  // modal's fields are being typed into.
+  function confirmBalance(amount, date) {
+    setState((s) => updateAccountBalance(s, primaryAccount(s).id, amount, date));
+    setUpdateBalanceOpen(false);
   }
 
   // Onboarding answers reuse the exact same {recurring, oneoffs,
@@ -275,6 +295,7 @@ export default function App() {
   if (!state) return <Splash />;
 
   const isDark = theme === "dark";
+  const account = primaryAccount(state); // the one account everything anchors to (Phase 1: single-account)
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
@@ -291,50 +312,18 @@ export default function App() {
           </button>
           <ExportMenu ledger={ledger} budget={budget} trackerCategories={state.trackerCategories} state={state} />
           <button
-            onClick={() => setCategoryManagerOpen(true)}
-            title="Manage savings/debt categories"
+            onClick={() => setSettingsOpen(true)}
+            title="Settings — appearance, categories, sign out, wipe data"
             className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
           >
-            ⚙<span className="hidden sm:inline"> Categories</span>
-          </button>
-          <button
-            onClick={toggleTheme}
-            title="This device only — other devices on your account keep their own theme"
-            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
-          >
-            {isDark ? "☀" : "🌙"}
-            <span className="hidden sm:inline">{isDark ? " Light" : " Dark"}</span>
-          </button>
-          <button
-            onClick={() => signOut()}
-            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
-          >
-            Sign out
+            ⚙<span className="hidden sm:inline"> Settings</span>
           </button>
         </div>
       </header>
 
-      {/* Check-in bar */}
-      <div className="px-3 sm:px-6 py-3 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/40 flex flex-wrap items-center gap-2 sm:gap-3 text-sm">
-        <span className="font-medium">Current TD balance:</span>
-        <span className="text-gray-500">$</span>
-        <input
-          type="number"
-          value={state.settings.checkInBalance}
-          onChange={(e) => setSettings({ checkInBalance: Number(e.target.value) })}
-          className="w-24 sm:w-28 px-2 py-1.5 sm:py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-        />
-        <span className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium ml-2">as of</span>
-          <input
-            type="date"
-            value={state.settings.checkInDate}
-            onChange={(e) => setSettings({ checkInDate: e.target.value })}
-            className="px-2 py-1.5 sm:py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-          />
-        </span>
-        <WipeData onWipe={wipeData} />
-      </div>
+      {/* Account strip — read-only; the balance only changes via the
+          Update balance modal's Confirm. Replaces the old live-edit bar. */}
+      <AccountStrip account={account} onUpdateClick={() => setUpdateBalanceOpen(true)} />
 
       {/* Global add — sits just above the tab navigation */}
       <div className="px-3 sm:px-6 pt-4 flex items-center gap-2 flex-wrap">
@@ -448,7 +437,22 @@ export default function App() {
       )}
 
       {showOnboarding && (
-        <Onboarding initialBalance={state.settings.checkInBalance || null} onComplete={completeOnboarding} />
+        <Onboarding initialBalance={account.balance || null} onComplete={completeOnboarding} />
+      )}
+
+      {settingsOpen && (
+        <SettingsModal
+          isDark={isDark}
+          onToggleTheme={toggleTheme}
+          onOpenCategories={() => { setSettingsOpen(false); setCategoryManagerOpen(true); }}
+          onWipe={wipeData}
+          onSignOut={() => signOut()}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {updateBalanceOpen && (
+        <UpdateBalanceModal account={account} onConfirm={confirmBalance} onClose={() => setUpdateBalanceOpen(false)} />
       )}
 
       {categoryManagerOpen && (

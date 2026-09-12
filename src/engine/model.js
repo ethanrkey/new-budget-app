@@ -57,6 +57,34 @@ export const CATEGORIES = {
     ];
   }
 
+  // ---- Accounts ----
+  // An account shape: { id, name, kind, balance, balanceAsOf, order }
+  // `balance` is the last balance you VERIFIED against the real bank, and
+  // `balanceAsOf` is when you verified it — together they anchor the whole
+  // ledger/budget balance chain (everything dated before balanceAsOf is
+  // already inside that number, so generate.js drops it). There is exactly
+  // ONE account today (kind "checking"); the shape is a list so adding more
+  // is additive later, not a rewrite. Transactions carry an `accountId`.
+  export const PRIMARY_ACCOUNT_ID = "checking"; // stable, like the legacy category ids
+
+  export function defaultAccounts(balance = 0, balanceAsOf = todayISO()) {
+    return [{ id: PRIMARY_ACCOUNT_ID, name: "Checking", kind: "checking", balance, balanceAsOf, order: 0 }];
+  }
+
+  // The one account everything anchors to. Falls back to the legacy
+  // settings.checkInBalance/checkInDate fields when `accounts` is absent —
+  // a pre-migration state, or a raw engine-test fixture — so every existing
+  // consumer keeps working unchanged through the migration.
+  export function primaryAccount(state) {
+    const acct = state.accounts?.[0];
+    if (acct) return acct;
+    return {
+      id: PRIMARY_ACCOUNT_ID, name: "Checking", kind: "checking", order: 0,
+      balance: Number(state.settings?.checkInBalance) || 0,
+      balanceAsOf: state.settings?.checkInDate,
+    };
+  }
+
   // Cadences a recurring rule can use.
   export const CADENCES = ["weekly", "biweekly", "monthly", "yearly"];
 
@@ -72,10 +100,19 @@ export const CATEGORIES = {
         visibleTrackerCategoryIds: [], // which savings/debt columns show on the Ledger; default none
         hasSeenOnboarding: false, // one-time welcome wizard; see storage.js's migration
       },
-      recurring: [], // rules that auto-generate events
-      oneoffs: [],   // individual dated events
+      // NOTE: settings.checkInBalance/checkInDate above are now a MIRROR of
+      // accounts[0].balance/balanceAsOf, kept in sync on every balance
+      // update for one release as a rollback safety net (an older build
+      // still reads them). primaryAccount() is the source of truth.
+      accounts: defaultAccounts(0, todayISO()),
+      recurring: [], // rules that auto-generate events (each carries accountId)
+      oneoffs: [],   // individual dated events (each carries accountId)
       paidOverrides: {}, // { "YYYY-MM": [ruleId,...] } — bills marked paid (feature 9)
       trackerCategories: defaultTrackerCategories(),
+      // Every confirmed balance update on an account also records a snapshot
+      // here — same { id, date, amount } entries as balanceSnapshots below,
+      // so a history chart can treat account and category history alike.
+      accountSnapshots: {}, // { [accountId]: [{ id, date, amount }, ...] }
       // Real, actual-world numbers you log yourself — never generated from
       // transactions — used to reconcile the forecast against reality (the
       // Dashboard tab). See engine/progress.js for how these are used.

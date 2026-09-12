@@ -31,7 +31,13 @@ export default function Dashboard({
 }) {
   const sortedCats = [...state.trackerCategories].sort((a, b) => a.order - b.order);
   const variableItems = state.recurring.filter((r) => r.variable);
-  const asOf = state.settings.checkInDate;
+  // "Now" is the real clock — this used to be the balance-verification date,
+  // which froze "expected now" / "contributed this year" / the variable-
+  // spending window at whenever the balance was last checked. The BALANCE
+  // CHAIN itself still anchors to the verification date (generate.js) so
+  // transactions in the gap between verifying and today don't vanish; only
+  // the "what is now" questions moved to the clock.
+  const asOf = todayISO();
   const monthKeys = lastMonthKeys(asOf, 6);
 
   return (

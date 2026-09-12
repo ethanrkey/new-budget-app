@@ -1,11 +1,11 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.js";
-import { CATEGORIES, endOfMonthISO } from "./model.js";
+import { CATEGORIES, endOfMonthISO, primaryAccount } from "./model.js";
 
 // LEDGER: every event with a running TD balance + stepped cumulative trackers.
 export function computeLedger(state, horizonISO) {
   const events = buildEvents(state, horizonISO);
-  let bal = Number(state.settings.checkInBalance) || 0;
+  let bal = Number(primaryAccount(state).balance) || 0;
   // One running total per user-defined tracker category (id -> cumulative $).
   // Anything not in the fixed CATEGORIES is a tracker category by definition.
   const cum = {};
@@ -64,7 +64,7 @@ export function computeBudget(state, horizonISO) {
     // hit constantly, since most bills aren't due on the same day checkIn
     // happens to be set to.
     const events = buildEvents(state, endOfMonthISO(horizonISO));
-    const months = monthsBetween(state.settings.checkInDate, horizonISO);
+    const months = monthsBetween(primaryAccount(state).balanceAsOf, horizonISO);
 
     const byMonth = {};
     for (const m of months) byMonth[m.key] = { items: {}, takeHome: 0, payCount: 0 };
@@ -90,8 +90,8 @@ export function computeBudget(state, horizonISO) {
     }
 
     // starting point chains from prior month's cumulative; first month = check-in balance
-    let prevCumulative = Number(state.settings.checkInBalance) || 0;
-    const startBalance = Number(state.settings.checkInBalance) || 0;
+    let prevCumulative = Number(primaryAccount(state).balance) || 0;
+    const startBalance = Number(primaryAccount(state).balance) || 0;
 
     const cols = months.map((m, idx) => {
       const b = byMonth[m.key];

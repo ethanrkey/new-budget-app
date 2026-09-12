@@ -1,7 +1,7 @@
 // ---- Pure state transitions for create / update / delete of budget items ----
 // UI-free so the future iOS app reuses them. An "item" is a RecurringRule (has
 // a `cadence`) or a OneOff (has a `date`).
-import { uid } from "./model.js";
+import { uid, primaryAccount } from "./model.js";
 
 // Insert a new item or replace an existing one (matched by id).
 // - No type change  -> replace in place, preserving list position.
@@ -14,7 +14,15 @@ export function upsertItem(state, item) {
     state.recurring.find((r) => r.id === item.id) ||
     state.oneoffs.find((o) => o.id === item.id) ||
     null;
-  const next = { ...item, order: item.order ?? existing?.order ?? nextOrder(state) };
+  // Every item belongs to an account. With one account today, anything that
+  // arrives without one (EventForm, QuickEntry, the CSV importers,
+  // Onboarding) is stamped with the primary account silently — no account
+  // picker in the UI until there's more than one to pick from.
+  const next = {
+    ...item,
+    order: item.order ?? existing?.order ?? nextOrder(state),
+    accountId: item.accountId ?? existing?.accountId ?? primaryAccount(state).id,
+  };
 
   if (isRecurring && state.recurring.some((r) => r.id === item.id)) {
     return { ...state, recurring: state.recurring.map((r) => (r.id === item.id ? next : r)) };
@@ -215,4 +223,46 @@ export function deleteMonthlyActual(state, itemId, monthKey) {
   const forItem = { ...(state.monthlyActuals?.[itemId] || {}) };
   delete forItem[monthKey];
   return { ...state, monthlyActuals: { ...state.monthlyActuals, [itemId]: forItem } };
+}
+
+// ---- Account balance updates (the "Update balance" confirm flow) ----
+// ONE atomic transition: the account's verified balance + its as-of date, a
+// history snapshot, AND the legacy settings mirror (rollback safety net —
+// see stateShape.js). Never partial: a half-applied update would desync the
+// balance chain from its own anchor date. Nothing here runs until the user
+// clicks Confirm — the modal holds drafts, this commits.
+export function updateAccountBalance(state, accountId, amount, date) {
+  const accounts = state.accounts.map((a) =>
+    a.id === accountId ? { ...a, balance: amount, balanceAsOf: date } : a
+  );
+  const list = state.accountSnapshots?.[accountId] || [];
+  const isPrimary = accounts[0]?.id === accountId;
+  return {
+    ...state,
+    accounts,
+    accountSnapshots: { ...state.accountSnapshots, [accountId]: [...list, { id: uid(), date, amount }] },
+    settings: isPrimary ? { ...state.settings, checkInBalance: amount, checkInDate: date } : state.settings,
+  };
+}
+
+// Account history is editable/deletable like every other logged value. The
+// account's live `balance` stays authoritative on its own — editing an old
+// snapshot corrects the record, it doesn't retroactively move the anchor.
+export function updateAccountSnapshot(state, accountId, snapshotId, patch) {
+  const list = state.accountSnapshots?.[accountId] || [];
+  return {
+    ...state,
+    accountSnapshots: {
+      ...state.accountSnapshots,
+      [accountId]: list.map((s) => (s.id === snapshotId ? { ...s, ...patch } : s)),
+    },
+  };
+}
+
+export function deleteAccountSnapshot(state, accountId, snapshotId) {
+  const list = state.accountSnapshots?.[accountId] || [];
+  return {
+    ...state,
+    accountSnapshots: { ...state.accountSnapshots, [accountId]: list.filter((s) => s.id !== snapshotId) },
+  };
 }

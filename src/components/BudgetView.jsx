@@ -1,7 +1,7 @@
 import { useState } from "react";
 import HorizonSlider from "./HorizonSlider.jsx";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../engine/budgetLayout.js";
-import { paletteColor } from "../engine/model.js";
+import { paletteColor, todayISO } from "../engine/model.js";
 
 const money = (n) =>
   (n < 0 ? "-" : "") +
@@ -14,7 +14,7 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
   const horizonControl = settings && setSettings ? (
     <HorizonSlider
       label="Project through"
-      anchor={settings.checkInDate}
+      anchor={todayISO()}
       horizon={settings.budgetHorizon}
       onChange={(iso) => setSettings({ budgetHorizon: iso })}
       help="How many months of columns the Budget grid shows. Independent from the Ledger's own horizon — you can project the Budget further (or less far) than the Ledger."

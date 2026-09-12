@@ -1,5 +1,5 @@
 // ---- Turn recurring rules into concrete dated events ----
-import { CATEGORIES } from "./model.js";
+import { CATEGORIES, primaryAccount } from "./model.js";
 
 function iso(d) { return d.toISOString().slice(0, 10); }
 function parse(isoStr) { return new Date(isoStr + "T00:00:00"); }
@@ -89,7 +89,7 @@ export function buildEvents(state, horizonISO) {
   // already-past events are gone, take-home for the check-in month
   // naturally sums to just the paychecks not yet received, and a bill
   // already due earlier this month drops out of the totals on its own.
-  const checkInDate = state.settings.checkInDate;
+  const checkInDate = primaryAccount(state).balanceAsOf;
   return events.filter((e) => e.date >= checkInDate);
 }
 

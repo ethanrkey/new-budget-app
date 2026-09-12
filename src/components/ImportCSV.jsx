@@ -4,7 +4,7 @@ import { parseLedgerCSV } from "../engine/ledgerCsvImport.js";
 import { normalize } from "../engine/stateShape.js";
 import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../engine/backupShape.js";
 import { downloadFile } from "../downloadFile.js";
-import { todayISO } from "../engine/model.js";
+import { todayISO, primaryAccount } from "../engine/model.js";
 
 const money = (n) =>
   Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -153,7 +153,7 @@ export default function ImportCSV({ onImport, onRestoreBackup, onClose, trackerC
                   <p><span className="font-medium">{restoreState.trackerCategories.length}</span> savings/debt categor{restoreState.trackerCategories.length === 1 ? "y" : "ies"}</p>
                   <p><span className="font-medium">{countSnapshots(restoreState.balanceSnapshots)}</span> logged balance snapshot{countSnapshots(restoreState.balanceSnapshots) === 1 ? "" : "s"}</p>
                   <p><span className="font-medium">{countMonthlyActuals(restoreState.monthlyActuals)}</span> logged variable-bill actual{countMonthlyActuals(restoreState.monthlyActuals) === 1 ? "" : "s"}</p>
-                  <p>TD checking balance: <span className="font-medium">{money(restoreState.settings.checkInBalance)}</span> as of {restoreState.settings.checkInDate}</p>
+                  <p>{primaryAccount(restoreState).name} balance: <span className="font-medium">{money(primaryAccount(restoreState).balance)}</span> verified {primaryAccount(restoreState).balanceAsOf}</p>
                 </div>
 
                 <label className="flex items-start gap-2 text-sm bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-lg p-3 cursor-pointer">
