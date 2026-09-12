@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { loadState, saveState } from "./storage.js";
 import { getSession, onAuthChange, signOut } from "./auth.js";
+import { getDeviceTheme, setDeviceTheme } from "./theme.js";
 import { computeLedger, computeBudget } from "./engine/compute.js";
 import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride,
@@ -187,13 +188,6 @@ export default function App() {
     return onAuthChange(setSession);
   }, []);
 
-  // default to the system color scheme before we know the user's saved theme
-  // (covers the splash/sign-in screens, which render before `state` exists)
-  useEffect(() => {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    document.documentElement.classList.toggle("dark", prefersDark);
-  }, []);
-
   // Load this user's state once signed in; clear it again on sign-out. Keyed
   // on the user id specifically (not the whole `session` object) so this does
   // NOT re-run on Supabase's periodic token refresh — that would reload from
@@ -225,13 +219,42 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, session?.user?.id]);
 
-  // apply dark mode class to <html> from the user's saved preference
+  // Per-device theme (theme.js) — NOT the same as settings.theme, which is
+  // the synced account default. Re-derive whenever the account default
+  // changes (covers first load, and another device changing the default);
+  // getDeviceTheme itself checks THIS device's localStorage first, so a
+  // device that's already personalized its own theme is unaffected either
+  // way.
+  // Initial value matches system preference — covers the splash/sign-in
+  // screens, which render before `state` (and so this device's actual
+  // resolved theme) exists yet. Lazy initializer so window.matchMedia only
+  // runs once, on mount.
+  const [theme, setTheme] = useState(() =>
+    window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  );
   useEffect(() => {
     if (!state) return;
+    setTheme(getDeviceTheme(state.settings.theme));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.settings?.theme]);
+
+  // apply dark mode class to <html> from this device's theme
+  useEffect(() => {
     const root = document.documentElement;
-    if (state.settings.theme === "dark") root.classList.add("dark");
+    if (theme === "dark") root.classList.add("dark");
     else root.classList.remove("dark");
-  }, [state]);
+  }, [theme]);
+
+  // Toggling theme is local-first: this device's choice takes effect
+  // immediately and is remembered independently of any other device, while
+  // also updating the account default (settings.theme) so a device that's
+  // never personalized its own theme yet still inherits something sensible.
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setDeviceTheme(next);
+    setTheme(next);
+    setSettings({ theme: next });
+  }
 
   const setSettings = (patch) =>
     setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
@@ -251,7 +274,7 @@ export default function App() {
   if (loadError) return <LoadError message={loadError.message} onRetry={() => setRetryTick((t) => t + 1)} />;
   if (!state) return <Splash />;
 
-  const isDark = state.settings.theme === "dark";
+  const isDark = theme === "dark";
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
@@ -275,13 +298,12 @@ export default function App() {
             ⚙<span className="hidden sm:inline"> Categories</span>
           </button>
           <button
-            onClick={() =>
-              setSettings({ theme: state.settings.theme === "dark" ? "light" : "dark" })
-            }
+            onClick={toggleTheme}
+            title="This device only — other devices on your account keep their own theme"
             className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
           >
-            {state.settings.theme === "dark" ? "☀" : "🌙"}
-            <span className="hidden sm:inline">{state.settings.theme === "dark" ? " Light" : " Dark"}</span>
+            {isDark ? "☀" : "🌙"}
+            <span className="hidden sm:inline">{isDark ? " Light" : " Dark"}</span>
           </button>
           <button
             onClick={() => signOut()}

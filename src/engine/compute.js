@@ -1,6 +1,6 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.js";
-import { CATEGORIES } from "./model.js";
+import { CATEGORIES, endOfMonthISO } from "./model.js";
 
 // LEDGER: every event with a running TD balance + stepped cumulative trackers.
 export function computeLedger(state, horizonISO) {
@@ -56,7 +56,14 @@ const PAY_RE = /pay|salary|take.?home/i;
 
 // BUDGET: monthly grid, spreadsheet-style with sections.
 export function computeBudget(state, horizonISO) {
-    const events = buildEvents(state, horizonISO);
+    // The last column represents horizonISO's WHOLE calendar month (see
+    // monthsBetween below — it's day-agnostic), but horizonISO itself is a
+    // specific date that always shares checkInDate's day-of-month. Without
+    // this, any bill due later in that final month than checkInDate's day
+    // would silently be missing from the last column — a real bug users
+    // hit constantly, since most bills aren't due on the same day checkIn
+    // happens to be set to.
+    const events = buildEvents(state, endOfMonthISO(horizonISO));
     const months = monthsBetween(state.settings.checkInDate, horizonISO);
 
     const byMonth = {};

@@ -123,3 +123,14 @@ export const CATEGORIES = {
   export function uid() {
     return Math.random().toString(36).slice(2, 10);
   }
+  // The last real calendar day of `iso`'s month — used where a horizon
+  // needs to cover a WHOLE month rather than stop at a specific day (see
+  // computeBudget in compute.js: its horizon always shares checkInDate's
+  // day-of-month, e.g. always the "8th," so truncating event generation at
+  // the exact horizon date silently drops any bill due later in that final
+  // month — this is what a full calendar-month column should NOT do).
+  export function endOfMonthISO(iso) {
+    const [y, m] = iso.slice(0, 7).split("-").map(Number);
+    const d = new Date(y, m, 0); // day 0 of next month = last day of this one
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }

@@ -39,7 +39,7 @@ export default function ExportMenu({ ledger, budget, trackerCategories = [], sta
         onClick={() => setOpen((v) => !v)}
         className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
       >
-        ⬇<span className="hidden sm:inline"> Export CSV</span>
+        ⬇<span className="hidden sm:inline"> Export</span>
       </button>
       {open && (
         <>
