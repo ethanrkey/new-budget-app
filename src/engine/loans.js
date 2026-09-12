@@ -36,6 +36,13 @@ function sortedSnapshots(state, categoryId) {
 export function computeLoanBalance(state, item, asOfISO) {
   if (item.originalPrincipal == null) return null;
   const apr = (item.interestRate || 0) / 100;
+  // Interest accrues from the LATER of the payment start and an optional
+  // interestStartDate (e.g. a student loan with no interest until Dec 2026:
+  // payments before that reduce principal dollar-for-dollar). Absent, the
+  // anchor is startDate and this is exactly the pre-existing behavior — no
+  // configured loan's number moves by adding the field.
+  const accrualStart =
+    item.interestStartDate && item.interestStartDate > item.startDate ? item.interestStartDate : item.startDate;
   const events = buildAllEvents(state, asOfISO)
     .filter((e) => e.id.startsWith(item.id + "@") && e.date <= asOfISO)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -43,12 +50,25 @@ export function computeLoanBalance(state, item, asOfISO) {
   let balance = item.originalPrincipal;
   let lastDate = item.startDate;
   for (const e of events) {
-    const days = Math.max(0, daysBetween(lastDate, e.date));
+    // Only the part of the gap that falls on/after accrualStart earns interest.
+    const from = lastDate > accrualStart ? lastDate : accrualStart;
+    const days = e.date > accrualStart ? Math.max(0, daysBetween(from, e.date)) : 0;
     const interest = balance * apr * (days / 365);
     balance = Math.max(0, round(balance + interest - e.amount));
     lastDate = e.date;
   }
   return balance;
+}
+
+// For a debt card: remaining, original, and percent paid off (0–100) — the
+// motivating framing. Deliberately NOT "expected remaining vs. actual
+// remaining"; that compares you to an ideal payoff and only ever scolds.
+export function computeLoanProgress(state, item, asOfISO) {
+  const remaining = computeLoanBalance(state, item, asOfISO);
+  if (remaining == null) return null;
+  const original = item.originalPrincipal;
+  const percentPaid = original > 0 ? Math.min(100, Math.max(0, round((1 - remaining / original) * 100))) : 0;
+  return { remaining, original, percentPaid };
 }
 
 // The "cumulative debt" figure for one category — sum of every configured

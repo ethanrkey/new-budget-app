@@ -92,18 +92,17 @@ export const CATEGORIES = {
   export function blankState() {
     return {
       settings: {
-        checkInBalance: 0,
-        checkInDate: todayISO(),
+        // (checkInBalance/checkInDate used to live here — now accounts[0].
+        // stateShape.js still READS them from a never-migrated state.)
         budgetHorizon: addMonthsISO(todayISO(), 9),  // default: ~9 months out
         ledgerHorizon: addMonthsISO(todayISO(), 12), // default: ~12 months out
         theme: "light",
         visibleTrackerCategoryIds: [], // which savings/debt columns show on the Ledger; default none
         hasSeenOnboarding: false, // one-time welcome wizard; see storage.js's migration
       },
-      // NOTE: settings.checkInBalance/checkInDate above are now a MIRROR of
-      // accounts[0].balance/balanceAsOf, kept in sync on every balance
-      // update for one release as a rollback safety net (an older build
-      // still reads them). primaryAccount() is the source of truth.
+      // primaryAccount() is the single source of truth for the anchor
+      // balance/date. (Phase 1 briefly mirrored it back into settings as a
+      // rollback net; retired in Phase 2.)
       accounts: defaultAccounts(0, todayISO()),
       recurring: [], // rules that auto-generate events (each carries accountId)
       oneoffs: [],   // individual dated events (each carries accountId)
@@ -136,6 +135,9 @@ export const CATEGORIES = {
   // amortize this specific loan's expected remaining balance. Either can be
   // left null/unset; an unconfigured loan is simply skipped in the
   // category's cumulative debt total until both are filled in.
+  // `interestStartDate` (optional, ISO) — interest accrues only from the
+  // LATER of this and startDate (a student loan with no interest until a
+  // set date). Absent = accrues from startDate, exactly as before.
 
   // A one-off shape:
   // { id, name, amount, category, date, order, color|null }

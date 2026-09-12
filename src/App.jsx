@@ -7,12 +7,13 @@ import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
-  updateAccountBalance,
+  updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot,
 } from "./engine/mutate.js";
 import { primaryAccount } from "./engine/model.js";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import Dashboard from "./components/Dashboard.jsx";
+import SpendingView from "./components/SpendingView.jsx";
 import EventForm from "./components/EventForm.jsx";
 import QuickEntry from "./components/QuickEntry.jsx";
 import ExportMenu from "./components/ExportMenu.jsx";
@@ -179,6 +180,13 @@ export default function App() {
   function confirmBalance(amount, date) {
     setState((s) => updateAccountBalance(s, primaryAccount(s).id, amount, date));
     setUpdateBalanceOpen(false);
+  }
+  // Checking-account history stays editable/deletable like every other logged value.
+  function updateAcctSnapshot(accountId, snapshotId, patch) {
+    setState((s) => updateAccountSnapshot(s, accountId, snapshotId, patch));
+  }
+  function deleteAcctSnapshot(accountId, snapshotId) {
+    setState((s) => deleteAccountSnapshot(s, accountId, snapshotId));
   }
 
   // Onboarding answers reuse the exact same {recurring, oneoffs,
@@ -355,7 +363,7 @@ export default function App() {
 
       {/* Tabs */}
       <nav className="px-3 sm:px-6 pt-3 flex gap-2">
-        {["ledger", "budget", "dashboard"].map((t) => (
+        {["ledger", "budget", "dashboard", "spending"].map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -399,17 +407,26 @@ export default function App() {
             onOpenOnboarding={() => setShowOnboarding(true)}
           />
         ) : (
-          <Dashboard
-            state={state}
-            isDark={isDark}
-            onAddSnapshot={addSnapshot}
-            onUpdateSnapshot={updateSnapshot}
-            onDeleteSnapshot={deleteSnapshot}
-            onSetMonthlyActual={logMonthlyActual}
-            onDeleteMonthlyActual={clearMonthlyActual}
-            onEditItem={editById}
-            onAddLoan={openAddModal}
-          />
+          tab === "dashboard" ? (
+            <Dashboard
+              state={state}
+              isDark={isDark}
+              onAddSnapshot={addSnapshot}
+              onUpdateSnapshot={updateSnapshot}
+              onDeleteSnapshot={deleteSnapshot}
+              onUpdateAccountBalance={() => setUpdateBalanceOpen(true)}
+              onUpdateAccountSnapshot={updateAcctSnapshot}
+              onDeleteAccountSnapshot={deleteAcctSnapshot}
+              onEditItem={editById}
+              onAddLoan={openAddModal}
+            />
+          ) : (
+            <SpendingView
+              state={state}
+              onSetMonthlyActual={logMonthlyActual}
+              onDeleteMonthlyActual={clearMonthlyActual}
+            />
+          )
         )}
       </main>
 

@@ -1,432 +1,243 @@
 import { useState } from "react";
-import { computeCategoryProgress, computeCategoryHistory, computeMonthVariance, computeContributionsByYear, lastMonthKeys } from "../engine/progress.js";
-import { computeDebtCategoryProgress, computeDebtCategoryHistory } from "../engine/loans.js";
-import { paletteColor, todayISO } from "../engine/model.js";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from "recharts";
+import { computeCategoryProgress, computeCategoryHistory, computeContributionsByYear, computeNetPosition, computeMonthVariance } from "../engine/progress.js";
+import { computeLoanProgress } from "../engine/loans.js";
+import { paletteColor, primaryAccount, todayISO } from "../engine/model.js";
+import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-const CADENCE_LABEL = {
-  weekly: "every week",
-  biweekly: "every 2 weeks",
-  monthly: "monthly",
-  yearly: "yearly",
-};
-
-function monthLabel(key) {
-  const [y, m] = key.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleString("en-US", { month: "short", year: "numeric" });
+function prettyDate(iso) {
+  return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+function shortDate(iso) {
+  return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric" });
+}
+function sortedSnaps(list) {
+  return [...(list || [])].sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? -1 : 1));
 }
 
-// Reconciles the forecast against reality: actual fund balances you log
-// yourself (vs. what the transaction log alone would project), actual vs.
-// budgeted for bills flagged "variable" (electric, groceries, gas — amounts
-// that are never exact), and amortized debt payoff. Ledger/Budget stay pure
-// forecasting tools; this is the only place actuals live.
+const CARD = "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 flex flex-col gap-4";
+const LABEL = "text-[11px] font-medium uppercase tracking-wider text-gray-500";
+const BTN = "text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition";
+
+// The "reality layer": what's actually in your accounts, what you actually
+// put in, and how that compares to what the transaction log alone would
+// project. Ledger/Budget stay pure forecasting. Everything here is a card
+// that is ONE thing. Variable spending lives on its own tab.
 export default function Dashboard({
   state, isDark,
   onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot,
-  onSetMonthlyActual, onDeleteMonthlyActual,
+  onUpdateAccountBalance, onUpdateAccountSnapshot, onDeleteAccountSnapshot,
   onEditItem, onAddLoan,
 }) {
-  const sortedCats = [...state.trackerCategories].sort((a, b) => a.order - b.order);
-  const variableItems = state.recurring.filter((r) => r.variable);
-  // "Now" is the real clock — this used to be the balance-verification date,
-  // which froze "expected now" / "contributed this year" / the variable-
-  // spending window at whenever the balance was last checked. The BALANCE
-  // CHAIN itself still anchors to the verification date (generate.js) so
-  // transactions in the gap between verifying and today don't vanish; only
-  // the "what is now" questions moved to the clock.
-  const asOf = todayISO();
-  const monthKeys = lastMonthKeys(asOf, 6);
+  const today = todayISO(); // real clock — the reality layer's "now"
+  const account = primaryAccount(state);
+  const cats = [...state.trackerCategories].sort((a, b) => a.order - b.order);
+  const assetCats = cats.filter((c) => c.kind !== "debt");
+  const debtCats = cats.filter((c) => c.kind === "debt");
+  const net = computeNetPosition(state, today);
+  const [logFor, setLogFor] = useState(null); // category currently logging a balance
+
+  const logCat = logFor ? cats.find((c) => c.id === logFor) : null;
+  const logLatest = logCat ? sortedSnaps(state.balanceSnapshots?.[logCat.id]).at(-1) : null;
 
   return (
-    <div className="space-y-4">
-      <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4">
-        <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">Fund balances</h2>
-        <p className="text-xs text-gray-400 mb-4">
-          &quot;Expected&quot; projects your last logged balance forward using every transaction since —
-          log a fresh balance any time you check the real account. For a market-exposed account
-          (Roth, Brokerage), the gap you see is mostly real growth/loss, not tracking error — that&apos;s
-          what &quot;Contributed&quot; is for: a number the market can&apos;t move.
-        </p>
-        {sortedCats.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-6">
-            No savings/debt categories yet — add one from ⚙ Categories.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {sortedCats.map((cat) =>
-              cat.kind === "debt" ? (
-                <DebtCategoryRow
-                  key={cat.id}
-                  category={cat}
-                  isDark={isDark}
-                  asOf={asOf}
-                  progress={computeDebtCategoryProgress(state, cat.id, asOf)}
-                  history={computeDebtCategoryHistory(state, cat.id)}
-                  contributionsByYear={computeContributionsByYear(state, cat.id, asOf)}
-                  onAddSnapshot={(amount, date) => onAddSnapshot(cat.id, amount, date)}
-                  onUpdateSnapshot={(snapshotId, patch) => onUpdateSnapshot(cat.id, snapshotId, patch)}
-                  onDeleteSnapshot={(snapshotId) => onDeleteSnapshot(cat.id, snapshotId)}
-                  onEditItem={onEditItem}
-                  onAddLoan={onAddLoan}
-                />
-              ) : (
-                <FundBalanceRow
-                  key={cat.id}
-                  category={cat}
-                  isDark={isDark}
-                  asOf={asOf}
-                  progress={computeCategoryProgress(state, cat.id, asOf)}
-                  history={computeCategoryHistory(state, cat.id)}
-                  contributionsByYear={computeContributionsByYear(state, cat.id, asOf)}
-                  onAddSnapshot={(amount, date) => onAddSnapshot(cat.id, amount, date)}
-                  onUpdateSnapshot={(snapshotId, patch) => onUpdateSnapshot(cat.id, snapshotId, patch)}
-                  onDeleteSnapshot={(snapshotId) => onDeleteSnapshot(cat.id, snapshotId)}
-                />
-              )
-            )}
-          </div>
-        )}
-      </section>
+    <div className="space-y-5">
+      <Hero net={net} />
 
-      <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-3 sm:p-4">
-        <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">Variable spending</h2>
-        <p className="text-xs text-gray-400 mb-4">
-          Bills flagged &quot;Track actual vs. budgeted&quot; in their edit form — log the real monthly
-          total once you know it, independent of any specific date. Clear a field to remove it.
-        </p>
-        {variableItems.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-6">
-            No bills are flagged for this yet — edit a bill (electric, groceries, gas) and check
-            &quot;Track actual vs. budgeted.&quot;
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {variableItems.map((item) => (
-              <VariableSpendingRow
-                key={item.id}
-                item={item}
-                monthKeys={monthKeys}
-                monthlyActuals={state.monthlyActuals}
-                onSet={(monthKey, amount) => onSetMonthlyActual(item.id, monthKey, amount)}
-                onDelete={(monthKey) => onDeleteMonthlyActual(item.id, monthKey)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-// Shared "log a balance" + history controls, used by both FundBalanceRow and
-// DebtCategoryRow — only the header content above it differs.
-function BalanceLogControls({ history, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot }) {
-  const [showHistory, setShowHistory] = useState(false);
-  const [draftAmount, setDraftAmount] = useState("");
-  const [draftDate, setDraftDate] = useState(todayISO());
-
-  function submitNew() {
-    if (draftAmount === "" || isNaN(Number(draftAmount))) return;
-    onAddSnapshot(Number(draftAmount), draftDate);
-    setDraftAmount("");
-    setDraftDate(todayISO());
-  }
-
-  return (
-    <>
-      <div className="flex flex-wrap items-end gap-2 mt-3">
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Log a balance</label>
-          <input
-            type="number"
-            value={draftAmount}
-            onChange={(e) => setDraftAmount(e.target.value)}
-            placeholder="0.00"
-            className="w-28 px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
-          />
-        </div>
-        <input
-          type="date"
-          value={draftDate}
-          onChange={(e) => setDraftDate(e.target.value)}
-          className="px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <CheckingCard
+          account={account}
+          snapshots={sortedSnaps(state.accountSnapshots?.[account.id])}
+          isDark={isDark}
+          onUpdate={onUpdateAccountBalance}
+          onUpdateSnapshot={(id, patch) => onUpdateAccountSnapshot(account.id, id, patch)}
+          onDeleteSnapshot={(id) => onDeleteAccountSnapshot(account.id, id)}
         />
-        <button
-          onClick={submitNew}
-          disabled={draftAmount === ""}
-          className="px-3 py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40"
-        >
-          Save
-        </button>
-        {history.length > 0 && (
-          <button
-            onClick={() => setShowHistory((v) => !v)}
-            className="text-sm text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 ml-auto"
-          >
-            {showHistory ? "Hide" : "Show"} history ({history.length})
-          </button>
+
+        {assetCats.map((cat) => (
+          <AssetCard
+            key={cat.id}
+            category={cat}
+            isDark={isDark}
+            progress={computeCategoryProgress(state, cat.id, today)}
+            history={computeCategoryHistory(state, cat.id)}
+            contributions={computeContributionsByYear(state, cat.id, today)}
+            today={today}
+            onLog={() => setLogFor(cat.id)}
+            onUpdateSnapshot={(id, patch) => onUpdateSnapshot(cat.id, id, patch)}
+            onDeleteSnapshot={(id) => onDeleteSnapshot(cat.id, id)}
+          />
+        ))}
+
+        {debtCats.map((cat) => {
+          const loans = state.recurring.filter((r) => r.category === cat.id);
+          if (loans.length === 0) return <EmptyDebtCard key={cat.id} category={cat} isDark={isDark} onAddLoan={() => onAddLoan(cat.id)} />;
+          return loans.map((item) =>
+            item.originalPrincipal != null ? (
+              <DebtLoanCard key={item.id} item={item} category={cat} isDark={isDark} state={state} today={today} onEdit={() => onEditItem(item.id)} />
+            ) : (
+              <UnconfiguredLoanCard key={item.id} item={item} category={cat} isDark={isDark} onEdit={() => onEditItem(item.id)} />
+            )
+          );
+        })}
+      </div>
+
+      {logCat && (
+        <UpdateBalanceModal
+          account={{ name: logCat.name, balance: logLatest?.amount ?? 0, balanceAsOf: logLatest?.date ?? "never" }}
+          onConfirm={(amount, date) => { onAddSnapshot(logCat.id, amount, date); setLogFor(null); }}
+          onClose={() => setLogFor(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---- Hero: net position ----
+function Hero({ net }) {
+  const unlogged = net.unloggedAssets + net.unloggedDebts;
+  return (
+    <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl px-6 py-6 sm:py-7">
+      <div className={LABEL}>Net position</div>
+      <div className={`mt-1 text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums ${net.net < 0 ? "text-expense" : ""}`}>
+        {money(net.net)}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        <Stat label="Cash" value={money(net.cash)} />
+        <Stat label="Investments & savings" value={money(net.assets)} />
+        <Stat label="Debt" value={net.debt > 0 ? `−${money(net.debt)}` : money(0)} />
+      </div>
+      <p className="mt-3 text-xs text-gray-400">
+        Verified checking balance + last logged balance of each savings/investment category − debt.
+        {unlogged > 0 && (
+          <> <span className="text-gray-500">{unlogged} categor{unlogged === 1 ? "y" : "ies"} not logged yet</span> — counted as $0 until you log a balance.</>
         )}
-      </div>
-
-      {showHistory && (
-        <div className="mt-3 border-t border-gray-100 dark:border-gray-800 pt-2">
-          {[...history].reverse().map((h) => (
-            <HistoryRow
-              key={h.id}
-              entry={h}
-              onUpdate={(patch) => onUpdateSnapshot(h.id, patch)}
-              onDelete={() => onDeleteSnapshot(h.id)}
-            />
-          ))}
-        </div>
-      )}
-    </>
+      </p>
+    </section>
   );
 }
 
-// Compact "Contributed/Paid this year" stat + an expandable by-year
-// breakdown — a growth-independent number to sit next to Expected/Actual,
-// which for a market-exposed account can otherwise look like a tracking
-// error when it's really just the market moving.
-function ContributionsStat({ label, byYear, currentYear }) {
-  const [expanded, setExpanded] = useState(false);
-  const years = Object.keys(byYear);
-  if (years.length === 0) return null;
+function Stat({ label, value }) {
   return (
-    <span className="text-gray-500">
-      {label} {currentYear}:{" "}
-      <span className="font-semibold text-gray-800 dark:text-gray-100">{money(byYear[currentYear] || 0)}</span>
-      {years.length > 1 && (
-        <button onClick={() => setExpanded((v) => !v)} className="ml-1.5 text-xs underline decoration-dotted underline-offset-2 text-gray-400">
-          {expanded ? "hide" : "all years"}
-        </button>
-      )}
-      {expanded && (
-        <span className="block text-xs mt-1 space-y-0.5">
-          {years.map((y) => (
-            <span key={y} className="block">
-              {y}: {money(byYear[y])}
-            </span>
-          ))}
-        </span>
-      )}
-    </span>
-  );
-}
-
-function FundBalanceRow({ category, isDark, asOf, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot }) {
-  const color = paletteColor(category.color, isDark);
-  // The app's own "now" (checkInDate), NOT the real device clock — same
-  // anchor everything else here uses. Using todayISO() instead was a real
-  // bug: contributionsByYear is keyed off checkInDate too, so any drift
-  // between the two showed "Contributed <wrong year>: $0.00" (easy to
-  // mistake for the stat not being there at all).
-  const currentYear = asOf.slice(0, 4);
-
-  return (
-    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
-          <span className="font-medium">{category.name}</span>
-        </div>
-        <div className="flex items-center gap-4 text-sm flex-wrap">
-          <span className="text-gray-500">
-            Expected now:{" "}
-            <span className="font-semibold text-gray-800 dark:text-gray-100">{money(progress.expectedNow)}</span>
-          </span>
-          <span className="text-gray-500">
-            {progress.latest ? (
-              <>
-                Last logged: <span className="font-semibold" style={{ color }}>{money(progress.latest.amount)}</span>{" "}
-                ({progress.latest.date})
-              </>
-            ) : (
-              "No balance logged yet"
-            )}
-          </span>
-          <ContributionsStat label="Contributed" byYear={contributionsByYear} currentYear={currentYear} />
-        </div>
-      </div>
-
-      <BalanceLogControls history={history} onAddSnapshot={onAddSnapshot} onUpdateSnapshot={onUpdateSnapshot} onDeleteSnapshot={onDeleteSnapshot} />
+    <div>
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="font-semibold tabular-nums">{value}</div>
     </div>
   );
 }
 
-// A debt category's "expected" is the sum of every configured loan's own
-// amortization schedule (rate + original amount), not a contribution
-// cumulative — a payment REDUCES what's owed, it doesn't accumulate.
-function DebtCategoryRow({ category, isDark, asOf, progress, history, contributionsByYear, onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot, onEditItem, onAddLoan }) {
-  const color = paletteColor(category.color, isDark);
-  const currentYear = asOf.slice(0, 4); // see FundBalanceRow's comment — same fix
-  // Nothing configured yet in this category (whether that's zero loan
-  // items at all, or some exist but none has a rate + original amount
-  // set) — "Expected remaining" would just be a hollow $0.00 next to a
-  // real logged balance, which reads as broken math rather than "not set
-  // up." Show a plain setup prompt in its place instead.
-  const isUnconfigured = progress.loans.length === 0;
-
+// ---- Chart ----
+// Schwab-style: thin line, recessive axes, hover any point for value + date.
+// `data` is [{ date, amount, expected? }]; the projected series is drawn
+// dashed and neutral (gray) — for an investment the gap is mostly the
+// market, not an error, so it's never colored good/bad.
+function ChartTip({ active, payload, label, color }) {
+  if (!active || !payload?.length) return null;
   return (
-    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
-          <span className="font-medium">{category.name}</span>
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Debt</span>
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs shadow-lg">
+      <div className="text-gray-500 mb-1">{prettyDate(label)}</div>
+      {payload.map((p) => (
+        <div key={p.dataKey} className="flex items-center gap-2 tabular-nums">
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.dataKey === "amount" ? color : "#9ca3af" }} />
+          <span className="text-gray-500">{p.dataKey === "amount" ? "Actual" : "Projected"}</span>
+          <span className="font-medium ml-auto pl-3">{money(p.value)}</span>
         </div>
-        <div className="flex items-center gap-4 text-sm flex-wrap">
-          {isUnconfigured ? (
-            <span className="text-amber-700 dark:text-amber-400 font-medium">Not set up yet</span>
-          ) : (
-            <span className="text-gray-500">
-              Expected remaining:{" "}
-              <span className="font-semibold text-gray-800 dark:text-gray-100">{money(progress.expectedNow)}</span>
-            </span>
-          )}
-          <span className="text-gray-500">
-            {progress.latest ? (
-              <>
-                Last logged: <span className="font-semibold" style={{ color }}>{money(progress.latest.amount)}</span>{" "}
-                ({progress.latest.date})
-              </>
-            ) : (
-              "No balance logged yet"
-            )}
-          </span>
-          <ContributionsStat label="Paid" byYear={contributionsByYear} currentYear={currentYear} />
-        </div>
-      </div>
-
-      {progress.loans.length > 1 && (
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-          {progress.loans.map((l) => (
-            <span key={l.id}>{l.name}: <span className="font-medium text-gray-700 dark:text-gray-300">{money(l.balance)}</span></span>
-          ))}
-        </div>
-      )}
-
-      {isUnconfigured ? (
-        <div className="mt-2 text-sm bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-lg p-3 text-amber-800 dark:text-amber-300">
-          {progress.unconfigured.length > 0 ? (
-            <>
-              Set up this loan first — {progress.unconfigured.map((loan, i) => (
-                <span key={loan.id}>
-                  {i > 0 && ", "}
-                  {onEditItem ? (
-                    <button onClick={() => onEditItem(loan.id)} className="font-medium underline decoration-dotted underline-offset-2">{loan.name}</button>
-                  ) : (
-                    <span className="font-medium">{loan.name}</span>
-                  )}
-                </span>
-              ))}{" "}
-              {progress.unconfigured.length === 1 ? "has" : "have"} no interest rate or original amount set. Open{" "}
-              {progress.unconfigured.length === 1 ? "it" : "one"}, and you&apos;ll see &quot;Interest rate (APR %)&quot; and
-              &quot;Original loan amount&quot; fields — fill those in to calculate an expected payoff.
-            </>
-          ) : (
-            <>
-              No loan added to this category yet — logging a balance above just records the number, it can&apos;t be
-              compared to anything until a loan exists here.
-              {onAddLoan && (
-                <button
-                  onClick={() => onAddLoan(category.id)}
-                  className="block mt-2 px-3 py-1.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium"
-                >
-                  + Add a loan
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      ) : (
-        progress.unconfigured.length > 0 && (
-          <div className="mt-2 text-xs bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 rounded-lg p-2 text-amber-800 dark:text-amber-300">
-            Also in this category, not yet counted in the total (needs an interest rate + original amount):{" "}
-            {progress.unconfigured.map((loan, i) => (
-              <span key={loan.id}>
-                {i > 0 && ", "}
-                {onEditItem ? (
-                  <button onClick={() => onEditItem(loan.id)} className="underline decoration-dotted underline-offset-2">{loan.name}</button>
-                ) : (
-                  loan.name
-                )}
-              </span>
-            ))}
-          </div>
-        )
-      )}
-
-      <BalanceLogControls history={history} onAddSnapshot={onAddSnapshot} onUpdateSnapshot={onUpdateSnapshot} onDeleteSnapshot={onDeleteSnapshot} />
+      ))}
     </div>
   );
 }
 
-function HistoryRow({ entry, onUpdate, onDelete }) {
+function HistoryChart({ data, color, isDark, projected = false, emptyHint }) {
+  const points = data.filter((d) => d.amount != null);
+  if (points.length < 2) {
+    return (
+      <div className="h-40 rounded-xl bg-gray-50 dark:bg-gray-800/40 flex items-center justify-center text-center px-6">
+        <p className="text-xs text-gray-400">
+          {points.length === 1 ? `One point so far (${shortDate(points[0].date)}). ` : ""}
+          {emptyHint}
+        </p>
+      </div>
+    );
+  }
+  const axis = isDark ? "#6b7280" : "#9ca3af";
+  return (
+    <div className="h-40 -mx-2">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 12 }}>
+          <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: axis }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={28} />
+          <YAxis hide domain={["auto", "auto"]} />
+          <Tooltip content={<ChartTip color={color} />} cursor={{ stroke: axis, strokeDasharray: "3 3" }} />
+          {projected && <Legend verticalAlign="top" align="right" height={20} iconType="plainline" wrapperStyle={{ fontSize: 11, color: axis }} formatter={(v) => (v === "amount" ? "Actual" : "Projected")} />}
+          <Line type="monotone" dataKey="amount" name="amount" stroke={color} strokeWidth={2} dot={{ r: 3, strokeWidth: 0, fill: color }} activeDot={{ r: 5 }} connectNulls={false} isAnimationActive={false} />
+          {projected && (
+            <Line type="monotone" dataKey="expected" name="expected" stroke="#9ca3af" strokeWidth={2} strokeDasharray="4 4" dot={false} activeDot={{ r: 4, fill: "#9ca3af" }} connectNulls isAnimationActive={false} />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ---- Editable history (every logged value stays correctable) ----
+function HistoryList({ entries, onUpdate, onDelete, showProjected }) {
+  const [open, setOpen] = useState(false);
+  if (entries.length === 0) return null;
+  return (
+    <div>
+      <button onClick={() => setOpen((v) => !v)} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+        {open ? "Hide" : "Show"} history ({entries.length})
+      </button>
+      {open && (
+        <div className="mt-2 border-t border-gray-100 dark:border-gray-800 pt-1">
+          {[...entries].reverse().map((h) => (
+            <HistoryRow key={h.id} entry={h} showProjected={showProjected} onUpdate={(patch) => onUpdate(h.id, patch)} onDelete={() => onDelete(h.id)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryRow({ entry, showProjected, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [draftAmount, setDraftAmount] = useState(entry.amount);
   const [draftDate, setDraftDate] = useState(entry.date);
   const [confirmDelete, setConfirmDelete] = useState(false);
-
   function commit() {
-    if (draftAmount !== "" && !isNaN(Number(draftAmount)) && draftDate) {
-      onUpdate({ amount: Number(draftAmount), date: draftDate });
-    }
+    if (draftAmount !== "" && !isNaN(Number(draftAmount)) && draftDate) onUpdate({ amount: Number(draftAmount), date: draftDate });
     setEditing(false);
   }
-
+  const inp = "px-1.5 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs";
   return (
     <div className="flex items-center gap-2 text-sm py-1 flex-wrap">
       {editing ? (
         <>
-          <input
-            type="date"
-            value={draftDate}
-            onChange={(e) => setDraftDate(e.target.value)}
-            className="px-1.5 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs"
-          />
-          <input
-            type="number"
-            autoFocus
-            value={draftAmount}
-            onChange={(e) => setDraftAmount(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
-            className="w-24 px-1.5 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-xs"
-          />
+          <input type="date" value={draftDate} onChange={(e) => setDraftDate(e.target.value)} className={inp} />
+          <input type="number" autoFocus value={draftAmount} onChange={(e) => setDraftAmount(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }} className={`${inp} w-24`} />
           <button onClick={commit} className="text-xs text-income font-medium">Save</button>
           <button onClick={() => setEditing(false)} className="text-xs text-gray-400">Cancel</button>
         </>
       ) : (
         <>
-          <span className="text-gray-400 w-24 shrink-0">{entry.date}</span>
-          <button
-            onClick={() => { setDraftAmount(entry.amount); setDraftDate(entry.date); setEditing(true); }}
-            title="Edit"
-            className="font-medium hover:underline decoration-dotted underline-offset-2"
-          >
+          <span className="text-gray-400 w-24 shrink-0 text-xs">{entry.date}</span>
+          <button onClick={() => { setDraftAmount(entry.amount); setDraftDate(entry.date); setEditing(true); }} title="Edit" className="font-medium tabular-nums hover:underline decoration-dotted underline-offset-2">
             {money(entry.amount)}
           </button>
-          {entry.expected == null ? (
-            <span className="text-xs text-gray-400">(no loan configured yet — this is just logged, not compared to anything)</span>
-          ) : (
-            <span className={`text-xs ${entry.variance === 0 ? "text-gray-400" : entry.variance > 0 ? "text-income" : "text-expense"}`}>
-              (expected {money(entry.expected)}, {entry.variance > 0 ? "+" : ""}{money(entry.variance)})
-            </span>
+          {showProjected && entry.expected != null && (
+            <span className="text-xs text-gray-400">projected {money(entry.expected)}</span>
           )}
           <span className="ml-auto" />
           {confirmDelete ? (
             <span className="text-xs text-expense whitespace-nowrap">
-              <button onClick={onDelete} className="font-semibold underline">Delete</button>
-              {" · "}
+              <button onClick={onDelete} className="font-semibold underline">Delete</button>{" · "}
               <button onClick={() => setConfirmDelete(false)} className="underline">Keep</button>
             </span>
           ) : (
-            <button onClick={() => setConfirmDelete(true)} title="Delete" className="text-gray-300 hover:text-expense text-xs px-1">
-              ✕
-            </button>
+            <button onClick={() => setConfirmDelete(true)} title="Delete" className="text-gray-300 hover:text-expense text-xs px-1">✕</button>
           )}
         </>
       )}
@@ -434,67 +245,173 @@ function HistoryRow({ entry, onUpdate, onDelete }) {
   );
 }
 
-function VariableSpendingRow({ item, monthKeys, monthlyActuals, onSet, onDelete }) {
-  // Cadence-aware label — a biweekly/weekly item's `amount` is per
-  // occurrence, not a monthly figure, so "budgeted $X/mo" would be wrong.
-  const cadenceLabel = CADENCE_LABEL[item.cadence] || item.cadence;
+// ---- Checking ----
+function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, onDeleteSnapshot }) {
+  const color = isDark ? "#e5e7eb" : "#111827"; // neutral — cash has no category color
   return (
-    <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
-      <div className="font-medium mb-2">
-        {item.name} <span className="text-gray-400 font-normal text-sm">— budgeted {money(item.amount)} {cadenceLabel}</span>
+    <section className={CARD}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className={LABEL}>{account.name}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{money(account.balance)}</div>
+          <div className="text-xs text-gray-500">verified {prettyDate(account.balanceAsOf)}</div>
+        </div>
+        <button onClick={onUpdate} className={BTN}>Update balance</button>
       </div>
-      <div className="overflow-x-auto">
-        <table className="text-sm border-collapse w-full">
-          <thead>
-            <tr className="text-left text-gray-400">
-              <th className="py-1 pr-3 font-medium">Month</th>
-              <th className="py-1 pr-3 font-medium text-right">Expected</th>
-              <th className="py-1 pr-3 font-medium text-right">Actual</th>
-              <th className="py-1 font-medium text-right">Delta</th>
-            </tr>
-          </thead>
-          <tbody>
-            {monthKeys.map((mk) => (
-              <MonthRow key={mk} item={item} monthKey={mk} monthlyActuals={monthlyActuals} onSet={onSet} onDelete={onDelete} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <HistoryChart data={snapshots.map((s) => ({ date: s.date, amount: s.amount }))} color={color} isDark={isDark}
+        emptyHint="Confirm a balance update whenever you check your bank — each one adds a point here." />
+      <HistoryList entries={snapshots} onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
+    </section>
   );
 }
 
-function MonthRow({ item, monthKey, monthlyActuals, onSet, onDelete }) {
-  const v = computeMonthVariance(item, monthlyActuals, monthKey);
-  const [draft, setDraft] = useState(v.actual != null ? String(v.actual) : "");
+// ---- Savings / investment ----
+function AssetCard({ category, isDark, progress, history, contributions, today, onLog, onUpdateSnapshot, onDeleteSnapshot }) {
+  const color = paletteColor(category.color, isDark);
+  const latest = progress.latest;
+  const [allYears, setAllYears] = useState(false);
+  const thisYear = today.slice(0, 4);
+  const years = Object.keys(contributions);
 
-  function commit() {
-    if (draft === "") { onDelete(monthKey); return; }
-    if (isNaN(Number(draft))) return;
-    onSet(monthKey, Number(draft));
-  }
+  // Actual = each logged snapshot; projected = what was expected AT that
+  // moment (computeCategoryHistory), extended to today's expected-now so the
+  // dashed line reaches "now."
+  const data = history.map((h) => ({ date: h.date, amount: h.amount, expected: h.expected }));
+  if (latest && today > latest.date) data.push({ date: today, expected: progress.expectedNow });
+  const gap = latest ? progress.expectedNow - latest.amount : null;
 
   return (
-    <tr className="border-t border-gray-100 dark:border-gray-800/60">
-      <td className="py-1.5 pr-3">
-        {monthLabel(monthKey)}
-        {v.occurrences > 1 && <span className="text-gray-400 text-xs"> ({v.occurrences}×)</span>}
-      </td>
-      <td className="py-1.5 pr-3 text-right text-gray-500">{money(v.expected)}</td>
-      <td className="py-1.5 pr-3 text-right">
-        <input
-          type="number"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
-          placeholder="—"
-          className="w-24 px-1.5 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-right"
-        />
-      </td>
-      <td className={`py-1.5 text-right font-medium ${v.delta == null ? "text-gray-300 dark:text-gray-600" : v.delta > 0 ? "text-expense" : v.delta < 0 ? "text-income" : "text-gray-400"}`}>
-        {v.delta == null ? "—" : (v.delta > 0 ? "+" : "") + money(v.delta)}
-      </td>
-    </tr>
+    <section className={CARD}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className={`${LABEL} flex items-center gap-1.5`}>
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+            <span className="truncate">{category.name}</span>
+          </div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums" style={{ color }}>
+            {latest ? money(latest.amount) : "—"}
+          </div>
+          <div className="text-xs text-gray-500">{latest ? `logged ${prettyDate(latest.date)}` : "no balance logged yet"}</div>
+        </div>
+        <button onClick={onLog} className={BTN}>Log balance</button>
+      </div>
+
+      <HistoryChart data={data} color={color} isDark={isDark} projected={!!latest}
+        emptyHint="Log a balance whenever you check the account — two points make a trend." />
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <div className="text-xs text-gray-500">Contributed {allYears ? "all time" : thisYear}</div>
+          <div className="font-semibold tabular-nums">
+            {money(allYears ? years.reduce((s, y) => s + contributions[y], 0) : contributions[thisYear] || 0)}
+          </div>
+          {years.length > 1 && (
+            <button onClick={() => setAllYears((v) => !v)} className="text-xs text-gray-400 underline decoration-dotted underline-offset-2">
+              {allYears ? "this year" : "all time"}
+            </button>
+          )}
+        </div>
+        <div>
+          <div className="text-xs text-gray-500">vs. projected</div>
+          {gap == null ? (
+            <div className="text-xs text-gray-400">Log a balance to compare.</div>
+          ) : (
+            <>
+              <div className="font-semibold tabular-nums text-gray-700 dark:text-gray-300">
+                {gap === 0 ? "on projection" : `${money(Math.abs(gap))} ${gap > 0 ? "below" : "above"}`}
+              </div>
+              <div className="text-xs text-gray-400">projected now {money(progress.expectedNow)}</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <HistoryList entries={history} showProjected onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
+    </section>
+  );
+}
+
+// ---- Debt (one card per loan) ----
+function DebtLoanCard({ item, category, isDark, state, today, onEdit }) {
+  const color = paletteColor(category.color, isDark);
+  const p = computeLoanProgress(state, item, today);
+  const monthKey = today.slice(0, 7);
+  const v = computeMonthVariance(item, state.monthlyActuals, monthKey);
+  const interestFrom = item.interestStartDate && item.interestStartDate > item.startDate ? item.interestStartDate : null;
+
+  return (
+    <section className={CARD}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className={`${LABEL} flex items-center gap-1.5`}>
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+            <span className="truncate">{item.name}</span>
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 normal-case tracking-normal">{category.name}</span>
+          </div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{money(p.remaining)}</div>
+          <div className="text-xs text-gray-500">remaining</div>
+        </div>
+        <button onClick={onEdit} className={BTN}>Edit loan</button>
+      </div>
+
+      <div>
+        <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+          <span className="font-medium text-gray-700 dark:text-gray-300">{p.percentPaid}% paid off</span>
+          <span>of {money(p.original)}</span>
+        </div>
+        <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{ width: `${p.percentPaid}%`, backgroundColor: color }} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <div className="text-xs text-gray-500">Terms</div>
+          <div className="font-medium tabular-nums">{item.interestRate ?? 0}% APR</div>
+          <div className="text-xs text-gray-400">
+            {interestFrom ? `interest from ${prettyDate(interestFrom)}` : `since ${prettyDate(item.startDate)}`}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-gray-500">This month</div>
+          <div className="font-medium tabular-nums">planned {money(v.expected)}</div>
+          {item.variable ? (
+            <div className="text-xs text-gray-400">{v.actual == null ? "paid: not logged yet" : `paid ${money(v.actual)}`}</div>
+          ) : (
+            <div className="text-xs text-gray-400">turn on &quot;Track actual vs. budgeted&quot; to log what you paid</div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UnconfiguredLoanCard({ item, category, isDark, onEdit }) {
+  const color = paletteColor(category.color, isDark);
+  return (
+    <section className={`${CARD} border-dashed`}>
+      <div className={`${LABEL} flex items-center gap-1.5`}>
+        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+        <span className="truncate">{item.name}</span>
+      </div>
+      <p className="text-sm text-gray-500">
+        Not set up yet — add its interest rate and original amount to see what&apos;s remaining and how far along you are.
+      </p>
+      <button onClick={onEdit} className={`${BTN} self-start`}>Set up loan</button>
+    </section>
+  );
+}
+
+function EmptyDebtCard({ category, isDark, onAddLoan }) {
+  const color = paletteColor(category.color, isDark);
+  return (
+    <section className={`${CARD} border-dashed`}>
+      <div className={`${LABEL} flex items-center gap-1.5`}>
+        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+        <span className="truncate">{category.name}</span>
+      </div>
+      <p className="text-sm text-gray-500">No loans in this category yet. A loan is a recurring payment pointed at this category, with its rate and original amount.</p>
+      <button onClick={onAddLoan} className={`${BTN} self-start`}>+ Add a loan</button>
+    </section>
   );
 }

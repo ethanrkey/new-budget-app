@@ -236,12 +236,13 @@ export function updateAccountBalance(state, accountId, amount, date) {
     a.id === accountId ? { ...a, balance: amount, balanceAsOf: date } : a
   );
   const list = state.accountSnapshots?.[accountId] || [];
-  const isPrimary = accounts[0]?.id === accountId;
+  // (Phase 1 also wrote a settings.checkInBalance/checkInDate mirror here as
+  // a rollback safety net — retired in Phase 2; accounts[0] is the only
+  // source of truth, see stateShape.js.)
   return {
     ...state,
     accounts,
     accountSnapshots: { ...state.accountSnapshots, [accountId]: [...list, { id: uid(), date, amount }] },
-    settings: isPrimary ? { ...state.settings, checkInBalance: amount, checkInDate: date } : state.settings,
   };
 }
 

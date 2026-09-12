@@ -13,6 +13,8 @@
 //    "2 vs 3 paydays" reality already true for paychecks) vs. whatever real
 //    total was logged in monthlyActuals.
 import { buildAllEvents, occurrenceDates } from "./generate.js";
+import { computeDebtCategoryExpected } from "./loans.js";
+import { primaryAccount } from "./model.js";
 
 function round(n) { return Math.round(n * 100) / 100; }
 
@@ -114,9 +116,46 @@ export function computeContributionsByYear(state, categoryId, asOfISO) {
   return Object.fromEntries(Object.entries(byYear).sort((a, b) => (a[0] < b[0] ? 1 : -1)));
 }
 
+// The Dashboard hero: overall net position, built ONLY from reality-layer
+// numbers — the verified checking balance (never the projected ledger
+// balance; the Ledger owns projection) plus each asset category's last
+// LOGGED balance, minus each debt category's last logged balance (falling
+// back to the amortized total when configured loans exist but nothing's
+// been logged). A category with nothing to go on contributes 0 and is
+// COUNTED, so the UI can say "N not yet logged" instead of letting a low
+// number masquerade as the truth.
+export function computeNetPosition(state, asOfISO) {
+  const cash = round(Number(primaryAccount(state).balance) || 0);
+  let assets = 0, debt = 0, unloggedAssets = 0, unloggedDebts = 0;
+  for (const cat of state.trackerCategories || []) {
+    const snaps = sortedSnapshots(state, cat.id);
+    const latest = snaps.length ? snaps[snaps.length - 1] : null;
+    if (cat.kind === "debt") {
+      if (latest) debt += latest.amount;
+      else {
+        const expected = computeDebtCategoryExpected(state, cat.id, asOfISO);
+        if (expected.loans.length > 0) debt += expected.total;
+        else unloggedDebts++;
+      }
+    } else if (latest) {
+      assets += latest.amount;
+    } else {
+      unloggedAssets++;
+    }
+  }
+  return {
+    net: round(cash + assets - debt),
+    cash,
+    assets: round(assets),
+    debt: round(debt),
+    unloggedAssets,
+    unloggedDebts,
+  };
+}
+
 // The last `count` months as "YYYY-MM" keys, ending at (and including)
-// `anchorISO`'s month — the window the Dashboard's variable-spending table
-// shows for each flagged bill.
+// `anchorISO`'s month — the window the Spending tab's variable-spending
+// table shows for each flagged bill.
 export function lastMonthKeys(anchorISO, count) {
   const [y, m] = anchorISO.slice(0, 7).split("-").map(Number);
   const out = [];

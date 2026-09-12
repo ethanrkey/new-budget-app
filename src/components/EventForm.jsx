@@ -19,14 +19,19 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
   const [variable, setVariable] = useState(initial?.variable ?? false);
   const [interestRate, setInterestRate] = useState(initial?.interestRate ?? "");
   const [originalPrincipal, setOriginalPrincipal] = useState(initial?.originalPrincipal ?? "");
+  const [interestStartDate, setInterestStartDate] = useState(initial?.interestStartDate ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
+  const selectedCat = sortedCats.find((c) => c.id === category);
+  const isDebtCategory = mode === "recurring" && selectedCat?.kind === "debt";
   // "Track actual vs. budgeted" applies to any recurring bill, any cadence —
   // a biweekly/weekly variable bill's logged monthly total just splits
   // evenly across however many instances land in that month (generate.js).
-  const showVariableToggle = mode === "recurring" && category === "bill";
-  const selectedCat = sortedCats.find((c) => c.id === category);
-  const isDebtCategory = mode === "recurring" && selectedCat?.kind === "debt";
+  // Open to debt-category items too: for a loan it means "did I pay what I
+  // planned this month" (the Dashboard's debt cards), and a logged actual
+  // payment flows into the amortization automatically since it's the same
+  // event stream.
+  const showVariableToggle = mode === "recurring" && (category === "bill" || isDebtCategory);
 
   function submit() {
     if (!name || amount === "" || isNaN(Number(amount))) return;
@@ -48,6 +53,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
         variable: showVariableToggle ? variable : false,
         interestRate: isDebtCategory && interestRate !== "" ? Math.abs(Number(interestRate)) : null,
         originalPrincipal: isDebtCategory && originalPrincipal !== "" ? Math.abs(Number(originalPrincipal)) : null,
+        interestStartDate: isDebtCategory && interestStartDate ? interestStartDate : null,
       });
     } else {
       onSave({ ...base, date });
@@ -155,9 +161,17 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
                 </div>
               )}
               {isDebtCategory && (
+                <div>
+                  <label className={label}>Interest starts (optional)</label>
+                  <input className={field} type="date" value={interestStartDate} onChange={(e) => setInterestStartDate(e.target.value)} />
+                </div>
+              )}
+              {isDebtCategory && (
                 <p className="text-xs text-gray-400 -mt-1">
-                  Set both to include this loan in the Dashboard&apos;s amortized debt total. Leave blank
-                  and it just won&apos;t count toward that total yet.
+                  Set rate + original amount to include this loan in the Dashboard&apos;s debt total. Leave
+                  them blank and it just won&apos;t count yet. &quot;Interest starts&quot; is for a loan
+                  that accrues nothing until a set date (some student loans) — before it, payments cut
+                  principal dollar-for-dollar.
                 </p>
               )}
               {showVariableToggle && (

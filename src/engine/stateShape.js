@@ -112,12 +112,15 @@ export function normalize(parsed) {
     accountSnapshots[primaryId] = [{ id: `seed-${primaryId}`, date: accounts[0].balanceAsOf, amount: accounts[0].balance }];
   }
 
-  // Rollback safety net (one release): settings.checkInBalance/checkInDate
-  // MIRROR accounts[0] so an older build, if Vercel is rolled back, still
-  // reads the right balance. accounts[0] is the source of truth; the mirror
-  // is derived from it here, never the other way around post-migration.
-  settings.checkInBalance = accounts[0].balance;
-  settings.checkInDate = accounts[0].balanceAsOf;
+  // Phase 2: the Phase 1 rollback mirror (settings.checkInBalance/
+  // checkInDate written back from accounts[0]) is retired. The legacy READ
+  // path above stays forever — a never-migrated state still builds its
+  // account from those fields — but they're stripped from the saved blob
+  // now that accounts[0] is the only source of truth. Stated plainly: a
+  // rollback to the Phase 1 build is still fine (it knows accounts); a
+  // rollback two releases back (pre-Phase 1) would not see the balance.
+  delete settings.checkInBalance;
+  delete settings.checkInDate;
 
   return {
     ...base,
