@@ -1,33 +1,22 @@
 import { useState } from "react";
 import { ledgerToCSV, budgetToCSV } from "../engine/csv.js";
 import { todayISO } from "../engine/model.js";
-
-function download(filename, contentString, mimeType) {
-  const blob = new Blob(["﻿" + contentString], { type: mimeType }); // BOM so Excel opens CSV as UTF-8
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
+import { downloadFile } from "../downloadFile.js";
 
 export default function ExportMenu({ ledger, budget, trackerCategories = [], state }) {
   const [open, setOpen] = useState(false);
 
   function exportLedger() {
-    download(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories), "text/csv;charset=utf-8;");
+    downloadFile(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories), "text/csv;charset=utf-8;");
     setOpen(false);
   }
   function exportBudget() {
-    download(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories), "text/csv;charset=utf-8;");
+    downloadFile(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories), "text/csv;charset=utf-8;");
     setOpen(false);
   }
   function exportBoth() {
-    download(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories), "text/csv;charset=utf-8;");
-    download(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories), "text/csv;charset=utf-8;");
+    downloadFile(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories), "text/csv;charset=utf-8;");
+    downloadFile(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories), "text/csv;charset=utf-8;");
     setOpen(false);
   }
   // The Ledger/Budget CSVs are transaction/monthly-grid shaped and don't have
@@ -35,9 +24,10 @@ export default function ExportMenu({ ledger, budget, trackerCategories = [], sta
   // actuals (they're not transactions). This exports the ENTIRE raw state —
   // including trackerCategories, balanceSnapshots, monthlyActuals, all of
   // it — as JSON, so nothing new is left un-backed-up. It also round-trips
-  // perfectly (no lossy reconstruction the way CSV re-import needs).
+  // perfectly (no lossy reconstruction the way CSV re-import needs), and
+  // ImportCSV.jsx can restore it — see that file's "Restore backup" mode.
   function exportBackup() {
-    download(`budget-backup-${todayISO()}.json`, JSON.stringify(state, null, 2), "application/json;charset=utf-8;");
+    downloadFile(`budget-backup-${todayISO()}.json`, JSON.stringify(state, null, 2), "application/json;charset=utf-8;");
     setOpen(false);
   }
 

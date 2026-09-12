@@ -152,6 +152,14 @@ export default function App() {
     });
   }
 
+  // A full JSON backup restore, unlike a CSV import, is always a total
+  // replace — `restoredState` has already been through normalize() by the
+  // time it gets here (see ImportCSV.jsx), so this is just a normal
+  // setState like any other mutation, going through the same autosave path.
+  function restoreBackup(restoredState) {
+    setState(() => restoredState);
+  }
+
   // Onboarding answers reuse the exact same {recurring, oneoffs,
   // checkInBalance} shape the CSV importers produce, so they commit through
   // the same importCSV() path — no separate data pipeline to keep in sync.
@@ -253,10 +261,10 @@ export default function App() {
         <div className="flex items-center gap-1.5 sm:gap-3">
           <button
             onClick={() => setImportOpen(true)}
-            title="Import CSV"
+            title="Import a CSV, or restore a full JSON backup"
             className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
           >
-            ⬆<span className="hidden sm:inline"> Import CSV</span>
+            ⬆<span className="hidden sm:inline"> Import</span>
           </button>
           <ExportMenu ledger={ledger} budget={budget} trackerCategories={state.trackerCategories} state={state} />
           <button
@@ -408,7 +416,13 @@ export default function App() {
       )}
 
       {importOpen && (
-        <ImportCSV onImport={importCSV} onClose={() => setImportOpen(false)} trackerCategories={state.trackerCategories} />
+        <ImportCSV
+          onImport={importCSV}
+          onRestoreBackup={restoreBackup}
+          onClose={() => setImportOpen(false)}
+          trackerCategories={state.trackerCategories}
+          currentState={state}
+        />
       )}
 
       {showOnboarding && (
