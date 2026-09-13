@@ -7,7 +7,7 @@ import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
-  updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan,
+  updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset,
 } from "./engine/mutate.js";
 import { primaryAccount } from "./engine/model.js";
 import LedgerView from "./components/LedgerView.jsx";
@@ -31,13 +31,15 @@ export default function App() {
   const [state, setState] = useState(null); // null until this user's data has loaded
   const [loadError, setLoadError] = useState(null); // set instead of `state` on a failed load
   const [retryTick, setRetryTick] = useState(0);
-  const [tab, setTab] = useState("ledger");
+  const [tab, setTab] = useState("dashboard");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // raw rule/one-off being edited
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+  // null when closed; otherwise where it was opened FROM, so it can offer a
+  // way back there ("settings" gets a "Back to Settings" link).
+  const [categoryManagerFrom, setCategoryManagerFrom] = useState(null);
   const [addPresetCategory, setAddPresetCategory] = useState(null); // e.g. Dashboard's "+ Add a loan" shortcut
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateBalanceOpen, setUpdateBalanceOpen] = useState(false);
@@ -192,6 +194,9 @@ export default function App() {
   // creates a transaction (see mutate.js setupLoan).
   function setupLoanHandler(payload) {
     setState((s) => setupLoan(s, payload));
+  }
+  function setupAssetHandler(payload) {
+    setState((s) => setupAsset(s, payload));
   }
 
   // Onboarding answers reuse the exact same {recurring, oneoffs,
@@ -368,7 +373,7 @@ export default function App() {
 
       {/* Tabs */}
       <nav className="px-3 sm:px-6 pt-3 flex gap-2">
-        {["ledger", "budget", "dashboard", "spending"].map((t) => (
+        {["dashboard", "budget", "ledger", "spending"].map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -397,7 +402,7 @@ export default function App() {
             onDeleteMany={removeItems}
             onTogglePaid={togglePaid}
             onOpenOnboarding={() => setShowOnboarding(true)}
-            onOpenCategoryManager={() => setCategoryManagerOpen(true)}
+            onOpenCategoryManager={() => setCategoryManagerFrom("ledger")}
           />
         ) : tab === "budget" ? (
           <BudgetView
@@ -406,6 +411,7 @@ export default function App() {
             setSettings={setSettings}
             trackerCategories={state.trackerCategories}
             isDark={isDark}
+            accountName={account.name}
             onEditName={editByName}
             onReorder={reorderNames}
             onReorderDrop={reorderDrop}
@@ -423,6 +429,7 @@ export default function App() {
               onUpdateAccountSnapshot={updateAcctSnapshot}
               onDeleteAccountSnapshot={deleteAcctSnapshot}
               onSetupLoan={setupLoanHandler}
+              onSetupAsset={setupAssetHandler}
             />
           ) : (
             <SpendingView
@@ -465,7 +472,7 @@ export default function App() {
         <SettingsModal
           isDark={isDark}
           onToggleTheme={toggleTheme}
-          onOpenCategories={() => { setSettingsOpen(false); setCategoryManagerOpen(true); }}
+          onOpenCategories={() => { setSettingsOpen(false); setCategoryManagerFrom("settings"); }}
           onWipe={wipeData}
           onSignOut={() => signOut()}
           onClose={() => setSettingsOpen(false)}
@@ -476,7 +483,7 @@ export default function App() {
         <UpdateBalanceModal account={account} onConfirm={confirmBalance} onClose={() => setUpdateBalanceOpen(false)} />
       )}
 
-      {categoryManagerOpen && (
+      {categoryManagerFrom && (
         <CategoryManager
           categories={state.trackerCategories}
           isDark={isDark}
@@ -484,7 +491,12 @@ export default function App() {
           onUpdate={updateTrackerCategory}
           onDelete={deleteTrackerCategory}
           onMove={moveTrackerCategory}
-          onClose={() => setCategoryManagerOpen(false)}
+          onClose={() => setCategoryManagerFrom(null)}
+          onBack={
+            categoryManagerFrom === "settings"
+              ? () => { setCategoryManagerFrom(null); setSettingsOpen(true); }
+              : undefined
+          }
         />
       )}
     </div>

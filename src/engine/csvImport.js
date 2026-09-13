@@ -68,6 +68,11 @@ function addMonthsToKey(key, n) {
 // file doesn't look like a Budget export at all (unparseable header).
 // `trackerCategories` is the importing user's own list — used to guess which
 // category a Saving/Debt row belongs to (see guessSavingCategory above).
+// The Budget grid's starting-balance row. Exports write "Checking";
+// "TD checking" is what exports said before the label was generalized, and
+// old files must keep importing.
+const STARTING_BALANCE_LABELS = new Set(["Checking", "TD checking"]);
+
 export function parseBudgetCSV(text, trackerCategories = []) {
   const rows = parseCSV(text);
   if (rows.length < 2) throw new Error("This file is empty or has no data rows.");
@@ -88,7 +93,7 @@ export function parseBudgetCSV(text, trackerCategories = []) {
     if (!label) continue;
 
     if (SECTION_HEADERS.has(label)) { section = label; continue; }
-    if (label === "TD checking") {
+    if (STARTING_BALANCE_LABELS.has(label)) {
       const v = Number(cells[0]);
       if (!Number.isNaN(v)) checkInBalance = v;
       continue;

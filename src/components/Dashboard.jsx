@@ -5,6 +5,7 @@ import { computeLoanProgress, computeLoanHistory, isLoanConfigured } from "../en
 import { paletteColor, primaryAccount, todayISO } from "../engine/model.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
 import LoanSetupModal from "./LoanSetupModal.jsx";
+import AssetSetupModal from "./AssetSetupModal.jsx";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -32,7 +33,7 @@ export default function Dashboard({
   state, isDark,
   onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot,
   onUpdateAccountBalance, onUpdateAccountSnapshot, onDeleteAccountSnapshot,
-  onSetupLoan,
+  onSetupLoan, onSetupAsset,
 }) {
   const today = todayISO(); // real clock — the reality layer's "now"
   const account = primaryAccount(state);
@@ -42,6 +43,7 @@ export default function Dashboard({
   const net = computeNetPosition(state);
   const [logFor, setLogFor] = useState(null);     // category currently logging a balance
   const [loanModal, setLoanModal] = useState(null); // null | { cat?: category } (cat absent = brand-new loan)
+  const [assetModal, setAssetModal] = useState(false);
 
   const logCat = logFor ? cats.find((c) => c.id === logFor) : null;
   const logLatest = logCat ? sortedSnaps(state.balanceSnapshots?.[logCat.id]).at(-1) : null;
@@ -75,6 +77,8 @@ export default function Dashboard({
           />
         ))}
 
+        <AddAssetCard onAdd={() => setAssetModal(true)} />
+
         {debtCats.map((cat) =>
           isLoanConfigured(cat) ? (
             <LoanCard
@@ -103,6 +107,14 @@ export default function Dashboard({
           account={{ name: logCat.name, balance: logLatest?.amount ?? 0, balanceAsOf: logLatest?.date ?? "never" }}
           onConfirm={(amount, date) => { onAddSnapshot(logCat.id, amount, date); setLogFor(null); }}
           onClose={() => setLogFor(null)}
+        />
+      )}
+
+      {assetModal && (
+        <AssetSetupModal
+          isDark={isDark}
+          onSave={(payload) => { onSetupAsset(payload); setAssetModal(false); }}
+          onClose={() => setAssetModal(false)}
         />
       )}
 
@@ -429,10 +441,8 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
           ) : (
             <>
               <div className="font-medium tabular-nums">planned {money(planned)}</div>
-              {trackable ? (
+              {trackable && (
                 <div className="text-xs text-gray-400">{paid == null ? "paid: not logged yet" : `paid ${money(paid)}`}</div>
-              ) : (
-                <div className="text-xs text-gray-400">turn on &quot;Track actual vs. budgeted&quot; on a payment to log what you paid</div>
               )}
             </>
           )}
@@ -456,6 +466,16 @@ function SetupLoanCard({ category, isDark, onSetup }) {
         Not set up yet — add its original amount, rate, and what you owe today to see the balance, progress, and projection.
       </p>
       <button onClick={onSetup} className={`${BTN} self-start`}>Set up loan</button>
+    </section>
+  );
+}
+
+function AddAssetCard({ onAdd }) {
+  return (
+    <section className={`${CARD} border-dashed justify-center items-start`}>
+      <div className={LABEL}>Savings &amp; investments</div>
+      <p className="text-sm text-gray-500">A savings account, a Roth, a brokerage — anything you want a balance, a history, and a contribution trend for.</p>
+      <button onClick={onAdd} className={BTN}>+ Add account</button>
     </section>
   );
 }

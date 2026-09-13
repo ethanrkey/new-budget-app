@@ -274,6 +274,26 @@ export function deleteAccountSnapshot(state, accountId, snapshotId) {
 // brand-new loan — log its current outstanding balance as the first
 // snapshot. Never creates a transaction; payments are added separately and
 // just tag this category. Editing terms later passes no `outstanding`.
+// Create (or rename/recolor) a savings/investment category and, for a new
+// one, log the balance it has today in the same step — the anchor every
+// projection on its Dashboard card measures from. The asset mirror of
+// setupLoan(): one atomic mutation, no transaction created. Contributions are
+// ordinary transactions that pick this category.
+export function setupAsset(state, { categoryId = null, name, color = null, balance = null, asOf = null }) {
+  let next = state;
+  let id = categoryId;
+  if (!id || !next.trackerCategories.some((c) => c.id === id)) {
+    next = addCategory(next, name, color ?? 0, "asset");
+    id = next.trackerCategories[next.trackerCategories.length - 1].id;
+  }
+  const patch = { kind: "asset" };
+  if (name) patch.name = name;
+  if (color != null) patch.color = color;
+  next = updateCategory(next, id, patch);
+  if (balance != null && asOf) next = addBalanceSnapshot(next, id, balance, asOf);
+  return next;
+}
+
 export function setupLoan(state, { categoryId = null, name, color = null, originalPrincipal, interestRate = null, interestStartDate = null, outstanding = null, asOf = null }) {
   let next = state;
   let id = categoryId;

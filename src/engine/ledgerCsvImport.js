@@ -160,7 +160,7 @@ function detectCadence(group) {
 
 // Returns { recurring, oneoffs, checkInBalance, warnings }. `checkInBalance`
 // is always null here — this format has no running-balance concept, unlike
-// the Budget grid's "TD checking" row — kept in the return shape so the
+// the Budget grid's "Checking" starting-balance row — kept in the return shape so the
 // import UI can render both formats' results identically. `trackerCategories`
 // is the importing user's own list — used to guess which category a
 // saving/debt/investment row belongs to (see guessCategory above).

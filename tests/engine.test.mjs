@@ -1,6 +1,6 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget } from "../src/engine/compute.js";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan } from "../src/engine/mutate.js";
+import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset } from "../src/engine/mutate.js";
 import { computeCategoryProgress, computeCategoryHistory, computeMonthVariance, computeContributionsByYear, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, isLoanConfigured } from "../src/engine/loans.js";
 import { buildAllEvents, occurrenceDates } from "../src/engine/generate.js";
@@ -351,7 +351,7 @@ const stateL = {
 const budgetL = computeBudget(stateL, stateL.settings.budgetHorizon);
 const parsedL = parseBudgetCSV(budgetToCSV(budgetL, stateL.trackerCategories), stateL.trackerCategories);
 
-check("checkInBalance recovered from TD checking", parsedL.checkInBalance, 3200.55);
+check("checkInBalance recovered from the \"Checking\" row", parsedL.checkInBalance, 3200.55);
 const rentRuleL = parsedL.recurring.find((r) => r.name === "Rent");
 check("Rent reconstructed as recurring", !!rentRuleL, true);
 check("Rent amount", rentRuleL.amount, 1500);
@@ -1098,6 +1098,55 @@ eq("every budget column's totals identical", computeBudget(migAC, "2026-12-01").
 // And the migrated loan projects exactly as before from its kept snapshot.
 check("the migrated Student Loans projects from the user's logged 16240 (Aug 1) with the Aug 15 + Sep 15 payments, no interest before Dec 1",
   computeLoanExpected(migAC, loansCat, "2026-09-15").expected, 15800);
+
+// ---------- Scenario AD: setupAsset (the asset mirror of setupLoan) ----------
+console.log("\n== Scenario AD: setupAsset ==");
+const baseAD = normalize({
+  settings: { checkInBalance: 1000, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  recurring: [], oneoffs: [], paidOverrides: {}, trackerCategories: [],
+});
+const catCountAD = baseAD.trackerCategories.length;
+
+// New account WITH an opening balance: one category, one snapshot, no transaction.
+const withBalAD = setupAsset(baseAD, { name: "Brokerage", color: 2, balance: 8890, asOf: "2026-09-01" });
+const newCatAD = withBalAD.trackerCategories.find((c) => c.name === "Brokerage");
+check("adds exactly one category", withBalAD.trackerCategories.length, catCountAD + 1);
+eq("it's an asset, not a debt", newCatAD.kind, "asset");
+eq("color kept", newCatAD.color, 2);
+check("opening balance logged as the first snapshot", withBalAD.balanceSnapshots[newCatAD.id][0].amount, 8890);
+eq("snapshot dated as-of", withBalAD.balanceSnapshots[newCatAD.id][0].date, "2026-09-01");
+check("creates NO transaction (setup is not a contribution)", withBalAD.recurring.length + withBalAD.oneoffs.length, 0);
+check("it shows up in net position as an asset", computeNetPosition(withBalAD).assets, 8890);
+
+// New account WITHOUT a balance: category only, nothing invented.
+const noBalAD = setupAsset(baseAD, { name: "Roth IRA", color: 4, balance: null, asOf: null });
+const rothAD = noBalAD.trackerCategories.find((c) => c.name === "Roth IRA");
+eq("no snapshot fabricated when the balance is left blank", noBalAD.balanceSnapshots[rothAD.id], undefined);
+check("counted as unlogged, not as zero", computeNetPosition(noBalAD).unloggedAssets, 1);
+
+// Editing an existing category through the same door renames/recolors it in
+// place — it must never spawn a duplicate.
+const renamedAD = setupAsset(withBalAD, { categoryId: newCatAD.id, name: "Fidelity brokerage", color: 5 });
+check("editing an existing account adds no category", renamedAD.trackerCategories.length, withBalAD.trackerCategories.length);
+eq("renamed in place", renamedAD.trackerCategories.find((c) => c.id === newCatAD.id).name, "Fidelity brokerage");
+eq("history untouched by an edit", renamedAD.balanceSnapshots[newCatAD.id], withBalAD.balanceSnapshots[newCatAD.id]);
+
+// ---------- Scenario AE: the Budget CSV's starting-balance row label ----------
+console.log("\n== Scenario AE: \"Checking\" / legacy \"TD checking\" starting-balance row ==");
+const stateAE = normalize({
+  settings: { checkInBalance: 4321.98, checkInDate: "2026-09-01", budgetHorizon: "2026-11-01", ledgerHorizon: "2026-11-01" },
+  recurring: [{ id: "ae-rent", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-09-02", order: 0 }],
+  oneoffs: [], paidOverrides: {}, trackerCategories: [],
+});
+const csvAE = budgetToCSV(computeBudget(stateAE, "2026-11-01"), stateAE.trackerCategories);
+check("export writes the row as \"Checking\"", /(^|\r\n)Checking,/.test(csvAE), true);
+check("export no longer writes \"TD checking\"", csvAE.includes("TD checking"), false);
+check("a fresh export round-trips its starting balance", parseBudgetCSV(csvAE, stateAE.trackerCategories).checkInBalance, 4321.98);
+// An export taken before the rename must still import — the label is the only
+// thing the parser has to find that number by.
+const legacyCsvAE = csvAE.replace(/(^|\r\n)Checking,/, "$1TD checking,");
+check("a LEGACY export (\"TD checking\") still round-trips", parseBudgetCSV(legacyCsvAE, stateAE.trackerCategories).checkInBalance, 4321.98);
+check("the label row isn't mistaken for a transaction", parseBudgetCSV(legacyCsvAE, stateAE.trackerCategories).recurring.some((r) => /checking/i.test(r.name)), false);
 
 // ---------- monthsDiff / addMonthsISO round trip (for the horizon sliders) ----------
 console.log("\n== monthsDiff / addMonthsISO ==");

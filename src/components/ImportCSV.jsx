@@ -179,7 +179,7 @@ export default function ImportCSV({ onImport, onRestoreBackup, onClose, trackerC
                   <p><span className="font-medium">{parsed.recurring.length}</span> recurring rule{parsed.recurring.length === 1 ? "" : "s"}</p>
                   <p><span className="font-medium">{parsed.oneoffs.length}</span> one-off transaction{parsed.oneoffs.length === 1 ? "" : "s"}</p>
                   {parsed.checkInBalance != null && (
-                    <p>TD checking balance found: <span className="font-medium">{money(parsed.checkInBalance)}</span> (as of the export date, not today — update it after importing)</p>
+                    <p>Checking balance found: <span className="font-medium">{money(parsed.checkInBalance)}</span> (as of the export date, not today — update it after importing)</p>
                   )}
                 </div>
 

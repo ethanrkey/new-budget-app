@@ -5,7 +5,7 @@ import { paletteColor } from "../engine/model.js";
 // Create / rename / recolor / reorder / delete a user's own savings/debt/
 // investment categories. These replace the old hardcoded Roth/Saved/
 // Brokerage/Loans — every user gets their own set, editable here.
-export default function CategoryManager({ categories, isDark, onAdd, onUpdate, onDelete, onMove, onClose }) {
+export default function CategoryManager({ categories, isDark, onAdd, onUpdate, onDelete, onMove, onClose, onBack }) {
   const sorted = [...categories].sort((a, b) => a.order - b.order);
   const [editingId, setEditingId] = useState(null);
   const [draftName, setDraftName] = useState("");
@@ -38,6 +38,11 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
+        {onBack && (
+          <button onClick={onBack} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-2 -mt-1">
+            ← Back to Settings
+          </button>
+        )}
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-semibold">Savings / debt categories</h2>
           <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">

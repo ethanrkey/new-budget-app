@@ -56,7 +56,9 @@ export function budgetToCSV(budget, trackerCategories = []) {
   lines.push(csvRow(["INCOME"]));
   row("Starting point", (c) => c.startingPoint);
   row("Take-home", (c) => c.takeHome);
-  row("TD checking", (c) => c.tdChecking);
+  // A FIXED label, not the account's name: parseBudgetCSV() keys the
+  // starting-balance row off it. It accepts the legacy "TD checking" too.
+  row("Checking", (c) => c.tdChecking);
   for (const name of layout.otherIncomeNames) row(name, (c) => c.otherInItems?.[name]?.val || 0);
   row("TOTAL IN", (c) => c.totalIn);
 

@@ -7,7 +7,7 @@ const money = (n) =>
   (n < 0 ? "-" : "") +
   Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-export default function BudgetView({ budget, settings, setSettings, trackerCategories = [], isDark, onEditName, onReorder, onReorderDrop, onOpenOnboarding }) {
+export default function BudgetView({ budget, settings, setSettings, trackerCategories = [], isDark, accountName = "Checking", onEditName, onReorder, onReorderDrop, onOpenOnboarding }) {
   const [dragName, setDragName] = useState(null);
   const [overName, setOverName] = useState(null);
 
@@ -144,7 +144,7 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
           <SectionHeader label="INCOME" span={budget.length + 1} tone="income" />
           <DataRow label="Starting point" cols={budget} pick={(c) => c.startingPoint} muted />
           <DataRow label="Take-home" cols={budget} pick={(c) => c.takeHome} tone="income" />
-          <DataRow label="TD checking" cols={budget} pick={(c) => c.tdChecking} tone="income" hideZero />
+          <DataRow label={accountName} cols={budget} pick={(c) => c.tdChecking} tone="income" hideZero />
           {rowMeta(otherIncomeNames).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
             <DataRow key={name} label={name} cols={budget} tone="income"
               pick={(c) => c.otherInItems?.[name]?.val || 0} hideZero

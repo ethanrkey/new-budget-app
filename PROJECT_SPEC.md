@@ -162,18 +162,26 @@ Conventions worth knowing before touching numbers:
 - **A variable item's logged monthly actual replaces the estimate** in the
   event stream for that month (split evenly across multiple same-month
   instances), so Ledger/Budget/amortization all see the real number.
+- **The Budget grid's starting-balance row is labeled with the account's
+  name**, but the CSV export writes the fixed label `Checking` because
+  `parseBudgetCSV` keys that number off the label. It also accepts the older
+  `TD checking`, so exports taken before the rename still import.
 - **Colors are inline styles** (`paletteColor(index, isDark)`), never
   runtime-built Tailwind class names — the JIT scanner can't see those.
 - **Variable actuals and "mark paid" are different things:** paid zeroes an
   instance's effect (already reflected in the verified balance); an actual
   substitutes a real amount that still counts.
 
-## 7. Tabs and features (current default order: Ledger · Budget · Dashboard · Spending)
+## 7. Tabs and features (default order: Dashboard · Budget · Ledger · Spending)
 
 - **Ledger** — every projected transaction, dated, with a running checking
   balance; month headers; optional per-category cumulative columns
   (checklist picker); mark-a-bill-paid checkbox for current-month bills;
   multi-select delete; per-item color override; projection horizon slider.
+  A savings/debt row also shows its category, muted, after the item name
+  ("Monthly payment · Student Loan") — the item name alone doesn't say which
+  loan or fund it feeds, and renaming a category never renames its items.
+  Suppressed when the item is already named after the category.
 - **Budget** — monthly grid: income (starting point, take-home = every
   paycheck landing that month, checking, other income), fixed/recurring,
   saving/debt clustered by category, one-offs, totals, cumulative net.
@@ -185,8 +193,11 @@ Conventions worth knowing before touching numbers:
   and loan; Recharts history charts with hover; asset cards show
   contributions (this year / all time) and a neutral "vs. projected"; loan
   cards show logged outstanding, percent-paid-off bar, terms, and planned vs.
-  paid this month. Loans are set up here via a loan form, never the
-  transaction editor.
+  paid this month. "+ Add account" and "+ Add loan" cards create an asset or
+  debt category through their own setup form (`setupAsset` / `setupLoan`) —
+  never the transaction editor, and setup never creates a transaction. An
+  opening balance entered there is logged as the category's first snapshot.
+  Settings → Categories still creates the same categories, minus the balance.
 - **Spending** — actual vs. budgeted per month for items flagged
   "Track actual vs. budgeted" (any cadence; loans too).
 - **Global:** + Add transaction (modal), Quick entry (inline, keeps going),
@@ -228,11 +239,6 @@ Conventions worth knowing before touching numbers:
 ## 10. Roadmap
 
 Near-term (in order):
-- Default tab order Dashboard · Budget · Ledger · Spending; "Checking" label
-  everywhere "TD checking" remains; category label on Ledger rows for
-  savings/debt items; back-navigation from Categories to Settings; "+ Add
-  account" on the Dashboard for asset categories; drop the actuals nudge on
-  loan cards.
 - In-app Tutorial (full feature walkthrough) next to Quick Setup.
 - Drag-to-reorder tabs on desktop (persisted `settings.tabOrder`).
 

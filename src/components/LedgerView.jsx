@@ -217,6 +217,12 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
         // an optional per-item color override (recurring items/bills too, not
         // just tracker categories) beats the default bill-purple/plain text
         const nameStyle = r.color != null ? { color: paletteColor(r.color, isDark) } : undefined;
+        // A payment/contribution is named by the ITEM ("Student loan payment"),
+        // which says nothing about which loan or fund it feeds — and renaming
+        // the category never renames the item. Show the category beside it,
+        // muted, unless the item is already named after it.
+        const rowCat = sortedCats.find((c) => c.id === r.category);
+        const catLabel = rowCat && rowCat.name.toLowerCase() !== r.name.toLowerCase() ? rowCat.name : null;
         return (
           <tr
             key={r.id}
@@ -259,6 +265,7 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               >
                 {r.name}
               </button>
+              {catLabel && <span className="ml-1.5 text-xs text-gray-400">· {catLabel}</span>}
               {r.paidOverride && <span className="ml-1.5 text-xs text-gray-400">· paid</span>}
             </td>
             <td className="py-2 sm:py-1.5 pr-3 text-right text-income">
