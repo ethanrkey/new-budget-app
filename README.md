@@ -81,6 +81,8 @@ see the real number.
 - **Per-device theme** — light on the laptop, dark on the phone, from one account.
 - **Quick Setup** wizard for a new account, and quick-entry for adding a batch
   of items without closing a modal each time.
+- **A built-in tutorial** covering every feature, kept in sync with the code by
+  the same rule as this README.
 - **Import** a budget-grid CSV, a per-transaction CSV (it detects recurrence),
   or restore a full JSON backup — which downloads a safety copy of your current
   data first.
@@ -154,8 +156,8 @@ CI runs all three on every push.
 
 ## Status and what's next
 
-In daily use and actively built on. Near-term: an in-app tutorial, reorderable
-tabs, goal-based savings targets. Later: multiple accounts and payment methods,
+In daily use and actively built on. Near-term: reorderable tabs, goal-based
+savings targets. Later: multiple accounts and payment methods,
 credit cards, bank linking, and the iOS client.
 
 Design decisions, the full data model, and the roadmap live in

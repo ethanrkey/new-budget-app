@@ -22,6 +22,7 @@ import AccountStrip from "./components/AccountStrip.jsx";
 import UpdateBalanceModal from "./components/UpdateBalanceModal.jsx";
 import SettingsModal from "./components/SettingsModal.jsx";
 import Onboarding from "./components/Onboarding.jsx";
+import Tutorial from "./components/Tutorial.jsx";
 import SignIn from "./components/SignIn.jsx";
 import CategoryManager from "./components/CategoryManager.jsx";
 
@@ -37,6 +38,7 @@ export default function App() {
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
   // null when closed; otherwise where it was opened FROM, so it can offer a
   // way back there ("settings" gets a "Back to Settings" link).
   const [categoryManagerFrom, setCategoryManagerFrom] = useState(null);
@@ -363,6 +365,13 @@ export default function App() {
         >
           🚀 Quick Setup
         </button>
+        <button
+          onClick={() => setTutorialOpen(true)}
+          title="Every feature, explained"
+          className="text-sm px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+        >
+          📖 Tutorial
+        </button>
       </div>
 
       {quickEntryOpen && (
@@ -463,6 +472,8 @@ export default function App() {
           currentState={state}
         />
       )}
+
+      {tutorialOpen && <Tutorial onClose={() => setTutorialOpen(false)} />}
 
       {showOnboarding && (
         <Onboarding initialBalance={account.balance || null} onComplete={completeOnboarding} />

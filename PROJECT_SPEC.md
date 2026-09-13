@@ -201,7 +201,9 @@ Conventions worth knowing before touching numbers:
 - **Spending** — actual vs. budgeted per month for items flagged
   "Track actual vs. budgeted" (any cadence; loans too).
 - **Global:** + Add transaction (modal), Quick entry (inline, keeps going),
-  Quick Setup wizard (once per account, reopenable), account strip
+  Quick Setup wizard (once per account, reopenable), Tutorial (a 12-section
+  walkthrough of every feature — `components/Tutorial.jsx`, sidebar on
+  desktop, chip row + full screen on mobile), account strip
   (read-only balance + Confirm-gated update that also snapshots), Settings
   (per-device theme, category manager with asset/debt kinds and colors, sign
   out, wipe with full confirmation), Import (Budget-grid CSV, per-transaction
@@ -230,16 +232,16 @@ Conventions worth knowing before touching numbers:
    `docs/screenshots/` are regenerated from fixture data when a view changes.
 3. **Engine behavior gets harness coverage** in the same commit; the harness
    lives in `tests/` and runs in CI.
-4. **The in-app Tutorial matches shipped features**; update it in the same
-   commit as any feature change. (Tutorial: planned next — see roadmap.)
+4. **The in-app Tutorial matches shipped features** (`src/components/Tutorial.jsx`);
+   update it in the same commit as any feature change. A stale tutorial is
+   worse than none.
 5. Data-shape changes are migration-safe: idempotent, deterministic,
    asserted before/after on a legacy-shaped fixture, never fabricating
    values the user didn't enter.
 
 ## 10. Roadmap
 
-Near-term (in order):
-- In-app Tutorial (full feature walkthrough) next to Quick Setup.
+Near-term:
 - Drag-to-reorder tabs on desktop (persisted `settings.tabOrder`).
 
 Later:
