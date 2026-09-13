@@ -18,6 +18,7 @@ const SECTIONS = [
         ["Reality — Dashboard and Spending", "Built entirely from numbers you logged yourself: your verified bank balance, what's really in each account, what a variable bill really cost."],
       ]],
       ["p", "Nothing blends the two. The Dashboard never shows a projected checking balance, and the Ledger never pretends a projection is confirmed. When the two disagree, that gap is the useful information."],
+      ["note", "On a computer you can drag the four tabs into whatever order you like — the app remembers it and opens on whichever one you put first. (Touch drags are left alone so a scroll can't shuffle them.)"],
     ],
   },
   {

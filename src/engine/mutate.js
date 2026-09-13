@@ -1,7 +1,7 @@
 // ---- Pure state transitions for create / update / delete of budget items ----
 // UI-free so the future iOS app reuses them. An "item" is a RecurringRule (has
 // a `cadence`) or a OneOff (has a `date`).
-import { uid, primaryAccount } from "./model.js";
+import { uid, primaryAccount, sanitizeTabOrder } from "./model.js";
 
 // Insert a new item or replace an existing one (matched by id).
 // - No type change  -> replace in place, preserving list position.
@@ -279,6 +279,17 @@ export function deleteAccountSnapshot(state, accountId, snapshotId) {
 // projection on its Dashboard card measures from. The asset mirror of
 // setupLoan(): one atomic mutation, no transaction created. Contributions are
 // ordinary transactions that pick this category.
+// Drag a tab in front of another one. Pure array move on the sanitized
+// order, so a stale stored order can't produce a broken one.
+export function moveTab(state, draggedId, beforeId) {
+  const order = sanitizeTabOrder(state.settings.tabOrder);
+  if (draggedId === beforeId || !order.includes(draggedId)) return state;
+  const without = order.filter((t) => t !== draggedId);
+  const at = beforeId == null ? without.length : without.indexOf(beforeId);
+  const next = at < 0 ? [...without, draggedId] : [...without.slice(0, at), draggedId, ...without.slice(at)];
+  return { ...state, settings: { ...state.settings, tabOrder: next } };
+}
+
 export function setupAsset(state, { categoryId = null, name, color = null, balance = null, asOf = null }) {
   let next = state;
   let id = categoryId;

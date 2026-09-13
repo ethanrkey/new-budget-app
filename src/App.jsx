@@ -7,9 +7,9 @@ import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
-  updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset,
+  updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
 } from "./engine/mutate.js";
-import { primaryAccount } from "./engine/model.js";
+import { primaryAccount, sanitizeTabOrder } from "./engine/model.js";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import Dashboard from "./components/Dashboard.jsx";
@@ -45,6 +45,8 @@ export default function App() {
   const [addPresetCategory, setAddPresetCategory] = useState(null); // e.g. Dashboard's "+ Add a loan" shortcut
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateBalanceOpen, setUpdateBalanceOpen] = useState(false);
+  const [draggingTab, setDraggingTab] = useState(null);
+  const [dragOverTab, setDragOverTab] = useState(null);
 
   const formOpen = adding || editing != null;
   const closeForm = () => { setAdding(false); setEditing(null); setAddPresetCategory(null); };
@@ -244,7 +246,12 @@ export default function App() {
     let cancelled = false;
     setLoadError(null);
     loadState(session.user.id)
-      .then((s) => { if (!cancelled) setState(s); })
+      .then((s) => {
+        if (cancelled) return;
+        setState(s);
+        // Open on whichever tab this user dragged to the front.
+        setTab(sanitizeTabOrder(s.settings.tabOrder)[0]);
+      })
       .catch((err) => { if (!cancelled) { console.error(err); setLoadError(err); } });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -380,16 +387,34 @@ export default function App() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — drag to reorder on desktop (HTML5 drag never fires from a
+          touch drag, so phones just get plain tabs, which is what they want:
+          a stray drag while scrolling would be worse than no reordering). */}
       <nav className="px-3 sm:px-6 pt-3 flex gap-2">
-        {["dashboard", "budget", "ledger", "spending"].map((t) => (
+        {sanitizeTabOrder(state.settings.tabOrder).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
+            draggable
+            onDragStart={(e) => { setDraggingTab(t); e.dataTransfer.effectAllowed = "move"; }}
+            onDragEnd={() => { setDraggingTab(null); setDragOverTab(null); }}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (t !== dragOverTab) setDragOverTab(t); }}
+            onDragLeave={() => setDragOverTab((cur) => (cur === t ? null : cur))}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (draggingTab && draggingTab !== t) setState((s) => moveTab(s, draggingTab, t));
+              setDraggingTab(null);
+              setDragOverTab(null);
+            }}
+            title="Drag to reorder"
             className={`px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition ${
               tab === t
                 ? "bg-white dark:bg-gray-900 border border-b-0 border-gray-200 dark:border-gray-800"
                 : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            } ${draggingTab === t ? "opacity-40" : ""} ${
+              dragOverTab === t && draggingTab && draggingTab !== t
+                ? "ring-2 ring-gray-400 dark:ring-gray-500"
+                : ""
             }`}
           >
             {t}

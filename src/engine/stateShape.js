@@ -4,7 +4,7 @@
 // from plain Node) — and so it stays reusable if storage.js's backend ever
 // changes again, per the same "keep it swappable" principle storage.js
 // itself follows.
-import { blankState, defaultAccounts, PRIMARY_ACCOUNT_ID } from "./model.js";
+import { blankState, defaultAccounts, sanitizeTabOrder, PRIMARY_ACCOUNT_ID } from "./model.js";
 
 // One-time migration: very old data had a separate `tracker` field and/or a
 // preset `savings` category. Promote any set `tracker` straight to the
@@ -57,6 +57,11 @@ function inferCategoryKind(cat) {
 export function normalize(parsed) {
   const base = blankState();
   const settings = { ...base.settings, ...(parsed.settings || {}) };
+  // Migration + repair: an account saved before tabs were reorderable has no
+  // tabOrder at all, and a saved one can name a tab that no longer exists (or
+  // miss one added since). Runs every load, so it's self-healing.
+  settings.tabOrder = sanitizeTabOrder(settings.tabOrder);
+
   const recurring = (parsed.recurring || []).map(migrateItem);
   const oneoffs = (parsed.oneoffs || []).map(migrateItem);
   const hasData = recurring.length > 0 || oneoffs.length > 0;

@@ -92,6 +92,26 @@ export const CATEGORIES = {
   // Cadences a recurring rule can use.
   export const CADENCES = ["weekly", "biweekly", "monthly", "yearly"];
 
+  // The tabs, in the order a new account gets them: reality first, then the
+  // forecast. A user can drag them into any order (settings.tabOrder); this
+  // list stays the authority on which tabs EXIST, so sanitizeTabOrder() below
+  // can drop a tab that's gone and append one that's new.
+  export const TABS = ["dashboard", "budget", "ledger", "spending"];
+
+  // A stored order is user data and can be stale (an old tab that no longer
+  // exists, a new tab added since it was saved, a duplicate from a bad write).
+  // Take the valid entries in the user's order, then append anything missing
+  // in TABS order — never drop a tab, never invent one.
+  export function sanitizeTabOrder(order) {
+    const seen = new Set();
+    const kept = (Array.isArray(order) ? order : []).filter((t) => {
+      if (!TABS.includes(t) || seen.has(t)) return false;
+      seen.add(t);
+      return true;
+    });
+    return [...kept, ...TABS.filter((t) => !seen.has(t))];
+  }
+
   // A fresh, blank app state.
   export function blankState() {
     return {
@@ -102,6 +122,7 @@ export const CATEGORIES = {
         ledgerHorizon: addMonthsISO(todayISO(), 12), // default: ~12 months out
         theme: "light",
         visibleTrackerCategoryIds: [], // which savings/debt columns show on the Ledger; default none
+        tabOrder: [...TABS],           // drag-reorderable on desktop; see sanitizeTabOrder()
         hasSeenOnboarding: false, // one-time welcome wizard; see storage.js's migration
       },
       // primaryAccount() is the single source of truth for the anchor

@@ -79,6 +79,7 @@ see the real number.
 
 - **Google sign-in or a magic link**; your data is per-account and private.
 - **Per-device theme** — light on the laptop, dark on the phone, from one account.
+- **Drag the tabs** into your own order (desktop); the app opens on the first one.
 - **Quick Setup** wizard for a new account, and quick-entry for adding a batch
   of items without closing a modal each time.
 - **A built-in tutorial** covering every feature, kept in sync with the code by
@@ -156,8 +157,7 @@ CI runs all three on every push.
 
 ## Status and what's next
 
-In daily use and actively built on. Near-term: reorderable tabs, goal-based
-savings targets. Later: multiple accounts and payment methods,
+In daily use and actively built on. Near-term: goal-based savings targets. Later: multiple accounts and payment methods,
 credit cards, bank linking, and the iOS client.
 
 Design decisions, the full data model, and the roadmap live in

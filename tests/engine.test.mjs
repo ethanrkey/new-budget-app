@@ -1,10 +1,10 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget } from "../src/engine/compute.js";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset } from "../src/engine/mutate.js";
+import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab } from "../src/engine/mutate.js";
 import { computeCategoryProgress, computeCategoryHistory, computeMonthVariance, computeContributionsByYear, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, isLoanConfigured } from "../src/engine/loans.js";
 import { buildAllEvents, occurrenceDates } from "../src/engine/generate.js";
-import { monthsDiff, addMonthsISO, paletteColor, primaryAccount, PRIMARY_ACCOUNT_ID } from "../src/engine/model.js";
+import { monthsDiff, addMonthsISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.js";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.js";
 import { computeBudgetLayout } from "../src/engine/budgetLayout.js";
 import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.js";
@@ -1147,6 +1147,33 @@ check("a fresh export round-trips its starting balance", parseBudgetCSV(csvAE, s
 const legacyCsvAE = csvAE.replace(/(^|\r\n)Checking,/, "$1TD checking,");
 check("a LEGACY export (\"TD checking\") still round-trips", parseBudgetCSV(legacyCsvAE, stateAE.trackerCategories).checkInBalance, 4321.98);
 check("the label row isn't mistaken for a transaction", parseBudgetCSV(legacyCsvAE, stateAE.trackerCategories).recurring.some((r) => /checking/i.test(r.name)), false);
+
+// ---------- Scenario AF: tab order (sanitize + drag + migration) ----------
+console.log("\n== Scenario AF: settings.tabOrder ==");
+eq("a brand-new account gets the default order", sanitizeTabOrder(undefined), TABS);
+eq("a stored order is kept as-is", sanitizeTabOrder(["spending", "ledger", "budget", "dashboard"]), ["spending", "ledger", "budget", "dashboard"]);
+// User data can be stale or corrupt — never drop a real tab, never invent one.
+eq("a tab that no longer exists is dropped", sanitizeTabOrder(["spending", "reports", "dashboard"]), ["spending", "dashboard", "budget", "ledger"]);
+eq("a tab added since the order was saved is appended", sanitizeTabOrder(["ledger", "budget"]), ["ledger", "budget", "dashboard", "spending"]);
+eq("duplicates collapse", sanitizeTabOrder(["ledger", "ledger", "budget"]), ["ledger", "budget", "dashboard", "spending"]);
+eq("garbage falls back to the default", sanitizeTabOrder("nope"), TABS);
+
+// Migration: an account saved before tabs were reorderable has no tabOrder.
+const legacyAF = normalize({
+  settings: { checkInBalance: 100, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  recurring: [], oneoffs: [], paidOverrides: {},
+});
+eq("normalize backfills the default order", legacyAF.settings.tabOrder, TABS);
+eq("normalize repairs a stale stored order", normalize({ ...legacyAF, settings: { ...legacyAF.settings, tabOrder: ["spending", "gone"] } }).settings.tabOrder, ["spending", "dashboard", "budget", "ledger"]);
+eq("normalize is idempotent on tabOrder", normalize(normalize(legacyAF)).settings.tabOrder, legacyAF.settings.tabOrder);
+
+// Dragging.
+eq("drag spending in front of budget", moveTab(legacyAF, "spending", "budget").settings.tabOrder, ["dashboard", "spending", "budget", "ledger"]);
+eq("drag dashboard onto the last tab", moveTab(legacyAF, "dashboard", "spending").settings.tabOrder, ["budget", "ledger", "dashboard", "spending"]);
+eq("dropping a tab on itself changes nothing", moveTab(legacyAF, "budget", "budget").settings.tabOrder, TABS);
+eq("an unknown dragged id is ignored", moveTab(legacyAF, "nope", "budget").settings.tabOrder, TABS);
+check("reordering touches nothing but settings.tabOrder",
+  JSON.stringify({ ...moveTab(legacyAF, "spending", "budget"), settings: null }) === JSON.stringify({ ...legacyAF, settings: null }), true);
 
 // ---------- monthsDiff / addMonthsISO round trip (for the horizon sliders) ----------
 console.log("\n== monthsDiff / addMonthsISO ==");

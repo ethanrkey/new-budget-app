@@ -65,6 +65,7 @@ holds it in React state; every mutation is a pure function in
     ledgerHorizon: "YYYY-MM-DD",       // Ledger projects through this date
     theme: "light" | "dark",           // ACCOUNT default; each device overrides in localStorage (theme.js)
     visibleTrackerCategoryIds: [id],   // which savings/debt columns the Ledger shows
+    tabOrder: ["dashboard", ...],      // user's tab order; sanitizeTabOrder() repairs it on load
     hasSeenOnboarding: boolean,        // welcome wizard shown once per account
   },
   accounts: [                          // exactly ONE today (kind "checking"); a list so more is additive
@@ -174,6 +175,14 @@ Conventions worth knowing before touching numbers:
 
 ## 7. Tabs and features (default order: Dashboard · Budget · Ledger · Spending)
 
+Tabs are drag-reorderable on desktop (`settings.tabOrder`, persisted; the app
+opens on the first one). HTML5 drag never fires from a touch drag, so phones
+get plain tabs on purpose — a stray drag mid-scroll would be worse than no
+reordering. `TABS` in `model.js` stays the authority on which tabs exist and
+`sanitizeTabOrder()` repairs a stored order on every load (drops a tab that no
+longer exists, appends one added since, collapses duplicates), so adding a
+fifth tab never needs a migration.
+
 - **Ledger** — every projected transaction, dated, with a running checking
   balance; month headers; optional per-category cumulative columns
   (checklist picker); mark-a-bill-paid checkbox for current-month bills;
@@ -240,9 +249,6 @@ Conventions worth knowing before touching numbers:
    values the user didn't enter.
 
 ## 10. Roadmap
-
-Near-term:
-- Drag-to-reorder tabs on desktop (persisted `settings.tabOrder`).
 
 Later:
 - Goal-based savings (target → per-paycheck contribution).
