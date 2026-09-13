@@ -32,7 +32,10 @@ contributed this year — a market dip isn't a failure, so the comparison is
 worded neutrally, never as good/bad. Loan cards show the outstanding balance you
 logged, how much of the original principal you've paid off, the terms, and this
 month's planned payment. They deliberately never show "expected remaining vs.
-actual remaining" — that framing only scolds.
+actual remaining" — that framing only scolds. A loan you owe more on than you
+borrowed (an unsubsidized one, before payments start) says so honestly —
+"$2,302.73 owed · $2,000.00 borrowed · $302.73 accrued interest" — instead of
+a percentage against a number the balance has already passed.
 
 Accounts and loans are created here too — "+ Add account" and "+ Add loan"
 open their own short setup form. A savings account or a loan is its own
@@ -57,9 +60,6 @@ The projection expanded into individual dated transactions with a running
 balance, grouped by month. Optional cumulative columns per savings category,
 per-item colors, mark-a-bill-paid for the current month, multi-select delete,
 and a horizon slider of its own.
-
-Savings and loan rows also name their category next to the item, since
-"Monthly payment" on its own doesn't say which loan it pays down.
 
 Anything dated before your last verified balance is dropped rather than
 double-counted — that money is already *in* the number.

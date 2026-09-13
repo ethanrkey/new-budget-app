@@ -29,11 +29,16 @@ body {
   opacity: 0;
   overflow: hidden;
   white-space: nowrap;
+  /* If anything ever does outgrow its column, show that it was cut rather
+     than lopping characters off in silence (two loans whose names differed
+     only past the cut looked identical). */
+  text-overflow: ellipsis;
   transition: width 0.25s ease, max-width 0.25s ease, padding 0.25s ease, opacity 0.2s ease;
 }
 .slide-col.open {
-  width: 6.5rem;
-  max-width: 6.5rem;
+  /* --col-w is set per column in LedgerView from the category's name. */
+  width: var(--col-w, 6.5rem);
+  max-width: var(--col-w, 6.5rem);
   padding-left: 0.75rem;
   padding-right: 0.75rem;
   opacity: 1;

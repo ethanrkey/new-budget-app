@@ -9,6 +9,16 @@ const money = (n) =>
 
 const CURRENT_MONTH = todayISO().slice(0, 7);
 
+// How wide a savings/debt column opens to. The column has to be nowrap +
+// overflow:hidden so it can animate open from zero width, which means a
+// header longer than the fixed width was SILENTLY CLIPPED — "Student Loan AA"
+// and "Student Loan AB" both rendered as "Student Loan", so the two columns
+// were impossible to tell apart. Size the column to its own header (ch is a
+// slightly generous proxy for average character width) with the old 6.5rem as
+// the floor so short names still line their amounts up. Both the th and every
+// td must carry it — a td's max-width would otherwise cap the whole column.
+const colVars = (name) => ({ "--col-w": `max(6.5rem, calc(${(name || "").length}ch + 1.75rem))` });
+
 export default function LedgerView({
   state, setSettings, ledger, trackerCategories = [], isDark,
   onEditItem, onDeleteItem, onDeleteMany, onTogglePaid, onOpenOnboarding, onOpenCategoryManager,
@@ -151,7 +161,7 @@ export default function LedgerView({
                 <th
                   key={c.id}
                   className={`py-2 font-medium text-right slide-col ${visibleIds.has(c.id) ? "open" : ""}`}
-                  style={{ color: paletteColor(c.color, isDark) }}
+                  style={{ color: paletteColor(c.color, isDark), ...colVars(c.name) }}
                 >
                   {c.name}
                 </th>
@@ -217,12 +227,6 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
         // an optional per-item color override (recurring items/bills too, not
         // just tracker categories) beats the default bill-purple/plain text
         const nameStyle = r.color != null ? { color: paletteColor(r.color, isDark) } : undefined;
-        // A payment/contribution is named by the ITEM ("Student loan payment"),
-        // which says nothing about which loan or fund it feeds — and renaming
-        // the category never renames the item. Show the category beside it,
-        // muted, unless the item is already named after it.
-        const rowCat = sortedCats.find((c) => c.id === r.category);
-        const catLabel = rowCat && rowCat.name.toLowerCase() !== r.name.toLowerCase() ? rowCat.name : null;
         return (
           <tr
             key={r.id}
@@ -265,7 +269,6 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               >
                 {r.name}
               </button>
-              {catLabel && <span className="ml-1.5 text-xs text-gray-400">· {catLabel}</span>}
               {r.paidOverride && <span className="ml-1.5 text-xs text-gray-400">· paid</span>}
             </td>
             <td className="py-2 sm:py-1.5 pr-3 text-right text-income">
@@ -284,7 +287,7 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               <td
                 key={c.id}
                 className={`py-2 sm:py-1.5 text-right slide-col ${visibleIds.has(c.id) ? "open" : ""}`}
-                style={{ color: paletteColor(c.color, isDark) }}
+                style={{ color: paletteColor(c.color, isDark), ...colVars(c.name) }}
               >
                 {stepCell(r, c.id)}
               </td>

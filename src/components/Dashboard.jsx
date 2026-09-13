@@ -413,13 +413,30 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
 
       {progress.percentPaid != null ? (
         <div>
-          <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+          <div className="flex justify-between gap-3 text-xs text-gray-500 mb-1.5">
             <span className="font-medium text-gray-700 dark:text-gray-300">{progress.percentPaid}% paid off</span>
-            <span>of {money(progress.original)}</span>
+            {/* What the bar is measured against. Once interest has ever put
+                the balance above what was borrowed, that's the peak owed, not
+                the original principal — saying "of $2,000.00" beside a
+                $2,302.73 balance is just wrong. */}
+            {progress.aboveOriginal == null && (
+              <span className="text-right">
+                of {money(progress.basis)}{progress.everAboveOriginal ? " at its highest" : ""}
+              </span>
+            )}
           </div>
           <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
             <div className="h-full rounded-full transition-all" style={{ width: `${progress.percentPaid}%`, backgroundColor: color }} />
           </div>
+          {/* Owing more than you borrowed isn't broken math, it's interest —
+              so say so, instead of a percentage against a number the balance
+              already passed. */}
+          {progress.aboveOriginal != null && (
+            <div className="mt-1.5 text-xs text-gray-500 tabular-nums">
+              {money(progress.outstanding)} owed · {money(progress.original)} borrowed ·{" "}
+              {money(progress.aboveOriginal)} accrued interest
+            </div>
+          )}
         </div>
       ) : (
         <p className="text-xs text-gray-400">Log today&apos;s outstanding balance to see how far along you are.</p>

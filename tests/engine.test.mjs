@@ -12,6 +12,7 @@ import { parseBudgetCSV } from "../src/engine/csvImport.js";
 import { parseLedgerCSV } from "../src/engine/ledgerCsvImport.js";
 import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../src/engine/backupShape.js";
 
+const round2 = (n) => Math.round(n * 100) / 100;
 const money = (n) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 let failures = 0;
 function check(label, got, want) {
@@ -1147,6 +1148,75 @@ check("a fresh export round-trips its starting balance", parseBudgetCSV(csvAE, s
 const legacyCsvAE = csvAE.replace(/(^|\r\n)Checking,/, "$1TD checking,");
 check("a LEGACY export (\"TD checking\") still round-trips", parseBudgetCSV(legacyCsvAE, stateAE.trackerCategories).checkInBalance, 4321.98);
 check("the label row isn't mistaken for a transaction", parseBudgetCSV(legacyCsvAE, stateAE.trackerCategories).recurring.some((r) => /checking/i.test(r.name)), false);
+
+// ---------- Scenario AG: a loan owed ABOVE what was borrowed ----------
+console.log("\n== Scenario AG: loan progress above original principal ==");
+// The real case: one unsubsidized loan, no interest-start date, nothing paid
+// yet — interest has pushed the balance past the principal. (1 - owed/orig)
+// is negative here; it used to clamp to 0% beside an "of $2,000.00" label.
+const abCat = { id: "ab", name: "Student Loan AB", color: 5, order: 0, kind: "debt", originalPrincipal: 2000, interestRate: 6.5 };
+const mkAB = (snapshots, payments = []) => normalize({
+  settings: { checkInBalance: 500, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  recurring: [], oneoffs: payments, paidOverrides: {},
+  trackerCategories: [abCat],
+  balanceSnapshots: { ab: snapshots },
+});
+
+const ab0 = computeLoanProgress(mkAB([{ id: "s1", date: "2026-09-01", amount: 2302.73 }]), abCat, "2026-09-13");
+check("bar sits at 0% — nothing has been paid", ab0.percentPaid, 0);
+check("never negative, and not by clamping a negative", ab0.percentPaid >= 0, true);
+eq("flagged as above principal", ab0.everAboveOriginal, true);
+check("owed", ab0.outstanding, 2302.73);
+check("borrowed", ab0.original, 2000);
+check("accrued interest = owed - borrowed", ab0.aboveOriginal, 302.73);
+check("the bar's denominator is the peak owed, not the principal", ab0.basis, 2302.73);
+
+// A payment lands: the bar moves, measured against the peak.
+const ab1 = computeLoanProgress(mkAB([
+  { id: "s1", date: "2026-09-01", amount: 2302.73 },
+  { id: "s2", date: "2026-10-01", amount: 2152.73 },
+]), abCat, "2026-10-02");
+check("first payment fills the bar (150 / 2302.73)", ab1.percentPaid, 6.51);
+check("breakdown follows the payment down", ab1.aboveOriginal, 152.73);
+
+// A month of interest with NO payment must not walk the bar backwards.
+const ab2 = computeLoanProgress(mkAB([
+  { id: "s1", date: "2026-09-01", amount: 2302.73 },
+  { id: "s2", date: "2026-10-01", amount: 2152.73 },
+  { id: "s3", date: "2026-11-01", amount: 2164.39 },
+]), abCat, "2026-11-02");
+check("a no-payment month holds the bar where it was", ab2.percentPaid, ab1.percentPaid);
+check("...and the breakdown still tells the truth about today", ab2.aboveOriginal, 164.39);
+check("...and it is NOT owed/peak today", ab2.percentPaid === round2((1 - 2164.39 / 2302.73) * 100), false);
+
+// Crossing back under the original principal must not jump backwards by
+// swapping denominators — the peak branch is sticky.
+const ab3 = computeLoanProgress(mkAB([
+  { id: "s1", date: "2026-09-01", amount: 2302.73 },
+  { id: "s2", date: "2026-10-01", amount: 2152.73 },
+  { id: "s3", date: "2026-11-01", amount: 2164.39 },
+  { id: "s4", date: "2026-12-01", amount: 1900 },
+]), abCat, "2026-12-02");
+check("still measured against the peak once under principal", ab3.percentPaid, 17.49);
+check("no backwards jump at the crossing", ab3.percentPaid > ab2.percentPaid, true);
+eq("breakdown disappears once owed <= borrowed", ab3.aboveOriginal, null);
+check("paid off entirely reaches 100%", computeLoanProgress(mkAB([
+  { id: "s1", date: "2026-09-01", amount: 2302.73 },
+  { id: "s2", date: "2027-06-01", amount: 0 },
+]), abCat, "2027-06-02").percentPaid, 100);
+
+// A loan that has never been above its principal behaves exactly as before.
+const aaCat = { id: "aa", name: "Student Loan AA", color: 6, order: 1, kind: "debt", originalPrincipal: 18000, interestRate: 5.8 };
+const aa = computeLoanProgress(normalize({
+  settings: { checkInBalance: 500, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  recurring: [], oneoffs: [], paidOverrides: {},
+  trackerCategories: [aaCat],
+  balanceSnapshots: { aa: [{ id: "t1", date: "2026-05-01", amount: 17010 }, { id: "t2", date: "2026-09-01", amount: 16120 }] },
+}), aaCat, "2026-09-13");
+check("ordinary loan: unchanged (1 - owed/original)", aa.percentPaid, 10.44);
+eq("ordinary loan: not flagged above principal", aa.everAboveOriginal, false);
+eq("ordinary loan: no breakdown line", aa.aboveOriginal, null);
+check("ordinary loan: still measured against what was borrowed", aa.basis, 18000);
 
 // ---------- Scenario AF: tab order (sanitize + drag + migration) ----------
 console.log("\n== Scenario AF: settings.tabOrder ==");

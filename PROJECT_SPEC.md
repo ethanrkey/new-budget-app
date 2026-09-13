@@ -157,6 +157,19 @@ Conventions worth knowing before touching numbers:
   a *loan* snapshot is start-of-day (a same-day payment still counts;
   `loans.js`). The loan convention is what lets a migrated origination seed
   reproduce the previous projection to the cent.
+- **Loan progress has two cases** (`computeLoanProgress`). Never above
+  principal: `1 − owed/original`, unchanged. Ever above principal (interest
+  outran payments, which an unsubsidized loan does from day one): the
+  denominator becomes `peak` — the most that loan has ever been worth owing —
+  and the numerator is measured from `bestOwed`, the lowest balance ever
+  logged, which is what keeps the bar monotonic (a no-payment month of
+  interest can't walk it backwards; min-so-far only falls). The branch keys
+  off `peak`, not today's balance, so crossing back under the original
+  principal can't jump the bar backwards by swapping denominators. While
+  owed > borrowed the card replaces "of $X" with `owed · borrowed · accrued
+  interest`; that third figure is `owed − borrowed`, i.e. interest net of
+  anything already paid, since payments made before the earliest logged
+  balance aren't knowable.
 - **Projections anchor to the last logged value** (asset: + contributions
   since; loan: + interest − payments since) and self-correct on every log.
   Nothing invents a "today" snapshot.
@@ -187,10 +200,13 @@ fifth tab never needs a migration.
   balance; month headers; optional per-category cumulative columns
   (checklist picker); mark-a-bill-paid checkbox for current-month bills;
   multi-select delete; per-item color override; projection horizon slider.
-  A savings/debt row also shows its category, muted, after the item name
-  ("Monthly payment · Student Loan") — the item name alone doesn't say which
-  loan or fund it feeds, and renaming a category never renames its items.
-  Suppressed when the item is already named after the category.
+  A cumulative column opens to fit its own category name (`colVars` in
+  LedgerView drives `--col-w`): the column is `nowrap` + `overflow:hidden` so
+  it can animate open from zero width, and a fixed width silently clipped
+  "Student Loan AA" and "Student Loan AB" to an identical "Student Loan".
+  `text-overflow: ellipsis` is the backstop so a future overflow is visible
+  rather than silent. The item column shows the transaction's own name and
+  nothing else.
 - **Budget** — monthly grid: income (starting point, take-home = every
   paycheck landing that month, checking, other income), fixed/recurring,
   saving/debt clustered by category, one-offs, totals, cumulative net.
@@ -274,3 +290,8 @@ Later:
   whether or not you're paying on it, exactly like an asset category.
 - "Expected remaining vs. actual remaining" is never shown for a loan; it
   only scolds. Percent paid off is the motivating framing.
+- A loan owed above its principal reports 0% rather than a clamped negative,
+  and says why in plain numbers. The peak-based, never-backwards bar was a
+  deliberate user choice (2026-09-13) over "fill against owed today", which
+  would tick down in a month with no payment: it can overstate where you
+  stand today, and that trade was made knowingly.

@@ -65,7 +65,7 @@ const SECTIONS = [
         ["Select", "Multi-select rows and delete them in one go."],
         ["Click any item name", "Edit or delete that item."],
       ]],
-      ["p", "A savings or loan row also shows its category, greyed, after the name — “Monthly payment · Student Loan” — since the item name alone doesn't say which loan it pays."],
+      ["p", "Each cumulative column is labeled with the category it tracks, and sized to fit that name — two loans called “Student Loan AA” and “Student Loan AB” stay tellable apart."],
     ],
   },
   {
@@ -121,6 +121,7 @@ const SECTIONS = [
       ]],
       ["p", "Payments are ordinary transactions that pick the loan as their category — set up as many as you like, or none. Setting up a loan never creates a payment for you."],
       ["note", "Loan cards show percent paid off, never “expected remaining vs. actual remaining.” That comparison only scolds, and it's wrong the moment you make an extra payment."],
+      ["p", "If interest has pushed a loan above what you borrowed — normal for an unsubsidized loan before payments start — the card says so plainly (“$2,302.73 owed · $2,000.00 borrowed · $302.73 accrued interest”) instead of showing a percentage of a number you've already passed. The bar measures against the most you've ever owed, and never moves backwards."],
     ],
   },
   {

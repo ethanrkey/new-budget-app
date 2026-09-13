@@ -92,10 +92,29 @@ export function computeLoanHistory(state, cat) {
   });
 }
 
-// For a debt card. `percentPaid` uses the LOGGED outstanding (the truth),
-// never the projection — the motivating framing. Deliberately does not
-// produce "expected remaining vs. actual remaining"; that compares you to
-// an ideal payoff and only ever scolds.
+// For a debt card. Every figure here comes from LOGGED balances (the truth),
+// never the projection. Deliberately does not produce "expected remaining vs.
+// actual remaining"; that compares you to an ideal payoff and only ever
+// scolds.
+//
+// Two cases, because "paid off" against the ORIGINAL
+// principal is meaningless once interest has pushed the balance above it —
+// an unsubsidized loan you haven't started paying can owe more than you
+// borrowed, and (1 − owed/original) goes negative there. That used to clamp
+// silently to 0% beside an "of $2,000.00" label next to a $2,302.73 balance,
+// which just reads as broken math.
+//
+//  - Never above principal: unchanged — (1 − owed/original).
+//  - Ever above principal (`everAboveOriginal`): the denominator becomes
+//    `peak`, the most this loan has ever been worth owing, and the numerator
+//    is measured from `bestOwed`, the LOWEST balance ever logged. Using the
+//    low-water balance rather than today's is what makes the bar monotonic:
+//    a month of interest with no payment can't walk it backwards, because
+//    min-so-far can only fall. The trade the user chose deliberately: the
+//    number then reflects the best you've got it down to, not owed ÷ peak
+//    today. The branch is sticky (it keys off peak, not today's balance), so
+//    crossing back under the original principal can't jump the bar backwards
+//    by swapping denominators mid-payoff.
 export function computeLoanProgress(state, cat, asOfISO) {
   if (!isLoanConfigured(cat)) return null;
   const snaps = sortedSnapshots(state, cat.id);
@@ -103,12 +122,32 @@ export function computeLoanProgress(state, cat, asOfISO) {
   const { expected } = computeLoanExpected(state, cat, asOfISO);
   const original = cat.originalPrincipal;
   const outstanding = latest ? latest.amount : null;
-  const percentPaid =
-    latest && original > 0 ? Math.min(100, Math.max(0, round((1 - outstanding / original) * 100))) : null;
+
+  const amounts = snaps.map((s) => s.amount);
+  const peak = Math.max(original, ...(amounts.length ? amounts : [original]));
+  const bestOwed = amounts.length ? Math.min(...amounts) : null;
+  const everAboveOriginal = peak > original;
+  const basis = everAboveOriginal ? peak : original;
+
+  let percentPaid = null;
+  if (latest && basis > 0) {
+    percentPaid = everAboveOriginal
+      ? Math.min(100, Math.max(0, round((1 - bestOwed / peak) * 100)))
+      : Math.min(100, Math.max(0, round((1 - outstanding / original) * 100)));
+  }
+
   return {
     latest,
     outstanding,
     original,
+    peak,
+    basis,
+    everAboveOriginal,
+    // What's owed beyond what was borrowed, when there is any. Interest is
+    // the only thing that can put it there, so that's what the card calls it
+    // — strictly it's interest NET of anything already paid, since payments
+    // made before the earliest logged balance aren't knowable.
+    aboveOriginal: outstanding != null && outstanding > original ? round(outstanding - original) : null,
     percentPaid,
     expectedNow: expected,
     interestRate: cat.interestRate ?? 0,
