@@ -37,14 +37,18 @@ export const CATEGORIES = {
     return isDark ? entry.dark : entry.light;
   }
 
-  // A tracker category shape (for reference): { id, name, color, order, kind }
+  // A tracker category shape (for reference):
+  // { id, name, color, order, kind, originalPrincipal?, interestRate?, interestStartDate? }
   // `color` is an index into CATEGORY_PALETTE. `id` is what an item's
   // `category` field holds for a savings/debt/investment item. `kind` is
   // "asset" (default — Savings, Investments: balance accumulates from
-  // contributions) or "debt" (Loans, credit cards: the Dashboard's
-  // "expected" instead comes from amortizing each of its items' own
-  // interest rate/original amount, via engine/loans.js — a payment REDUCES
-  // what's owed, it doesn't accumulate like a deposit).
+  // contributions) or "debt". A debt-kind category IS a loan: it carries the
+  // loan's terms (originalPrincipal, interestRate as APR %, optional
+  // interestStartDate), its outstanding balance is a logged snapshot in
+  // balanceSnapshots exactly like an asset, and a payment is any
+  // transaction tagged to it (engine/loans.js). A payment REDUCES what's
+  // owed, it doesn't accumulate like a deposit. A debt category with no
+  // originalPrincipal is simply "not set up yet."
 
   // The 3 starting categories for a brand-new account (no prior data) — see
   // stateShape.js for the migration that instead seeds an EXISTING user's

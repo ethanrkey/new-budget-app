@@ -267,3 +267,24 @@ export function deleteAccountSnapshot(state, accountId, snapshotId) {
     accountSnapshots: { ...state.accountSnapshots, [accountId]: list.filter((s) => s.id !== snapshotId) },
   };
 }
+
+// ---- Loan setup (the Dashboard's "Set up loan" / "+ Add loan" flow) ----
+// A loan IS a debt-kind category (see engine/loans.js). ONE atomic transition:
+// create the category if it doesn't exist yet, write its terms, and — for a
+// brand-new loan — log its current outstanding balance as the first
+// snapshot. Never creates a transaction; payments are added separately and
+// just tag this category. Editing terms later passes no `outstanding`.
+export function setupLoan(state, { categoryId = null, name, color = null, originalPrincipal, interestRate = null, interestStartDate = null, outstanding = null, asOf = null }) {
+  let next = state;
+  let id = categoryId;
+  if (!id || !next.trackerCategories.some((c) => c.id === id)) {
+    next = addCategory(next, name, color ?? 3, "debt");
+    id = next.trackerCategories[next.trackerCategories.length - 1].id;
+  }
+  const patch = { kind: "debt", originalPrincipal, interestRate, interestStartDate };
+  if (name) patch.name = name;
+  if (color != null) patch.color = color;
+  next = updateCategory(next, id, patch);
+  if (outstanding != null && asOf) next = addBalanceSnapshot(next, id, outstanding, asOf);
+  return next;
+}

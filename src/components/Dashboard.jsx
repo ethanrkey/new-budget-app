@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { computeCategoryProgress, computeCategoryHistory, computeContributionsByYear, computeNetPosition, computeMonthVariance } from "../engine/progress.js";
-import { computeLoanProgress } from "../engine/loans.js";
+import { computeLoanProgress, computeLoanHistory, isLoanConfigured } from "../engine/loans.js";
 import { paletteColor, primaryAccount, todayISO } from "../engine/model.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
+import LoanSetupModal from "./LoanSetupModal.jsx";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -24,21 +25,23 @@ const BTN = "text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-g
 
 // The "reality layer": what's actually in your accounts, what you actually
 // put in, and how that compares to what the transaction log alone would
-// project. Ledger/Budget stay pure forecasting. Everything here is a card
-// that is ONE thing. Variable spending lives on its own tab.
+// project. Ledger/Budget stay pure forecasting. Every card is ONE thing.
+// A loan is a debt-kind category (engine/loans.js) — set up here, never via
+// the transaction editor. Variable spending lives on its own tab.
 export default function Dashboard({
   state, isDark,
   onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot,
   onUpdateAccountBalance, onUpdateAccountSnapshot, onDeleteAccountSnapshot,
-  onEditItem, onAddLoan,
+  onSetupLoan,
 }) {
   const today = todayISO(); // real clock — the reality layer's "now"
   const account = primaryAccount(state);
   const cats = [...state.trackerCategories].sort((a, b) => a.order - b.order);
   const assetCats = cats.filter((c) => c.kind !== "debt");
   const debtCats = cats.filter((c) => c.kind === "debt");
-  const net = computeNetPosition(state, today);
-  const [logFor, setLogFor] = useState(null); // category currently logging a balance
+  const net = computeNetPosition(state);
+  const [logFor, setLogFor] = useState(null);     // category currently logging a balance
+  const [loanModal, setLoanModal] = useState(null); // null | { cat?: category } (cat absent = brand-new loan)
 
   const logCat = logFor ? cats.find((c) => c.id === logFor) : null;
   const logLatest = logCat ? sortedSnaps(state.balanceSnapshots?.[logCat.id]).at(-1) : null;
@@ -72,17 +75,27 @@ export default function Dashboard({
           />
         ))}
 
-        {debtCats.map((cat) => {
-          const loans = state.recurring.filter((r) => r.category === cat.id);
-          if (loans.length === 0) return <EmptyDebtCard key={cat.id} category={cat} isDark={isDark} onAddLoan={() => onAddLoan(cat.id)} />;
-          return loans.map((item) =>
-            item.originalPrincipal != null ? (
-              <DebtLoanCard key={item.id} item={item} category={cat} isDark={isDark} state={state} today={today} onEdit={() => onEditItem(item.id)} />
-            ) : (
-              <UnconfiguredLoanCard key={item.id} item={item} category={cat} isDark={isDark} onEdit={() => onEditItem(item.id)} />
-            )
-          );
-        })}
+        {debtCats.map((cat) =>
+          isLoanConfigured(cat) ? (
+            <LoanCard
+              key={cat.id}
+              category={cat}
+              isDark={isDark}
+              state={state}
+              today={today}
+              progress={computeLoanProgress(state, cat, today)}
+              history={computeLoanHistory(state, cat)}
+              onLog={() => setLogFor(cat.id)}
+              onEdit={() => setLoanModal({ cat })}
+              onUpdateSnapshot={(id, patch) => onUpdateSnapshot(cat.id, id, patch)}
+              onDeleteSnapshot={(id) => onDeleteSnapshot(cat.id, id)}
+            />
+          ) : (
+            <SetupLoanCard key={cat.id} category={cat} isDark={isDark} onSetup={() => setLoanModal({ cat })} />
+          )
+        )}
+
+        <AddLoanCard onAdd={() => setLoanModal({})} />
       </div>
 
       {logCat && (
@@ -90,6 +103,15 @@ export default function Dashboard({
           account={{ name: logCat.name, balance: logLatest?.amount ?? 0, balanceAsOf: logLatest?.date ?? "never" }}
           onConfirm={(amount, date) => { onAddSnapshot(logCat.id, amount, date); setLogFor(null); }}
           onClose={() => setLogFor(null)}
+        />
+      )}
+
+      {loanModal && (
+        <LoanSetupModal
+          initial={loanModal.cat ?? null}
+          isDark={isDark}
+          onSave={(payload) => { onSetupLoan(payload); setLoanModal(null); }}
+          onClose={() => setLoanModal(null)}
         />
       )}
     </div>
@@ -111,7 +133,7 @@ function Hero({ net }) {
         <Stat label="Debt" value={net.debt > 0 ? `−${money(net.debt)}` : money(0)} />
       </div>
       <p className="mt-3 text-xs text-gray-400">
-        Verified checking balance + last logged balance of each savings/investment category − debt.
+        Verified checking balance + last logged balance of each savings/investment − last logged balance of each loan.
         {unlogged > 0 && (
           <> <span className="text-gray-500">{unlogged} categor{unlogged === 1 ? "y" : "ies"} not logged yet</span> — counted as $0 until you log a balance.</>
         )}
@@ -288,8 +310,8 @@ function AssetCard({ category, isDark, progress, history, contributions, today, 
             <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
             <span className="truncate">{category.name}</span>
           </div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums" style={{ color }}>
-            {latest ? money(latest.amount) : "—"}
+          <div className="mt-1 text-2xl font-semibold tabular-nums" style={latest ? { color } : undefined}>
+            {latest ? money(latest.amount) : <span className="text-gray-300 dark:text-gray-600">—</span>}
           </div>
           <div className="text-xs text-gray-500">{latest ? `logged ${prettyDate(latest.date)}` : "no balance logged yet"}</div>
         </div>
@@ -331,13 +353,29 @@ function AssetCard({ category, isDark, progress, history, contributions, today, 
   );
 }
 
-// ---- Debt (one card per loan) ----
-function DebtLoanCard({ item, category, isDark, state, today, onEdit }) {
+// ---- Loan (one card per loan = per debt-kind category) ----
+// The LOGGED outstanding balance is the big number (truth). Amortization
+// drives the dashed projected line and nothing else on screen —
+// "expected remaining vs. actual remaining" appears nowhere by design.
+function LoanCard({ category, isDark, state, today, progress, history, onLog, onEdit, onUpdateSnapshot, onDeleteSnapshot }) {
   const color = paletteColor(category.color, isDark);
-  const p = computeLoanProgress(state, item, today);
+  const latest = progress.latest;
   const monthKey = today.slice(0, 7);
-  const v = computeMonthVariance(item, state.monthlyActuals, monthKey);
-  const interestFrom = item.interestStartDate && item.interestStartDate > item.startDate ? item.interestStartDate : null;
+
+  const data = history.map((h) => ({ date: h.date, amount: h.amount, expected: h.expected }));
+  if (latest && today > latest.date && progress.expectedNow != null) data.push({ date: today, expected: progress.expectedNow });
+
+  // Planned vs. actually paid THIS MONTH — your behavior, summed across every
+  // payment tagged to this loan. "Paid" comes from the same monthlyActuals
+  // mechanism variable bills use, so only items flagged "Track actual vs.
+  // budgeted" can report it.
+  const payments = state.recurring.filter((r) => r.category === category.id);
+  const variances = payments.map((p) => computeMonthVariance(p, state.monthlyActuals, monthKey));
+  const planned = variances.reduce((s, v) => s + v.expected, 0);
+  const trackable = payments.some((p) => p.variable);
+  const paidValues = variances.filter((v, i) => payments[i].variable && v.actual != null).map((v) => v.actual);
+  const paid = paidValues.length ? paidValues.reduce((s, a) => s + a, 0) : null;
+  const interestFrom = progress.interestStartDate;
 
   return (
     <section className={CARD}>
@@ -345,64 +383,68 @@ function DebtLoanCard({ item, category, isDark, state, today, onEdit }) {
         <div className="min-w-0">
           <div className={`${LABEL} flex items-center gap-1.5`}>
             <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-            <span className="truncate">{item.name}</span>
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 normal-case tracking-normal">{category.name}</span>
+            <span className="truncate">{category.name}</span>
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 normal-case tracking-normal">Loan</span>
           </div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">{money(p.remaining)}</div>
-          <div className="text-xs text-gray-500">remaining</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">
+            {latest ? money(latest.amount) : <span className="text-gray-300 dark:text-gray-600">—</span>}
+          </div>
+          <div className="text-xs text-gray-500">
+            {latest ? `outstanding · logged ${prettyDate(latest.date)}` : "no balance logged yet"}
+          </div>
         </div>
-        <button onClick={onEdit} className={BTN}>Edit loan</button>
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <button onClick={onLog} className={BTN}>Log balance</button>
+          <button onClick={onEdit} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Edit terms</button>
+        </div>
       </div>
 
-      <div>
-        <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-          <span className="font-medium text-gray-700 dark:text-gray-300">{p.percentPaid}% paid off</span>
-          <span>of {money(p.original)}</span>
+      {progress.percentPaid != null ? (
+        <div>
+          <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+            <span className="font-medium text-gray-700 dark:text-gray-300">{progress.percentPaid}% paid off</span>
+            <span>of {money(progress.original)}</span>
+          </div>
+          <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+            <div className="h-full rounded-full transition-all" style={{ width: `${progress.percentPaid}%`, backgroundColor: color }} />
+          </div>
         </div>
-        <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-          <div className="h-full rounded-full transition-all" style={{ width: `${p.percentPaid}%`, backgroundColor: color }} />
-        </div>
-      </div>
+      ) : (
+        <p className="text-xs text-gray-400">Log today&apos;s outstanding balance to see how far along you are.</p>
+      )}
+
+      <HistoryChart data={data} color={color} isDark={isDark} projected={!!latest}
+        emptyHint="Log the outstanding balance whenever you check it — two points make a trend." />
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
           <div className="text-xs text-gray-500">Terms</div>
-          <div className="font-medium tabular-nums">{item.interestRate ?? 0}% APR</div>
-          <div className="text-xs text-gray-400">
-            {interestFrom ? `interest from ${prettyDate(interestFrom)}` : `since ${prettyDate(item.startDate)}`}
-          </div>
+          <div className="font-medium tabular-nums">{progress.interestRate}% APR · {money(progress.original)}</div>
+          <div className="text-xs text-gray-400">{interestFrom ? `interest from ${prettyDate(interestFrom)}` : "interest accruing"}</div>
         </div>
         <div>
           <div className="text-xs text-gray-500">This month</div>
-          <div className="font-medium tabular-nums">planned {money(v.expected)}</div>
-          {item.variable ? (
-            <div className="text-xs text-gray-400">{v.actual == null ? "paid: not logged yet" : `paid ${money(v.actual)}`}</div>
+          {payments.length === 0 ? (
+            <div className="text-xs text-gray-400">No payments planned yet — add a transaction and pick this loan.</div>
           ) : (
-            <div className="text-xs text-gray-400">turn on &quot;Track actual vs. budgeted&quot; to log what you paid</div>
+            <>
+              <div className="font-medium tabular-nums">planned {money(planned)}</div>
+              {trackable ? (
+                <div className="text-xs text-gray-400">{paid == null ? "paid: not logged yet" : `paid ${money(paid)}`}</div>
+              ) : (
+                <div className="text-xs text-gray-400">turn on &quot;Track actual vs. budgeted&quot; on a payment to log what you paid</div>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      <HistoryList entries={history} showProjected onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
     </section>
   );
 }
 
-function UnconfiguredLoanCard({ item, category, isDark, onEdit }) {
-  const color = paletteColor(category.color, isDark);
-  return (
-    <section className={`${CARD} border-dashed`}>
-      <div className={`${LABEL} flex items-center gap-1.5`}>
-        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-        <span className="truncate">{item.name}</span>
-      </div>
-      <p className="text-sm text-gray-500">
-        Not set up yet — add its interest rate and original amount to see what&apos;s remaining and how far along you are.
-      </p>
-      <button onClick={onEdit} className={`${BTN} self-start`}>Set up loan</button>
-    </section>
-  );
-}
-
-function EmptyDebtCard({ category, isDark, onAddLoan }) {
+function SetupLoanCard({ category, isDark, onSetup }) {
   const color = paletteColor(category.color, isDark);
   return (
     <section className={`${CARD} border-dashed`}>
@@ -410,8 +452,20 @@ function EmptyDebtCard({ category, isDark, onAddLoan }) {
         <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
         <span className="truncate">{category.name}</span>
       </div>
-      <p className="text-sm text-gray-500">No loans in this category yet. A loan is a recurring payment pointed at this category, with its rate and original amount.</p>
-      <button onClick={onAddLoan} className={`${BTN} self-start`}>+ Add a loan</button>
+      <p className="text-sm text-gray-500">
+        Not set up yet — add its original amount, rate, and what you owe today to see the balance, progress, and projection.
+      </p>
+      <button onClick={onSetup} className={`${BTN} self-start`}>Set up loan</button>
+    </section>
+  );
+}
+
+function AddLoanCard({ onAdd }) {
+  return (
+    <section className={`${CARD} border-dashed justify-center items-start`}>
+      <div className={LABEL}>Loans</div>
+      <p className="text-sm text-gray-500">Car loan, mortgage, student loan — a loan is its own category; payments tag to it like Roth contributions tag to Roth.</p>
+      <button onClick={onAdd} className={BTN}>+ Add loan</button>
     </section>
   );
 }

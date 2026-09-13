@@ -13,7 +13,6 @@
 //    "2 vs 3 paydays" reality already true for paychecks) vs. whatever real
 //    total was logged in monthlyActuals.
 import { buildAllEvents, occurrenceDates } from "./generate.js";
-import { computeDebtCategoryExpected } from "./loans.js";
 import { primaryAccount } from "./model.js";
 
 function round(n) { return Math.round(n * 100) / 100; }
@@ -124,19 +123,19 @@ export function computeContributionsByYear(state, categoryId, asOfISO) {
 // been logged). A category with nothing to go on contributes 0 and is
 // COUNTED, so the UI can say "N not yet logged" instead of letting a low
 // number masquerade as the truth.
-export function computeNetPosition(state, asOfISO) {
+export function computeNetPosition(state) {
   const cash = round(Number(primaryAccount(state).balance) || 0);
   let assets = 0, debt = 0, unloggedAssets = 0, unloggedDebts = 0;
   for (const cat of state.trackerCategories || []) {
     const snaps = sortedSnapshots(state, cat.id);
     const latest = snaps.length ? snaps[snaps.length - 1] : null;
     if (cat.kind === "debt") {
+      // A loan's outstanding balance is its last LOGGED snapshot — the
+      // truth, same as an asset. No snapshot means no anchor at all (the
+      // loan model never invents one from origination), so it's counted
+      // as unlogged rather than contributing a number the user never saw.
       if (latest) debt += latest.amount;
-      else {
-        const expected = computeDebtCategoryExpected(state, cat.id, asOfISO);
-        if (expected.loans.length > 0) debt += expected.total;
-        else unloggedDebts++;
-      }
+      else unloggedDebts++;
     } else if (latest) {
       assets += latest.amount;
     } else {

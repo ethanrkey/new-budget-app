@@ -122,18 +122,59 @@ export function normalize(parsed) {
   delete settings.checkInBalance;
   delete settings.checkInDate;
 
+  // Migration (loan model): loan terms used to live on the PAYMENT item
+  // (originalPrincipal/interestRate/interestStartDate on a recurring rule).
+  // A loan is now its debt-kind CATEGORY, exactly like an asset category —
+  // the terms move onto it, the item stays as a plain payment tagged to it.
+  // - The first configured item in a category migrates onto that category.
+  // - Any additional configured item in the SAME category (or one whose
+  //   category is missing / not debt-kind) spawns its own debt category —
+  //   named after it, deterministic id — and is retagged. Nothing dropped.
+  // - Balance anchor: an existing user-logged snapshot on the category is
+  //   kept untouched. If there's none, one REAL fact is seeded —
+  //   originalPrincipal as of the payment's start date ("on this date the
+  //   balance was $X") — which reproduces the old projection exactly. A
+  //   "today" snapshot is never fabricated (a number the user never saw,
+  //   and it would break normalize's purity).
+  // Idempotent (items come out stripped, so a second pass is a no-op) and
+  // deterministic (fixed ids, no uid()).
+  const cats = trackerCategories.map((c) => ({ ...c }));
+  const catById = new Map(cats.map((c) => [c.id, c]));
+  const balanceSnapshotsOut = { ...(parsed.balanceSnapshots || {}) };
+  const nextCatOrder = () => (cats.length ? Math.max(...cats.map((c) => c.order ?? 0)) + 1 : 0);
+  const migrateLoanItem = (it) => {
+    if (it.originalPrincipal == null && it.interestRate == null && it.interestStartDate == null) return it;
+    const { originalPrincipal, interestRate, interestStartDate, ...rest } = it;
+    if (originalPrincipal == null) return rest; // stray rate with no principal: nothing to carry
+    let cat = catById.get(rest.category);
+    const terms = { originalPrincipal, interestRate: interestRate ?? null, interestStartDate: interestStartDate ?? null };
+    if (!cat || cat.kind !== "debt" || cat.originalPrincipal != null) {
+      const spawned = { id: `loan-${rest.id}`, name: rest.name, color: cat?.color ?? 3, order: nextCatOrder(), kind: "debt", ...terms };
+      cats.push(spawned);
+      catById.set(spawned.id, spawned);
+      cat = spawned;
+      rest.category = spawned.id;
+    } else {
+      Object.assign(cat, terms);
+    }
+    if (!balanceSnapshotsOut[cat.id]?.length) {
+      balanceSnapshotsOut[cat.id] = [{ id: `seed-loan-${cat.id}`, date: rest.startDate ?? rest.date, amount: originalPrincipal }];
+    }
+    return rest;
+  };
+
   return {
     ...base,
     ...parsed,
     settings,
     accounts,
-    recurring: recurring.map(stamp),
-    oneoffs: oneoffs.map(stamp),
+    recurring: recurring.map(stamp).map(migrateLoanItem),
+    oneoffs: oneoffs.map(stamp).map(migrateLoanItem),
     paidOverrides: parsed.paidOverrides || {},
-    trackerCategories,
+    trackerCategories: cats,
     // Brand-new fields, no legacy shape to fold in — an existing account
     // simply never had any actuals logged yet, same as paidOverrides above.
-    balanceSnapshots: parsed.balanceSnapshots || {},
+    balanceSnapshots: balanceSnapshotsOut,
     monthlyActuals: parsed.monthlyActuals || {},
     accountSnapshots,
   };

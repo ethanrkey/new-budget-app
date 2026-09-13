@@ -17,9 +17,6 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
   const [startDate, setStartDate] = useState(initial?.startDate ?? todayISO());
   const [endDate, setEndDate] = useState(initial?.endDate ?? "");
   const [variable, setVariable] = useState(initial?.variable ?? false);
-  const [interestRate, setInterestRate] = useState(initial?.interestRate ?? "");
-  const [originalPrincipal, setOriginalPrincipal] = useState(initial?.originalPrincipal ?? "");
-  const [interestStartDate, setInterestStartDate] = useState(initial?.interestStartDate ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
   const selectedCat = sortedCats.find((c) => c.id === category);
@@ -51,9 +48,6 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
         endDate: endDate || null,
         dayOfMonth: new Date(startDate + "T00:00:00").getDate(),
         variable: showVariableToggle ? variable : false,
-        interestRate: isDebtCategory && interestRate !== "" ? Math.abs(Number(interestRate)) : null,
-        originalPrincipal: isDebtCategory && originalPrincipal !== "" ? Math.abs(Number(originalPrincipal)) : null,
-        interestStartDate: isDebtCategory && interestStartDate ? interestStartDate : null,
       });
     } else {
       onSave({ ...base, date });
@@ -149,29 +143,9 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
                 </div>
               </div>
               {isDebtCategory && (
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1">
-                    <label className={label}>Interest rate (APR %)</label>
-                    <input className={field} type="number" step="0.01" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} placeholder="e.g. 5.5" />
-                  </div>
-                  <div className="flex-1">
-                    <label className={label}>Original loan amount</label>
-                    <input className={field} type="number" step="0.01" value={originalPrincipal} onChange={(e) => setOriginalPrincipal(e.target.value)} placeholder="e.g. 12000" />
-                  </div>
-                </div>
-              )}
-              {isDebtCategory && (
-                <div>
-                  <label className={label}>Interest starts (optional)</label>
-                  <input className={field} type="date" value={interestStartDate} onChange={(e) => setInterestStartDate(e.target.value)} />
-                </div>
-              )}
-              {isDebtCategory && (
                 <p className="text-xs text-gray-400 -mt-1">
-                  Set rate + original amount to include this loan in the Dashboard&apos;s debt total. Leave
-                  them blank and it just won&apos;t count yet. &quot;Interest starts&quot; is for a loan
-                  that accrues nothing until a set date (some student loans) — before it, payments cut
-                  principal dollar-for-dollar.
+                  This is a payment toward <span className="font-medium">{selectedCat.name}</span>. The
+                  loan&apos;s own terms (original amount, APR, interest start) live on its Dashboard card.
                 </p>
               )}
               {showVariableToggle && (

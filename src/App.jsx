@@ -7,7 +7,7 @@ import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
-  updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot,
+  updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan,
 } from "./engine/mutate.js";
 import { primaryAccount } from "./engine/model.js";
 import LedgerView from "./components/LedgerView.jsx";
@@ -187,6 +187,11 @@ export default function App() {
   }
   function deleteAcctSnapshot(accountId, snapshotId) {
     setState((s) => deleteAccountSnapshot(s, accountId, snapshotId));
+  }
+  // Loan setup / edit-terms — a loan is a debt-kind category; this never
+  // creates a transaction (see mutate.js setupLoan).
+  function setupLoanHandler(payload) {
+    setState((s) => setupLoan(s, payload));
   }
 
   // Onboarding answers reuse the exact same {recurring, oneoffs,
@@ -417,8 +422,7 @@ export default function App() {
               onUpdateAccountBalance={() => setUpdateBalanceOpen(true)}
               onUpdateAccountSnapshot={updateAcctSnapshot}
               onDeleteAccountSnapshot={deleteAcctSnapshot}
-              onEditItem={editById}
-              onAddLoan={openAddModal}
+              onSetupLoan={setupLoanHandler}
             />
           ) : (
             <SpendingView
