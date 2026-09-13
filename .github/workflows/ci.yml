@@ -1,0 +1,24 @@
+name: CI
+
+# Runs on every push and pull request: lint, the engine test harness, and a
+# production build. The harness (tests/engine.test.mjs) is the project's
+# safety net for every migration and money calculation — it MUST live in
+# the repo and run here, never only on a developer's machine.
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # No Supabase env needed: src/supabase.js reads it at runtime only.
+      - run: npm run build

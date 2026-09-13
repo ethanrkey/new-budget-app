@@ -29,10 +29,27 @@ export default [
       ...react.configs['jsx-runtime'].rules,
       ...reactHooks.configs.recommended.rules,
       'react/jsx-no-target-blank': 'off',
+      // JS project with no PropTypes: this rule produced ~255 pure-noise
+      // errors that buried every real signal and kept `npm run lint`
+      // permanently red. Off, so CI fails only on things that matter.
+      'react/prop-types': 'off',
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
       ],
+    },
+  },
+  {
+    // The engine test harness: plain Node, no React. Lint it too — a typo
+    // in an assertion is a false PASS waiting to happen.
+    files: ['tests/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: globals.node,
+    },
+    rules: {
+      ...js.configs.recommended.rules,
     },
   },
 ]

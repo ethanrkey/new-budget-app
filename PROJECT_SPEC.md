@@ -1,241 +1,262 @@
-# Budget App — Project Spec & Handoff (v2)
+# PROJECT_SPEC — new-budget-app
 
-This document is the single source of truth for the project. If you are an AI
-assistant (e.g. Claude Code) picking this up, READ THIS FIRST, then read the
-existing files under `src/`. Continue the work from "KNOWN BUGS" and
-"To build next".
+**This document must always match the code.** Any change that makes it wrong is
+updated in the same commit (see *Maintenance rules*). Last full rewrite:
+2026-09-13, from the code as it exists at that commit.
 
----
+## 1. What this is
 
-## What this is
+A personal cash-flow forecaster with a reality check. You describe your money
+as **rules** (a paycheck every two weeks, rent on the 2nd, $500 to a Roth on
+the 5th) plus **one-offs**, and the app projects your checking balance day by
+day and month by month. Separately, you **log what's actually true** — your
+verified checking balance, what's really in each savings/investment account,
+what you really owe on each loan, what a variable bill really cost — and the
+app shows how reality compares to the projection.
 
-A personal budgeting web app (eventually web + iOS) for one primary user
-(Ethan) that will later support multiple users. It replaces a spreadsheet that
-had two synced tabs: a **Ledger** (day-by-day transaction log with a running
-bank balance) and a **Budget** (monthly summary grid). The point is to forecast
-committed money forward and never lose sync between the two views.
+Two layers, deliberately kept apart:
 
----
+| Layer | Tabs | Source of truth |
+|---|---|---|
+| **Forecast** | Ledger, Budget | rules + one-offs, computed from one event list |
+| **Reality** | Dashboard, Spending | numbers you logged yourself |
 
-## Tech stack (locked)
+Ledger and Budget never disagree because both are derived from the same event
+list. The Dashboard never *projects* checking; it shows the verified balance.
+The Ledger owns projection.
 
-- **Vite + React** (JavaScript, not TypeScript)
-- **Tailwind CSS v3** (`darkMode: "class"`)
-- **Browser localStorage** for persistence (v1), isolated to ONE file
-  (`src/storage.js`) so it can later be swapped for Supabase (auth + Postgres)
-  WITHOUT touching engine or components.
-- Dev machine now on Node 22 (upgraded from 20.11 because Claude Code needs >=22).
+## 2. Status
 
-### Architecture principle
-The "brain" (data model + calculation engine, in `src/engine/`) is deliberately
-separated from the UI so a future iOS app can reuse the exact same logic. Keep
-engine code free of any React/DOM dependencies.
+Live, single-user-per-account, deployed on Vercel from `main`. Actively
+developed. Goal: a full web app plus a connected iOS app sharing the same
+engine (which is why the engine is pure JS with no UI or backend imports).
 
----
-
-## Core design principle: ONE shared dataset
-
-Everything derives from a single state object:
-
-```
-state = {
-  settings: {
-    checkInBalance,   // real current bank (TD) balance, a number
-    checkInDate,      // "YYYY-MM-DD"
-    budgetHorizon,    // "YYYY-MM-DD" how far the Budget projects
-    ledgerHorizon,    // "YYYY-MM-DD" how far the Ledger projects (independent!)
-    theme,            // "light" | "dark"
-    showCumulative,   // bool — toggle the 4 savings columns on the ledger
-  },
-  recurring: [ RecurringRule ],  // rules that auto-generate dated events
-  oneoffs:   [ OneOff ],         // individual dated events
-  paidOverrides: { "YYYY-MM": [ ruleId, ... ] },  // bills marked paid (feature 9)
-}
-```
-
-- **RecurringRule**: `{ id, name, amount, category, cadence, dayOfMonth, startDate, endDate|null, order }`
-  - cadence ∈ `weekly | biweekly | monthly | yearly`
-- **OneOff**: `{ id, name, amount, category, date, order }`
-
-The **Ledger** = every event expanded + sorted, with a running balance.
-The **Budget** = the same events bucketed into months.
-Both derive from the same event list, so they can never desync (the key
-improvement over the old spreadsheet). Nothing computed is ever stored — always
-recomputed from state. Money rounds to cents.
-
----
-
-## Categories (IMPLEMENT THIS REFACTOR)
-
-Replace the old `savings` category with four real buckets. Final set:
-
-| key        | label       | direction | color    | notes                          |
-|------------|-------------|-----------|----------|--------------------------------|
-| income     | Income      | in        | green    |                                |
-| bill       | Fixed Bill  | out       | purple   |                                |
-| oneoff     | One-off     | out       | red      |                                |
-| roth       | Roth        | out       | #6A1B9A  | feeds Roth cumulative col      |
-| saved      | Saved       | out       | #0B7A0B  | feeds Saved cumulative col     |
-| brokerage  | Brokerage   | out       | #1565C0  | feeds Brokerage cumulative col |
-| loans      | Loans       | out       | #B36A00  | feeds Loans cumulative col     |
-
-- The four Ledger cumulative columns map DIRECTLY to the roth/saved/brokerage/
-  loans categories. DROP the old separate `tracker` field — category IS the
-  tracker now. Any event in one of those four categories increments that
-  column's running total; show the value ONLY on rows where it changes (stepped
-  display), blank elsewhere.
-- Future (NOT v1): user-defined custom categories with color + section mapping,
-  and logic to remap rows when categories change. Build the fixed set cleanly
-  first, structured so custom categories can be added later.
-
----
-
-## Budget view format (match the spreadsheet)
-
-Columns = months. Rows grouped into sections with subtotals:
-
-```
-MONTH                | Sep 2026 | Oct 2026 | ...
-INCOME (green header)
-  Starting point     |   0.00   | (prev month CUMULATIVE NET) ...
-  Take-home          |  = SUM OF ALL PAYCHECKS THAT MONTH  (see bug 1)
-  TD checking        |  (real balance, first/live month only)
-  <other income, e.g. Money from Poppy>   (its own row)
-  TOTAL IN (green fill)
-FIXED / RECURRING
-  <each bill row>
-SAVING / DEBT
-  <roth rows, then saved, then brokerage, then loans>
-ONE-OFF / SEASONAL
-  <one-off rows>
-TOTAL OUT (red fill)
-MONTHLY NET (green/red by sign)
-CUMULATIVE NET (dark bold row)
-```
-
-- First column sticky (stays visible scrolling across months).
-- "Take-home" = SUM of every paycheck landing in that month. Convention: income
-  item whose name matches /pay|salary|take.?home/i is take-home; other income
-  (Poppy) shows as its own row.
-- Starting point: month 0 = 0; later months = prior month's CUMULATIVE NET.
-- TD checking: real check-in balance, first/live month only.
-
-### SAVING / DEBT section layout (clarified)
-The four savings categories (roth/saved/brokerage/loans) all appear under ONE
-"SAVING / DEBT" section header as normal item rows, grouped in that category
-order. Do NOT create four separate section headers — one header, rows grouped by
-category within it.
-
-### Current-month convention (important)
-When today's date is inside a month, that month is "live":
-- Starting point = 0
-- TD checking = real check-in balance (already includes any paycheck received)
-- Take-home = only paychecks NOT YET received this month
-- Bills already paid this month = 0 (see mark-paid feature)
-
----
-
-## KNOWN BUGS TO FIX (do these first)
-
-1. **Take-home only shows one paycheck.** Must be the SUM of all paychecks in
-   the month (2 biweekly = 2×; 3-payday month = 3×). This also causes CUMULATIVE
-   NET to drift wildly negative — fixing take-home fixes the cascade.
-
-2. **Cumulative savings columns don't accumulate.** They were keyed to a
-   separate `tracker` field the user never set. FIX: key them to the new
-   roth/saved/brokerage/loans CATEGORIES. Stepped display (value only on rows
-   where it changes).
-
----
-
-## To build next (the batch, in priority order)
-
-### MUST-HAVE (do first)
-1. **Category refactor** — replace `savings` with roth/saved/brokerage/loans
-   across model, EventForm, Budget grouping, Ledger cumulative columns.
-   Cumulative columns derive from category.
-2. **Fix take-home** = sum of all paychecks per month.
-3. **Fix cumulative columns** = derive from the four categories, stepped.
-4. **Single Add button ABOVE the Ledger/Budget tabs.** Remove the add button
-   currently inside LedgerView; keep exactly one global add button in App,
-   positioned just above the tab navigation.
-5. **Full CRUD:**
-   - Click any Ledger row's item name (e.g. "Internet", "Paycheck") → opens the
-     edit form, pre-filled.
-   - Edit works for both one-offs and recurring rules; editing a recurring rule
-     edits all its instances.
-   - Delete from within the edit form (and optionally a hover ✕).
-   - Reach edit/delete from Budget rows too where practical.
-
-### NEXT
-6. **Manual row reordering WITHIN each section** (Income, Fixed/Recurring,
-   Saving/Debt, One-off) on the Budget. Persist an `order` field per item; sort
-   by it within its section. Reorder only within a section, never across.
-   Up/down arrows are fine (simpler than drag-and-drop).
-7. **Projection sliders** — two INDEPENDENT controls: Budget horizon and Ledger
-   horizon, letting the user pick how many months out each view projects (e.g.
-   Budget → May 2027, Ledger → Dec 2027, independently). Wire to
-   settings.budgetHorizon / settings.ledgerHorizon.
-8. **Ledger cumulative columns animation** — keep the show/hide toggle; when
-   toggled on, the 4 columns slide out from the right of the TD Balance column
-   with a smooth CSS transition. Default hidden.
-
-### LAST (nice-to-have, user unsure how necessary)
-9. **Mark bill paid this month (Ledger).** On hovering a Ledger row, show a
-   small checkbox next to the date (e.g. beside "Sep 10"). Checking it zeroes
-   THAT bill for the CURRENT month only; both Ledger and Budget update. Store via
-   `paidOverrides` (`{ "YYYY-MM": [ruleId,...] }`). Current month only to start.
-   Lowest priority.
-
----
-
-## Future roadmap (NOT v1, but design toward it)
-
-- **Supabase auth (Google sign-in) + Postgres** so data persists across devices
-  and the app is usable for real without the spreadsheet. `src/storage.js` is
-  the ONLY file that should change. Do UI/format polish FIRST, then migrate
-  storage — don't do DB migrations while the data shape is still moving.
-- **iOS app** reusing the same engine (why the engine is UI-free).
-- **User-defined categories** with custom colors + section mapping.
-- Multi-user; each user starts blank.
-
----
-
-## File map (current)
+## 3. Architecture
 
 ```
 src/
-  engine/
-    model.js      — categories, cadences, blankState(), date helpers, uid()
-    generate.js   — buildEvents(state, horizonISO): expand recurring + oneoffs, sort
-    compute.js    — computeLedger(), groupByMonth(), computeBudget()
-  components/
-    LedgerView.jsx  — ledger table, color coding, cumulative toggle, add/delete
-    BudgetView.jsx  — sectioned monthly grid (spreadsheet-style)
-    EventForm.jsx   — add/edit modal (one-off vs recurring)
-  storage.js    — loadState()/saveState() to localStorage (SWAP POINT for backend)
-  App.jsx       — hub: state, autosave, theme, check-in bar, tabs, global add
-  index.css     — tailwind directives + base
-tailwind.config.js — darkMode class, semantic colors
+  engine/          pure functions, no React, no Supabase — the future iOS app reuses these
+  components/      React UI (Tailwind v3, dark mode via the `dark` class)
+  storage.js       the ONLY backend touchpoint (Supabase load/save, debounced)
+  auth.js          Supabase auth helpers (Google OAuth, magic link, session)
+  supabase.js      client from VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
+  theme.js         per-device light/dark (localStorage; never synced)
+  downloadFile.js  browser download trigger shared by export + restore
+  App.jsx          state owner: loads once per user, autosaves on change, wires handlers
+tests/engine.test.mjs   the engine harness (see §8)
+supabase/schema.sql     the one table + RLS policies
 ```
 
-NOTE: current code still uses the OLD category set and a separate `tracker`
-field. The batch above changes that. Update model.js first, then propagate to
-EventForm, compute.js, LedgerView, BudgetView.
+**Engine / UI separation.** Everything with a number in it lives in
+`src/engine/*` as pure functions of `(state, …)`. Components only render and
+call mutators. This is what makes the harness possible (plain Node, no DOM)
+and what will make an iOS client possible without a rewrite.
 
----
+**Single state object.** All user data is one JSON blob per user. `App.jsx`
+holds it in React state; every mutation is a pure function in
+`engine/mutate.js` returning a new state; a debounced effect saves it.
 
-## Conventions / preferences (from the user)
-- Numbers-first, accurate, no drift. Verify the math.
-- Clean, modern, professional look. Light/dark toggle. Not ultra-minimal.
-- Income green, bills purple, expenses red, negative balances red.
-- Start BLANK (no seeded data) — user enters their own.
-- Build for exactly how the primary user uses it now; generalize later once the
-  base is clean.
-- User wants to ration back-and-forth: show a short plan before large edits,
-  then implement; work in focused chunks; let the user review diffs.
+## 4. Data model (the `state` blob)
 
-## Dev commands
+```js
+{
+  settings: {
+    budgetHorizon: "YYYY-MM-DD",       // Budget projects through this month
+    ledgerHorizon: "YYYY-MM-DD",       // Ledger projects through this date
+    theme: "light" | "dark",           // ACCOUNT default; each device overrides in localStorage (theme.js)
+    visibleTrackerCategoryIds: [id],   // which savings/debt columns the Ledger shows
+    hasSeenOnboarding: boolean,        // welcome wizard shown once per account
+  },
+  accounts: [                          // exactly ONE today (kind "checking"); a list so more is additive
+    { id: "checking", name, kind: "checking", balance, balanceAsOf: "YYYY-MM-DD", order }
+  ],
+  recurring: [ { id, name, amount, category, cadence, dayOfMonth, startDate, endDate|null,
+                 order, accountId, color|null, variable? } ],
+  oneoffs:   [ { id, name, amount, category, date, order, accountId, color|null } ],
+  paidOverrides: { "YYYY-MM": [itemId] },          // a bill marked paid this month → zero effect on balance, still shown
+  trackerCategories: [                             // the user's own savings / investment / debt buckets
+    { id, name, color /* palette index */, order, kind: "asset" | "debt",
+      // debt-kind only — a debt category IS a loan:
+      originalPrincipal?, interestRate? /* APR % */, interestStartDate? }
+  ],
+  balanceSnapshots: { [categoryId]: [ { id, date, amount } ] },  // logged balances (assets) / logged outstanding (loans)
+  accountSnapshots: { [accountId]:  [ { id, date, amount } ] },  // one per confirmed checking-balance update
+  monthlyActuals:   { [itemId]: { "YYYY-MM": amount } },         // real total for a variable bill/payment that month
+}
 ```
-npm run dev     # start dev server (localhost:5173)
-```
+
+**Categories.** `income`, `bill`, `oneoff` are fixed. Any other `category`
+value on an item is a `trackerCategories` id. An item's category decides its
+direction (income in; everything else out) and where the Budget files it.
+
+**Accounts.** `accounts[0]` is the checking account everything anchors to
+(`primaryAccount(state)` in `model.js`). Its `balance` is the last balance you
+*verified* against the bank and `balanceAsOf` is when. Events dated before
+`balanceAsOf` are already inside that number and are dropped
+(`generate.js buildEvents`). Transactions carry `accountId` (stamped
+automatically; no picker until there is more than one account).
+
+**A loan is a debt-kind category.** It carries its terms; its outstanding
+balance is a logged snapshot; a *payment* is any transaction tagged to it —
+one-off, recurring, or both. Setting up a loan never creates a transaction.
+
+**Every logged value is editable and deletable** (snapshots, monthly actuals,
+balance updates). Nothing is append-only.
+
+## 5. Storage, auth, security
+
+- **Supabase Postgres**, one table `budget_states (user_id uuid PK → auth.users, state jsonb, updated_at)`.
+  RLS enabled; select/insert/update policies are `auth.uid() = user_id`.
+  Verified empirically with the anon key: unfiltered select returns 0 rows,
+  a write to another user_id is rejected (42501).
+- **Auth:** Google OAuth and magic link, `persistSession` + `autoRefreshToken`.
+  `redirectTo` is `window.location.origin` (works on localhost and prod).
+- **Load-then-save discipline (a real incident drove this):** `loadState`
+  THROWS on any query error and never fabricates state; `App.jsx` shows a
+  dead-end error screen and the autosave effect cannot run until a load
+  succeeds. "No row yet" (`maybeSingle` → null) is the only case that yields
+  a blank state. `saveState` is debounced 500 ms and keyed on the user id, not
+  the session object (token refreshes must not reload/clobber).
+- The anon (publishable) key is in the deployed bundle by design; RLS is the
+  boundary. No secrets are in git (history swept 2026-09-13).
+- Financial CSVs are gitignored (`*.csv`). Never commit user data.
+
+## 6. Migrations and conventions
+
+All shape changes go through `engine/stateShape.js normalize()`, which runs on
+every load and is **idempotent and deterministic** (fixed seed ids, never
+`uid()`), asserted in the harness. Current migrations, oldest first:
+
+1. item `tracker` field / preset `savings` → category.
+2. `hasSeenOnboarding` absent + real data → treated as seen.
+3. `trackerCategories` absent → legacy `roth/saved/brokerage/loans` seeded
+   under the SAME ids (no item rewritten) for existing users; 3 fresh
+   defaults for new accounts.
+4. category `kind` absent → inferred (`loans` id / debt-sounding name → debt).
+5. `accounts` absent → one checking account built from legacy
+   `settings.checkInBalance/checkInDate`; items stamped with `accountId`;
+   `accountSnapshots` seeded with that balance. (The Phase 1 mirror back
+   into settings was retired in Phase 2; the legacy fields are stripped.)
+6. loan terms on a payment item → moved onto its debt category; item kept as
+   a payment; a second configured item in the same category spawns its own
+   category (`loan-<itemId>`); balance anchor seeded as `originalPrincipal`
+   as of the payment's start only if the user never logged one.
+
+Conventions worth knowing before touching numbers:
+
+- **"Today" is the clock; the balance chain is anchored to the verified
+  date.** Current month, Dashboard "now", contribution years, the variable
+  spending window, and horizon labels use the real date. Which events count
+  toward the checking projection is anchored to `accounts[0].balanceAsOf`.
+- **Budget columns are whole calendar months**; event generation for the
+  Budget runs to the end of the horizon's month (`endOfMonthISO`), so a bill
+  due late in the last month isn't dropped.
+- **Snapshot day semantics differ by kind, on purpose:** an *asset* snapshot
+  is end-of-day (a same-day deposit is already in it; `progress.js` uses `>`);
+  a *loan* snapshot is start-of-day (a same-day payment still counts;
+  `loans.js`). The loan convention is what lets a migrated origination seed
+  reproduce the previous projection to the cent.
+- **Projections anchor to the last logged value** (asset: + contributions
+  since; loan: + interest − payments since) and self-correct on every log.
+  Nothing invents a "today" snapshot.
+- **A variable item's logged monthly actual replaces the estimate** in the
+  event stream for that month (split evenly across multiple same-month
+  instances), so Ledger/Budget/amortization all see the real number.
+- **Colors are inline styles** (`paletteColor(index, isDark)`), never
+  runtime-built Tailwind class names — the JIT scanner can't see those.
+- **Variable actuals and "mark paid" are different things:** paid zeroes an
+  instance's effect (already reflected in the verified balance); an actual
+  substitutes a real amount that still counts.
+
+## 7. Tabs and features (current default order: Ledger · Budget · Dashboard · Spending)
+
+- **Ledger** — every projected transaction, dated, with a running checking
+  balance; month headers; optional per-category cumulative columns
+  (checklist picker); mark-a-bill-paid checkbox for current-month bills;
+  multi-select delete; per-item color override; projection horizon slider.
+- **Budget** — monthly grid: income (starting point, take-home = every
+  paycheck landing that month, checking, other income), fixed/recurring,
+  saving/debt clustered by category, one-offs, totals, cumulative net.
+  Reorder rows by arrows or drag (never across a section/cluster). Its own
+  horizon slider.
+- **Dashboard** — the reality layer: hero net position (verified checking +
+  last logged asset balances − last logged loan balances, with an explicit
+  "N not logged yet" count); a card per checking account, asset category,
+  and loan; Recharts history charts with hover; asset cards show
+  contributions (this year / all time) and a neutral "vs. projected"; loan
+  cards show logged outstanding, percent-paid-off bar, terms, and planned vs.
+  paid this month. Loans are set up here via a loan form, never the
+  transaction editor.
+- **Spending** — actual vs. budgeted per month for items flagged
+  "Track actual vs. budgeted" (any cadence; loans too).
+- **Global:** + Add transaction (modal), Quick entry (inline, keeps going),
+  Quick Setup wizard (once per account, reopenable), account strip
+  (read-only balance + Confirm-gated update that also snapshots), Settings
+  (per-device theme, category manager with asset/debt kinds and colors, sign
+  out, wipe with full confirmation), Import (Budget-grid CSV, per-transaction
+  CSV with tolerant recurrence detection, or a full JSON backup restore that
+  downloads a safety copy first), Export (Ledger/Budget CSV, full JSON backup).
+
+## 8. Verification
+
+- `npm test` — `tests/engine.test.mjs`: ~250 assertions over the engine,
+  including every migration (before/after identical ledger and budget
+  output, idempotency, determinism), amortization, budget math, CSV
+  round-trips, backup validation. Pure Node; no framework.
+- `npm run lint` — ESLint (flat config). `react/prop-types` is off by
+  decision (JS project, no PropTypes); everything else is signal.
+- **CI** (`.github/workflows/ci.yml`) runs lint → test → build on every push
+  and pull request. Vercel deploys `main`.
+- UI changes get a browser pass (a throwaway Puppeteer harness against
+  fixture data, light/dark, desktop/mobile) before commit; the harness is
+  never committed.
+
+## 9. Maintenance rules (standing — apply to every commit)
+
+1. **This spec matches the code.** A change that makes it wrong updates it in
+   the same commit.
+2. **README.md stays current** for a public audience; screenshots in
+   `docs/screenshots/` are regenerated from fixture data when a view changes.
+3. **Engine behavior gets harness coverage** in the same commit; the harness
+   lives in `tests/` and runs in CI.
+4. **The in-app Tutorial matches shipped features**; update it in the same
+   commit as any feature change. (Tutorial: planned next — see roadmap.)
+5. Data-shape changes are migration-safe: idempotent, deterministic,
+   asserted before/after on a legacy-shaped fixture, never fabricating
+   values the user didn't enter.
+
+## 10. Roadmap
+
+Near-term (in order):
+- Default tab order Dashboard · Budget · Ledger · Spending; "Checking" label
+  everywhere "TD checking" remains; category label on Ledger rows for
+  savings/debt items; back-navigation from Categories to Settings; "+ Add
+  account" on the Dashboard for asset categories; drop the actuals nudge on
+  loan cards.
+- In-app Tutorial (full feature walkthrough) next to Quick Setup.
+- Drag-to-reorder tabs on desktop (persisted `settings.tabOrder`).
+
+Later:
+- Goal-based savings (target → per-paycheck contribution).
+- Tie one-offs to a recurring item by name.
+- Small fixes: favicon, leading-zero in numeric inputs.
+- Multi-account model (payment method per transaction, credit cards with
+  limits, full initial setup wizard) — the account list is already shaped
+  for it; this is the one deliberate architectural step still ahead.
+- Bank linking (Plaid-style) — much later.
+- iOS client sharing `src/engine`.
+
+## 11. Decision log (why things are the way they are)
+
+- Categories are user-defined with a validated 8-color palette because the
+  old fixed four clashed with income-green / bill-purple.
+- Bills get no automatic color or bold; only a user-picked color
+  distinguishes a row.
+- The old editable "check-in bar" was replaced by a Confirm-gated modal
+  because a half-typed number used to be live state.
+- The Dashboard shows the *verified* checking balance, not the projected
+  one — the Dashboard is reality, the Ledger is projection.
+- Loans were split from loan payments (2026-09-13) because a loan exists
+  whether or not you're paying on it, exactly like an asset category.
+- "Expected remaining vs. actual remaining" is never shown for a loan; it
+  only scolds. Percent paid off is the motivating framing.
