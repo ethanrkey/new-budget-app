@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { uid, todayISO } from "../engine/model.js";
+import { uid, todayISO, toISODate } from "../engine/model.js";
 
 // Draft copy — expected to be edited. Every string a user reads lives here or
 // inline below, so it's easy to find and tweak in one pass.
@@ -88,7 +88,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
       d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
       addRule({
         id: uid(), name: "Rent", amount: amt, category: "bill",
-        cadence: "monthly", startDate: d.toISOString().slice(0, 10), dayOfMonth: day,
+        cadence: "monthly", startDate: toISODate(d), dayOfMonth: day,
       });
     }
     goNext();

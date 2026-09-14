@@ -4,7 +4,7 @@ import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, 
 import { computeCategoryProgress, computeCategoryHistory, computeMonthVariance, computeContributionsByYear, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, isLoanConfigured } from "../src/engine/loans.js";
 import { buildAllEvents, occurrenceDates } from "../src/engine/generate.js";
-import { monthsDiff, addMonthsISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.js";
+import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.js";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.js";
 import { computeBudgetLayout } from "../src/engine/budgetLayout.js";
 import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.js";
@@ -1281,6 +1281,34 @@ eq("rejects a future envelope version", isRecoveryEnvelope({ ...env, version: 2 
 eq("rejects a missing timestamp", isRecoveryEnvelope({ ...env, savedAt: undefined }), false);
 eq("rejects an implausible payload", isRecoveryEnvelope({ ...env, state: { nope: true } }), false);
 eq("rejects a half-written entry", isRecoveryEnvelope({ kind: "budget-app-recovery", version: 1 }), false);
+
+// ---------- Scenario AI: dates are LOCAL calendar dates, never UTC ----------
+console.log("\n== Scenario AI: toISODate (local, not UTC) ==");
+// Every date in this app is a calendar date, not an instant. Using
+// toISOString().slice(0,10) converted to UTC first, which west of UTC rolled
+// "today" over in the evening and east of UTC shifted a local-midnight date
+// back a whole day. These assertions are timezone-independent: they build a
+// Date from LOCAL components and expect those same components back.
+eq("local midnight keeps its own date", toISODate(new Date(2026, 8, 14, 0, 0, 0)), "2026-09-14");
+eq("late evening keeps TODAY's date (the 8pm-Eastern bug)", toISODate(new Date(2026, 8, 14, 23, 59, 59)), "2026-09-14");
+eq("one minute past midnight", toISODate(new Date(2026, 8, 15, 0, 1, 0)), "2026-09-15");
+eq("month and day are zero-padded", toISODate(new Date(2026, 0, 5, 12, 0, 0)), "2026-01-05");
+eq("end of year", toISODate(new Date(2026, 11, 31, 22, 0, 0)), "2026-12-31");
+
+// todayISO must agree with the device's own calendar, whatever timezone the
+// test runs in (this is the assertion that fails on the old UTC behavior
+// whenever CI or a laptop is west of UTC in the evening).
+const nowAI = new Date();
+const localTodayAI = `${nowAI.getFullYear()}-${String(nowAI.getMonth() + 1).padStart(2, "0")}-${String(nowAI.getDate()).padStart(2, "0")}`;
+eq("todayISO is the local calendar date", todayISO(), localTodayAI);
+eq("todayISO stays a well-formed ISO date", /^\d{4}-\d{2}-\d{2}$/.test(todayISO()), true);
+
+// The helpers built on it must not drift either.
+eq("addMonthsISO keeps the day of month", addMonthsISO("2026-09-14", 3), "2026-12-14");
+eq("addMonthsISO across a year boundary", addMonthsISO("2026-11-30", 2), "2027-01-30");
+eq("addMonthsISO is exact on the 1st (no day-before drift)", addMonthsISO("2026-03-01", 1), "2026-04-01");
+eq("endOfMonthISO unchanged", endOfMonthISO("2026-02-14"), "2026-02-28");
+eq("endOfMonthISO in a leap year", endOfMonthISO("2028-02-01"), "2028-02-29");
 
 // ---------- monthsDiff / addMonthsISO round trip (for the horizon sliders) ----------
 console.log("\n== monthsDiff / addMonthsISO ==");

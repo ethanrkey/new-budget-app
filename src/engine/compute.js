@@ -1,6 +1,6 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.js";
-import { CATEGORIES, endOfMonthISO, primaryAccount } from "./model.js";
+import { CATEGORIES, endOfMonthISO, primaryAccount, toISODate } from "./model.js";
 
 // LEDGER: every event with a running TD balance + stepped cumulative trackers.
 export function computeLedger(state, horizonISO) {
@@ -157,7 +157,7 @@ function monthsBetween(startISO, endISO) {
   let guard = 0;
   while (d <= end && guard < 240) {
     guard++;
-    const key = d.toISOString().slice(0, 7);
+    const key = toISODate(d).slice(0, 7); // local — see toISODate in model.js
     out.push({ key, label: d.toLocaleString("en-US", { month: "short", year: "numeric" }) });
     d.setMonth(d.getMonth() + 1);
   }

@@ -1,7 +1,8 @@
 // ---- Turn recurring rules into concrete dated events ----
-import { CATEGORIES, primaryAccount } from "./model.js";
+import { CATEGORIES, primaryAccount, toISODate } from "./model.js";
 
-function iso(d) { return d.toISOString().slice(0, 10); }
+// Local calendar date — see toISODate in model.js for why not toISOString.
+function iso(d) { return toISODate(d); }
 function parse(isoStr) { return new Date(isoStr + "T00:00:00"); }
 function round(n) { return Math.round(n * 100) / 100; }
 

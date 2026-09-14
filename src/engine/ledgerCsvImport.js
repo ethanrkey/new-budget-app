@@ -16,7 +16,7 @@
 // each side) from "a student loan that was $200 once, $400 twice, then
 // stopped" (no amount has enough support) — the latter stays as one-offs
 // with each real amount preserved exactly, by design.
-import { uid } from "./model.js";
+import { uid, toISODate } from "./model.js";
 
 function findCol(header, patterns) {
   for (let i = 0; i < header.length; i++) {
@@ -102,7 +102,7 @@ function daysBetween(a, b) {
 function addDays(dateStr, n) {
   const d = new Date(dateStr + "T00:00:00");
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return toISODate(d); // local — see toISODate in model.js
 }
 // The date a MONTHLY item would next land on, after `lastDateStr`.
 function nextExpectedMonthlyDate(lastDateStr, dayOfMonth) {

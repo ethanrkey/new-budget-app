@@ -170,13 +170,23 @@ export const CATEGORIES = {
   // default category color for just that one item, e.g. in the Ledger.
   
   // ---- small date helpers (ISO strings "YYYY-MM-DD") ----
+  // A Date's LOCAL calendar date. Everything in this app is a calendar date,
+  // never an instant, so `toISOString().slice(0, 10)` is always wrong here: it
+  // converts to UTC first. West of UTC that makes "today" roll over in the
+  // evening (after 8pm Eastern the app thought it was tomorrow — wrong current
+  // month, wrong Dashboard "now", wrong projection endpoint); east of UTC it
+  // shifts a local-midnight date back a whole day. Use this everywhere a Date
+  // becomes a "YYYY-MM-DD".
+  export function toISODate(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
   export function todayISO() {
-    return new Date().toISOString().slice(0, 10);
+    return toISODate(new Date());
   }
   export function addMonthsISO(iso, n) {
     const d = new Date(iso + "T00:00:00");
     d.setMonth(d.getMonth() + n);
-    return d.toISOString().slice(0, 10);
+    return toISODate(d);
   }
   // whole months between two ISO dates, by calendar month (not day-precise)
   export function monthsDiff(aISO, bISO) {

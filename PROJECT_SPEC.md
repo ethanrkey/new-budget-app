@@ -167,6 +167,14 @@ every load and is **idempotent and deterministic** (fixed seed ids, never
 
 Conventions worth knowing before touching numbers:
 
+- **Dates are LOCAL calendar dates, never instants.** Every `YYYY-MM-DD` in
+  the app goes through `toISODate(d)` (`model.js`), which reads the Date's
+  local components. `toISOString().slice(0, 10)` converts to UTC first and is
+  always wrong here: west of UTC it rolls "today" over in the evening (after
+  8pm Eastern the app believed it was tomorrow — wrong current month, wrong
+  Dashboard "now", wrong projection endpoint), east of UTC it shifts a
+  local-midnight date back a day. The harness asserts this timezone-
+  independently and the suite is run across UTC−5 … UTC+14.
 - **"Today" is the clock; the balance chain is anchored to the verified
   date.** Current month, Dashboard "now", contribution years, the variable
   spending window, and horizon labels use the real date. Which events count
