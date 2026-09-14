@@ -1,5 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
-import { loadState, saveState } from "./storage.js";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import {
+  loadState, saveState, fetchVersion, getVersion, hasPendingSave, resetSyncState,
+  stashRecoveryCopy, readRecoveryCopy,
+} from "./storage.js";
+import { downloadFile } from "./downloadFile.js";
+import { isStale } from "./engine/syncGuard.js";
 import { getSession, onAuthChange, signOut } from "./auth.js";
 import { getDeviceTheme, setDeviceTheme } from "./theme.js";
 import { computeLedger, computeBudget } from "./engine/compute.js";
@@ -24,6 +29,7 @@ import SettingsModal from "./components/SettingsModal.jsx";
 import Onboarding from "./components/Onboarding.jsx";
 import Tutorial from "./components/Tutorial.jsx";
 import SignIn from "./components/SignIn.jsx";
+import SyncNotice from "./components/SyncNotice.jsx";
 import CategoryManager from "./components/CategoryManager.jsx";
 
 export default function App() {
@@ -45,6 +51,16 @@ export default function App() {
   const [addPresetCategory, setAddPresetCategory] = useState(null); // e.g. Dashboard's "+ Add a loan" shortcut
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateBalanceOpen, setUpdateBalanceOpen] = useState(false);
+  // Multi-device safety. The version token every write is conditional on
+  // lives in storage.js (it has to, to stay correct across overlapping
+  // writes). `skipNextSave` suppresses the autosave that would otherwise fire
+  // the instant a load puts server data into state — nothing has changed yet,
+  // and writing it back would bump the version for nothing.
+  const skipNextSave = useRef(false);
+  const [syncNotice, setSyncNotice] = useState(null);
+  // Mirrors `state` for listeners that are registered once and would
+  // otherwise close over a stale value.
+  const stateRef = useRef(null);
   const [draggingTab, setDraggingTab] = useState(null);
   const [dragOverTab, setDragOverTab] = useState(null);
 
@@ -242,12 +258,13 @@ export default function App() {
   // used to fall back to a blank state on error, which then got autosaved
   // straight over real cloud data on nothing more than a transient error.)
   useEffect(() => {
-    if (!session) { setState(null); setLoadError(null); return; }
+    if (!session) { setState(null); setLoadError(null); resetSyncState(); return; }
     let cancelled = false;
     setLoadError(null);
     loadState(session.user.id)
-      .then((s) => {
+      .then(({ state: s }) => {
         if (cancelled) return;
+        skipNextSave.current = true;
         setState(s);
         // Open on whichever tab this user dragged to the front.
         setTab(sanitizeTabOrder(s.settings.tabOrder)[0]);
@@ -257,14 +274,80 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, retryTick]);
 
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Hand back the copy we had to discard, as an ordinary full-backup JSON —
+  // the same shape Import → Restore accepts, so it's not a dead-end artifact.
+  function downloadRecoveryCopy() {
+    const copy = readRecoveryCopy();
+    if (!copy) return;
+    downloadFile(
+      `budget-recovery-${copy.savedAt.slice(0, 10)}.json`,
+      JSON.stringify(copy.state, null, 2),
+      "application/json"
+    );
+  }
+
+  // Replace what's in memory with the server's copy — but stash the copy
+  // we're discarding FIRST, always, before anything else happens. That stash
+  // is the whole safety net: a reload that swaps your data under you must
+  // never be the moment something becomes unrecoverable.
+  const adoptServerState = useCallback(async (userId, discarded, kind) => {
+    const stashed = discarded ? stashRecoveryCopy(discarded, kind) : false;
+    const { state: fresh } = await loadState(userId);
+    skipNextSave.current = true;
+    setState(fresh);
+    setSyncNotice({ kind, stashed });
+  }, []);
+
   // Persist on every change, once loaded. Same reasoning as above: keyed on
   // the user id, not the whole session object. Guarded on `state` being set,
   // which (per above) never happens after a load error.
+  //
+  // The write is conditional on the loaded version: if another device wrote
+  // since we loaded, ours matches no row and comes back as a conflict. We do
+  // NOT retry — this device's whole document is the stale one, and forcing it
+  // through is precisely the overwrite this guard exists to prevent.
   useEffect(() => {
     if (!session || !state) return;
-    saveState(session.user.id, state).catch((err) => console.error("save failed", err));
+    if (skipNextSave.current) { skipNextSave.current = false; return; }
+    saveState(session.user.id, state)
+      .then((res) => {
+        if (res?.ok) return;
+        if (res?.reason === "conflict") return adoptServerState(session.user.id, state, "conflict");
+      })
+      .catch((err) => console.error("save failed", err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, session?.user?.id]);
+
+  // Coming back to the app: check whether the row moved while we were away,
+  // and adopt it if so. This is what stops a backgrounded phone from sitting
+  // on a stale copy until it's fully reopened. Skipped while one of our own
+  // writes is still debounced — reloading then would discard that edit.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) return;
+    let checking = false;
+    async function check() {
+      if (document.visibilityState !== "visible") return;
+      if (!getVersion() || hasPendingSave() || checking) return;
+      checking = true;
+      try {
+        const serverVersion = await fetchVersion(userId);
+        if (isStale(getVersion(), serverVersion)) {
+          await adoptServerState(userId, stateRef.current, "refreshed");
+        }
+      } finally {
+        checking = false;
+      }
+    }
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+  }, [session?.user?.id, adoptServerState]);
 
   // Per-device theme (theme.js) — NOT the same as settings.theme, which is
   // the synced account default. Re-derive whenever the account default
@@ -347,6 +430,12 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      <SyncNotice
+        notice={syncNotice}
+        onDownload={downloadRecoveryCopy}
+        onDismiss={() => setSyncNotice(null)}
+      />
 
       {/* Account strip — read-only; the balance only changes via the
           Update balance modal's Confirm. Replaces the old live-edit bar. */}

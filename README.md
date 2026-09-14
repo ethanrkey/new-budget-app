@@ -89,6 +89,9 @@ see the real number.
   data first.
 - **Export** the Ledger or Budget as CSV, or the whole account as JSON.
 - Fully editable, fully deletable logged values. Nothing is append-only.
+- **Safe on more than one device** — a phone holding an out-of-date copy can't
+  overwrite newer data, and says so instead of failing silently. Anything it
+  had to discard is kept as a downloadable copy.
 
 ---
 

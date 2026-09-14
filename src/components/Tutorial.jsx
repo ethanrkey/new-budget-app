@@ -168,6 +168,7 @@ const SECTIONS = [
         ["Import → Restore backup", "Replaces your data with a JSON backup — and downloads a copy of your current data first, automatically, before it touches anything."],
       ]],
       ["note", "Take a backup before anything drastic. It's one click and it has saved this project before."],
+      ["p", "On more than one device: the app loads your data when you open it, so a phone that's been sitting open since yesterday is showing yesterday's copy. It can't overwrite newer data with it — if it tries, it tells you, reloads the current version, and keeps what was on the device as a downloadable copy. Switching back to the app also re-checks for you."],
     ],
   },
 ];

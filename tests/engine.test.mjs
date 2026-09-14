@@ -11,6 +11,7 @@ import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.js";
 import { parseBudgetCSV } from "../src/engine/csvImport.js";
 import { parseLedgerCSV } from "../src/engine/ledgerCsvImport.js";
 import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../src/engine/backupShape.js";
+import { isStale, makeRecoveryEnvelope, isRecoveryEnvelope } from "../src/engine/syncGuard.js";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const money = (n) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -1244,6 +1245,42 @@ eq("dropping a tab on itself changes nothing", moveTab(legacyAF, "budget", "budg
 eq("an unknown dragged id is ignored", moveTab(legacyAF, "nope", "budget").settings.tabOrder, TABS);
 check("reordering touches nothing but settings.tabOrder",
   JSON.stringify({ ...moveTab(legacyAF, "spending", "budget"), settings: null }) === JSON.stringify({ ...legacyAF, settings: null }), true);
+
+// ---------- Scenario AH: multi-device staleness guard + recovery copy ----------
+console.log("\n== Scenario AH: syncGuard ==");
+// Versions are opaque tokens (the row's updated_at). Only "different" matters
+// — never ordered, so clock skew between two devices can't be misread.
+eq("same version is not stale", isStale("2026-09-14T10:00:00.000Z", "2026-09-14T10:00:00.000Z"), false);
+eq("a different version is stale", isStale("2026-09-14T10:00:00.000Z", "2026-09-14T10:05:00.000Z"), true);
+eq("an OLDER server version still counts as stale (never ordered)", isStale("2026-09-14T10:05:00.000Z", "2026-09-14T10:00:00.000Z"), true);
+// "Can't tell" must never be reported as "changed" — that would reload (and
+// discard the in-memory copy) on nothing more than a failed version check.
+eq("nothing loaded yet is not stale", isStale(null, "2026-09-14T10:00:00.000Z"), false);
+eq("no server row is not stale", isStale("2026-09-14T10:00:00.000Z", null), false);
+eq("neither known is not stale", isStale(null, null), false);
+
+// The recovery copy: written before any in-memory state is discarded, so it
+// has to survive a JSON round trip and be recognizable on the way back.
+const liveAH = normalize({
+  settings: { checkInBalance: 1234.56, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  recurring: [{ id: "ah1", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-09-02", order: 0 }],
+  oneoffs: [], paidOverrides: {},
+});
+const env = makeRecoveryEnvelope(liveAH, "conflict", "2026-09-14T12:00:00.000Z");
+eq("envelope is self-describing", [env.kind, env.version, env.reason], ["budget-app-recovery", 1, "conflict"]);
+eq("envelope carries the discarded state verbatim", env.state, liveAH);
+eq("survives a localStorage round trip", isRecoveryEnvelope(JSON.parse(JSON.stringify(env))), true);
+check("the stashed state is itself a restorable backup", isPlausibleBackup(env.state), true);
+eq("the date prefix used for the download filename", env.savedAt.slice(0, 10), "2026-09-14");
+
+// A corrupt or foreign entry must never be offered back as the user's data.
+eq("rejects null", isRecoveryEnvelope(null), false);
+eq("rejects a bare state object", isRecoveryEnvelope(liveAH), false);
+eq("rejects a wrong kind", isRecoveryEnvelope({ ...env, kind: "something-else" }), false);
+eq("rejects a future envelope version", isRecoveryEnvelope({ ...env, version: 2 }), false);
+eq("rejects a missing timestamp", isRecoveryEnvelope({ ...env, savedAt: undefined }), false);
+eq("rejects an implausible payload", isRecoveryEnvelope({ ...env, state: { nope: true } }), false);
+eq("rejects a half-written entry", isRecoveryEnvelope({ kind: "budget-app-recovery", version: 1 }), false);
 
 // ---------- monthsDiff / addMonthsISO round trip (for the horizon sliders) ----------
 console.log("\n== monthsDiff / addMonthsISO ==");

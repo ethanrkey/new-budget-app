@@ -112,6 +112,28 @@ balance updates). Nothing is append-only.
   a write to another user_id is rejected (42501).
 - **Auth:** Google OAuth and magic link, `persistSession` + `autoRefreshToken`.
   `redirectTo` is `window.location.origin` (works on localhost and prod).
+- **Every write is conditional on the version we loaded.** `loadState`
+  returns the row's `updated_at` alongside the state, and `writeState` does an
+  `update ... .eq("updated_at", <that version>)` — never an upsert, because an
+  upsert can't say "only if unchanged". A device holding a stale copy (a phone
+  open since before you changed something on a laptop) matches zero rows and
+  is told `conflict` instead of overwriting newer data with its whole stale
+  document. Conflicts are never retried: this device's document IS the stale
+  one. Versions are compared as opaque tokens, never ordered, so clock skew
+  between devices can't be misread (`engine/syncGuard.js isStale`).
+- **Nothing in memory is discarded without a recovery copy first.**
+  `stashRecoveryCopy()` writes the about-to-be-replaced state to
+  `localStorage["budget-app-recovery-v1"]` in a self-describing envelope
+  before any server copy is adopted — on a conflict and on a focus refresh
+  alike. `SyncNotice` then says what happened and offers the copy as a
+  download in the same JSON shape Import → Restore accepts. `readRecoveryCopy`
+  validates through `isPlausibleBackup` so a corrupt entry is never handed
+  back as the user's data.
+- **Staleness self-corrects on return.** On `visibilitychange`/`focus` the app
+  re-reads just `updated_at`; if it moved, it adopts the server copy (after
+  stashing). Skipped while one of our own debounced writes is still pending,
+  which would otherwise discard that edit. There is still no push-based sync —
+  an open tab learns nothing until it is focused (see roadmap).
 - **Load-then-save discipline (a real incident drove this):** `loadState`
   THROWS on any query error and never fabricates state; `App.jsx` shows a
   dead-end error screen and the autosave effect cannot run until a load
@@ -267,6 +289,9 @@ fifth tab never needs a migration.
 ## 10. Roadmap
 
 Later:
+- Live multi-device sync (Supabase Realtime). Today staleness is *safe and
+  self-correcting* — a stale device can't overwrite, and refocusing fixes it —
+  but two tabs open side by side still don't update each other live.
 - Goal-based savings (target → per-paycheck contribution).
 - Tie one-offs to a recurring item by name.
 - Small fixes: favicon, leading-zero in numeric inputs.
