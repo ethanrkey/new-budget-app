@@ -223,7 +223,8 @@ Conventions worth knowing before touching numbers:
   `parseBudgetCSV` keys that number off the label. It also accepts the older
   `TD checking`, so exports taken before the rename still import.
 - **Display preferences are per device, never in `state`** — the theme
-  (`theme.js`) and the collapsed/expanded hero (`devicePrefs.js`) live in
+  (`theme.js`) and the collapsed/expanded hero and debt section
+  (`devicePrefs.js`: `hero-collapsed`, `debts-expanded`) live in
   localStorage. They never sync, never conflict between devices, and never
   count as a change worth writing to Supabase.
 - **Colors are inline styles** (`paletteColor(index, isDark)`), never
@@ -262,10 +263,21 @@ fifth tab never needs a migration.
   last logged asset balances − last logged loan balances, with an explicit
   "N not logged yet" count), collapsible and remembered per device; a card
   per checking account, asset category, and loan; Recharts history charts
-  with hover. Asset cards show ONE line — the balances you logged — plus
+  with hover. Card order is Checking → "+ Add account" → asset cards → the
+  debt section. Asset cards show ONE line — the balances you logged — plus
   contributions (this year / all time). Loan cards show logged outstanding,
   percent-paid-off bar, terms, planned vs. paid this month, and keep their
-  dashed amortization line. "+ Add account" and "+ Add loan" cards create an asset or
+  dashed amortization line.
+  **The debt section collapses to a single card** (`DebtSection`, collapsed by
+  default, remembered per device). Collapsed, one root card carries both the
+  overview — total owed from `computeDebtSummary`, then every loan as a
+  compact scrolling list — and "+ Add loan". Expanded, that same root card
+  swaps its content for the add card plus "Collapse debts", and the loan cards
+  fan out after it with a staggered enter/exit. The root card is always first
+  in the debt run and never moves, so toggling doesn't shuffle the grid under
+  the cursor. "+ Add loan" while collapsed expands the section too — a new
+  category takes `max(order)+1`, so it lands last. With no debt categories at
+  all the root card is simply the add card, no expand control. "+ Add account" and "+ Add loan" cards create an asset or
   debt category through their own setup form (`setupAsset` / `setupLoan`) —
   never the transaction editor, and setup never creates a transaction. An
   opening balance entered there is logged as the category's first snapshot.
@@ -338,6 +350,10 @@ Later:
   one — the Dashboard is reality, the Ledger is projection.
 - Loans were split from loan payments (2026-09-13) because a loan exists
   whether or not you're paying on it, exactly like an asset category.
+- The debt section's collapse is NOT a shared `<CollapsibleSection>` yet
+  (2026-09-18). Assets keep their flat layout deliberately, so the pattern
+  can be lived with on one section before it's generalized — one concrete
+  implementation is easier to change or delete than a premature abstraction.
 - Asset cards show what you logged and what you contributed — never a
   projection. See the conventions above; the user's framing was that
   contributions-only is the honest stat.

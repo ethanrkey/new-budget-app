@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { computeCategoryHistory, computeContributionsByYear, computeNetPosition, computeMonthVariance } from "../engine/progress.js";
-import { computeLoanProgress, computeLoanHistory, isLoanConfigured } from "../engine/loans.js";
+import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.js";
 import { paletteColor, primaryAccount, todayISO } from "../engine/model.js";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
@@ -63,6 +63,8 @@ export default function Dashboard({
           onDeleteSnapshot={(id) => onDeleteAccountSnapshot(account.id, id)}
         />
 
+        <AddAssetCard onAdd={() => setAssetModal(true)} />
+
         {assetCats.map((cat) => (
           <AssetCard
             key={cat.id}
@@ -77,29 +79,18 @@ export default function Dashboard({
           />
         ))}
 
-        <AddAssetCard onAdd={() => setAssetModal(true)} />
-
-        {debtCats.map((cat) =>
-          isLoanConfigured(cat) ? (
-            <LoanCard
-              key={cat.id}
-              category={cat}
-              isDark={isDark}
-              state={state}
-              today={today}
-              progress={computeLoanProgress(state, cat, today)}
-              history={computeLoanHistory(state, cat)}
-              onLog={() => setLogFor(cat.id)}
-              onEdit={() => setLoanModal({ cat })}
-              onUpdateSnapshot={(id, patch) => onUpdateSnapshot(cat.id, id, patch)}
-              onDeleteSnapshot={(id) => onDeleteSnapshot(cat.id, id)}
-            />
-          ) : (
-            <SetupLoanCard key={cat.id} category={cat} isDark={isDark} onSetup={() => setLoanModal({ cat })} />
-          )
-        )}
-
-        <AddLoanCard onAdd={() => setLoanModal({})} />
+        <DebtSection
+          summary={computeDebtSummary(state)}
+          debtCats={debtCats}
+          isDark={isDark}
+          state={state}
+          today={today}
+          onAddLoan={() => setLoanModal({})}
+          onLog={(id) => setLogFor(id)}
+          onEditTerms={(cat) => setLoanModal({ cat })}
+          onUpdateSnapshot={onUpdateSnapshot}
+          onDeleteSnapshot={onDeleteSnapshot}
+        />
       </div>
 
       {logCat && (
@@ -163,8 +154,16 @@ function Hero({ net }) {
         className="w-full flex items-center justify-between gap-3 py-1 text-left group"
       >
         <span className={LABEL}>Net position</span>
-        <span className="shrink-0 h-6 w-6 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-gray-100 dark:group-hover:bg-gray-800 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
-          <span className={`inline-block text-sm leading-none transition-transform duration-300 motion-reduce:transition-none ${collapsed ? "" : "rotate-180"}`}>▾</span>
+        {/* A real stroked chevron, not the ▾ glyph — at this size the glyph
+            renders as a small solid blob that reads as a dot. */}
+        <span className="shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-gray-100 dark:group-hover:bg-gray-800 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
+          <svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+            className={`h-4 w-4 transition-transform duration-300 motion-reduce:transition-none ${collapsed ? "" : "rotate-180"}`}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
         </span>
       </button>
 
@@ -524,12 +523,168 @@ function AddAssetCard({ onAdd }) {
   );
 }
 
-function AddLoanCard({ onAdd }) {
+// ---- Debt section: one root card, collapsed by default ----
+// Collapsed, the whole section is a single card carrying the overview AND the
+// "+ Add loan" affordance. Expanded, that SAME card swaps its content for the
+// add card and the individual loan cards fan out after it. The root card is
+// always first and never moves, so expanding/collapsing doesn't shuffle the
+// grid around the thing you just clicked.
+//
+// Deliberately NOT generalized into a <CollapsibleSection> yet — assets keep
+// their flat layout until this has been lived with. One concrete
+// implementation is easier to delete or change than a premature abstraction.
+const DEBTS_PREF = "debts-expanded";
+const FAN_MS = 260;      // must match the duration classes below
+const STAGGER_MS = 45;   // per-card delay, so they fan rather than pop together
+
+function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog, onEditTerms, onUpdateSnapshot, onDeleteSnapshot }) {
+  const [expanded, setExpanded] = useState(() => getDeviceFlag(DEBTS_PREF, false));
+  // A grid item can't collapse to nothing without leaving a hole in the grid,
+  // so the loan cards genuinely mount and unmount. `closing` keeps them
+  // mounted for one transition while they animate away.
+  const [closing, setClosing] = useState(false);
+  const [shown, setShown] = useState(expanded); // drives the enter transition
+  const timers = useRef([]);
+
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  function later(fn, ms) { timers.current.push(setTimeout(fn, ms)); }
+
+  function open() {
+    if (expanded) return;
+    setDeviceFlag(DEBTS_PREF, true);
+    setClosing(false);
+    setExpanded(true);
+    setShown(false);
+    // Mount hidden, then flip on the next frame so the transition actually
+    // runs (a style applied in the same frame as the mount just... is).
+    requestAnimationFrame(() => requestAnimationFrame(() => setShown(true)));
+  }
+  function close() {
+    if (!expanded) return;
+    setDeviceFlag(DEBTS_PREF, false);
+    setShown(false);
+    setClosing(true);
+    later(() => { setClosing(false); setExpanded(false); }, FAN_MS + STAGGER_MS * Math.max(0, debtCats.length - 1));
+  }
+
+  // Adding from the collapsed card expands the section too — the new loan
+  // appears at the end (a new category takes max(order)+1), and landing back
+  // on a collapsed card that silently grew by one would be worse than useless.
+  function addLoan() {
+    open();
+    onAddLoan();
+  }
+
+  // With no loans at all there is nothing to collapse, and an overview of
+  // nothing ("$0.00 · 0 loans") is just noise — the root card is simply the
+  // add card, with no expand control.
+  const hasDebts = summary.count > 0;
+  const visible = hasDebts && (expanded || closing);
+
+  return (
+    <>
+      {hasDebts && !visible ? (
+        <DebtOverviewCard summary={summary} isDark={isDark} onExpand={open} onAddLoan={addLoan} />
+      ) : (
+        <AddLoanCard onAdd={onAddLoan} onCollapse={hasDebts ? close : undefined} />
+      )}
+
+      {visible &&
+        debtCats.map((cat, i) => (
+          <FanIn key={cat.id} shown={shown} index={i} count={debtCats.length}>
+            {isLoanConfigured(cat) ? (
+              <LoanCard
+                category={cat}
+                isDark={isDark}
+                state={state}
+                today={today}
+                progress={computeLoanProgress(state, cat, today)}
+                history={computeLoanHistory(state, cat)}
+                onLog={() => onLog(cat.id)}
+                onEdit={() => onEditTerms(cat)}
+                onUpdateSnapshot={(id, patch) => onUpdateSnapshot(cat.id, id, patch)}
+                onDeleteSnapshot={(id) => onDeleteSnapshot(cat.id, id)}
+              />
+            ) : (
+              <SetupLoanCard category={cat} isDark={isDark} onSetup={() => onEditTerms(cat)} />
+            )}
+          </FanIn>
+        ))}
+    </>
+  );
+}
+
+// One loan card on its way in or out: slides up from behind the root card and
+// fades, staggered by position. Reversed on the way out (the last card leaves
+// first) so it reads as folding back in rather than unravelling.
+function FanIn({ shown, index, count, children }) {
+  const delay = (shown ? index : count - 1 - index) * STAGGER_MS;
+  return (
+    <div
+      className={`transition-[opacity,transform] ease-out motion-reduce:transition-none ${
+        shown ? "opacity-100 translate-y-0 scale-100" : "opacity-0 -translate-y-3 scale-[0.97]"
+      }`}
+      style={{ transitionDuration: `${FAN_MS}ms`, transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// The collapsed state: total owed, then every loan in a compact scrolling
+// list. The list scrolls rather than capping the count — "just show the first
+// five" would hide exactly the loan someone is looking for.
+function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan }) {
+  return (
+    <section className={CARD}>
+      <div>
+        <div className={LABEL}>Debt</div>
+        <div className="mt-1 text-2xl font-semibold tabular-nums">{money(summary.total)}</div>
+        <div className="text-xs text-gray-500">
+          {summary.count} loan{summary.count === 1 ? "" : "s"}
+          {summary.unlogged > 0 && ` · ${summary.unlogged} not logged yet`}
+        </div>
+      </div>
+
+      <div className="grow min-h-0 -mx-1 max-h-52 overflow-y-auto">
+        <ul className="px-1 space-y-1.5">
+          {summary.loans.map((loan) => (
+            <li key={loan.id} className="flex items-baseline justify-between gap-3 text-sm">
+              <span className="flex items-baseline gap-1.5 min-w-0">
+                <span className="h-1.5 w-1.5 rounded-full shrink-0 self-center" style={{ backgroundColor: paletteColor(loan.color, isDark) }} />
+                <span className="truncate text-gray-700 dark:text-gray-300">{loan.name}</span>
+              </span>
+              <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">
+                {loan.outstanding == null
+                  ? <span className="text-xs text-gray-400">not logged</span>
+                  : money(loan.outstanding)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onExpand} className={BTN} aria-expanded={false}>
+          Show {summary.count} loan{summary.count === 1 ? "" : "s"}
+        </button>
+        <button onClick={onAddLoan} className={BTN}>+ Add loan</button>
+      </div>
+    </section>
+  );
+}
+
+function AddLoanCard({ onAdd, onCollapse }) {
   return (
     <section className={`${CARD} border-dashed justify-center items-start`}>
       <div className={LABEL}>Loans</div>
       <p className="text-sm text-gray-500">Car loan, mortgage, student loan — a loan is its own category; payments tag to it like Roth contributions tag to Roth.</p>
-      <button onClick={onAdd} className={BTN}>+ Add loan</button>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onAdd} className={BTN}>+ Add loan</button>
+        {onCollapse && (
+          <button onClick={onCollapse} className={BTN} aria-expanded>Collapse debts</button>
+        )}
+      </div>
     </section>
   );
 }

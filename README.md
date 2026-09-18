@@ -27,7 +27,9 @@ each savings/investment account, minus the last balance you logged for each loan
 (with an explicit count of anything not logged yet — no silent zeros).
 
 The hero collapses if you'd rather not be met by a big number, and stays that
-way on that device.
+way on that device. Debt collapses the same way, and does it by default: one
+card showing what you owe in total and a scrolling list of each loan, which
+expands into a card per loan when you want the detail.
 
 Then a card per account. Savings and investment cards chart the balances you've
 logged — just that one line — plus what you've actually contributed this year

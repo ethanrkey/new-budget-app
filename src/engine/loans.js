@@ -92,6 +92,40 @@ export function computeLoanHistory(state, cat) {
   });
 }
 
+// Every loan at a glance, for the Dashboard's collapsed debt card: the total
+// owed plus one compact row per debt category, in display order.
+//
+// `total` is deliberately computed the same way computeNetPosition does it —
+// the sum of each loan's LAST LOGGED outstanding — so the collapsed card and
+// the hero's "Debt" figure can never disagree. A loan with no logged balance
+// contributes nothing and is counted in `unlogged` instead: the loan model
+// never invents an anchor from origination, and showing $0 for "I haven't
+// told you yet" would quietly understate what's owed.
+export function computeDebtSummary(state) {
+  const cats = (state.trackerCategories || [])
+    .filter((c) => c.kind === "debt")
+    .sort((a, b) => a.order - b.order);
+
+  let total = 0;
+  let unlogged = 0;
+  const loans = cats.map((cat) => {
+    const snaps = sortedSnapshots(state, cat.id);
+    const latest = snaps.length ? snaps[snaps.length - 1] : null;
+    if (latest) total += latest.amount;
+    else unlogged++;
+    return {
+      id: cat.id,
+      name: cat.name,
+      color: cat.color,
+      outstanding: latest ? latest.amount : null,
+      loggedOn: latest ? latest.date : null,
+      configured: isLoanConfigured(cat),
+    };
+  });
+
+  return { total: round(total), loans, count: loans.length, unlogged };
+}
+
 // For a debt card. Every figure here comes from LOGGED balances (the truth),
 // never the projection. Deliberately does not produce "expected remaining vs.
 // actual remaining"; that compares you to an ideal payoff and only ever

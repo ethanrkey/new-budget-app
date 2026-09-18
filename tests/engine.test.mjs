@@ -2,7 +2,7 @@
 import { computeLedger, computeBudget } from "../src/engine/compute.js";
 import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab } from "../src/engine/mutate.js";
 import { computeCategoryHistory, computeMonthVariance, computeContributionsByYear, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
-import { computeLoanExpected, computeLoanHistory, computeLoanProgress, isLoanConfigured } from "../src/engine/loans.js";
+import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.js";
 import { buildAllEvents, occurrenceDates } from "../src/engine/generate.js";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.js";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.js";
@@ -1317,6 +1317,48 @@ eq("addMonthsISO across a year boundary", addMonthsISO("2026-11-30", 2), "2027-0
 eq("addMonthsISO is exact on the 1st (no day-before drift)", addMonthsISO("2026-03-01", 1), "2026-04-01");
 eq("endOfMonthISO unchanged", endOfMonthISO("2026-02-14"), "2026-02-28");
 eq("endOfMonthISO in a leap year", endOfMonthISO("2028-02-01"), "2028-02-29");
+
+// ---------- Scenario AJ: computeDebtSummary (the collapsed debt card) ----------
+console.log("\n== Scenario AJ: computeDebtSummary ==");
+const stateAJ = normalize({
+  settings: { checkInBalance: 500, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  recurring: [], oneoffs: [], paidOverrides: {},
+  trackerCategories: [
+    // deliberately out of display order, and mixed in with assets
+    { id: "car", name: "Car Loan", color: 6, order: 3, kind: "debt", originalPrincipal: 14500, interestRate: 4.2 },
+    { id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" },
+    { id: "aa", name: "Student Loan AA", color: 0, order: 1, kind: "debt", originalPrincipal: 18000, interestRate: 5.8 },
+    { id: "new", name: "New Loan", color: 3, order: 2, kind: "debt" }, // no terms yet
+  ],
+  balanceSnapshots: {
+    roth: [{ id: "r1", date: "2026-09-01", amount: 8890 }],
+    aa: [{ id: "a1", date: "2026-05-01", amount: 17010 }, { id: "a2", date: "2026-09-01", amount: 16120 }],
+    car: [{ id: "c1", date: "2026-09-01", amount: 12240 }],
+    // "new" has no logged balance at all
+  },
+});
+const sumAJ = computeDebtSummary(stateAJ);
+eq("only debt categories, in display order", sumAJ.loans.map((l) => l.name), ["Student Loan AA", "New Loan", "Car Loan"]);
+check("counts every loan, configured or not", sumAJ.count, 3);
+check("total is the sum of LAST logged outstandings", sumAJ.total, 28360);
+check("an unlogged loan contributes nothing to the total", sumAJ.unlogged, 1);
+eq("an unlogged loan's balance is null, never 0", sumAJ.loans.find((l) => l.id === "new").outstanding, null);
+eq("rows carry what the card renders", sumAJ.loans[0], { id: "aa", name: "Student Loan AA", color: 0, outstanding: 16120, loggedOn: "2026-09-01", configured: true });
+eq("a loan with no terms is flagged unconfigured", sumAJ.loans.find((l) => l.id === "new").configured, false);
+
+// The collapsed card's total and the hero's Debt figure must never disagree —
+// they are two renderings of the same number.
+check("total matches computeNetPosition's debt exactly", sumAJ.total, computeNetPosition(stateAJ).debt);
+check("...and so does the unlogged count", sumAJ.unlogged, computeNetPosition(stateAJ).unloggedDebts);
+
+// Degenerate cases the card has to survive.
+const noDebtAJ = computeDebtSummary(normalize({
+  settings: { checkInBalance: 0, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  recurring: [], oneoffs: [], paidOverrides: {}, trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }],
+}));
+eq("no debt categories -> empty list", noDebtAJ.loans, []);
+check("no debt categories -> zero total, not NaN", noDebtAJ.total, 0);
+check("no debt categories -> count 0 (card renders as plain '+ Add loan')", noDebtAJ.count, 0);
 
 // ---------- monthsDiff / addMonthsISO round trip (for the horizon sliders) ----------
 console.log("\n== monthsDiff / addMonthsISO ==");
