@@ -26,13 +26,20 @@ Net position at the top: verified checking, plus the last balance you logged for
 each savings/investment account, minus the last balance you logged for each loan
 (with an explicit count of anything not logged yet — no silent zeros).
 
-Then a card per account. Savings and investment cards chart what you've logged
-against a dotted projection of your scheduled contributions, and show what you
-contributed this year — a market dip isn't a failure, so the comparison is
-worded neutrally, never as good/bad. Loan cards show the outstanding balance you
+The hero collapses if you'd rather not be met by a big number, and stays that
+way on that device.
+
+Then a card per account. Savings and investment cards chart the balances you've
+logged — just that one line — plus what you've actually contributed this year
+or all time. There's no projected line on them on purpose: for a savings
+account it's arithmetic you can do in your head, and for anything market-
+exposed it can't tell a market dip apart from a transaction you never recorded.
+Loan cards show the outstanding balance you
 logged, how much of the original principal you've paid off, the terms, and this
-month's planned payment. They deliberately never show "expected remaining vs.
-actual remaining" — that framing only scolds. A loan you owe more on than you
+month's planned payment, and they DO keep a projected line — amortization is
+real math about a known quantity, not a guess about a market. They deliberately
+never show "expected remaining vs. actual remaining" — that framing only
+scolds. A loan you owe more on than you
 borrowed (an unsubsidized one, before payments start) says so honestly —
 "$2,302.73 owed · $2,000.00 borrowed · $302.73 accrued interest" — instead of
 a percentage against a number the balance has already passed.

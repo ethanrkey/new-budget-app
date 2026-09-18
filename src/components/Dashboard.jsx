@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from "recharts";
-import { computeCategoryProgress, computeCategoryHistory, computeContributionsByYear, computeNetPosition, computeMonthVariance } from "../engine/progress.js";
+import { computeCategoryHistory, computeContributionsByYear, computeNetPosition, computeMonthVariance } from "../engine/progress.js";
 import { computeLoanProgress, computeLoanHistory, isLoanConfigured } from "../engine/loans.js";
 import { paletteColor, primaryAccount, todayISO } from "../engine/model.js";
+import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
 import LoanSetupModal from "./LoanSetupModal.jsx";
 import AssetSetupModal from "./AssetSetupModal.jsx";
@@ -67,7 +68,6 @@ export default function Dashboard({
             key={cat.id}
             category={cat}
             isDark={isDark}
-            progress={computeCategoryProgress(state, cat.id, today)}
             history={computeCategoryHistory(state, cat.id)}
             contributions={computeContributionsByYear(state, cat.id, today)}
             today={today}
@@ -131,25 +131,69 @@ export default function Dashboard({
 }
 
 // ---- Hero: net position ----
+// Collapsible, and it remembers per device (localStorage, like the theme) —
+// opening the app shouldn't force the big number on you. Collapsed shows the
+// label and nothing else: a smaller version of the number would defeat the
+// point of hiding it.
+//
+// The animation is the grid-template-rows 0fr -> 1fr trick: height:auto isn't
+// animatable, and this avoids measuring scrollHeight in JS or capping with a
+// magic max-height that clips when the text wraps.
+const HERO_PREF = "hero-collapsed";
+
 function Hero({ net }) {
   const unlogged = net.unloggedAssets + net.unloggedDebts;
+  // Lazy initializer: read the stored preference during the first render, so
+  // a collapsed hero never flashes open before an effect closes it.
+  const [collapsed, setCollapsed] = useState(() => getDeviceFlag(HERO_PREF, false));
+
+  function toggle() {
+    setCollapsed((prev) => {
+      setDeviceFlag(HERO_PREF, !prev);
+      return !prev;
+    });
+  }
+
   return (
-    <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl px-6 py-6 sm:py-7">
-      <div className={LABEL}>Net position</div>
-      <div className={`mt-1 text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums ${net.net < 0 ? "text-expense" : ""}`}>
-        {money(net.net)}
+    <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl px-6 py-4 sm:py-5">
+      <button
+        onClick={toggle}
+        aria-expanded={!collapsed}
+        title={collapsed ? "Show net position" : "Hide net position"}
+        className="w-full flex items-center justify-between gap-3 py-1 text-left group"
+      >
+        <span className={LABEL}>Net position</span>
+        <span className="shrink-0 h-6 w-6 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-gray-100 dark:group-hover:bg-gray-800 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
+          <span className={`inline-block text-sm leading-none transition-transform duration-300 motion-reduce:transition-none ${collapsed ? "" : "rotate-180"}`}>▾</span>
+        </span>
+      </button>
+
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
+          collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"
+        }`}
+      >
+        {/* The row being animated has to be the ONLY child and must clip its
+            own overflow, or the content keeps its natural height throughout. */}
+        <div className="overflow-hidden">
+          <div className={`pt-1 pb-1 transition-opacity duration-200 motion-reduce:transition-none ${collapsed ? "opacity-0" : "opacity-100"}`}>
+            <div className={`text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums ${net.net < 0 ? "text-expense" : ""}`}>
+              {money(net.net)}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              <Stat label="Cash" value={money(net.cash)} />
+              <Stat label="Investments & savings" value={money(net.assets)} />
+              <Stat label="Debt" value={net.debt > 0 ? `−${money(net.debt)}` : money(0)} />
+            </div>
+            <p className="mt-3 text-xs text-gray-400">
+              Verified checking balance + last logged balance of each savings/investment − last logged balance of each loan.
+              {unlogged > 0 && (
+                <> <span className="text-gray-500">{unlogged} categor{unlogged === 1 ? "y" : "ies"} not logged yet</span> — counted as $0 until you log a balance.</>
+              )}
+            </p>
+          </div>
+        </div>
       </div>
-      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-        <Stat label="Cash" value={money(net.cash)} />
-        <Stat label="Investments & savings" value={money(net.assets)} />
-        <Stat label="Debt" value={net.debt > 0 ? `−${money(net.debt)}` : money(0)} />
-      </div>
-      <p className="mt-3 text-xs text-gray-400">
-        Verified checking balance + last logged balance of each savings/investment − last logged balance of each loan.
-        {unlogged > 0 && (
-          <> <span className="text-gray-500">{unlogged} categor{unlogged === 1 ? "y" : "ies"} not logged yet</span> — counted as $0 until you log a balance.</>
-        )}
-      </p>
     </section>
   );
 }
@@ -300,19 +344,17 @@ function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, 
 }
 
 // ---- Savings / investment ----
-function AssetCard({ category, isDark, progress, history, contributions, today, onLog, onUpdateSnapshot, onDeleteSnapshot }) {
+// One line: the balances you logged. No projection — see
+// computeCategoryHistory in engine/progress.js for why (loans are different
+// and keep theirs).
+function AssetCard({ category, isDark, history, contributions, today, onLog, onUpdateSnapshot, onDeleteSnapshot }) {
   const color = paletteColor(category.color, isDark);
-  const latest = progress.latest;
+  const latest = history.length ? history[history.length - 1] : null;
   const [allYears, setAllYears] = useState(false);
   const thisYear = today.slice(0, 4);
   const years = Object.keys(contributions);
 
-  // Actual = each logged snapshot; projected = what was expected AT that
-  // moment (computeCategoryHistory), extended to today's expected-now so the
-  // dashed line reaches "now."
-  const data = history.map((h) => ({ date: h.date, amount: h.amount, expected: h.expected }));
-  if (latest && today > latest.date) data.push({ date: today, expected: progress.expectedNow });
-  const gap = latest ? progress.expectedNow - latest.amount : null;
+  const data = history.map((h) => ({ date: h.date, amount: h.amount }));
 
   return (
     <section className={CARD}>
@@ -330,37 +372,22 @@ function AssetCard({ category, isDark, progress, history, contributions, today, 
         <button onClick={onLog} className={BTN}>Log balance</button>
       </div>
 
-      <HistoryChart data={data} color={color} isDark={isDark} projected={!!latest}
+      <HistoryChart data={data} color={color} isDark={isDark}
         emptyHint="Log a balance whenever you check the account — two points make a trend." />
 
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <div className="text-xs text-gray-500">Contributed {allYears ? "all time" : thisYear}</div>
-          <div className="font-semibold tabular-nums">
-            {money(allYears ? years.reduce((s, y) => s + contributions[y], 0) : contributions[thisYear] || 0)}
-          </div>
-          {years.length > 1 && (
-            <button onClick={() => setAllYears((v) => !v)} className="text-xs text-gray-400 underline decoration-dotted underline-offset-2">
-              {allYears ? "this year" : "all time"}
-            </button>
-          )}
+      <div className="text-sm">
+        <div className="text-xs text-gray-500">Contributed {allYears ? "all time" : thisYear}</div>
+        <div className="font-semibold tabular-nums">
+          {money(allYears ? years.reduce((s, y) => s + contributions[y], 0) : contributions[thisYear] || 0)}
         </div>
-        <div>
-          <div className="text-xs text-gray-500">vs. projected</div>
-          {gap == null ? (
-            <div className="text-xs text-gray-400">Log a balance to compare.</div>
-          ) : (
-            <>
-              <div className="font-semibold tabular-nums text-gray-700 dark:text-gray-300">
-                {gap === 0 ? "on projection" : `${money(Math.abs(gap))} ${gap > 0 ? "below" : "above"}`}
-              </div>
-              <div className="text-xs text-gray-400">projected now {money(progress.expectedNow)}</div>
-            </>
-          )}
-        </div>
+        {years.length > 1 && (
+          <button onClick={() => setAllYears((v) => !v)} className="text-xs text-gray-400 underline decoration-dotted underline-offset-2">
+            {allYears ? "this year" : "all time"}
+          </button>
+        )}
       </div>
 
-      <HistoryList entries={history} showProjected onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
+      <HistoryList entries={history} onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
     </section>
   );
 }

@@ -31,56 +31,24 @@ function sortedSnapshots(state, categoryId) {
   );
 }
 
-// Sum of a category's transactions strictly after `sinceDateOrNull` (or ALL
-// of them, if null — the "no snapshot logged yet" case) through `asOfISO`
-// inclusive. Deliberately uses buildAllEvents, not buildEvents — the live-
-// month filter that drops already-past events exists for the Ledger/Budget's
-// forward-looking display and would silently exclude most of what a balance
-// reconciliation actually needs to sum (everything since a past snapshot).
-function contributionsSince(state, categoryId, sinceDateOrNull, asOfISO) {
-  const events = buildAllEvents(state, asOfISO);
-  return round(
-    events
-      .filter((e) => e.category === categoryId && e.date <= asOfISO && (!sinceDateOrNull || e.date > sinceDateOrNull))
-      .reduce((sum, e) => sum + e.amount, 0)
-  );
-}
-
-// The live, ever-current figure for the Dashboard: the last balance you
-// logged (if any) plus every contribution since, projected through
-// `asOfISO` (normally settings.checkInDate — the app's "now"). `latest` is
-// null when nothing's ever been logged for this category, in which case
-// `expectedNow` falls back to a from-zero cumulative (today's Ledger
-// stepping behavior) since there's no real anchor yet.
-export function computeCategoryProgress(state, categoryId, asOfISO) {
-  const snaps = sortedSnapshots(state, categoryId);
-  const latest = snaps.length ? snaps[snaps.length - 1] : null;
-  const expectedNow = round((latest?.amount ?? 0) + contributionsSince(state, categoryId, latest?.date ?? null, asOfISO));
-  return { latest, expectedNow };
-}
-
-// The full snapshot history for one category (oldest -> newest), each
-// annotated with what was expected AT THAT TIME (the prior snapshot plus
-// contributions since it, or from-zero if it's the first-ever snapshot) and
-// the resulting variance. Recomputed fresh from current transactions on
-// every call, never stored on the snapshot itself — editing or deleting a
-// past transaction should update history the next time it's shown, not
-// leave a stale variance behind.
+// An asset category's logged balance history, oldest -> newest. Just the
+// balances you recorded: no "expected", no variance.
+//
+// This used to annotate every snapshot with what the last snapshot plus the
+// contributions since it would predict, and the card drew that as a dashed
+// projected line. It was removed deliberately (2026-09-18): for a cash
+// account it's arithmetic the user can do in their head, and for anything
+// market-exposed it conflates market movement with transactions that were
+// never recorded — so a "variance" said nothing useful about either. The
+// balance history itself already answers "is this growing the way I expect",
+// and `computeContributionsByYear` is the honest companion stat.
+//
+// NOTE the deliberate asymmetry: LOANS keep their projected line
+// (engine/loans.js). Amortization is real math about a known quantity —
+// last logged balance + interest accrued − payments — not a guess about a
+// market. Don't "tidy up" by stripping both.
 export function computeCategoryHistory(state, categoryId) {
-  const snaps = sortedSnapshots(state, categoryId);
-  return snaps.map((snap, i) => {
-    if (i === 0) {
-      // The very first snapshot establishes the baseline — nothing was
-      // being reconciled before it, so a from-zero transaction sum isn't a
-      // real "expected" (it'd just show whatever was in the account before
-      // you ever started tracking as a misleading variance). It trivially
-      // matches itself instead.
-      return { ...snap, expected: snap.amount, variance: 0 };
-    }
-    const prior = snaps[i - 1];
-    const expected = round(prior.amount + contributionsSince(state, categoryId, prior.date, snap.date));
-    return { ...snap, expected, variance: round(snap.amount - expected) };
-  });
+  return sortedSnapshots(state, categoryId);
 }
 
 // One variable bill's expected-vs-actual for one month. `expected` is the

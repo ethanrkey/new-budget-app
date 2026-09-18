@@ -1,7 +1,7 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget } from "../src/engine/compute.js";
 import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab } from "../src/engine/mutate.js";
-import { computeCategoryProgress, computeCategoryHistory, computeMonthVariance, computeContributionsByYear, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
+import { computeCategoryHistory, computeMonthVariance, computeContributionsByYear, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, isLoanConfigured } from "../src/engine/loans.js";
 import { buildAllEvents, occurrenceDates } from "../src/engine/generate.js";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.js";
@@ -596,8 +596,8 @@ eq("an already-saved category with no `kind` yet gets inferred from its name (as
 eq("an explicit `kind` already set is NEVER overridden by the name heuristic",
   preLoanFeatureCustom.trackerCategories.find((c) => c.id === "z3").kind, "asset");
 
-// ---------- Scenario Q: fund-balance progress (anchor + contributions since) ----------
-console.log("\n== Scenario Q: computeCategoryProgress / computeCategoryHistory ==");
+// ---------- Scenario Q: an asset category's balance history ----------
+console.log("\n== Scenario Q: computeCategoryHistory (balances only, no projection) ==");
 const stateQ = {
   settings: { checkInBalance: 0, checkInDate: "2026-01-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01", theme: "light" },
   recurring: [
@@ -612,36 +612,44 @@ const stateQ = {
   ],
   balanceSnapshots: {
     sav: [
-      { id: "s1", date: "2026-01-01", amount: 1000 },
+      // deliberately out of order: the history has to sort them
       { id: "s2", date: "2026-03-01", amount: 1350 },
+      { id: "s1", date: "2026-01-01", amount: 1000 },
     ],
   },
   monthlyActuals: {},
 };
 
-// History: snapshot s2's "expected at the time" = s1's 1000 + deposits
-// strictly after 2026-01-01 through 2026-03-01 (Jan5, Feb5 = 200; Mar5 is
-// AFTER the snapshot date, correctly excluded) = 1200. Actual was 1350 ->
-// variance +150.
+// The asset projection was removed on purpose (see computeCategoryHistory's
+// comment): what comes back is the logged balances, oldest -> newest, and
+// nothing else. No "expected", no "variance" — a card can't accidentally
+// render a projection that no longer means anything.
 const histQ = computeCategoryHistory(stateQ, "sav");
-check("history: first snapshot's own expected = itself (no prior anchor)", histQ[0].expected, 1000);
-check("history: first snapshot's variance = 0", histQ[0].variance, 0);
-check("history: second snapshot's expected (1000 + Jan/Feb deposits)", histQ[1].expected, 1200);
-check("history: second snapshot's variance (1350 actual vs 1200 expected)", histQ[1].variance, 150);
+eq("history is the logged balances, oldest first", histQ.map((h) => [h.date, h.amount]), [["2026-01-01", 1000], ["2026-03-01", 1350]]);
+eq("no `expected` field on any entry", histQ.some((h) => "expected" in h), false);
+eq("no `variance` field on any entry", histQ.some((h) => "variance" in h), false);
+eq("entries keep their ids, so they stay editable/deletable", histQ.map((h) => h.id), ["s1", "s2"]);
+eq("no snapshots ever -> empty array, not a crash", computeCategoryHistory(stateQ, "inv"), []);
+eq("the state's own snapshot array is not mutated by sorting", stateQ.balanceSnapshots.sav.map((s) => s.id), ["s2", "s1"]);
 
-// Live "expected now" as of 2026-04-01: last snapshot (1350 @ 2026-03-01) +
-// Mar5's deposit (100, after the snapshot, on/before asOf) = 1450. Apr5 is
-// after asOf, correctly excluded.
-const progQ = computeCategoryProgress(stateQ, "sav", "2026-04-01");
-check("progress: expectedNow anchors off the LAST snapshot, not from zero", progQ.expectedNow, 1450);
-eq("progress: latest is the most recent snapshot", progQ.latest.id, "s2");
+// The stat that replaced it is untouched and still counts real transactions.
+const contribQ = computeContributionsByYear(stateQ, "sav", "2026-04-01");
+check("contributions this year (Jan+Feb+Mar deposits)", contribQ["2026"], 300);
 
-// No snapshot ever logged for "inv" -> falls back to from-zero cumulative
-// (today's Ledger-stepping behavior), exactly like before this feature existed.
-const progInv = computeCategoryProgress(stateQ, "inv", "2026-03-15");
-eq("progress: no snapshot -> latest is null", progInv.latest, null);
-check("progress: no snapshot -> expectedNow sums ALL contributions from zero (Jan10+Feb10+Mar10)", progInv.expectedNow, 150);
-eq("history: no snapshots ever -> empty array, not a crash", computeCategoryHistory(stateQ, "inv"), []);
+// The asymmetry is deliberate and load-bearing: LOANS keep their projection,
+// because amortization is real math about a known quantity. If a future
+// cleanup strips loans too, this fails.
+const loanCatQ = { id: "lq", name: "Loan Q", color: 3, order: 2, kind: "debt", originalPrincipal: 5000, interestRate: 6 };
+const loanStateQ = normalize({
+  settings: { checkInBalance: 0, checkInDate: "2026-01-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  recurring: [{ id: "lq-pay", name: "Loan payment", amount: 200, category: "lq", cadence: "monthly", startDate: "2026-01-15", dayOfMonth: 15, order: 0 }],
+  oneoffs: [], paidOverrides: {},
+  trackerCategories: [loanCatQ],
+  balanceSnapshots: { lq: [{ id: "lq1", date: "2026-01-01", amount: 5000 }, { id: "lq2", date: "2026-03-01", amount: 4620 }] },
+});
+const loanHistQ = computeLoanHistory(loanStateQ, loanCatQ);
+eq("loan history STILL carries `expected` (don't strip both)", loanHistQ.every((h) => "expected" in h), true);
+check("loan projection is still real amortization, not a copy of the balance", loanHistQ[1].expected !== loanHistQ[1].amount, true);
 
 // ---------- Scenario R: variable-bill monthly actuals override the estimate ----------
 console.log("\n== Scenario R: setMonthlyActual / deleteMonthlyActual + generate.js override ==");

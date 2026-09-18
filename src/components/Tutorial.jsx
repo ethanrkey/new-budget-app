@@ -88,12 +88,12 @@ const SECTIONS = [
     body: [
       ["p", "The reality layer: what you actually have, based only on numbers you logged."],
       ["dl", [
-        ["Net position", "Verified checking + the last logged balance of every savings/investment − the last logged balance of every loan. Anything you haven't logged yet is counted as unlogged, never as zero."],
+        ["Net position", "Verified checking + the last logged balance of every savings/investment − the last logged balance of every loan. Anything you haven't logged yet is counted as unlogged, never as zero. Collapse it with the arrow if you'd rather not see it first thing — each device remembers that on its own."],
         ["Checking card", "Your verified balance and its history."],
-        ["Savings / investment cards", "What you logged, charted against a dotted line showing what your scheduled contributions alone would predict, plus what you've contributed this year."],
+        ["Savings / investment cards", "The balances you logged, as one line, plus what you've actually contributed this year (or all time). No predicted line: for a savings account it's arithmetic you can do in your head, and for a brokerage it can't tell a market dip apart from a deposit you forgot to record."],
         ["Loan cards", "What you owe, how much of the original you've paid off, the terms, and this month's planned payment."],
       ]],
-      ["note", "The “vs. projected” line on an investment is neutral on purpose. Markets move; being under the line isn't a failure, it's information."],
+      ["note", "Loan cards are the one place a dashed predicted line appears, because amortization is real math about a known quantity — what you owe, the rate, and the payments you've planned."],
     ],
   },
   {

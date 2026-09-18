@@ -200,9 +200,21 @@ Conventions worth knowing before touching numbers:
   interest`; that third figure is `owed − borrowed`, i.e. interest net of
   anything already paid, since payments made before the earliest logged
   balance aren't knowable.
-- **Projections anchor to the last logged value** (asset: + contributions
-  since; loan: + interest − payments since) and self-correct on every log.
-  Nothing invents a "today" snapshot.
+- **Loan projections anchor to the last logged value** (+ interest − payments
+  since) and self-correct on every log. Nothing invents a "today" snapshot.
+- **Assets have no projection, deliberately** (removed 2026-09-18). They used
+  to carry "last snapshot + contributions since" as a dashed line and a
+  "vs. projected" stat. For a cash account that's arithmetic the user can do
+  in their head; for anything market-exposed it conflates market movement
+  with transactions that were never recorded, so the variance described
+  neither. The balance history already answers "is this growing the way I
+  expect", and `computeContributionsByYear` is the honest companion stat.
+  `computeCategoryHistory` is now just the sorted balance history — the
+  removal went all the way into the engine so a card can't render a
+  projection that no longer means anything. **The asymmetry with loans is
+  intentional:** amortization is real math about a known quantity. Don't
+  "tidy up" by stripping both; the harness asserts loan history still
+  carries `expected`.
 - **A variable item's logged monthly actual replaces the estimate** in the
   event stream for that month (split evenly across multiple same-month
   instances), so Ledger/Budget/amortization all see the real number.
@@ -210,6 +222,10 @@ Conventions worth knowing before touching numbers:
   name**, but the CSV export writes the fixed label `Checking` because
   `parseBudgetCSV` keys that number off the label. It also accepts the older
   `TD checking`, so exports taken before the rename still import.
+- **Display preferences are per device, never in `state`** — the theme
+  (`theme.js`) and the collapsed/expanded hero (`devicePrefs.js`) live in
+  localStorage. They never sync, never conflict between devices, and never
+  count as a change worth writing to Supabase.
 - **Colors are inline styles** (`paletteColor(index, isDark)`), never
   runtime-built Tailwind class names — the JIT scanner can't see those.
 - **Variable actuals and "mark paid" are different things:** paid zeroes an
@@ -244,11 +260,12 @@ fifth tab never needs a migration.
   horizon slider.
 - **Dashboard** — the reality layer: hero net position (verified checking +
   last logged asset balances − last logged loan balances, with an explicit
-  "N not logged yet" count); a card per checking account, asset category,
-  and loan; Recharts history charts with hover; asset cards show
-  contributions (this year / all time) and a neutral "vs. projected"; loan
-  cards show logged outstanding, percent-paid-off bar, terms, and planned vs.
-  paid this month. "+ Add account" and "+ Add loan" cards create an asset or
+  "N not logged yet" count), collapsible and remembered per device; a card
+  per checking account, asset category, and loan; Recharts history charts
+  with hover. Asset cards show ONE line — the balances you logged — plus
+  contributions (this year / all time). Loan cards show logged outstanding,
+  percent-paid-off bar, terms, planned vs. paid this month, and keep their
+  dashed amortization line. "+ Add account" and "+ Add loan" cards create an asset or
   debt category through their own setup form (`setupAsset` / `setupLoan`) —
   never the transaction editor, and setup never creates a transaction. An
   opening balance entered there is logged as the category's first snapshot.
@@ -321,6 +338,9 @@ Later:
   one — the Dashboard is reality, the Ledger is projection.
 - Loans were split from loan payments (2026-09-13) because a loan exists
   whether or not you're paying on it, exactly like an asset category.
+- Asset cards show what you logged and what you contributed — never a
+  projection. See the conventions above; the user's framing was that
+  contributions-only is the honest stat.
 - "Expected remaining vs. actual remaining" is never shown for a loan; it
   only scolds. Percent paid off is the motivating framing.
 - A loan owed above its principal reports 0% rather than a clamped negative,
