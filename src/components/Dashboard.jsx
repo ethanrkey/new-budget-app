@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from "recharts";
-import { computeCategoryHistory, computeContributionsByYear, computeNetPosition, computeMonthVariance } from "../engine/progress.js";
+import { computeCategoryHistory, computeLoggedContributions, computeNetPosition, computeMonthVariance } from "../engine/progress.js";
 import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.js";
 import { paletteColor, primaryAccount, todayISO } from "../engine/model.js";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
@@ -34,7 +34,8 @@ export default function Dashboard({
   state, isDark,
   onAddSnapshot, onUpdateSnapshot, onDeleteSnapshot,
   onUpdateAccountBalance, onUpdateAccountSnapshot, onDeleteAccountSnapshot,
-  onSetupLoan, onSetupAsset,
+  onSetupLoan, onSetupAsset, onDeleteCategory, countTagged,
+  onAddContribution, onUpdateContribution, onDeleteContribution,
 }) {
   const today = todayISO(); // real clock — the reality layer's "now"
   const account = primaryAccount(state);
@@ -44,9 +45,11 @@ export default function Dashboard({
   const net = computeNetPosition(state);
   const [logFor, setLogFor] = useState(null);     // category currently logging a balance
   const [loanModal, setLoanModal] = useState(null); // null | { cat?: category } (cat absent = brand-new loan)
-  const [assetModal, setAssetModal] = useState(false);
+  const [assetModal, setAssetModal] = useState(null); // null | {} (new) | { cat }
+  const [contribFor, setContribFor] = useState(null);  // category currently logging a contribution
 
   const logCat = logFor ? cats.find((c) => c.id === logFor) : null;
+  const contribCat = contribFor ? cats.find((c) => c.id === contribFor) : null;
   const logLatest = logCat ? sortedSnaps(state.balanceSnapshots?.[logCat.id]).at(-1) : null;
 
   return (
@@ -63,21 +66,25 @@ export default function Dashboard({
           onDeleteSnapshot={(id) => onDeleteAccountSnapshot(account.id, id)}
         />
 
-        <AddAssetCard onAdd={() => setAssetModal(true)} />
-
         {assetCats.map((cat) => (
           <AssetCard
             key={cat.id}
             category={cat}
             isDark={isDark}
             history={computeCategoryHistory(state, cat.id)}
-            contributions={computeContributionsByYear(state, cat.id, today)}
+            contributions={computeLoggedContributions(state, cat.id, today)}
             today={today}
             onLog={() => setLogFor(cat.id)}
+            onLogContribution={() => setContribFor(cat.id)}
+            onEdit={() => setAssetModal({ cat })}
             onUpdateSnapshot={(id, patch) => onUpdateSnapshot(cat.id, id, patch)}
             onDeleteSnapshot={(id) => onDeleteSnapshot(cat.id, id)}
+            onUpdateContribution={(id, patch) => onUpdateContribution(cat.id, id, patch)}
+            onDeleteContribution={(id) => onDeleteContribution(cat.id, id)}
           />
         ))}
+
+        <AddAssetCard onAdd={() => setAssetModal({})} />
 
         <DebtSection
           summary={computeDebtSummary(state)}
@@ -101,19 +108,36 @@ export default function Dashboard({
         />
       )}
 
+      {contribCat && (
+        <UpdateBalanceModal
+          account={{ name: contribCat.name, balance: null, balanceAsOf: null }}
+          title={`Log a contribution to ${contribCat.name}`}
+          blurb="What you actually put in, and when. Log each contribution as it happens — this is the record of what you really did, not what the ledger plans."
+          amountLabel="Amount contributed"
+          cta="Log contribution"
+          onConfirm={(amount, date) => { onAddContribution(contribCat.id, amount, date); setContribFor(null); }}
+          onClose={() => setContribFor(null)}
+        />
+      )}
+
       {assetModal && (
         <AssetSetupModal
+          initial={assetModal.cat ?? null}
+          taggedCount={assetModal.cat ? countTagged(assetModal.cat.id) : 0}
           isDark={isDark}
-          onSave={(payload) => { onSetupAsset(payload); setAssetModal(false); }}
-          onClose={() => setAssetModal(false)}
+          onSave={(payload) => { onSetupAsset(payload); setAssetModal(null); }}
+          onDelete={assetModal.cat ? () => { onDeleteCategory(assetModal.cat.id); setAssetModal(null); } : undefined}
+          onClose={() => setAssetModal(null)}
         />
       )}
 
       {loanModal && (
         <LoanSetupModal
           initial={loanModal.cat ?? null}
+          taggedCount={loanModal.cat ? countTagged(loanModal.cat.id) : 0}
           isDark={isDark}
           onSave={(payload) => { onSetupLoan(payload); setLoanModal(null); }}
+          onDelete={loanModal.cat ? () => { onDeleteCategory(loanModal.cat.id); setLoanModal(null); } : undefined}
           onClose={() => setLoanModal(null)}
         />
       )}
@@ -259,13 +283,14 @@ function HistoryChart({ data, color, isDark, projected = false, emptyHint }) {
 }
 
 // ---- Editable history (every logged value stays correctable) ----
-function HistoryList({ entries, onUpdate, onDelete, showProjected }) {
+function HistoryList({ entries, onUpdate, onDelete, showProjected, label }) {
   const [open, setOpen] = useState(false);
   if (entries.length === 0) return null;
+  const noun = label ? `${label}${entries.length === 1 ? "" : "s"}` : "history";
   return (
     <div>
       <button onClick={() => setOpen((v) => !v)} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-        {open ? "Hide" : "Show"} history ({entries.length})
+        {open ? "Hide" : "Show"} {noun} ({entries.length})
       </button>
       {open && (
         <div className="mt-2 border-t border-gray-100 dark:border-gray-800 pt-1">
@@ -346,12 +371,13 @@ function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, 
 // One line: the balances you logged. No projection — see
 // computeCategoryHistory in engine/progress.js for why (loans are different
 // and keep theirs).
-function AssetCard({ category, isDark, history, contributions, today, onLog, onUpdateSnapshot, onDeleteSnapshot }) {
+function AssetCard({ category, isDark, history, contributions, today, onLog, onLogContribution, onEdit,
+  onUpdateSnapshot, onDeleteSnapshot, onUpdateContribution, onDeleteContribution }) {
   const color = paletteColor(category.color, isDark);
   const latest = history.length ? history[history.length - 1] : null;
   const [allYears, setAllYears] = useState(false);
   const thisYear = today.slice(0, 4);
-  const years = Object.keys(contributions);
+  const years = Object.keys(contributions.byYear);
 
   const data = history.map((h) => ({ date: h.date, amount: h.amount }));
 
@@ -368,25 +394,45 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onU
           </div>
           <div className="text-xs text-gray-500">{latest ? `logged ${prettyDate(latest.date)}` : "no balance logged yet"}</div>
         </div>
-        <button onClick={onLog} className={BTN}>Log balance</button>
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <button onClick={onLog} className={BTN}>Log balance</button>
+          <button onClick={onEdit} className={BTN}>Edit</button>
+        </div>
       </div>
 
       <HistoryChart data={data} color={color} isDark={isDark}
         emptyHint="Log a balance whenever you check the account — two points make a trend." />
 
+      {/* Contributions are LOGGED, never summed from the ledger — the ledger
+          is a forecast, so that figure would be what you planned to put in.
+          An account you never log (a 401k taken before the paycheck) says so
+          rather than claiming $0.00, which would read as a real number. */}
       <div className="text-sm">
         <div className="text-xs text-gray-500">Contributed {allYears ? "all time" : thisYear}</div>
-        <div className="font-semibold tabular-nums">
-          {money(allYears ? years.reduce((s, y) => s + contributions[y], 0) : contributions[thisYear] || 0)}
-        </div>
-        {years.length > 1 && (
-          <button onClick={() => setAllYears((v) => !v)} className="text-xs text-gray-400 underline decoration-dotted underline-offset-2">
-            {allYears ? "this year" : "all time"}
-          </button>
+        {contributions.logged ? (
+          <>
+            <div className="font-semibold tabular-nums">
+              {money(allYears ? contributions.total : contributions.byYear[thisYear] || 0)}
+            </div>
+            {years.length > 1 && (
+              <button onClick={() => setAllYears((v) => !v)} className="text-xs text-gray-400 underline decoration-dotted underline-offset-2">
+                {allYears ? "this year" : "all time"}
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="text-gray-300 dark:text-gray-600 text-2xl leading-tight">—</div>
+            <div className="text-xs text-gray-400">
+              Nothing logged yet. Fine to leave empty for an account you never see the money go into.
+            </div>
+          </>
         )}
+        <button onClick={onLogContribution} className={`${BTN} mt-2`}>Log contribution</button>
       </div>
 
       <HistoryList entries={history} onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
+      <HistoryList entries={contributions.entries} label="contribution" onUpdate={onUpdateContribution} onDelete={onDeleteContribution} />
     </section>
   );
 }
@@ -433,7 +479,7 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
           <button onClick={onLog} className={BTN}>Log balance</button>
-          <button onClick={onEdit} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Edit terms</button>
+          <button onClick={onEdit} className={BTN}>Edit</button>
         </div>
       </div>
 

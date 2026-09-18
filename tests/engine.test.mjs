@@ -1,7 +1,7 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget } from "../src/engine/compute.js";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab } from "../src/engine/mutate.js";
-import { computeCategoryHistory, computeMonthVariance, computeContributionsByYear, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
+import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.js";
+import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.js";
 import { buildAllEvents, occurrenceDates } from "../src/engine/generate.js";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.js";
@@ -632,9 +632,11 @@ eq("entries keep their ids, so they stay editable/deletable", histQ.map((h) => h
 eq("no snapshots ever -> empty array, not a crash", computeCategoryHistory(stateQ, "inv"), []);
 eq("the state's own snapshot array is not mutated by sorting", stateQ.balanceSnapshots.sav.map((s) => s.id), ["s2", "s1"]);
 
-// The stat that replaced it is untouched and still counts real transactions.
-const contribQ = computeContributionsByYear(stateQ, "sav", "2026-04-01");
-check("contributions this year (Jan+Feb+Mar deposits)", contribQ["2026"], 300);
+// Contributions are logged now, not derived — an account with ledger
+// transactions but nothing logged reports NOTHING, not the planned sum.
+const contribQ = computeLoggedContributions(stateQ, "sav", "2026-04-01");
+check("ledger transactions do NOT count as contributions", contribQ.total, 0);
+eq("...and the card can tell 'unrecorded' from 'zero'", contribQ.logged, false);
 
 // The asymmetry is deliberate and load-bearing: LOANS keep their projection,
 // because amortization is real math about a known quantity. If a future
@@ -765,23 +767,44 @@ eq("computeMonthVariance's full shape after logging (includes occurrences)",
   computeMonthVariance(stateU.recurring[0], stateU.monthlyActuals, "2026-09"),
   { monthKey: "2026-09", occurrences: 2, expected: 80, actual: 84, delta: 4 });
 
-// ---------- Scenario V: computeContributionsByYear ----------
-console.log("\n== Scenario V: computeContributionsByYear ==");
-const stateV = {
-  settings: { checkInBalance: 0, checkInDate: "2025-01-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01", theme: "light" },
-  recurring: [
-    { id: "roth-v", name: "Roth IRA", amount: 500, category: "roth", cadence: "monthly", startDate: "2025-01-05", dayOfMonth: 5, order: 0 },
-  ],
-  oneoffs: [],
-  paidOverrides: {},
-  trackerCategories: [],
-  balanceSnapshots: {},
-  monthlyActuals: {},
-};
-eq("contributions grouped by year, most recent first (2025: 12mo, 2026: 6mo of $500)",
-  computeContributionsByYear(stateV, "roth", "2026-06-30"), { "2026": 3000, "2025": 6000 });
-eq("a category with zero transactions -> empty object, not a crash",
-  computeContributionsByYear(stateV, "nonexistent", "2026-06-30"), {});
+// ---------- Scenario V: logged contributions (not ledger-derived) ----------
+console.log("\n== Scenario V: computeLoggedContributions ==");
+let stateV = normalize({
+  settings: { checkInBalance: 0, checkInDate: "2026-01-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  // A big planned contribution in the ledger that must NEVER be counted as real.
+  recurring: [{ id: "v-plan", name: "Roth auto", amount: 500, category: "roth", cadence: "monthly", dayOfMonth: 1, startDate: "2025-01-01", order: 0 }],
+  oneoffs: [], paidOverrides: {},
+  trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }, { id: "k401", name: "401k", color: 2, order: 1, kind: "asset" }],
+});
+eq("normalize backfills an empty contribution log", stateV.contributionLog, {});
+const emptyV = computeLoggedContributions(stateV, "roth", "2026-06-30");
+check("a full ledger with nothing logged contributes 0", emptyV.total, 0);
+eq("`logged` is false so the card shows '—', never a confident $0.00", emptyV.logged, false);
+
+stateV = addContribution(stateV, "roth", 2000, "2025-04-15");
+stateV = addContribution(stateV, "roth", 1000, "2026-02-01");
+stateV = addContribution(stateV, "roth", 500, "2026-03-01");
+stateV = addContribution(stateV, "roth", 9999, "2026-12-31"); // after asOf
+const vc = computeLoggedContributions(stateV, "roth", "2026-06-30");
+check("total counts only entries on/before asOf", vc.total, 3500);
+eq("by year, newest first", vc.byYear, { "2026": 1500, "2025": 2000 });
+eq("entries come back oldest -> newest for the history list", vc.entries.map((e) => e.date), ["2025-04-15", "2026-02-01", "2026-03-01"]);
+eq("logged is true once anything exists", vc.logged, true);
+eq("entries carry a source, so an importer can fill the same slot", vc.entries.every((e) => e.source === "manual"), true);
+check("the ledger's own planned Roth transactions changed nothing", vc.total, 3500);
+
+// Fully editable and deletable, like every other logged value.
+const editV = updateContribution(stateV, "roth", vc.entries[1].id, { amount: 1200, date: "2026-02-05" });
+check("an entry can be corrected", computeLoggedContributions(editV, "roth", "2026-06-30").total, 3700);
+const delV = deleteContribution(stateV, "roth", vc.entries[0].id);
+check("an entry can be deleted", computeLoggedContributions(delV, "roth", "2026-06-30").total, 1500);
+eq("deleting one account's entry leaves others alone", computeLoggedContributions(delV, "k401", "2026-06-30").logged, false);
+
+// An importer (Plaid later) writes the same shape with its own source.
+const impV = addContribution(stateV, "k401", 750, "2026-05-01", { source: "plaid", externalId: "tx_abc123" });
+const impRead = computeLoggedContributions(impV, "k401", "2026-06-30");
+check("an imported contribution counts the same", impRead.total, 750);
+eq("...and keeps its provenance for dedupe", [impRead.entries[0].source, impRead.entries[0].externalId], ["plaid", "tx_abc123"]);
 
 // ---------- Scenario Y: full JSON backup restore (isPlausibleBackup + normalize round-trip) ----------
 console.log("\n== Scenario Y: backup validation + export/restore round-trip ==");
@@ -1359,6 +1382,37 @@ const noDebtAJ = computeDebtSummary(normalize({
 eq("no debt categories -> empty list", noDebtAJ.loans, []);
 check("no debt categories -> zero total, not NaN", noDebtAJ.total, 0);
 check("no debt categories -> count 0 (card renders as plain '+ Add loan')", noDebtAJ.count, 0);
+
+// ---------- Scenario AK: deleting a category orphans, never flips direction ----------
+console.log("\n== Scenario AK: orphaned transactions keep their direction ==");
+const beforeAK = normalize({
+  settings: { checkInBalance: 1000, checkInDate: "2026-09-01", budgetHorizon: "2026-11-01", ledgerHorizon: "2026-11-01" },
+  recurring: [{ id: "ak1", name: "Test deposit", amount: 50, category: "testacct", cadence: "monthly", dayOfMonth: 10, startDate: "2026-09-10", order: 0 }],
+  oneoffs: [{ id: "ak2", name: "Extra deposit", amount: 75, category: "testacct", date: "2026-10-20", order: 1 }],
+  paidOverrides: {},
+  trackerCategories: [{ id: "testacct", name: "Test account", color: 1, order: 0, kind: "asset" }],
+});
+check("count of transactions the delete confirm must report", countTaggedItems(beforeAK, "testacct"), 2);
+
+const afterAK = deleteCategory(beforeAK, "testacct");
+const dirs = (st) => buildAllEvents(st, "2026-11-01").map((e) => [e.name, e.direction, e.amount]);
+eq("every event's direction and amount is unchanged by the delete", dirs(afterAK), dirs(beforeAK));
+eq("nothing became an inflow", buildAllEvents(afterAK, "2026-11-01").some((e) => e.direction === "in"), false);
+
+// The whole point: the forecast must be byte-identical.
+const ledgerOf = (st) => computeLedger(st, "2026-11-01").rows.map((r) => [r.date, r.name, r.direction, r.amount, r.balance]);
+eq("the ledger is identical before and after", ledgerOf(afterAK), ledgerOf(beforeAK));
+const budgetOf = (st) => computeBudget(st, "2026-11-01").map((c) => [c.key, c.totalIn, c.totalOut, c.cumulative]);
+eq("every budget column is identical before and after", budgetOf(afterAK), budgetOf(beforeAK));
+check("the orphaned items are still there", afterAK.recurring.length + afterAK.oneoffs.length, 2);
+eq("they keep the dead category id rather than being reassigned", afterAK.recurring[0].category, "testacct");
+
+// The regression this guards: an orphan resolving to the FIRST category in
+// the map (income) instead of the "out" default. A $50 outflow read as a $50
+// inflow swings the forecast by $100 per occurrence.
+eq("an unknown category resolves to 'out', not the first entry in CATEGORIES",
+  buildAllEvents(afterAK, "2026-11-01").find((e) => e.name === "Test deposit").direction, "out");
+check("balance after the first orphaned outflow still falls", computeLedger(afterAK, "2026-11-01").rows[0].balance, 950);
 
 // ---------- monthsDiff / addMonthsISO round trip (for the horizon sliders) ----------
 console.log("\n== monthsDiff / addMonthsISO ==");

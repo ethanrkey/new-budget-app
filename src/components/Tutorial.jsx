@@ -90,7 +90,7 @@ const SECTIONS = [
       ["dl", [
         ["Net position", "Verified checking + the last logged balance of every savings/investment − the last logged balance of every loan. Anything you haven't logged yet is counted as unlogged, never as zero. Collapse it with the arrow if you'd rather not see it first thing — each device remembers that on its own."],
         ["Checking card", "Your verified balance and its history."],
-        ["Savings / investment cards", "The balances you logged, as one line, plus what you've actually contributed this year (or all time). No predicted line: for a savings account it's arithmetic you can do in your head, and for a brokerage it can't tell a market dip apart from a deposit you forgot to record."],
+        ["Savings / investment cards", "The balances you logged, as one line, plus what you've actually contributed — logged one contribution at a time with “Log contribution”, never added up from the ledger (that would be what you PLANNED to put in). An account you never log just shows a dash; that's fine, and honest, for something like a 401k you never see the money go into."],
         ["Loan cards", "What you owe, how much of the original you've paid off, the terms, and this month's planned payment. Debt starts collapsed into a single card — a total and a list of your loans — and expands into a card each when you want the detail. Each device remembers which way you left it."],
       ]],
       ["note", "Loan cards are the one place a dashed predicted line appears, because amortization is real math about a known quantity — what you owe, the rate, and the payments you've planned."],
@@ -106,7 +106,8 @@ const SECTIONS = [
         "Add a transaction for the money going into it, and pick the account as its category.",
         "Log the real balance whenever you check it — Log balance on the card.",
       ]],
-      ["p", "Every logged balance is editable and deletable afterwards, under “Show history”. Fat-finger a number and you can just fix it."],
+      ["p", "Every logged balance and contribution is editable and deletable afterwards, under “Show history” / “Show contributions”. Fat-finger a number and you can just fix it."],
+      ["p", "“Edit” on a card renames it, recolours it, and is where deleting lives. Deleting tells you how many transactions are tagged to it first — those are scheduled, so they stay in your ledger as uncategorized rather than vanishing and quietly changing your forecast."],
     ],
   },
   {

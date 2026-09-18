@@ -209,6 +209,50 @@ export function deleteBalanceSnapshot(state, categoryId, snapshotId) {
 // editable/deletable by construction (setting the same key again replaces
 // it; there's no separate "list of entries" to prune).
 
+// ---- Logged contributions ----
+// Money you actually put in, recorded one entry at a time. Same CRUD shape as
+// balance snapshots, and like them every entry stays editable and deletable.
+// `source` defaults to "manual"; an importer (Plaid or a bank CSV) writes its
+// own source and an `externalId` so re-importing can dedupe instead of
+// doubling entries.
+export function addContribution(state, categoryId, amount, date, extra = {}) {
+  const list = state.contributionLog?.[categoryId] || [];
+  return {
+    ...state,
+    contributionLog: {
+      ...state.contributionLog,
+      [categoryId]: [...list, { id: uid(), date, amount, source: "manual", ...extra }],
+    },
+  };
+}
+
+export function updateContribution(state, categoryId, entryId, patch) {
+  const list = state.contributionLog?.[categoryId] || [];
+  return {
+    ...state,
+    contributionLog: {
+      ...state.contributionLog,
+      [categoryId]: list.map((c) => (c.id === entryId ? { ...c, ...patch } : c)),
+    },
+  };
+}
+
+export function deleteContribution(state, categoryId, entryId) {
+  const list = state.contributionLog?.[categoryId] || [];
+  return {
+    ...state,
+    contributionLog: { ...state.contributionLog, [categoryId]: list.filter((c) => c.id !== entryId) },
+  };
+}
+
+// How many transactions are tagged to a category — what the delete confirm
+// tells you will be left behind. Counts ITEMS (a recurring rule is one), not
+// occurrences: the rule is the thing that survives deletion.
+export function countTaggedItems(state, categoryId) {
+  const hit = (i) => i.category === categoryId;
+  return state.recurring.filter(hit).length + state.oneoffs.filter(hit).length;
+}
+
 export function setMonthlyActual(state, itemId, monthKey, amount) {
   return {
     ...state,

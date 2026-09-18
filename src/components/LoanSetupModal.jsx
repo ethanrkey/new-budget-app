@@ -9,7 +9,7 @@ import ColorSwatches from "./ColorSwatches.jsx";
 // balance as the first snapshot (the anchor everything projects from);
 // editing an existing loan's terms doesn't touch balance history — that's
 // the card's own "Log balance."
-export default function LoanSetupModal({ initial, presetName, isDark, onSave, onClose }) {
+export default function LoanSetupModal({ initial, presetName, taggedCount = 0, isDark, onSave, onDelete, onClose }) {
   const isNew = !initial?.originalPrincipal && initial?.originalPrincipal !== 0;
   const [name, setName] = useState(initial?.name ?? presetName ?? "");
   const [color, setColor] = useState(initial?.color ?? 3);
@@ -18,6 +18,7 @@ export default function LoanSetupModal({ initial, presetName, isDark, onSave, on
   const [interestStartDate, setInterestStartDate] = useState(initial?.interestStartDate ?? "");
   const [outstanding, setOutstanding] = useState("");
   const [asOf, setAsOf] = useState(todayISO());
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const valid =
     name.trim() !== "" &&
@@ -100,6 +101,43 @@ export default function LoanSetupModal({ initial, presetName, isDark, onSave, on
             {isNew ? "Set up loan" : "Save terms"}
           </button>
         </div>
+
+        {/* Deleting a loan is a primary action, so it lives here rather than
+            only in Settings → Categories. The payments tagged to it are
+            SCHEDULED, not completed — removing them would quietly change the
+            forecast, so they stay and the count says so up front. */}
+        {onDelete && (
+          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+            {confirmDelete ? (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  Delete {initial.name}?{" "}
+                  {taggedCount > 0 ? (
+                    <>
+                      {taggedCount} transaction{taggedCount === 1 ? "" : "s"} tagged to this loan will
+                      remain in your ledger, uncategorized.
+                    </>
+                  ) : (
+                    <>No transactions are tagged to it.</>
+                  )}{" "}
+                  Its terms and logged balances are deleted.
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setConfirmDelete(false)} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">
+                    Keep it
+                  </button>
+                  <button onClick={onDelete} className="flex-1 py-2 rounded-lg bg-expense text-white text-sm font-medium">
+                    Delete loan
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)} className="text-xs text-gray-400 hover:text-expense">
+                Delete this loan
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

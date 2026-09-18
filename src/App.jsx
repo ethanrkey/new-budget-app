@@ -13,6 +13,7 @@ import {
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
   updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
+  addContribution, updateContribution, deleteContribution, countTaggedItems,
 } from "./engine/mutate.js";
 import { primaryAccount, sanitizeTabOrder } from "./engine/model.js";
 import LedgerView from "./components/LedgerView.jsx";
@@ -144,6 +145,16 @@ export default function App() {
   }
   // Dashboard: fund-balance snapshots + variable-bill monthly actuals — both
   // fully editable/deletable after the fact (see mutate.js).
+  function logContribution(categoryId, amount, date) {
+    setState((s) => addContribution(s, categoryId, amount, date));
+  }
+  function editContribution(categoryId, entryId, patch) {
+    setState((s) => updateContribution(s, categoryId, entryId, patch));
+  }
+  function removeContribution(categoryId, entryId) {
+    setState((s) => deleteContribution(s, categoryId, entryId));
+  }
+
   function addSnapshot(categoryId, amount, date) {
     setState((s) => addBalanceSnapshot(s, categoryId, amount, date));
   }
@@ -553,6 +564,11 @@ export default function App() {
               onDeleteAccountSnapshot={deleteAcctSnapshot}
               onSetupLoan={setupLoanHandler}
               onSetupAsset={setupAssetHandler}
+              onDeleteCategory={deleteTrackerCategory}
+              countTagged={(catId) => countTaggedItems(state, catId)}
+              onAddContribution={logContribution}
+              onUpdateContribution={editContribution}
+              onDeleteContribution={removeContribution}
             />
           ) : (
             <SpendingView

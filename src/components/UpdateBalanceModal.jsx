@@ -10,7 +10,10 @@ const money = (n) =>
 // The amount field starts EMPTY on purpose (placeholder shows the current
 // figure): pre-filling it would make one stray Confirm re-log the same
 // number as a fresh snapshot dated today.
-export default function UpdateBalanceModal({ account, onConfirm, onClose }) {
+// Also used, with copy overrides, to log a contribution — it is already
+// exactly amount + date + Confirm, and a near-identical second modal would
+// be two places to fix every future change to this interaction.
+export default function UpdateBalanceModal({ account, onConfirm, onClose, title, blurb, amountLabel, cta }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayISO());
   const valid = amount !== "" && !isNaN(Number(amount)) && !!date;
@@ -29,16 +32,20 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose }) {
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-sm shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold mb-1">Update {account.name} balance</h2>
+        <h2 className="text-lg font-semibold mb-1">{title ?? `Update ${account.name} balance`}</h2>
         <p className="text-xs text-gray-500 mb-4">
-          Enter what the bank actually shows and when you checked it. Everything dated before that
-          is treated as already inside this number; the forecast builds forward from it.
-          Currently {money(account.balance)}, verified {account.balanceAsOf}.
+          {blurb ?? (
+            <>
+              Enter what the bank actually shows and when you checked it. Everything dated before that
+              is treated as already inside this number; the forecast builds forward from it.
+              Currently {money(account.balance)}, verified {account.balanceAsOf}.
+            </>
+          )}
         </p>
 
         <div className="space-y-3">
           <div>
-            <label className={label}>Current balance</label>
+            <label className={label}>{amountLabel ?? "Current balance"}</label>
             <input
               className={field}
               type="number"
@@ -47,7 +54,7 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose }) {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") confirm(); }}
-              placeholder={String(account.balance)}
+              placeholder={account.balance == null ? "0.00" : String(account.balance)}
             />
           </div>
           <div>
@@ -65,7 +72,7 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose }) {
             disabled={!valid}
             className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40"
           >
-            Confirm
+            {cta ?? "Confirm"}
           </button>
         </div>
       </div>

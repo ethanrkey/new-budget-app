@@ -12,7 +12,7 @@
 //    biweekly/weekly bill can land 2 or 3 times in a given month — same
 //    "2 vs 3 paydays" reality already true for paychecks) vs. whatever real
 //    total was logged in monthlyActuals.
-import { buildAllEvents, occurrenceDates } from "./generate.js";
+import { occurrenceDates } from "./generate.js";
 import { primaryAccount } from "./model.js";
 
 function round(n) { return Math.round(n * 100) / 100; }
@@ -41,7 +41,7 @@ function sortedSnapshots(state, categoryId) {
 // market-exposed it conflates market movement with transactions that were
 // never recorded — so a "variance" said nothing useful about either. The
 // balance history itself already answers "is this growing the way I expect",
-// and `computeContributionsByYear` is the honest companion stat.
+// and `computeLoggedContributions` is the honest companion stat.
 //
 // NOTE the deliberate asymmetry: LOANS keep their projected line
 // (engine/loans.js). Amortization is real math about a known quantity —
@@ -68,20 +68,43 @@ export function computeMonthVariance(item, monthlyActuals, monthKey) {
   };
 }
 
-// Sum of a category's transactions grouped by calendar year, through
-// `asOfISO` — a growth-independent number (unlike a market-exposed
-// account's balance) that tells you how much you've actually put in
-// (or, for a debt category, paid down) regardless of what the balance
-// itself is doing. { "2026": 3600, "2025": 6000, ... }, most recent first.
-export function computeContributionsByYear(state, categoryId, asOfISO) {
-  const events = buildAllEvents(state, asOfISO).filter((e) => e.category === categoryId && e.date <= asOfISO);
+// What you ACTUALLY put in, from the contribution log — never from the ledger.
+// Summing tagged ledger transactions (which is what this used to do) counts
+// PLANNED contributions and calls them contributed: a forecast wearing the
+// label of a fact, the same error as the projected line that was removed from
+// these cards. A contribution counts only once you've logged it.
+//
+// `entries` comes back oldest -> newest for the editable history list, and
+// `byYear` newest year first for the stat. `total` is all of it. An account
+// you never log (a 401k deducted before the paycheck, say) reports
+// `logged: false` so the card can say "not tracked" instead of "$0.00" —
+// zero-because-unrecorded and zero-because-you-contributed-nothing are
+// different claims and must not look alike.
+//
+// Entries carry `source` ("manual" today; an importer writes its own), so
+// Plaid-imported contributions land in this same list and everything here
+// keeps working unchanged.
+export function computeLoggedContributions(state, categoryId, asOfISO) {
+  const all = [...(state.contributionLog?.[categoryId] || [])].sort((a, b) =>
+    a.date === b.date ? 0 : a.date < b.date ? -1 : 1
+  );
+  const entries = asOfISO ? all.filter((c) => c.date <= asOfISO) : all;
+
   const byYear = {};
-  for (const e of events) {
-    const y = e.date.slice(0, 4);
-    byYear[y] = round((byYear[y] || 0) + e.amount);
+  let total = 0;
+  for (const c of entries) {
+    const y = c.date.slice(0, 4);
+    byYear[y] = round((byYear[y] || 0) + c.amount);
+    total = round(total + c.amount);
   }
-  return Object.fromEntries(Object.entries(byYear).sort((a, b) => (a[0] < b[0] ? 1 : -1)));
+  return {
+    entries,
+    total,
+    byYear: Object.fromEntries(Object.entries(byYear).sort((a, b) => (a[0] < b[0] ? 1 : -1))),
+    logged: all.length > 0,
+  };
 }
+
 
 // The Dashboard hero: overall net position, built ONLY from reality-layer
 // numbers — the verified checking balance (never the projected ledger

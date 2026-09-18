@@ -81,6 +81,7 @@ holds it in React state; every mutation is a pure function in
       originalPrincipal?, interestRate? /* APR % */, interestStartDate? }
   ],
   balanceSnapshots: { [categoryId]: [ { id, date, amount } ] },  // logged balances (assets) / logged outstanding (loans)
+  contributionLog:  { [categoryId]: [ { id, date, amount, source, externalId? } ] }, // what you ACTUALLY put in
   accountSnapshots: { [accountId]:  [ { id, date, amount } ] },  // one per confirmed checking-balance update
   monthlyActuals:   { [itemId]: { "YYYY-MM": amount } },         // real total for a variable bill/payment that month
 }
@@ -160,7 +161,10 @@ every load and is **idempotent and deterministic** (fixed seed ids, never
    `settings.checkInBalance/checkInDate`; items stamped with `accountId`;
    `accountSnapshots` seeded with that balance. (The Phase 1 mirror back
    into settings was retired in Phase 2; the legacy fields are stripped.)
-6. loan terms on a payment item → moved onto its debt category; item kept as
+6. `contributionLog` absent → `{}`. Deliberately NOT backfilled from ledger
+   transactions: those are a forecast, and inventing a contribution history
+   from a plan is exactly the error the feature exists to correct.
+7. loan terms on a payment item → moved onto its debt category; item kept as
    a payment; a second configured item in the same category spawns its own
    category (`loan-<itemId>`); balance anchor seeded as `originalPrincipal`
    as of the payment's start only if the user never logged one.
@@ -202,6 +206,24 @@ Conventions worth knowing before touching numbers:
   balance aren't knowable.
 - **Loan projections anchor to the last logged value** (+ interest − payments
   since) and self-correct on every log. Nothing invents a "today" snapshot.
+- **"Contributed" is logged, never derived** (`computeLoggedContributions`,
+  2026-09-18). It used to sum ledger transactions tagged to the category —
+  but the ledger is a forecast, so that was *planned* contributions wearing
+  the label of a fact, the same error as the projected line. Contributions are
+  now logged one entry at a time and nothing else counts. An account with no
+  entries reports `logged: false` and the card shows "—", never `$0.00`:
+  zero-because-unrecorded and zero-because-you-contributed-nothing are
+  different claims and must not look alike (a 401k deducted pre-paycheck is
+  the motivating case). Entries carry `source` ("manual" today) and an
+  optional `externalId`, which is the slot a Plaid/bank import drops into —
+  imported contributions are the same shape, not a parallel system.
+- **A deleted category orphans its transactions; it never reassigns them.**
+  `generate.js` resolves an unknown category to `direction: "out"`, and the
+  harness asserts a delete leaves every event, ledger row and budget column
+  byte-identical. The subtle half was in the UI: a controlled `<select>` whose
+  value matches no option falls back to `selectedIndex 0`, which is `Income`,
+  so an orphaned OUTFLOW *displayed* as income and was one click from becoming
+  it. EventForm now renders an explicit "Uncategorized (deleted)" option.
 - **Assets have no projection, deliberately** (removed 2026-09-18). They used
   to carry "last snapshot + contributions since" as a dashed line and a
   "vs. projected" stat. For a cash account that's arithmetic the user can do
@@ -267,7 +289,12 @@ fifth tab never needs a migration.
   debt section. Asset cards show ONE line — the balances you logged — plus
   contributions (this year / all time). Loan cards show logged outstanding,
   percent-paid-off bar, terms, planned vs. paid this month, and keep their
-  dashed amortization line.
+  dashed amortization line. Both card kinds carry "Edit", which is also where
+  delete lives — a primary action shouldn't be buried in Settings → Categories
+  (that path still works). Deleting is confirmed with the number of
+  transactions tagged to the category (`countTaggedItems`), because those are
+  SCHEDULED transactions in a forecast: they survive, uncategorized, and
+  silently removing them would change the forecast without saying so.
   **The debt section collapses to a single card** (`DebtSection`, collapsed by
   default, remembered per device). Collapsed, one root card carries both the
   overview — total owed from `computeDebtSummary`, then every loan as a
@@ -355,7 +382,7 @@ Later:
   can be lived with on one section before it's generalized — one concrete
   implementation is easier to change or delete than a premature abstraction.
 - Asset cards show what you logged and what you contributed — never a
-  projection. See the conventions above; the user's framing was that
+  projection, and never a plan restyled as a fact. See the conventions above; the user's framing was that
   contributions-only is the honest stat.
 - "Expected remaining vs. actual remaining" is never shown for a loan; it
   only scolds. Percent paid off is the motivating framing.

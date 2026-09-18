@@ -7,11 +7,13 @@ import ColorSwatches from "./ColorSwatches.jsx";
 // never creates a contribution. A new one also logs what's in it today as its
 // first snapshot, the anchor its card projects from. The Settings → Categories
 // path still exists and does the same thing minus the opening balance.
-export default function AssetSetupModal({ isDark, onSave, onClose }) {
-  const [name, setName] = useState("");
-  const [color, setColor] = useState(0);
+export default function AssetSetupModal({ initial, taggedCount = 0, isDark, onSave, onDelete, onClose }) {
+  const isNew = !initial;
+  const [name, setName] = useState(initial?.name ?? "");
+  const [color, setColor] = useState(initial?.color ?? 0);
   const [balance, setBalance] = useState("");
   const [asOf, setAsOf] = useState(todayISO());
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const valid = name.trim() !== "" && (balance === "" || !isNaN(Number(balance)));
 
@@ -19,11 +21,11 @@ export default function AssetSetupModal({ isDark, onSave, onClose }) {
     if (!valid) return;
     const hasBalance = balance !== "" && !isNaN(Number(balance));
     onSave({
-      categoryId: null,
+      categoryId: initial?.id ?? null,
       name: name.trim(),
       color,
-      balance: hasBalance ? Number(balance) : null,
-      asOf: hasBalance ? asOf : null,
+      balance: isNew && hasBalance ? Number(balance) : null,
+      asOf: isNew && hasBalance ? asOf : null,
     });
   }
 
@@ -36,7 +38,7 @@ export default function AssetSetupModal({ isDark, onSave, onClose }) {
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-semibold mb-1">Add an account</h2>
+        <h2 className="text-lg font-semibold mb-1">{isNew ? "Add an account" : `Edit ${initial.name}`}</h2>
         <p className="text-xs text-gray-500 mb-4">
           Savings, a Roth, a brokerage — anything you want a balance and a history for. Money you put
           into it is an ordinary transaction that picks this account as its category.
@@ -51,6 +53,7 @@ export default function AssetSetupModal({ isDark, onSave, onClose }) {
             <label className={label}>Color</label>
             <ColorSwatches value={color} onChange={setColor} isDark={isDark} />
           </div>
+          {isNew && (
           <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
             <div className="flex-1">
               <label className={label}>Balance today (optional)</label>
@@ -61,17 +64,57 @@ export default function AssetSetupModal({ isDark, onSave, onClose }) {
               <input className={field} type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} />
             </div>
           </div>
-          <p className="text-xs text-gray-400">
-            Skip the balance if you don&apos;t know it — the card will ask for it later.
-          </p>
+          )}
+          {isNew && (
+            <p className="text-xs text-gray-400">
+              Skip the balance if you don&apos;t know it — the card will ask for it later.
+            </p>
+          )}
         </div>
 
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">Cancel</button>
           <button onClick={save} disabled={!valid} className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40">
-            Add account
+            {isNew ? "Add account" : "Save"}
           </button>
         </div>
+
+        {/* Delete lives here rather than being buried in Settings → Categories.
+            The count is the point: these are SCHEDULED transactions in a
+            forecast, so deleting them silently would change the forecast
+            without saying so. They stay, uncategorized. */}
+        {!isNew && onDelete && (
+          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+            {confirmDelete ? (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  Delete {initial.name}?{" "}
+                  {taggedCount > 0 ? (
+                    <>
+                      {taggedCount} transaction{taggedCount === 1 ? "" : "s"} tagged to this account
+                      will remain in your ledger, uncategorized.
+                    </>
+                  ) : (
+                    <>No transactions are tagged to it.</>
+                  )}{" "}
+                  Its logged balances and contributions are deleted.
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setConfirmDelete(false)} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">
+                    Keep it
+                  </button>
+                  <button onClick={onDelete} className="flex-1 py-2 rounded-lg bg-expense text-white text-sm font-medium">
+                    Delete account
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)} className="text-xs text-gray-400 hover:text-expense">
+                Delete this account
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

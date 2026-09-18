@@ -32,8 +32,10 @@ card showing what you owe in total and a scrolling list of each loan, which
 expands into a card per loan when you want the detail.
 
 Then a card per account. Savings and investment cards chart the balances you've
-logged — just that one line — plus what you've actually contributed this year
-or all time. There's no projected line on them on purpose: for a savings
+logged — just that one line — plus what you've actually contributed, logged one
+contribution at a time. Not summed from the ledger: the ledger is a plan, and a
+plan labelled "contributed" is a lie you tell yourself. An account you never log
+(a 401k taken out before the paycheck) says so rather than claiming $0.00. There's no projected line on them on purpose: for a savings
 account it's arithmetic you can do in your head, and for anything market-
 exposed it can't tell a market dip apart from a transaction you never recorded.
 Loan cards show the outstanding balance you

@@ -137,6 +137,13 @@ export const CATEGORIES = {
       // here — same { id, date, amount } entries as balanceSnapshots below,
       // so a history chart can treat account and category history alike.
       accountSnapshots: {}, // { [accountId]: [{ id, date, amount }, ...] }
+      // Contributions you actually made, logged one by one — NOT derived from
+      // the ledger (which is a forecast; summing it would be planned
+      // contributions wearing the label of a fact). `source` marks where an
+      // entry came from: "manual" today, and the slot a Plaid/bank import
+      // drops into later, alongside an optional `externalId` for dedupe —
+      // imported contributions are the same shape, not a parallel system.
+      contributionLog: {}, // { [categoryId]: [{ id, date, amount, source, externalId? }] }
       // Real, actual-world numbers you log yourself — never generated from
       // transactions — used to reconcile the forecast against reality (the
       // Dashboard tab). See engine/progress.js for how these are used.

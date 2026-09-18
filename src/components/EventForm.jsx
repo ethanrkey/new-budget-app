@@ -20,6 +20,13 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
   const [confirmDelete, setConfirmDelete] = useState(false);
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
   const selectedCat = sortedCats.find((c) => c.id === category);
+  // The item's category was deleted. A <select> whose value matches no option
+  // falls back to selectedIndex 0 — which is "Income" — so an orphaned OUTFLOW
+  // silently read as income in this form, one click away from becoming true.
+  // Give it a real option instead: the orphan stays an orphan, keeps its
+  // direction, and saving is a no-op on the category.
+  const isOrphan =
+    !CATEGORIES[category] && !selectedCat && category != null && category !== "";
   const isDebtCategory = mode === "recurring" && selectedCat?.kind === "debt";
   // "Track actual vs. budgeted" applies to any recurring bill, any cadence —
   // a biweekly/weekly variable bill's logged monthly total just splits
@@ -96,6 +103,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
             <div className="flex-1">
               <label className={label}>Category</label>
               <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
+                {isOrphan && <option value={category}>Uncategorized (deleted)</option>}
                 {Object.entries(CATEGORIES).map(([k, v]) => (
                   <option key={k} value={k}>{v.label}</option>
                 ))}

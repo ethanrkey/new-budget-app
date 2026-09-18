@@ -181,6 +181,12 @@ export function normalize(parsed) {
     // simply never had any actuals logged yet, same as paidOverrides above.
     balanceSnapshots: balanceSnapshotsOut,
     monthlyActuals: parsed.monthlyActuals || {},
+    // Contributions logged by hand (or, later, imported). Absent on every
+    // account that predates the feature — an empty log is the correct and
+    // honest starting point, since we can't know what was contributed before
+    // anyone was recording it. Deliberately NOT backfilled from ledger
+    // transactions: those are a forecast.
+    contributionLog: parsed.contributionLog || {},
     accountSnapshots,
   };
 }
