@@ -298,9 +298,11 @@ fifth tab never needs a migration.
   **The debt section collapses to a single card** (`DebtSection`, collapsed by
   default, remembered per device). Collapsed, one root card carries both the
   overview — total owed from `computeDebtSummary`, then every loan as a
-  compact scrolling list — and "+ Add loan". Expanded, that same root card
-  swaps its content for the add card plus "Collapse debts", and the loan cards
-  fan out after it with a staggered enter/exit. The root card is always first
+  compact scrolling list — and "+ Add loan", top-right. Expanded, that same
+  root card swaps its content for the add card and the loan cards fan out
+  after it with a staggered enter/exit. The expand/collapse control sits
+  bottom-RIGHT in both states ("Show N loans ›" / "‹ Minimize"), so it never
+  moves between them, and its chevron points the way the cards travel. The root card is always first
   in the debt run and never moves, so toggling doesn't shuffle the grid under
   the cursor. "+ Add loan" while collapsed expands the section too — a new
   category takes `max(order)+1`, so it lands last. With no debt categories at

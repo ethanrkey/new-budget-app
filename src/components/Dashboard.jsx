@@ -178,16 +178,8 @@ function Hero({ net }) {
         className="w-full flex items-center justify-between gap-3 py-1 text-left group"
       >
         <span className={LABEL}>Net position</span>
-        {/* A real stroked chevron, not the ▾ glyph — at this size the glyph
-            renders as a small solid blob that reads as a dot. */}
         <span className="shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-gray-500 group-hover:bg-gray-100 dark:group-hover:bg-gray-800 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
-          <svg
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
-            className={`h-4 w-4 transition-transform duration-300 motion-reduce:transition-none ${collapsed ? "" : "rotate-180"}`}
-          >
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+          <Chevron className={`h-4 w-4 transition-transform duration-300 motion-reduce:transition-none ${collapsed ? "" : "rotate-180"}`} />
         </span>
       </button>
 
@@ -579,6 +571,20 @@ function AddAssetCard({ onAdd }) {
 // Deliberately NOT generalized into a <CollapsibleSection> yet — assets keep
 // their flat layout until this has been lived with. One concrete
 // implementation is easier to delete or change than a premature abstraction.
+// Stroked chevron. The ▾ glyph renders as a solid blob at this size and reads
+// as a dot, which is exactly the note the hero's version got.
+const CHEVRON_PATH = { down: "M6 9l6 6 6-6", right: "M9 6l6 6-6 6", left: "M15 6l-6 6 6 6" };
+function Chevron({ dir = "down", className = "h-4 w-4" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}
+    >
+      <path d={CHEVRON_PATH[dir]} />
+    </svg>
+  );
+}
+
 const DEBTS_PREF = "debts-expanded";
 const FAN_MS = 260;      // must match the duration classes below
 const STAGGER_MS = 45;   // per-card delay, so they fan rather than pop together
@@ -683,13 +689,16 @@ function FanIn({ shown, index, count, children }) {
 function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan }) {
   return (
     <section className={CARD}>
-      <div>
-        <div className={LABEL}>Debt</div>
-        <div className="mt-1 text-2xl font-semibold tabular-nums">{money(summary.total)}</div>
-        <div className="text-xs text-gray-500">
-          {summary.count} loan{summary.count === 1 ? "" : "s"}
-          {summary.unlogged > 0 && ` · ${summary.unlogged} not logged yet`}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className={LABEL}>Debt</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{money(summary.total)}</div>
+          <div className="text-xs text-gray-500">
+            {summary.count} loan{summary.count === 1 ? "" : "s"}
+            {summary.unlogged > 0 && ` · ${summary.unlogged} not logged yet`}
+          </div>
         </div>
+        <button onClick={onAddLoan} className={`${BTN} shrink-0`}>+ Add loan</button>
       </div>
 
       <div className="grow min-h-0 -mx-1 max-h-52 overflow-y-auto">
@@ -710,11 +719,14 @@ function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan }) {
         </ul>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <button onClick={onExpand} className={BTN} aria-expanded={false}>
+      {/* The expand/collapse control sits bottom-RIGHT in both states — same
+          spot whether the section is open or closed — and its chevron points
+          the way the cards actually move: right to fan out, left to fold back. */}
+      <div className="mt-auto flex justify-end">
+        <button onClick={onExpand} className={`${BTN} inline-flex items-center gap-1.5`} aria-expanded={false}>
           Show {summary.count} loan{summary.count === 1 ? "" : "s"}
+          <Chevron dir="right" className="h-3.5 w-3.5" />
         </button>
-        <button onClick={onAddLoan} className={BTN}>+ Add loan</button>
       </div>
     </section>
   );
@@ -722,15 +734,18 @@ function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan }) {
 
 function AddLoanCard({ onAdd, onCollapse }) {
   return (
-    <section className={`${CARD} border-dashed justify-center items-start`}>
+    <section className={`${CARD} border-dashed items-start`}>
       <div className={LABEL}>Loans</div>
       <p className="text-sm text-gray-500">Car loan, mortgage, student loan — a loan is its own category; payments tag to it like Roth contributions tag to Roth.</p>
-      <div className="flex flex-wrap gap-2">
-        <button onClick={onAdd} className={BTN}>+ Add loan</button>
-        {onCollapse && (
-          <button onClick={onCollapse} className={BTN} aria-expanded>Collapse debts</button>
-        )}
-      </div>
+      <button onClick={onAdd} className={BTN}>+ Add loan</button>
+      {onCollapse && (
+        <div className="mt-auto w-full flex justify-end">
+          <button onClick={onCollapse} className={`${BTN} inline-flex items-center gap-1.5`} aria-expanded>
+            <Chevron dir="left" className="h-3.5 w-3.5" />
+            Minimize
+          </button>
+        </div>
+      )}
     </section>
   );
 }
