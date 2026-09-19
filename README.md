@@ -1,4 +1,4 @@
-# Budget
+# Key Budget
 
 A personal cash-flow app that keeps **what you plan** and **what actually
 happened** in separate, honest columns.

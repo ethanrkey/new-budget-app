@@ -25,3 +25,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Throwaway browser-verification harness (created per session, deleted after).
+# Belt and braces: teardown removes these, and this makes sure a missed
+# teardown can never commit one.
+mobile-preview.html
+src/mobile-preview-entry.jsx
+.tmp-*.mjs

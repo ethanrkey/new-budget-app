@@ -2,9 +2,36 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Key Budget</title>
+    <meta name="description" content="Personal cash-flow forecasting with a reality check." />
+
+    <!-- Favicons. The SVG is what modern desktop browsers draw in the tab; the
+         PNGs cover everything that won't take an SVG. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+
+    <!-- iOS home screen. These are full-bleed squares on purpose: iOS applies
+         its own rounded mask and fills any transparency with black. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/apple-touch-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-152.png" />
+    <meta name="apple-mobile-web-app-title" content="Key Budget" />
+    <!-- Legacy, but iOS still honours it alongside the manifest's
+         display:standalone — keeping both is what actually drops the browser
+         chrome when launched from the home screen. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Per-scheme so the status bar matches whichever theme this device is
+         using (the app's theme is per device — see src/theme.js). These are
+         the page's own background colors: gray-50 and gray-950. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9fafb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#030712" />
   </head>
   <body>
     <div id="root"></div>

@@ -1,4 +1,4 @@
-# PROJECT_SPEC — new-budget-app
+# PROJECT_SPEC — Key Budget (repo: new-budget-app)
 
 **This document must always match the code.** Any change that makes it wrong is
 updated in the same commit (see *Maintenance rules*). Last full rewrite:
@@ -24,6 +24,19 @@ Two layers, deliberately kept apart:
 Ledger and Budget never disagree because both are derived from the same event
 list. The Dashboard never *projects* checking; it shows the verified balance.
 The Ledger owns projection.
+
+## 1a. Name, icon, PWA
+
+The app is **Key Budget**. `index.html` carries the title, description, the
+favicon set and the iOS home-screen icons; `public/manifest.webmanifest` makes
+it installable (`display: standalone`, so a home-screen launch has no browser
+chrome). Icons are generated, not hand-drawn — a key in white on gray-900
+(`#111827`), full-bleed for iOS (which masks the corners itself and fills any
+transparency with black) and rounded for the browser tab. The small sizes use a
+one-tooth key because two teeth smear together at 16px. `theme-color` is
+declared per color-scheme so the status bar matches whichever theme that device
+is on. To regenerate the icons, render `public/favicon.svg`'s geometry at each
+size (the last pass used headless Chrome).
 
 ## 2. Status
 
