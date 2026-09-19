@@ -30,10 +30,16 @@ The Ledger owns projection.
 The app is **Key Budget**. `index.html` carries the title, description, the
 favicon set and the iOS home-screen icons; `public/manifest.webmanifest` makes
 it installable (`display: standalone`, so a home-screen launch has no browser
-chrome). Icons are generated, not hand-drawn — a key in white on gray-900
-(`#111827`), full-bleed for iOS (which masks the corners itself and fills any
-transparency with black) and rounded for the browser tab. The small sizes use a
-one-tooth key because two teeth smear together at 16px. `theme-color` is
+chrome). Icons are generated, not hand-drawn — a horizontal brass key (🔑-shaped: bow
+left, shaft right, teeth under the tip) on gray-900 (`#111827`), sized to about
+68% of the tile so it has real padding. Full-bleed for iOS (which masks the
+corners itself and fills any transparency with black), rounded for the browser
+tab. The small sizes use a ONE-tooth key in flat gold because at 16px two teeth
+merge into a single blob and a gradient just muddies; ring and shaft are
+identical across both builds so it stays one key. Any gradient here must use
+`gradientUnits="userSpaceOnUse"` — the shaft and teeth are straight lines with
+zero-height/width bounding boxes, and a default objectBoundingBox gradient is
+degenerate on those, so they silently do not paint at all. `theme-color` is
 declared per color-scheme so the status bar matches whichever theme that device
 is on. To regenerate the icons, render `public/favicon.svg`'s geometry at each
 size (the last pass used headless Chrome).
