@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { todayISO } from "../engine/model.js";
 import ColorSwatches from "./ColorSwatches.jsx";
+import { useSubmitOnce } from "../useSubmitOnce.js";
 
 // Set up (or edit the terms of) a loan — which is a debt-kind category, so
 // this is deliberately NOT the transaction editor. Setting up a loan never
@@ -26,7 +27,7 @@ export default function LoanSetupModal({ initial, presetName, taggedCount = 0, i
     (interestRate === "" || !isNaN(Number(interestRate))) &&
     (!isNew || (outstanding !== "" && !isNaN(Number(outstanding)) && !!asOf));
 
-  function save() {
+  const [save, submitted] = useSubmitOnce(() => {
     if (!valid) return;
     onSave({
       categoryId: initial?.id ?? null,
@@ -38,7 +39,7 @@ export default function LoanSetupModal({ initial, presetName, taggedCount = 0, i
       outstanding: isNew ? Math.abs(Number(outstanding)) : null,
       asOf: isNew ? asOf : null,
     });
-  }
+  });
 
   const field = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
   const label = "block text-xs font-medium text-gray-500 mb-1";
@@ -97,7 +98,7 @@ export default function LoanSetupModal({ initial, presetName, taggedCount = 0, i
 
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">Cancel</button>
-          <button onClick={save} disabled={!valid} className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40">
+          <button onClick={save} disabled={!valid || submitted} className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40">
             {isNew ? "Set up loan" : "Save terms"}
           </button>
         </div>

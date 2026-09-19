@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.js";
 import ColorSwatches from "./ColorSwatches.jsx";
+import { useSubmitOnce } from "../useSubmitOnce.js";
 
 export default function EventForm({ onSave, onCancel, onDelete, initial, trackerCategories = [], isDark, presetCategory }) {
   // presetCategory (e.g. from the Dashboard's "+ Add a loan" shortcut on an
@@ -37,7 +38,9 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
   // event stream.
   const showVariableToggle = mode === "recurring" && (category === "bill" || isDebtCategory);
 
-  function submit() {
+  // `id: initial?.id ?? uid()` means a double-fire on a NEW item mints a
+  // second id and saves a duplicate transaction, not an overwrite.
+  const [submit, submitted] = useSubmitOnce(() => {
     if (!name || amount === "" || isNaN(Number(amount))) return;
     const base = {
       id: initial?.id ?? uid(),
@@ -59,7 +62,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
     } else {
       onSave({ ...base, date });
     }
-  }
+  });
 
   const field = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
   const label = "block text-xs font-medium text-gray-500 mb-1";
@@ -177,7 +180,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
 
         <div className="flex gap-3 mt-6">
           <button onClick={onCancel} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">Cancel</button>
-          <button onClick={submit} className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium">Save</button>
+          <button onClick={submit} disabled={submitted} className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40">Save</button>
         </div>
 
         {onDelete && (

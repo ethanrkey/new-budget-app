@@ -256,9 +256,19 @@ Conventions worth knowing before touching numbers:
   intentional:** amortization is real math about a known quantity. Don't
   "tidy up" by stripping both; the harness asserts loan history still
   carries `expected`.
-- **A variable item's logged monthly actual replaces the estimate** in the
-  event stream for that month (split evenly across multiple same-month
-  instances), so Ledger/Budget/amortization all see the real number.
+- **Nothing logged anywhere changes a forecast number** (2026-09-19). A
+  variable item's logged monthly actual used to substitute into the event
+  stream, split across that month's instances — so a $150 biweekly rule with
+  $150 logged for a two-instance month rendered as two $75 rows, and editing
+  the rule appeared to do nothing for that month. Removed: `makeEvent` always
+  uses the rule's amount, and the even-split machinery went with it. The
+  Ledger and Budget are the forecast and are built from rules alone, exactly
+  like logged balances and logged contributions never write back either.
+  `monthlyActuals` is untouched and is what the Spending tab compares against
+  `computeMonthVariance`'s rule-derived expected. One consequence worth
+  knowing: loan amortization reads payments from `buildAllEvents`, so it now
+  amortizes the PLANNED payment rather than the logged one — reality for a
+  loan comes from its logged balance, which is the anchor anyway.
 - **The Budget grid's starting-balance row is labeled with the account's
   name**, but the CSV export writes the fixed label `Checking` because
   `parseBudgetCSV` keys that number off the label. It also accepts the older

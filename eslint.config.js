@@ -5,7 +5,10 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist'] },
+  // 'dist' is build output; the other two are the throwaway browser-
+  // verification harness (see .gitignore) — linting a scratch file adds
+  // noise to a run that is supposed to be clean.
+  { ignores: ['dist', 'mobile-preview.html', 'src/mobile-preview-entry.jsx', '.tmp-*.mjs'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {

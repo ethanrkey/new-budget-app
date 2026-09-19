@@ -89,6 +89,7 @@ export default function Dashboard({
         <DebtSection
           summary={computeDebtSummary(state)}
           debtCats={debtCats}
+          onEditLoanById={(id) => setLoanModal({ cat: debtCats.find((c) => c.id === id) })}
           isDark={isDark}
           state={state}
           today={today}
@@ -416,7 +417,7 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onL
           <>
             <div className="text-gray-300 dark:text-gray-600 text-2xl leading-tight">—</div>
             <div className="text-xs text-gray-400">
-              Nothing logged yet. Fine to leave empty for an account you never see the money go into.
+              Nothing logged yet.
             </div>
           </>
         )}
@@ -589,7 +590,7 @@ const DEBTS_PREF = "debts-expanded";
 const FAN_MS = 260;      // must match the duration classes below
 const STAGGER_MS = 45;   // per-card delay, so they fan rather than pop together
 
-function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog, onEditTerms, onUpdateSnapshot, onDeleteSnapshot }) {
+function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog, onEditTerms, onEditLoanById, onUpdateSnapshot, onDeleteSnapshot }) {
   const [expanded, setExpanded] = useState(() => getDeviceFlag(DEBTS_PREF, false));
   // A grid item can't collapse to nothing without leaving a hole in the grid,
   // so the loan cards genuinely mount and unmount. `closing` keeps them
@@ -636,7 +637,7 @@ function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog
   return (
     <>
       {hasDebts && !visible ? (
-        <DebtOverviewCard summary={summary} isDark={isDark} onExpand={open} onAddLoan={addLoan} />
+        <DebtOverviewCard summary={summary} isDark={isDark} onExpand={open} onAddLoan={addLoan} onEditLoan={onEditLoanById} />
       ) : (
         <AddLoanCard onAdd={onAddLoan} onCollapse={hasDebts ? close : undefined} />
       )}
@@ -686,7 +687,7 @@ function FanIn({ shown, index, count, children }) {
 // The collapsed state: total owed, then every loan in a compact scrolling
 // list. The list scrolls rather than capping the count — "just show the first
 // five" would hide exactly the loan someone is looking for.
-function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan }) {
+function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan, onEditLoan }) {
   return (
     <section className={CARD}>
       <div className="flex items-start justify-between gap-3">
@@ -704,16 +705,24 @@ function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan }) {
       <div className="grow min-h-0 -mx-1 max-h-52 overflow-y-auto">
         <ul className="px-1 space-y-1.5">
           {summary.loans.map((loan) => (
-            <li key={loan.id} className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="flex items-baseline gap-1.5 min-w-0">
-                <span className="h-1.5 w-1.5 rounded-full shrink-0 self-center" style={{ backgroundColor: paletteColor(loan.color, isDark) }} />
-                <span className="truncate text-gray-700 dark:text-gray-300">{loan.name}</span>
-              </span>
-              <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">
-                {loan.outstanding == null
-                  ? <span className="text-xs text-gray-400">not logged</span>
-                  : money(loan.outstanding)}
-              </span>
+            <li key={loan.id}>
+              {/* The row is the way into that loan — otherwise editing one
+                  means expanding the section first, which is a detour. */}
+              <button
+                onClick={() => onEditLoan(loan.id)}
+                title={`Edit ${loan.name}`}
+                className="w-full flex items-baseline justify-between gap-3 text-sm text-left rounded-md px-1 -mx-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <span className="flex items-baseline gap-1.5 min-w-0">
+                  <span className="h-1.5 w-1.5 rounded-full shrink-0 self-center" style={{ backgroundColor: paletteColor(loan.color, isDark) }} />
+                  <span className="truncate text-gray-700 dark:text-gray-300">{loan.name}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">
+                  {loan.outstanding == null
+                    ? <span className="text-xs text-gray-400">not logged</span>
+                    : money(loan.outstanding)}
+                </span>
+              </button>
             </li>
           ))}
         </ul>

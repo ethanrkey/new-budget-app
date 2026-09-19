@@ -276,9 +276,6 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
             </td>
             <td className={`py-2 sm:py-1.5 pr-3 text-right text-expense ${r.paidOverride ? "line-through opacity-40" : ""}`}>
               {r.direction === "out" ? money(r.amount) : ""}
-              {r.isActual && (
-                <span title="Uses a logged actual amount, not the budgeted estimate (Dashboard)" className="ml-1 text-gray-400">•</span>
-              )}
             </td>
             <td className={`py-2 sm:py-1.5 pr-3 text-right font-medium ${r.negative ? "text-expense" : ""}`}>
               {money(r.balance)}

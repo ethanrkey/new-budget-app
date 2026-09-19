@@ -4,7 +4,6 @@ import { CATEGORIES, primaryAccount, toISODate } from "./model.js";
 // Local calendar date — see toISODate in model.js for why not toISOString.
 function iso(d) { return toISODate(d); }
 function parse(isoStr) { return new Date(isoStr + "T00:00:00"); }
-function round(n) { return Math.round(n * 100) / 100; }
 
 // Every date a recurring rule fires, from its own startDate up to
 // `horizonISO` (respecting its own endDate). Exported so callers that need
@@ -41,31 +40,18 @@ export function buildAllEvents(state, horizonISO) {
   const horizon = parse(horizonISO);
 
   const paidOverrides = state.paidOverrides || {};
-  const monthlyActuals = state.monthlyActuals || {};
 
-  // 1) expand each recurring rule. A logged monthly actual is a TOTAL for
-  //    the month, not a per-instance amount — so for a weekly/biweekly rule
-  //    that fires more than once in that month (gas, groceries bought every
-  //    couple weeks), split it evenly across however many instances
-  //    actually land there, rather than assuming exactly one (which only
-  //    monthly-cadence rules guarantee).
+  // 1) expand each recurring rule
   for (const rule of state.recurring) {
-    const dates = occurrenceDates(rule, horizonISO);
-    const countByMonth = new Map();
-    for (const dt of dates) {
-      const mk = dt.slice(0, 7);
-      countByMonth.set(mk, (countByMonth.get(mk) || 0) + 1);
-    }
-    for (const dt of dates) {
-      const countInMonth = countByMonth.get(dt.slice(0, 7));
-      events.push(makeEvent(rule, dt, paidOverrides, monthlyActuals, countInMonth));
+    for (const dt of occurrenceDates(rule, horizonISO)) {
+      events.push(makeEvent(rule, dt, paidOverrides));
     }
   }
 
   // 2) add one-offs within horizon
   for (const o of state.oneoffs) {
     if (parse(o.date) <= horizon) {
-      events.push(makeEvent(o, o.date, paidOverrides, monthlyActuals, 1));
+      events.push(makeEvent(o, o.date, paidOverrides));
     }
   }
 
@@ -98,30 +84,29 @@ export function buildEvents(state, horizonISO) {
 // paid for that month. The event still appears (so it stays visible), but its
 // magnitude is zeroed so it stops moving the balance / budget totals again.
 //
-// `monthlyActuals` is `{ [itemId]: { "YYYY-MM": amount } }` — the real TOTAL
-// for a variable bill (electric, groceries, gas: the estimate is never
-// exact) in a given month, logged from the Dashboard, independent of any
-// specific dated instance. Once logged, it REPLACES the rule's flat
-// estimate — split evenly across `countInMonth` instances when the rule
-// fires more than once that month — so forward projections compound off
-// the real number instead of a stale guess the moment it's known.
-function makeEvent(src, date, paidOverrides, monthlyActuals, countInMonth = 1) {
+// An event's amount is ALWAYS the rule's amount. `monthlyActuals` used to
+// substitute a logged actual here (split across a month's instances), which
+// meant a $150 biweekly rule with a $150 logged month rendered as two $75
+// rows the rule itself couldn't explain. That write-back was removed
+// deliberately (2026-09-19): the Ledger and Budget are the forecast and are
+// built from rules alone, exactly like the Dashboard's logged balances and
+// contributions never write back either. Logged actuals still exist and are
+// still yours — the Spending tab compares them against the rule. Nothing
+// logged anywhere changes a forecast number.
+function makeEvent(src, date, paidOverrides) {
   const dir = CATEGORIES[src.category]?.direction ?? "out";
   const monthKey = date.slice(0, 7);
   const paidOverride =
     src.category === "bill" && (paidOverrides?.[monthKey]?.includes(src.id) ?? false);
-  const actual = monthlyActuals?.[src.id]?.[monthKey];
-  const amount = actual != null ? Math.abs(round(actual / countInMonth)) : Math.abs(src.amount);
   return {
     id: src.id + "@" + date,
     name: src.name,
-    amount,
+    amount: Math.abs(src.amount),
     direction: dir,
     category: src.category,
     color: src.color ?? null, // optional per-item palette-index override
     order: src.order,
     paidOverride,
-    isActual: actual != null, // this event used a logged actual, not the estimate
     date,
   };
 }

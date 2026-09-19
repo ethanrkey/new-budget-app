@@ -131,7 +131,7 @@ const SECTIONS = [
     title: "Variable spending",
     body: [
       ["p", "Groceries aren't $420 every month. For bills like that, turn on “Track actual vs. budgeted” in the item's editor. The item then appears on the Spending tab with a row per month."],
-      ["p", "Log the real total whenever you know it — no need to tie it to a date or split it across trips. The logged amount then REPLACES the estimate everywhere: the Ledger, the Budget, and the loan math all use the real number for that month."],
+      ["p", "Log the real total whenever you know it — no need to tie it to a date or split it across trips. Logging it does NOT change your Ledger or Budget: those always show what your rule says. This tab is purely the comparison between the two."],
       ["p", "Clear the field to remove a logged amount. Nothing here is permanent."],
     ],
   },

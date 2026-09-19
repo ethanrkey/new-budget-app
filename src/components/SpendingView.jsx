@@ -31,8 +31,9 @@ export default function SpendingView({ state, onSetMonthlyActual, onDeleteMonthl
       <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">Variable spending</h2>
       <p className="text-xs text-gray-400 mb-4">
         Items flagged &quot;Track actual vs. budgeted&quot; in their edit form — log the real monthly total
-        once you know it, independent of any specific date. Clear a field to remove it. A logged
-        amount also replaces the estimate in the Ledger and Budget for that month.
+        once you know it, independent of any specific date. Clear a field to remove it. This is a
+        comparison only: what you log here never changes your Ledger or Budget, which always show
+        the rule&apos;s amount.
       </p>
       {variableItems.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">

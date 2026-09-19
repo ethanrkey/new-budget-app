@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { todayISO } from "../engine/model.js";
+import { useSubmitOnce } from "../useSubmitOnce.js";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -18,10 +19,10 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
   const [date, setDate] = useState(todayISO());
   const valid = amount !== "" && !isNaN(Number(amount)) && !!date;
 
-  function confirm() {
+  const [confirm, submitted] = useSubmitOnce(() => {
     if (!valid) return;
     onConfirm(Number(amount), date);
-  }
+  });
 
   const field = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
   const label = "block text-xs font-medium text-gray-500 mb-1";
@@ -69,7 +70,7 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
           </button>
           <button
             onClick={confirm}
-            disabled={!valid}
+            disabled={!valid || submitted}
             className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40"
           >
             {cta ?? "Confirm"}

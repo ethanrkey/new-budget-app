@@ -3,7 +3,7 @@ import { computeLedger, computeBudget } from "../src/engine/compute.js";
 import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.js";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.js";
-import { buildAllEvents, occurrenceDates } from "../src/engine/generate.js";
+import { buildAllEvents } from "../src/engine/generate.js";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.js";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.js";
 import { computeBudgetLayout } from "../src/engine/budgetLayout.js";
@@ -653,8 +653,13 @@ const loanHistQ = computeLoanHistory(loanStateQ, loanCatQ);
 eq("loan history STILL carries `expected` (don't strip both)", loanHistQ.every((h) => "expected" in h), true);
 check("loan projection is still real amortization, not a copy of the balance", loanHistQ[1].expected !== loanHistQ[1].amount, true);
 
-// ---------- Scenario R: variable-bill monthly actuals override the estimate ----------
-console.log("\n== Scenario R: setMonthlyActual / deleteMonthlyActual + generate.js override ==");
+// ---------- Scenario R: logged actuals NEVER touch the forecast ----------
+console.log("\n== Scenario R: monthlyActuals are a comparison, not a write-back ==");
+// The Ledger and Budget are the forecast and are built from rules alone —
+// exactly like logged balances and logged contributions never write back
+// either. A logged actual used to SUBSTITUTE into the event stream, which is
+// what made a $150 biweekly rule render as two $75 rows the rule itself
+// couldn't explain. Removed deliberately (2026-09-19).
 let stateR = {
   settings: { checkInBalance: 0, checkInDate: "2026-09-01", budgetHorizon: "2026-11-01", ledgerHorizon: "2026-11-01", theme: "light" },
   recurring: [
@@ -667,27 +672,36 @@ let stateR = {
   monthlyActuals: {},
 };
 
-let eventsR = buildAllEvents(stateR, "2026-11-06");
-check("before logging an actual: Sep event uses the flat estimate", eventsR.find((e) => e.date === "2026-09-05").amount, 150);
-eq("before logging an actual: isActual is false", eventsR.find((e) => e.date === "2026-09-05").isActual, false);
+const amountsR = (st) => buildAllEvents(st, "2026-11-06").map((e) => [e.date, e.amount]);
+const beforeR = amountsR(stateR);
+check("before logging: Sep event is the rule's amount", buildAllEvents(stateR, "2026-11-06").find((e) => e.date === "2026-09-05").amount, 150);
 
 stateR = setMonthlyActual(stateR, "elec", "2026-09", 187.34);
-eventsR = buildAllEvents(stateR, "2026-11-06");
-check("after logging Sep's actual: Sep event uses the real amount", eventsR.find((e) => e.date === "2026-09-05").amount, 187.34);
-eq("after logging Sep's actual: isActual is true", eventsR.find((e) => e.date === "2026-09-05").isActual, true);
-check("Oct's event is untouched (no actual logged for 2026-10)", eventsR.find((e) => e.date === "2026-10-05").amount, 150);
-eq("Oct's event isActual is false", eventsR.find((e) => e.date === "2026-10-05").isActual, false);
+eq("logging an actual changes NO event amount anywhere", amountsR(stateR), beforeR);
+check("Sep stays the rule's amount even with an actual logged", buildAllEvents(stateR, "2026-11-06").find((e) => e.date === "2026-09-05").amount, 150);
+eq("no event carries an isActual flag any more", buildAllEvents(stateR, "2026-11-06").some((e) => "isActual" in e), false);
 
-eq("computeMonthVariance: a month with a logged actual",
+// The logged number is not lost — it is what the Spending tab compares.
+eq("computeMonthVariance still sees it: expected from the rule, actual from the log",
   computeMonthVariance(stateR.recurring[0], stateR.monthlyActuals, "2026-09"),
   { monthKey: "2026-09", occurrences: 1, expected: 150, actual: 187.34, delta: 37.34 });
-eq("computeMonthVariance: a month with no actual logged yet",
+eq("a month with nothing logged reports no actual",
   computeMonthVariance(stateR.recurring[0], stateR.monthlyActuals, "2026-10"),
   { monthKey: "2026-10", occurrences: 1, expected: 150, actual: null, delta: null });
 
+// The ledger and budget are identical with and without the log.
+const noLogR = { ...stateR, monthlyActuals: {} };
+eq("the ledger is identical with and without logged actuals",
+  computeLedger(normalize(stateR), "2026-11-01").rows.map((r) => [r.date, r.amount, r.balance]),
+  computeLedger(normalize(noLogR), "2026-11-01").rows.map((r) => [r.date, r.amount, r.balance]));
+eq("every budget column is identical with and without logged actuals",
+  computeBudget(normalize(stateR), "2026-11-01").map((c) => [c.key, c.totalOut, c.cumulative]),
+  computeBudget(normalize(noLogR), "2026-11-01").map((c) => [c.key, c.totalOut, c.cumulative]));
+
 stateR = deleteMonthlyActual(stateR, "elec", "2026-09");
-eventsR = buildAllEvents(stateR, "2026-11-06");
-check("deleting the actual reverts Sep's event back to the estimate", eventsR.find((e) => e.date === "2026-09-05").amount, 150);
+eq("deleting an actual also changes no event", amountsR(stateR), beforeR);
+eq("...and the comparison goes back to 'nothing logged'",
+  computeMonthVariance(stateR.recurring[0], stateR.monthlyActuals, "2026-09").actual, null);
 
 eq("lastMonthKeys: last 3 months ending at the anchor's month", lastMonthKeys("2026-09-15", 3), ["2026-07", "2026-08", "2026-09"]);
 
@@ -730,42 +744,33 @@ eq("existing logged actuals pass through normalize() untouched",
 eq("existing monthly actuals pass through normalize() untouched",
   existingUserWithData.monthlyActuals, { elec: { "2026-09": 187.34 } });
 
-// ---------- Scenario U: variable bill on a non-monthly cadence (the groceries/gas gap) ----------
-console.log("\n== Scenario U: even-split of a variable bill's actual across a multi-instance month ==");
-let stateU = {
-  settings: { checkInBalance: 0, checkInDate: "2026-09-01", budgetHorizon: "2026-11-01", ledgerHorizon: "2026-11-01", theme: "light" },
-  recurring: [
-    { id: "gas", name: "Gas", amount: 40, category: "bill", cadence: "biweekly", startDate: "2026-09-03", order: 0, variable: true },
-  ],
-  oneoffs: [],
-  paidOverrides: {},
-  trackerCategories: [],
-  balanceSnapshots: {},
-  monthlyActuals: {},
-};
+// ---------- Scenario U: the $75 report — a biweekly rule with a logged month ----------
+console.log("\n== Scenario U: a multi-instance month is never split across instances ==");
+// The exact shape of the bug report: a $150 biweekly payment, variable-tracked,
+// with $150 logged for a September in which it fires twice. That used to render
+// as 2 x $75 — half the rule's amount, with nothing on screen explaining why,
+// and editing the rule appeared to do nothing for that month.
+let stateU = normalize({
+  settings: { checkInBalance: 4000, checkInDate: "2026-09-01", budgetHorizon: "2026-11-01", ledgerHorizon: "2026-10-31" },
+  recurring: [{ id: "ab", name: "Student Loan AB", amount: 150, category: "bill", variable: true,
+    cadence: "biweekly", startDate: "2026-09-15", order: 0 }],
+  oneoffs: [], paidOverrides: {}, trackerCategories: [],
+  monthlyActuals: { ab: { "2026-09": 150 } },
+});
+const sepU = buildAllEvents(stateU, "2026-10-31").filter((e) => e.date.startsWith("2026-09"));
+check("September fires twice", sepU.length, 2);
+eq("both instances show the RULE's $150, not $75", sepU.map((e) => e.amount), [150, 150]);
+check("the month totals 2 x the rule, not the logged figure", sepU.reduce((t, e) => t + e.amount, 0), 300);
 
-eq("occurrenceDates: Gas fires 2x in September, 3x in October (2 vs 3 paydays, same shape)",
-  occurrenceDates(stateU.recurring[0], "2026-10-31").filter((d) => d < "2026-11-01").map((d) => d.slice(0, 7)),
-  ["2026-09", "2026-09", "2026-10", "2026-10", "2026-10"]);
+// Editing the rule now visibly changes that month — the other half of the report.
+const editedU = upsertItem(stateU, { ...stateU.recurring[0], amount: 152 });
+eq("editing the rule 150 -> 152 moves September too", buildAllEvents(editedU, "2026-10-31")
+  .filter((e) => e.date.startsWith("2026-09")).map((e) => e.amount), [152, 152]);
 
-check("computeMonthVariance (no actual yet): Sep expected = $40 x 2 occurrences",
-  computeMonthVariance(stateU.recurring[0], stateU.monthlyActuals, "2026-09").expected, 80);
-check("computeMonthVariance (no actual yet): Oct expected = $40 x 3 occurrences",
-  computeMonthVariance(stateU.recurring[0], stateU.monthlyActuals, "2026-10").expected, 120);
-
-stateU = setMonthlyActual(stateU, "gas", "2026-09", 84);
-let eventsU = buildAllEvents(stateU, "2026-10-05");
-const sepGasEvents = eventsU.filter((e) => e.id.startsWith("gas@") && e.date.slice(0, 7) === "2026-09");
-check("Sep's logged $84 total splits evenly across its 2 instances -> $42 each", sepGasEvents[0].amount, 42);
-check("...and the second instance too", sepGasEvents[1].amount, 42);
-eq("both Sep instances are flagged isActual", sepGasEvents.map((e) => e.isActual), [true, true]);
-const octGasEvent = eventsU.find((e) => e.id === "gas@2026-10-01");
-check("October is untouched (no actual logged for it) -> still the $40 estimate", octGasEvent.amount, 40);
-eq("October isActual is false", octGasEvent.isActual, false);
-
-eq("computeMonthVariance's full shape after logging (includes occurrences)",
+// And the comparison still knows what really happened.
+eq("Spending still compares: 2 occurrences expected vs the $150 logged",
   computeMonthVariance(stateU.recurring[0], stateU.monthlyActuals, "2026-09"),
-  { monthKey: "2026-09", occurrences: 2, expected: 80, actual: 84, delta: 4 });
+  { monthKey: "2026-09", occurrences: 2, expected: 300, actual: 150, delta: -150 });
 
 // ---------- Scenario V: logged contributions (not ledger-derived) ----------
 console.log("\n== Scenario V: computeLoggedContributions ==");

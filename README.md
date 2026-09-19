@@ -80,9 +80,10 @@ double-counted — that money is already *in* the number.
 ![Spending](docs/screenshots/spending.png)
 
 Flag a variable bill (groceries, electric) as tracked and log the real total for
-the month whenever you find out — no need to match it to a date. The logged
-amount replaces the estimate everywhere: Ledger, Budget, and the loan math all
-see the real number.
+the month whenever you find out — no need to match it to a date. It's a
+comparison and nothing more: what you log here never changes the Ledger or the
+Budget, which always show what your rule says. Forecast and reality stay in
+separate columns, here as everywhere else.
 
 ---
 

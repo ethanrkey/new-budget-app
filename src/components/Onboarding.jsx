@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { uid, todayISO, toISODate } from "../engine/model.js";
+import { useSubmitOnce } from "../useSubmitOnce.js";
 
 // Draft copy — expected to be edited. Every string a user reads lives here or
 // inline below, so it's easy to find and tweak in one pass.
@@ -66,9 +67,9 @@ export default function Onboarding({ initialBalance, onComplete }) {
   function goNext() {
     setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
   }
-  function finishNow() {
+  const [finishNow] = useSubmitOnce(() => {
     onComplete({ recurring, oneoffs: [], checkInBalance });
-  }
+  })
 
   function submitPaycheck() {
     const amt = Number(payAmount);
