@@ -1,9 +1,12 @@
 // ---- Turn recurring rules into concrete dated events ----
-import { CATEGORIES, primaryAccount, toISODate } from "./model.js";
+import { CATEGORIES, primaryAccount, toISODate } from "./model.ts";
+import type {
+  BudgetEvent, BudgetItem, BudgetState, ISODate, MonthKey, RecurringItem,
+} from "./types.ts";
 
-// Local calendar date — see toISODate in model.js for why not toISOString.
-function iso(d) { return toISODate(d); }
-function parse(isoStr) { return new Date(isoStr + "T00:00:00"); }
+// Local calendar date — see toISODate in model.ts for why not toISOString.
+function iso(d: Date): ISODate { return toISODate(d); }
+function parse(isoStr: ISODate): Date { return new Date(isoStr + "T00:00:00"); }
 
 // Every date a recurring rule fires, from its own startDate up to
 // `horizonISO` (respecting its own endDate). Exported so callers that need
@@ -12,13 +15,13 @@ function parse(isoStr) { return new Date(isoStr + "T00:00:00"); }
 // for a variable bill (a biweekly item can land 2 or 3 times in a given
 // month, same "2 vs 3 paydays" thing that's already true for paychecks) and
 // engine/loans.js's amortization schedule both do this.
-export function occurrenceDates(rule, horizonISO) {
+export function occurrenceDates(rule: RecurringItem, horizonISO: ISODate): ISODate[] {
   const horizon = parse(horizonISO);
   const start = parse(rule.startDate);
   const end = rule.endDate ? parse(rule.endDate) : horizon;
   const stop = end < horizon ? end : horizon;
 
-  const dates = [];
+  const dates: ISODate[] = [];
   let d = new Date(start);
   let guard = 0;
   while (d <= stop && guard < 2000) {
@@ -35,8 +38,8 @@ export function occurrenceDates(rule, horizonISO) {
 // balance progress calculator (engine/progress.js) also needs this directly,
 // since it specifically sums already-past transactions (everything since a
 // balance snapshot's date) that buildEvents would otherwise throw away.
-export function buildAllEvents(state, horizonISO) {
-  const events = [];
+export function buildAllEvents(state: BudgetState, horizonISO: ISODate): BudgetEvent[] {
+  const events: BudgetEvent[] = [];
   const horizon = parse(horizonISO);
 
   const paidOverrides = state.paidOverrides || {};
@@ -58,14 +61,16 @@ export function buildAllEvents(state, horizonISO) {
   // 3) sort by date; income before expense on the same day
   events.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-    return (b.direction === "in") - (a.direction === "in");
+    // Number(): boolean arithmetic is legal JS but not TS. Same coercion the
+    // runtime was already doing, spelled out.
+    return Number(b.direction === "in") - Number(a.direction === "in");
   });
 
   return events;
 }
 
 // Generate all events (recurring expanded + one-offs) up to `horizonISO`.
-export function buildEvents(state, horizonISO) {
+export function buildEvents(state: BudgetState, horizonISO: ISODate): BudgetEvent[] {
   const events = buildAllEvents(state, horizonISO);
 
   // drop anything strictly BEFORE the check-in date — it's already
@@ -93,7 +98,7 @@ export function buildEvents(state, horizonISO) {
 // contributions never write back either. Logged actuals still exist and are
 // still yours — the Spending tab compares them against the rule. Nothing
 // logged anywhere changes a forecast number.
-function makeEvent(src, date, paidOverrides) {
+function makeEvent(src: BudgetItem, date: ISODate, paidOverrides: Record<MonthKey, string[]>): BudgetEvent {
   const dir = CATEGORIES[src.category]?.direction ?? "out";
   const monthKey = date.slice(0, 7);
   const paidOverride =
@@ -111,7 +116,7 @@ function makeEvent(src, date, paidOverrides) {
   };
 }
 
-function advance(d, rule) {
+function advance(d: Date, rule: RecurringItem): Date {
   const next = new Date(d);
   switch (rule.cadence) {
     case "weekly":   next.setDate(next.getDate() + 7);  break;
@@ -129,6 +134,6 @@ function advance(d, rule) {
   return next;
 }
 
-function daysInMonth(d) {
+function daysInMonth(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 }

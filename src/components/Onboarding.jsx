@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { uid, todayISO, toISODate } from "../engine/model.js";
+import { uid, todayISO, toISODate } from "../engine/model.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
 // Draft copy — expected to be edited. Every string a user reads lives here or

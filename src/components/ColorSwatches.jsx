@@ -1,4 +1,4 @@
-import { CATEGORY_PALETTE, paletteColor } from "../engine/model.js";
+import { CATEGORY_PALETTE, paletteColor } from "../engine/model.ts";
 
 // A row of small clickable color dots for picking a CATEGORY_PALETTE index —
 // the one color-picking UI shared by CategoryManager (a category's own

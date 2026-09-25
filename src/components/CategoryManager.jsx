@@ -1,6 +1,6 @@
 import { useState } from "react";
 import ColorSwatches from "./ColorSwatches.jsx";
-import { paletteColor } from "../engine/model.js";
+import { paletteColor } from "../engine/model.ts";
 
 // Create / rename / recolor / reorder / delete a user's own savings/debt/
 // investment categories. These replace the old hardcoded Roth/Saved/

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { todayISO } from "../engine/model.js";
+import { todayISO } from "../engine/model.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
 const money = (n) =>

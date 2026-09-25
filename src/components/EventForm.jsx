@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.js";
+import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
 import ColorSwatches from "./ColorSwatches.jsx";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
@@ -31,7 +31,7 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
   const isDebtCategory = mode === "recurring" && selectedCat?.kind === "debt";
   // "Track actual vs. budgeted" applies to any recurring bill, any cadence —
   // a biweekly/weekly variable bill's logged monthly total just splits
-  // evenly across however many instances land in that month (generate.js).
+  // evenly across however many instances land in that month (generate.ts).
   // Open to debt-category items too: for a loan it means "did I pay what I
   // planned this month" (the Dashboard's debt cards), and a logged actual
   // payment flows into the amortization automatically since it's the same

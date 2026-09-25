@@ -1,7 +1,7 @@
 // ---- CSV export: pure string builders, no DOM/File APIs here ----
 // (those live in the component that triggers the actual download)
-import { CATEGORIES } from "./model.js";
-import { computeBudgetLayout } from "./budgetLayout.js";
+import { CATEGORIES } from "./model.ts";
+import { computeBudgetLayout } from "./budgetLayout.ts";
 
 function csvCell(v) {
   const s = v === null || v === undefined ? "" : String(v);
@@ -27,7 +27,7 @@ function categoryLabel(cat, trackerCategories) {
 // data it came from, not some hardcoded set.
 export function ledgerToCSV(ledger, trackerCategories = []) {
   // `.order` is the source of truth for column sequence, not array
-  // position — see budgetLayout.js's identical note.
+  // position — see budgetLayout.ts's identical note.
   const cats = [...trackerCategories].sort((a, b) => a.order - b.order);
   const lines = [csvRow(["Date", "Item", "Category", "In", "Out", "Balance", ...cats.map((c) => c.name)])];
   for (const r of ledger.rows) {

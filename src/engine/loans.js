@@ -23,7 +23,7 @@
 // ever counted twice. (Assets use the opposite, end-of-day convention —
 // a deposit that day is already in the logged balance — which is why
 // progress.js's contributionsSince uses a strict `>`.)
-import { buildAllEvents } from "./generate.js";
+import { buildAllEvents } from "./generate.ts";
 
 function round(n) { return Math.round(n * 100) / 100; }
 function daysBetween(a, b) {

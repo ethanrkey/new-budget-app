@@ -15,7 +15,7 @@ import {
   updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
   addContribution, updateContribution, deleteContribution, countTaggedItems,
 } from "./engine/mutate.js";
-import { primaryAccount, sanitizeTabOrder } from "./engine/model.js";
+import { primaryAccount, sanitizeTabOrder } from "./engine/model.ts";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import Dashboard from "./components/Dashboard.jsx";

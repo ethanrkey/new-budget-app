@@ -1,7 +1,7 @@
 // ---- Pure state transitions for create / update / delete of budget items ----
 // UI-free so the future iOS app reuses them. An "item" is a RecurringRule (has
 // a `cadence`) or a OneOff (has a `date`).
-import { uid, primaryAccount, sanitizeTabOrder } from "./model.js";
+import { uid, primaryAccount, sanitizeTabOrder } from "./model.ts";
 
 // Insert a new item or replace an existing one (matched by id).
 // - No type change  -> replace in place, preserving list position.
@@ -122,7 +122,7 @@ export function reorderList(state, names, name, beforeName) {
 // ---- Tracker category (savings/debt/investment) CRUD ----
 // Deleting a category never touches items that reference it — an orphaned
 // category id just renders as a neutral "Uncategorized" (see
-// budgetLayout.js / CATEGORY_PALETTE's fallback color) rather than blocking
+// budgetLayout.ts / CATEGORY_PALETTE's fallback color) rather than blocking
 // the delete or silently reassigning someone's data.
 
 export function addCategory(state, name, color, kind = "asset") {

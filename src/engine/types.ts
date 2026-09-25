@@ -202,3 +202,48 @@ export interface BudgetEvent {
   paidOverride: boolean;
   date: ISODate;
 }
+
+// ---- Budget grid (derived, never stored) ---------------------------------
+
+/** One named row's value inside a month column. */
+export interface BudgetRowValue {
+  val: number;
+  order: number;
+}
+export interface BudgetExpenseValue extends BudgetRowValue {
+  /** May be an orphaned id — see CategoryRef. */
+  category: CategoryRef;
+}
+
+/** One month column of the Budget grid. */
+export interface BudgetColumn {
+  key: MonthKey;
+  label: string;
+  /** Carried in from the previous month; 0 for the first column. */
+  startingPoint: number;
+  /** Every paycheck landing this month, summed — 2 or 3 in a biweekly month. */
+  takeHome: number;
+  payCount: number;
+  otherIn: number;
+  otherInItems: Record<string, BudgetRowValue>;
+  /** The verified account balance, seeded into the first column only. */
+  tdChecking: number;
+  totalIn: number;
+  totalOut: number;
+  net: number;
+  cumulative: number;
+  expenseItems: Record<string, BudgetExpenseValue>;
+}
+
+/** A ledger row: an event plus the running balance after it. */
+export interface LedgerRow extends BudgetEvent {
+  balance: number;
+  negative: boolean;
+  /** Set only on rows that advance a tracker column. */
+  stepped: { key: string; value: number } | null;
+}
+
+export interface Ledger {
+  rows: LedgerRow[];
+  endingBalance: number;
+}

@@ -4,7 +4,7 @@ import { parseLedgerCSV } from "../engine/ledgerCsvImport.js";
 import { normalize } from "../engine/stateShape.js";
 import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../engine/backupShape.ts";
 import { downloadFile } from "../downloadFile.js";
-import { todayISO, primaryAccount } from "../engine/model.js";
+import { todayISO, primaryAccount } from "../engine/model.ts";
 
 const money = (n) =>
   Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });

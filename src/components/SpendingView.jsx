@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { computeMonthVariance, lastMonthKeys } from "../engine/progress.js";
-import { todayISO } from "../engine/model.js";
+import { todayISO } from "../engine/model.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });

@@ -4,7 +4,7 @@
 // from plain Node) — and so it stays reusable if storage.js's backend ever
 // changes again, per the same "keep it swappable" principle storage.js
 // itself follows.
-import { blankState, defaultAccounts, sanitizeTabOrder, PRIMARY_ACCOUNT_ID } from "./model.js";
+import { blankState, defaultAccounts, sanitizeTabOrder, PRIMARY_ACCOUNT_ID } from "./model.ts";
 
 // One-time migration: very old data had a separate `tracker` field and/or a
 // preset `savings` category. Promote any set `tracker` straight to the
@@ -34,7 +34,7 @@ export function legacyTrackerCategories() {
   ];
 }
 
-// Migration: `kind` (asset/debt — see model.js) predates the loan-
+// Migration: `kind` (asset/debt — see model.ts) predates the loan-
 // amortization feature, so it's missing from BOTH a category that just came
 // out of legacyTrackerCategories() in an OLDER build (before this function
 // added `kind` above) and any custom category a user already created via

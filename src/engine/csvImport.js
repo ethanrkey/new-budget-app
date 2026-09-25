@@ -5,7 +5,7 @@
 // only has the section, not the sub-category). This makes the best
 // reconstruction it can and returns `warnings` describing every guess, so
 // the caller can show them before committing anything to state.
-import { uid } from "./model.js";
+import { uid } from "./model.ts";
 
 const SECTION_HEADERS = new Set(["INCOME", "FIXED / RECURRING", "SAVING / DEBT", "ONE-OFF / SEASONAL"]);
 const SKIP_ROWS = new Set(["Starting point", "TOTAL IN", "TOTAL OUT", "MONTHLY NET", "CUMULATIVE NET"]);

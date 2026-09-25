@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.js";
+import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
 
 const money = (n) =>
   Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });

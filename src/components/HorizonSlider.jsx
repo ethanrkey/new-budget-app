@@ -1,4 +1,4 @@
-import { addMonthsISO, monthsDiff } from "../engine/model.js";
+import { addMonthsISO, monthsDiff } from "../engine/model.ts";
 import InfoTip from "./InfoTip.jsx";
 
 const MIN_MONTHS = 3;

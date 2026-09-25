@@ -1,7 +1,7 @@
 import { useState } from "react";
 import HorizonSlider from "./HorizonSlider.jsx";
-import { BUDGET_SECTIONS, computeBudgetLayout } from "../engine/budgetLayout.js";
-import { paletteColor, todayISO } from "../engine/model.js";
+import { BUDGET_SECTIONS, computeBudgetLayout } from "../engine/budgetLayout.ts";
+import { paletteColor, todayISO } from "../engine/model.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") +

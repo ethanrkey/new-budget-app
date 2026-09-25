@@ -3,17 +3,30 @@
 // BudgetView (to render) and the CSV exporter (to match exactly what's on
 // screen) — one source of truth instead of two copies that can drift apart.
 
-export const BUDGET_SECTIONS = [
+import type { BudgetColumn, CategoryRef, TrackerCategory } from "./types.ts";
+
+export type SectionKey = "bill" | "saving" | "oneoff";
+
+export const BUDGET_SECTIONS: ReadonlyArray<{ key: SectionKey; label: string }> = [
   { key: "bill", label: "FIXED / RECURRING" },
   { key: "saving", label: "SAVING / DEBT" },
   { key: "oneoff", label: "ONE-OFF / SEASONAL" },
 ];
 
+export interface BudgetLayout {
+  otherIncomeNames: string[];
+  sectionItems: Record<SectionKey, string[]>;
+  /** sectionItems.saving, split into one array per tracker category. */
+  savingGroups: string[][];
+  nameCat: Record<string, CategoryRef>;
+  nameOrder: Record<string, number>;
+}
+
 // Which section a category belongs to. "bill" and "oneoff" are the only
 // fixed expense categories; everything else (any user-defined tracker
 // category, and an orphaned/deleted one) is a Saving/Debt row by definition
 // — there's nowhere else for it to go.
-function sectionFor(category) {
+function sectionFor(category: CategoryRef): SectionKey {
   if (category === "bill") return "bill";
   if (category === "oneoff") return "oneoff";
   return "saving";
@@ -31,12 +44,14 @@ function sectionFor(category) {
 //   "Uncategorized" cluster rather than being dropped.
 // - nameCat / nameOrder: name -> its category / manual order, for callers
 //   that need to know which reorder group a name belongs to
-export function computeBudgetLayout(budget, trackerCategories = []) {
-  const sectionItems = {};
-  for (const sec of BUDGET_SECTIONS) sectionItems[sec.key] = [];
-  const otherIncomeNames = [];
-  const nameCat = {};
-  const nameOrder = {};
+export function computeBudgetLayout(
+  budget: BudgetColumn[],
+  trackerCategories: TrackerCategory[] = []
+): BudgetLayout {
+  const sectionItems = { bill: [], saving: [], oneoff: [] } as Record<SectionKey, string[]>;
+  const otherIncomeNames: string[] = [];
+  const nameCat: Record<string, CategoryRef> = {};
+  const nameOrder: Record<string, number> = {};
 
   for (const col of budget) {
     for (const [name, obj] of Object.entries(col.expenseItems)) {
@@ -51,24 +66,27 @@ export function computeBudgetLayout(budget, trackerCategories = []) {
     }
   }
 
-  otherIncomeNames.sort((a, b) => nameOrder[a] - nameOrder[b]);
-  sectionItems.bill.sort((a, b) => nameOrder[a] - nameOrder[b]);
-  sectionItems.oneoff.sort((a, b) => nameOrder[a] - nameOrder[b]);
+  // `?? 0` only where the compiler cannot see that every name was just
+  // written into nameOrder above — the runtime result is unchanged.
+  const ord = (n: string) => nameOrder[n] ?? 0;
+  otherIncomeNames.sort((a, b) => ord(a) - ord(b));
+  sectionItems.bill.sort((a, b) => ord(a) - ord(b));
+  sectionItems.oneoff.sort((a, b) => ord(a) - ord(b));
 
   // Sort by `.order` rather than trusting the array's own position — moving
   // a category (mutate.js's moveCategory) only swaps `.order` values, it
   // never reshuffles the array itself, so `.order` is always the source of
   // truth for display sequence, never array index.
   const catOrder = [...trackerCategories].sort((a, b) => a.order - b.order).map((c) => c.id);
-  const clusterIndex = (cat) => {
-    const i = catOrder.indexOf(cat);
+  const clusterIndex = (cat: CategoryRef | undefined) => {
+    const i = cat === undefined ? -1 : catOrder.indexOf(cat);
     return i < 0 ? catOrder.length : i; // unknown/orphaned categories cluster last, together
   };
   sectionItems.saving.sort((a, b) => {
     const catDiff = clusterIndex(nameCat[a]) - clusterIndex(nameCat[b]);
-    return catDiff !== 0 ? catDiff : nameOrder[a] - nameOrder[b];
+    return catDiff !== 0 ? catDiff : ord(a) - ord(b);
   });
-  const savingGroups = [...catOrder, null] // null = the trailing orphaned-category cluster
+  const savingGroups: string[][] = [...catOrder, null] // null = the trailing orphaned-category cluster
     .map((cat) => sectionItems.saving.filter((n) => (cat === null ? clusterIndex(nameCat[n]) === catOrder.length : nameCat[n] === cat)))
     .filter((g) => g.length > 0);
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ledgerToCSV, budgetToCSV } from "../engine/csv.js";
-import { todayISO } from "../engine/model.js";
+import { todayISO } from "../engine/model.ts";
 import { downloadFile } from "../downloadFile.js";
 
 export default function ExportMenu({ ledger, budget, trackerCategories = [], state }) {

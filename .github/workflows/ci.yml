@@ -15,9 +15,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          # 24, not 20: the engine test harness imports .ts files directly and
-          # relies on Node's native type stripping, which landed in 22.18/23.
-          node-version: 24
+          # Pinned to the 24 line, never "lts/*" or "latest": the harness
+          # imports .ts directly and depends on native type stripping, whose
+          # behavior has moved between major versions. A new major must be an
+          # explicit, tested change here — not something a runner picks up.
+          # Matches package.json "engines" and .nvmrc.
+          node-version: "24"
           cache: npm
       - run: npm ci
       - run: npm run lint

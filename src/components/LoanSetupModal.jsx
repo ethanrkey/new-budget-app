@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { todayISO } from "../engine/model.js";
+import { todayISO } from "../engine/model.ts";
 import ColorSwatches from "./ColorSwatches.jsx";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 

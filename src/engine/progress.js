@@ -12,8 +12,8 @@
 //    biweekly/weekly bill can land 2 or 3 times in a given month — same
 //    "2 vs 3 paydays" reality already true for paychecks) vs. whatever real
 //    total was logged in monthlyActuals.
-import { occurrenceDates } from "./generate.js";
-import { primaryAccount } from "./model.js";
+import { occurrenceDates } from "./generate.ts";
+import { primaryAccount } from "./model.ts";
 
 function round(n) { return Math.round(n * 100) / 100; }
 

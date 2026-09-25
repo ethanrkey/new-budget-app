@@ -1,10 +1,19 @@
 // ---- Data model: the single source of truth ----
 // Everything (ledger rows, budget totals, balances) is COMPUTED from this.
+import type {
+  Account, BudgetState, FixedCategoryMeta, ISODate, PaletteIndex,
+  Settings, TabId, TrackerCategory,
+} from "./types.ts";
 
 // Fixed categories — not user-customizable. Any OTHER category value is a
 // user-defined tracker category (see trackerCategories below): a savings,
 // debt, or investment bucket, always direction "out" by definition.
-export const CATEGORIES = {
+// Keyed by `string`, not by the FixedCategory union, because that is how it
+// is actually used: an item's category may be a tracker id or an ORPHANED id
+// from a deleted category, and both are looked up here. With
+// noUncheckedIndexedAccess a miss is typed `undefined`, which is exactly the
+// `CATEGORIES[cat]?.direction ?? "out"` shape every caller already uses.
+export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
     income: { label: "Income",     color: "#0B7A0B", direction: "in"  },
     bill:   { label: "Fixed Bill", color: "#7030A0", direction: "out" },
     oneoff: { label: "One-off",    color: "#C0392B", direction: "out" },
@@ -17,7 +26,7 @@ export const CATEGORIES = {
   // (income green, bill purple, expense red) — that overlap was the actual
   // bug this palette replaces. Each category stores an INDEX into this array
   // (not a raw hex), so the right light/dark step is always used automatically.
-  export const CATEGORY_PALETTE = [
+  export const CATEGORY_PALETTE: ReadonlyArray<{ name: string; light: string; dark: string }> = [
     { name: "Blue",     light: "#2a78d6", dark: "#3987e5" },
     { name: "Orange",   light: "#eb6834", dark: "#d95926" },
     { name: "Teal",     light: "#0d9488", dark: "#199e70" },
@@ -31,8 +40,11 @@ export const CATEGORIES = {
   // Resolve a palette index (possibly out of range/undefined, e.g. an
   // orphaned category) to a hex for the current theme. Falls back to a
   // neutral gray rather than crashing.
-  export function paletteColor(index, isDark) {
-    const entry = CATEGORY_PALETTE[index];
+  export function paletteColor(index: PaletteIndex | null | undefined, isDark: boolean): string {
+    // `CATEGORY_PALETTE[undefined]` was legal JS and returned undefined; TS
+    // will not index with undefined, so the nullish case is made explicit.
+    // Same result, same fallback.
+    const entry = index == null ? undefined : CATEGORY_PALETTE[index];
     if (!entry) return isDark ? "#9ca3af" : "#6b7280"; // gray-400 / gray-500
     return isDark ? entry.dark : entry.light;
   }
@@ -53,7 +65,7 @@ export const CATEGORIES = {
   // The 3 starting categories for a brand-new account (no prior data) — see
   // stateShape.js for the migration that instead seeds an EXISTING user's
   // legacy roth/saved/brokerage/loans as their own editable categories.
-  export function defaultTrackerCategories() {
+  export function defaultTrackerCategories(): TrackerCategory[] {
     return [
       { id: uid(), name: "Savings",     color: 2, order: 0, kind: "asset" }, // Teal
       { id: uid(), name: "Investments", color: 5, order: 1, kind: "asset" }, // Indigo
@@ -66,12 +78,12 @@ export const CATEGORIES = {
   // `balance` is the last balance you VERIFIED against the real bank, and
   // `balanceAsOf` is when you verified it — together they anchor the whole
   // ledger/budget balance chain (everything dated before balanceAsOf is
-  // already inside that number, so generate.js drops it). There is exactly
+  // already inside that number, so generate.ts drops it). There is exactly
   // ONE account today (kind "checking"); the shape is a list so adding more
   // is additive later, not a rewrite. Transactions carry an `accountId`.
   export const PRIMARY_ACCOUNT_ID = "checking"; // stable, like the legacy category ids
 
-  export function defaultAccounts(balance = 0, balanceAsOf = todayISO()) {
+  export function defaultAccounts(balance: number = 0, balanceAsOf: ISODate = todayISO()): Account[] {
     return [{ id: PRIMARY_ACCOUNT_ID, name: "Checking", kind: "checking", balance, balanceAsOf, order: 0 }];
   }
 
@@ -79,33 +91,37 @@ export const CATEGORIES = {
   // settings.checkInBalance/checkInDate fields when `accounts` is absent —
   // a pre-migration state, or a raw engine-test fixture — so every existing
   // consumer keeps working unchanged through the migration.
-  export function primaryAccount(state) {
+  export function primaryAccount(state: AnchorSource): Account {
     const acct = state.accounts?.[0];
     if (acct) return acct;
     return {
       id: PRIMARY_ACCOUNT_ID, name: "Checking", kind: "checking", order: 0,
       balance: Number(state.settings?.checkInBalance) || 0,
-      balanceAsOf: state.settings?.checkInDate,
+      // Asserted, not proven: a never-migrated state (or a raw engine-test
+      // fixture) can genuinely lack this. normalize() guarantees it for every
+      // real load, and coercing a default here would change behavior, so the
+      // hole is documented rather than papered over.
+      balanceAsOf: state.settings?.checkInDate as ISODate,
     };
   }
 
   // Cadences a recurring rule can use.
-  export const CADENCES = ["weekly", "biweekly", "monthly", "yearly"];
+  export const CADENCES = ["weekly", "biweekly", "monthly", "yearly"] as const;
 
   // The tabs, in the order a new account gets them: reality first, then the
   // forecast. A user can drag them into any order (settings.tabOrder); this
   // list stays the authority on which tabs EXIST, so sanitizeTabOrder() below
   // can drop a tab that's gone and append one that's new.
-  export const TABS = ["dashboard", "budget", "ledger", "spending"];
+  export const TABS: readonly TabId[] = ["dashboard", "budget", "ledger", "spending"];
 
   // A stored order is user data and can be stale (an old tab that no longer
   // exists, a new tab added since it was saved, a duplicate from a bad write).
   // Take the valid entries in the user's order, then append anything missing
   // in TABS order — never drop a tab, never invent one.
-  export function sanitizeTabOrder(order) {
-    const seen = new Set();
-    const kept = (Array.isArray(order) ? order : []).filter((t) => {
-      if (!TABS.includes(t) || seen.has(t)) return false;
+  export function sanitizeTabOrder(order: unknown): TabId[] {
+    const seen = new Set<string>();
+    const kept = (Array.isArray(order) ? order : []).filter((t): t is TabId => {
+      if (!(TABS as readonly unknown[]).includes(t) || seen.has(t)) return false;
       seen.add(t);
       return true;
     });
@@ -113,7 +129,7 @@ export const CATEGORIES = {
   }
 
   // A fresh, blank app state.
-  export function blankState() {
+  export function blankState(): BudgetState {
     return {
       settings: {
         // (checkInBalance/checkInDate used to live here — now accounts[0].
@@ -160,7 +176,7 @@ export const CATEGORIES = {
   // monthlyActuals from the Dashboard (electric, groceries, gas: the
   // estimate is never exact, unlike rent). Any cadence works — a biweekly
   // variable bill's logged total splits evenly across however many
-  // instances land in that month (see generate.js).
+  // instances land in that month (see generate.ts).
   // `interestRate` (APR, as a percent e.g. 5.5) and `originalPrincipal`
   // (the loan's starting balance) apply only to a recurring rule tagged
   // with a DEBT-kind tracker category — together they let engine/loans.js
@@ -184,24 +200,24 @@ export const CATEGORIES = {
   // month, wrong Dashboard "now", wrong projection endpoint); east of UTC it
   // shifts a local-midnight date back a whole day. Use this everywhere a Date
   // becomes a "YYYY-MM-DD".
-  export function toISODate(d) {
+  export function toISODate(d: Date): ISODate {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
-  export function todayISO() {
+  export function todayISO(): ISODate {
     return toISODate(new Date());
   }
-  export function addMonthsISO(iso, n) {
+  export function addMonthsISO(iso: ISODate, n: number): ISODate {
     const d = new Date(iso + "T00:00:00");
     d.setMonth(d.getMonth() + n);
     return toISODate(d);
   }
   // whole months between two ISO dates, by calendar month (not day-precise)
-  export function monthsDiff(aISO, bISO) {
+  export function monthsDiff(aISO: ISODate, bISO: ISODate): number {
     const a = new Date(aISO.slice(0, 7) + "-01T00:00:00");
     const b = new Date(bISO.slice(0, 7) + "-01T00:00:00");
     return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
   }
-  export function uid() {
+  export function uid(): string {
     return Math.random().toString(36).slice(2, 10);
   }
   // The last real calendar day of `iso`'s month — used where a horizon
@@ -210,8 +226,23 @@ export const CATEGORIES = {
   // day-of-month, e.g. always the "8th," so truncating event generation at
   // the exact horizon date silently drops any bill due later in that final
   // month — this is what a full calendar-month column should NOT do).
-  export function endOfMonthISO(iso) {
+  export function endOfMonthISO(iso: ISODate): ISODate {
     const [y, m] = iso.slice(0, 7).split("-").map(Number);
-    const d = new Date(y, m, 0); // day 0 of next month = last day of this one
+    // Non-null assertions, not defaults: a "YYYY-MM" slice always yields two
+    // parts, and substituting a fallback would CHANGE behavior on malformed
+    // input (year 0 instead of the Invalid Date it produces today).
+    const d = new Date(y!, m!, 0); // day 0 of next month = last day of this one
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  // What primaryAccount() can read an anchor out of: a normalized state, or a
+  // pre-migration one that still keeps the anchor in `settings`. Deliberately
+  // permissive — this is the compatibility seam, and typing it narrowly would
+  // just push casts onto every caller.
+  export interface LegacyAnchorSettings {
+    checkInBalance?: unknown;
+    checkInDate?: ISODate;
+  }
+  export interface AnchorSource {
+    accounts?: Account[] | undefined;
+    settings?: (Partial<Settings> & LegacyAnchorSettings) | undefined;
   }

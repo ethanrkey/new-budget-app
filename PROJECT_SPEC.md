@@ -424,7 +424,13 @@ and then splitting the schema means doing the work twice.
 
 Later:
 - iOS client: Expo / React Native, reusing `src/engine` verbatim rather than
-  reimplementing the money math. Protecting that reuse is why the engine has
+  reimplementing the money math. **Metro resolves the explicit `.ts`
+  specifiers** this codebase uses — verified 2026-09-25 by bundling a
+  `.js → .jsx → .ts → .ts` chain through Metro 0.87 (it executed correctly)
+  and by resolving those specifiers through `@expo/metro-config` 57's own
+  resolver. **Re-check the Node support matrix when this work starts:** the
+  repo requires Node >= 24 for the harness's type stripping, and Expo/Metro
+  keep their own supported-Node range that may not yet include it. Protecting that reuse is why the engine has
   no React, no network and no DOM in it, and why it is the part being typed.
 - Live multi-device sync (Supabase Realtime). Today staleness is *safe and
   self-correcting* — a stale device can't overwrite, and refocusing fixes it —
