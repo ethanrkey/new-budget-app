@@ -109,9 +109,9 @@ separate columns, here as everywhere else.
 
 ## Tech stack
 
-React 18 + Vite · Tailwind CSS v3 · Recharts · Supabase (Postgres + Auth) ·
-deployed on Vercel · GitHub Actions for CI. No state library, no component
-library, no backend of my own.
+React 18 + Vite · TypeScript (the engine; the UI stays JSX) · Tailwind CSS v3 ·
+Recharts · Supabase (Postgres + Auth) · deployed on Vercel · GitHub Actions for
+CI. No state library, no component library, no backend of my own.
 
 ## Architecture
 
@@ -134,7 +134,9 @@ the state. That's the whole design decision the rest follows from:
 - The Ledger and the Budget can't disagree, because both are derived from one
   generated event list rather than computed separately.
 - An iOS client can reuse the engine verbatim instead of reimplementing (and
-  subtly mis-implementing) the money math.
+  subtly mis-implementing) the money math — the plan is Expo / React Native,
+  which is why the engine is the part being typed: its exports are a contract
+  between two codebases, not an internal detail.
 - Swapping the backend means rewriting one file, `storage.js`.
 
 All user data is a single JSON document per user, stored as `jsonb`. Row-level

@@ -15,10 +15,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 24, not 20: the engine test harness imports .ts files directly and
+          # relies on Node's native type stripping, which landed in 22.18/23.
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
       # No Supabase env needed: src/supabase.js reads it at runtime only.
       - run: npm run build

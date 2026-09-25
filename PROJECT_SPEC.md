@@ -66,6 +66,29 @@ tests/engine.test.mjs   the engine harness (see §8)
 supabase/schema.sql     the one table + RLS policies
 ```
 
+**JavaScript / TypeScript boundary.** `src/engine` is migrating to
+TypeScript, file by file, leaf dependencies first; `src/components` stays JSX
+and is not scheduled to convert. That split is deliberate: the engine holds the
+money math and is about to have a SECOND consumer (the Expo client), so its
+exported surface is a contract between two codebases rather than an internal
+detail — that is where a type is worth its keystrokes. Components are cosmetic
+by comparison and typing them would be ceremony.
+
+Mechanics, because they are load-bearing and non-obvious:
+- `tsconfig.json` is type-checking only (`noEmit`). Vite transpiles for the
+  browser; Node 24 strips types for the test harness. `npm run typecheck` runs
+  `tsc --noEmit` and CI runs it between lint and test.
+- **Intra-engine imports carry an explicit `.ts` extension**, and so do
+  imports of engine files from components and tests. Plain Node does no
+  TypeScript-style resolution, so `./model.js` would simply not exist once
+  `model.ts` is the file; the explicit extension is the one specifier that
+  resolves identically under Vite, `tsc` (`allowImportingTsExtensions`) and
+  Node's stripper.
+- CI runs Node 24. Node 20 cannot strip types and the harness would not start.
+- `allowJs` + `checkJs: false` while the migration is in flight: converted and
+  unconverted files import each other freely, and only the `.ts` ones are
+  checked.
+
 **Engine / UI separation.** Everything with a number in it lives in
 `src/engine/*` as pure functions of `(state, …)`. Components only render and
 call mutators. This is what makes the harness possible (plain Node, no DOM)
@@ -383,7 +406,26 @@ fifth tab never needs a migration.
 
 ## 10. Roadmap
 
+**Gated decision — the storage model, decided BEFORE Expo work starts.**
+The single `state` jsonb document is a known ceiling, deliberately unaddressed:
+it is why this shipped fast and it is correct for one user on the web. Every
+roadmap item leans on it, though. Realtime means diffing whole documents;
+multi-account and credit cards grow the blob monotonically; Plaid imports are
+bulk appends to `contributionLog`; and mobile is the worst case — a phone on
+cell service re-uploading the entire document on every debounced save. The
+conflict guard is honest, but the unit of write is *everything*, so two devices
+editing different categories is a merge that could be won and currently cannot
+be. Options: (a) stay whole-document and add Supabase Realtime for push;
+(b) split the hot collections (transactions, snapshots, contributions) into
+real tables and keep settings as a blob; (c) a hybrid. Any of them stays cheap
+because `storage.js` is the only backend touchpoint. **This is decided before
+the mobile sync layer is built, not after** — building on whole-document writes
+and then splitting the schema means doing the work twice.
+
 Later:
+- iOS client: Expo / React Native, reusing `src/engine` verbatim rather than
+  reimplementing the money math. Protecting that reuse is why the engine has
+  no React, no network and no DOM in it, and why it is the part being typed.
 - Live multi-device sync (Supabase Realtime). Today staleness is *safe and
   self-correcting* — a stale device can't overwrite, and refocusing fixes it —
   but two tabs open side by side still don't update each other live.

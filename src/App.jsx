@@ -4,7 +4,7 @@ import {
   stashRecoveryCopy, readRecoveryCopy,
 } from "./storage.js";
 import { downloadFile } from "./downloadFile.js";
-import { isStale } from "./engine/syncGuard.js";
+import { isStale } from "./engine/syncGuard.ts";
 import { getSession, onAuthChange, signOut } from "./auth.js";
 import { getDeviceTheme, setDeviceTheme } from "./theme.js";
 import { computeLedger, computeBudget } from "./engine/compute.js";

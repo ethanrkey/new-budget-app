@@ -1,0 +1,38 @@
+{
+  // Type-checking only. Vite transpiles for the browser and Node 24 strips
+  // types for the test harness, so tsc never emits anything here — it is a
+  // linter for types and nothing else.
+  //
+  // Scope is src/engine plus its direct consumers' imports. The components
+  // stay JSX on purpose (see PROJECT_SPEC "JavaScript / TypeScript boundary"):
+  // the engine is where the money math and the shared-with-iOS contract live,
+  // and typing it is most of the value.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+
+    "noEmit": true,
+    // Intra-engine imports carry explicit .ts extensions so the same specifier
+    // resolves under Vite, tsc, AND plain Node's type stripping — Node does no
+    // TypeScript-style resolution, so "./model.js" would simply not exist.
+    "allowImportingTsExtensions": true,
+
+    // The engine is mid-migration: .ts and .js files import each other, and
+    // the .js ones are not type-checked yet.
+    "allowJs": true,
+    "checkJs": false,
+
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/engine/**/*"]
+}

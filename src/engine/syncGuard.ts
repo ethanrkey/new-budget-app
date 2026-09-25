@@ -11,13 +11,28 @@
 // the pure half — deciding whether what we hold is stale, and building the
 // recovery copy that is ALWAYS written before anything replaces what's in
 // memory.
-import { isPlausibleBackup } from "./backupShape.js";
+import { isPlausibleBackup } from "./backupShape.ts";
+import type { RawState } from "./types.ts";
+
+/** The row's `updated_at`, treated as an opaque token. */
+export type Version = string | null | undefined;
+
+/** Why a copy had to be set aside before the server's version replaced it. */
+export type RecoveryReason = "conflict" | "refreshed";
+
+export interface RecoveryEnvelope {
+  kind: "budget-app-recovery";
+  version: 1;
+  reason: RecoveryReason;
+  savedAt: string;
+  state: RawState;
+}
 
 // A version is the row's `updated_at` string, straight from Postgres. Compared
 // as an opaque token, never parsed or ordered: "different" is the only thing
 // that matters, and an equality test can't be fooled by clock skew between
 // devices the way a newer-than comparison could.
-export function isStale(localVersion, serverVersion) {
+export function isStale(localVersion: Version, serverVersion: Version): boolean {
   if (!localVersion || !serverVersion) return false; // nothing loaded yet, or no row — not a staleness question
   return localVersion !== serverVersion;
 }
@@ -25,19 +40,24 @@ export function isStale(localVersion, serverVersion) {
 // What gets stashed in localStorage before an in-memory state is discarded.
 // Deliberately self-describing: it has to be recognizable months later by
 // someone (or some future build) that has forgotten this feature exists.
-export function makeRecoveryEnvelope(state, reason, nowISO) {
+export function makeRecoveryEnvelope(
+  state: RawState,
+  reason: RecoveryReason,
+  nowISO: string
+): RecoveryEnvelope {
   return { kind: "budget-app-recovery", version: 1, reason, savedAt: nowISO, state };
 }
 
 // Validate before ever offering a stashed copy back to the user — a corrupt or
 // half-written localStorage entry must not be presented as their data. Reuses
 // the same plausibility check the JSON-restore path gates on.
-export function isRecoveryEnvelope(obj) {
+export function isRecoveryEnvelope(obj: unknown): obj is RecoveryEnvelope {
+  if (!obj || typeof obj !== "object") return false;
+  const o = obj as Record<string, unknown>;
   return (
-    !!obj &&
-    obj.kind === "budget-app-recovery" &&
-    obj.version === 1 &&
-    typeof obj.savedAt === "string" &&
-    isPlausibleBackup(obj.state)
+    o.kind === "budget-app-recovery" &&
+    o.version === 1 &&
+    typeof o.savedAt === "string" &&
+    isPlausibleBackup(o.state)
   );
 }

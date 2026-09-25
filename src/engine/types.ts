@@ -1,0 +1,204 @@
+// ---- The shape of everything ----
+// The state blob, as PROJECT_SPEC §4 describes it, expressed so the compiler
+// can hold the app to it. This file is the contract the Expo client will share
+// verbatim — the engine exists to be the one implementation of the money math,
+// and these are its terms.
+//
+// Discriminated unions are used wherever the spec already implies one. The
+// prose "debt-kind only — a debt category IS a loan" is a union in disguise:
+// reading `originalPrincipal` off an asset category should not compile.
+
+// ---- Primitives ----------------------------------------------------------
+
+/** A calendar date, "YYYY-MM-DD". Never an instant — see toISODate in model. */
+export type ISODate = string;
+/** A calendar month, "YYYY-MM". The key for paidOverrides and monthlyActuals. */
+export type MonthKey = string;
+/** An index into CATEGORY_PALETTE, not a hex colour. */
+export type PaletteIndex = number;
+
+// ---- Categories ----------------------------------------------------------
+
+/** The three built-in categories. Everything else is a trackerCategory id. */
+export type FixedCategory = "income" | "bill" | "oneoff";
+/** Which way money moves. Only `income` is "in"; an unknown category is "out". */
+export type Direction = "in" | "out";
+/**
+ * An item's category: one of the three fixed ones, or a trackerCategory id —
+ * and, unavoidably, the id of a category that has since been deleted. The type
+ * is `string` rather than a narrower union precisely because orphans are a
+ * real state the app must keep handling.
+ */
+export type CategoryRef = FixedCategory | string;
+
+export interface FixedCategoryMeta {
+  label: string;
+  color: string;
+  direction: Direction;
+}
+
+// ---- Tracker categories (the user's own buckets) -------------------------
+
+interface TrackerCategoryBase {
+  id: string;
+  name: string;
+  color: PaletteIndex;
+  order: number;
+}
+
+/** Something you own: savings, a Roth, a brokerage. */
+export interface AssetCategory extends TrackerCategoryBase {
+  kind: "asset";
+}
+
+/**
+ * Something you owe. A debt-kind category IS the loan: it carries the terms,
+ * its outstanding balance is a logged snapshot, and a payment is any
+ * transaction tagged to it.
+ *
+ * The terms are optional because a debt category exists before it is set up
+ * (`isLoanConfigured` is the gate), but they exist ONLY here — asking an asset
+ * for its APR is now a compile error rather than `undefined` at runtime.
+ */
+export interface DebtCategory extends TrackerCategoryBase {
+  kind: "debt";
+  /** What was borrowed. Absent until the loan is set up. */
+  originalPrincipal?: number;
+  /** APR as a percentage, e.g. 5.8 — not a fraction. */
+  interestRate?: number;
+  /** Nothing accrues before this date (a student loan's grace period). */
+  interestStartDate?: ISODate | null;
+}
+
+export type TrackerCategory = AssetCategory | DebtCategory;
+
+/** A debt category with its terms present — what the loan math requires. */
+export type ConfiguredLoan = DebtCategory & { originalPrincipal: number };
+
+// ---- Items (the forecast's inputs) ---------------------------------------
+
+export type Cadence = "weekly" | "biweekly" | "monthly" | "yearly";
+
+interface ItemBase {
+  id: string;
+  name: string;
+  amount: number;
+  category: CategoryRef;
+  order: number;
+  /** Stamped automatically; there is no picker while there is one account. */
+  accountId?: string;
+  /** Per-item palette override; null means "use the category's colour". */
+  color?: PaletteIndex | null;
+}
+
+/** A rule that generates events forever (or until endDate). */
+export interface RecurringItem extends ItemBase {
+  cadence: Cadence;
+  startDate: ISODate;
+  endDate?: ISODate | null;
+  /** Monthly rules keep their intended day when a month is short. */
+  dayOfMonth?: number;
+  /** Flagged "Track actual vs. budgeted" — appears on the Spending tab. */
+  variable?: boolean;
+}
+
+/** A single dated transaction. */
+export interface OneOffItem extends ItemBase {
+  date: ISODate;
+}
+
+/**
+ * The discriminant is structural, matching the runtime check the engine
+ * already uses (`!!item.cadence`) rather than a tag field that would have to
+ * be migrated into existing data.
+ */
+export type BudgetItem = RecurringItem | OneOffItem;
+
+// ---- Logged reality ------------------------------------------------------
+
+/** One logged balance: an asset's value, or a loan's outstanding. */
+export interface BalanceSnapshot {
+  id: string;
+  date: ISODate;
+  amount: number;
+}
+
+/** Where a contribution came from. An importer writes its own source. */
+export type ContributionSource = "manual" | (string & {});
+
+/** Money you actually put in, logged one entry at a time. */
+export interface Contribution {
+  id: string;
+  date: ISODate;
+  amount: number;
+  source: ContributionSource;
+  /** An importer's own id, so a re-import can dedupe instead of doubling. */
+  externalId?: string;
+}
+
+// ---- Accounts ------------------------------------------------------------
+
+export interface Account {
+  id: string;
+  name: string;
+  kind: "checking";
+  /** The last balance VERIFIED against the bank — not a projection. */
+  balance: number;
+  /** When that balance was verified. The forecast starts here. */
+  balanceAsOf: ISODate;
+  order: number;
+}
+
+// ---- Settings ------------------------------------------------------------
+
+export type TabId = "dashboard" | "budget" | "ledger" | "spending";
+
+export interface Settings {
+  budgetHorizon: ISODate;
+  ledgerHorizon: ISODate;
+  /** The ACCOUNT default. Each device overrides it in localStorage. */
+  theme: "light" | "dark";
+  visibleTrackerCategoryIds: string[];
+  tabOrder: TabId[];
+  hasSeenOnboarding: boolean;
+}
+
+// ---- The state blob ------------------------------------------------------
+
+export interface BudgetState {
+  settings: Settings;
+  accounts: Account[];
+  recurring: RecurringItem[];
+  oneoffs: OneOffItem[];
+  /** Bills ticked off as already paid, by month. */
+  paidOverrides: Record<MonthKey, string[]>;
+  trackerCategories: TrackerCategory[];
+  balanceSnapshots: Record<string, BalanceSnapshot[]>;
+  contributionLog: Record<string, Contribution[]>;
+  accountSnapshots: Record<string, BalanceSnapshot[]>;
+  monthlyActuals: Record<string, Record<MonthKey, number>>;
+}
+
+/**
+ * State as it arrives from storage or a restored backup: any shape at all,
+ * including shapes from builds that predate half these fields. Only
+ * `normalize()` turns this into a BudgetState, which is the point of it.
+ */
+export type RawState = Record<string, unknown>;
+
+// ---- Derived (never stored) ----------------------------------------------
+
+/** One occurrence of an item on one date. Generated, never persisted. */
+export interface BudgetEvent {
+  /** `${itemId}@${date}` — only the item half is ever parsed back out. */
+  id: string;
+  name: string;
+  amount: number;
+  direction: Direction;
+  category: CategoryRef;
+  color: PaletteIndex | null;
+  order: number;
+  /** Paid this month: still shown, but contributes 0 to the balance. */
+  paidOverride: boolean;
+  date: ISODate;
+}

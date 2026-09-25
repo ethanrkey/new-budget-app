@@ -10,8 +10,8 @@ import { computeBudgetLayout } from "../src/engine/budgetLayout.js";
 import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.js";
 import { parseBudgetCSV } from "../src/engine/csvImport.js";
 import { parseLedgerCSV } from "../src/engine/ledgerCsvImport.js";
-import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../src/engine/backupShape.js";
-import { isStale, makeRecoveryEnvelope, isRecoveryEnvelope } from "../src/engine/syncGuard.js";
+import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../src/engine/backupShape.ts";
+import { isStale, makeRecoveryEnvelope, isRecoveryEnvelope } from "../src/engine/syncGuard.ts";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const money = (n) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });

@@ -6,10 +6,10 @@
 // Writes are CONDITIONAL on the version (`updated_at`) we loaded. A device
 // holding a stale copy — a phone that's been open since before you changed
 // something on a laptop — matches zero rows and is told so, instead of
-// overwriting newer data with its whole stale document. See engine/syncGuard.js.
+// overwriting newer data with its whole stale document. See engine/syncGuard.ts.
 import { supabase } from "./supabase.js";
 import { normalize } from "./engine/stateShape.js";
-import { makeRecoveryEnvelope, isRecoveryEnvelope } from "./engine/syncGuard.js";
+import { makeRecoveryEnvelope, isRecoveryEnvelope } from "./engine/syncGuard.ts";
 
 const LOCAL_KEY = "budget-app-state-v1";        // legacy localStorage key, for one-time import
 const RECOVERY_KEY = "budget-app-recovery-v1";  // last in-memory copy we had to discard
