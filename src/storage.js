@@ -8,7 +8,7 @@
 // something on a laptop — matches zero rows and is told so, instead of
 // overwriting newer data with its whole stale document. See engine/syncGuard.ts.
 import { supabase } from "./supabase.js";
-import { normalize } from "./engine/stateShape.js";
+import { normalize } from "./engine/stateShape.ts";
 import { makeRecoveryEnvelope, isRecoveryEnvelope } from "./engine/syncGuard.ts";
 
 const LOCAL_KEY = "budget-app-state-v1";        // legacy localStorage key, for one-time import

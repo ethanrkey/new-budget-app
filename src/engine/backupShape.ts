@@ -1,7 +1,7 @@
 // ---- Pure validation/summary helpers for a full JSON backup restore ----
 // Split out of ImportCSV.jsx so this is testable from plain Node (that file
 // has JSX, which Node can't parse directly) — same reasoning as
-// stateShape.js being split out of storage.js.
+// stateShape.ts being split out of storage.js.
 import type { BalanceSnapshot, MonthKey, RawState } from "./types.ts";
 
 /**

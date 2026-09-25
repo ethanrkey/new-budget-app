@@ -5,6 +5,7 @@
 // changes again, per the same "keep it swappable" principle storage.js
 // itself follows.
 import { blankState, defaultAccounts, sanitizeTabOrder, PRIMARY_ACCOUNT_ID } from "./model.ts";
+import type { BudgetState, RawState, TrackerCategory } from "./types.ts";
 
 // One-time migration: very old data had a separate `tracker` field and/or a
 // preset `savings` category. Promote any set `tracker` straight to the
@@ -12,7 +13,12 @@ import { blankState, defaultAccounts, sanitizeTabOrder, PRIMARY_ACCOUNT_ID } fro
 // anymore — everything but income/bill/oneoff is a user-defined tracker
 // category now), and fold a leftover `savings` category into "saved", which
 // the tracker-categories migration below always seeds for an existing user.
-function migrateItem(item) {
+// `any` here is deliberate and is the point of the whole file: the input is
+// data written by builds that no longer exist, with fields this codebase has
+// since deleted. Narrowing it would mean inventing a type for every historical
+// shape, and the first convenient "fix" to satisfy such a type is exactly how
+// a legacy state silently becomes a different state.
+function migrateItem(item: any): any {
   const { tracker, ...rest } = item;
   let category = rest.category;
   if (tracker) category = tracker;
@@ -25,7 +31,7 @@ function migrateItem(item) {
 // no rewriting at all. Colors are deliberately NOT the old ones — "saved"
 // used to be the same green as income, which was the actual bug this
 // feature replaces.
-export function legacyTrackerCategories() {
+export function legacyTrackerCategories(): TrackerCategory[] {
   return [
     { id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" },           // Indigo
     { id: "saved", name: "Saved", color: 2, order: 1, kind: "asset" },         // Teal
@@ -45,7 +51,7 @@ export function legacyTrackerCategories() {
 // feature existed — cumulative-payments based — until you flip it in
 // Categories; misclassifying a real asset as debt would silently feed it
 // through the wrong math with no such fallback).
-function inferCategoryKind(cat) {
+function inferCategoryKind(cat: any): "asset" | "debt" {
   if (cat.kind) return cat.kind;
   if (cat.id === "loans" || /\b(debt|loans?|credit card)\b/i.test(cat.name)) return "debt";
   return "asset";
@@ -54,7 +60,12 @@ function inferCategoryKind(cat) {
 // Merge a raw loaded/imported object onto blankState() so every field always
 // exists, running item migrations and the onboarding-seen / tracker-category
 // migrations below.
-export function normalize(parsed) {
+export function normalize(parsed: RawState): BudgetState;
+// The implementation signature is intentionally `any`. Callers get the precise
+// RawState -> BudgetState contract above; the body below is untouched, so the
+// seven migrations run on exactly the code that has been shipping and asserted
+// against, rather than on code edited to satisfy a compiler.
+export function normalize(parsed: any): BudgetState {
   const base = blankState();
   const settings = { ...base.settings, ...(parsed.settings || {}) };
   // Migration + repair: an account saved before tabs were reorderable has no
@@ -88,7 +99,7 @@ export function normalize(parsed) {
   // inferCategoryKind's comment above for why this can't just be folded
   // into the branch above (a user who already has a real trackerCategories
   // array saved from before `kind` existed still needs it added).
-  const trackerCategories = trackerCategoriesRaw.map((c) => ({ ...c, kind: inferCategoryKind(c) }));
+  const trackerCategories = trackerCategoriesRaw.map((c: any) => ({ ...c, kind: inferCategoryKind(c) }));
 
   // Migration: `accounts` predates this state — build the one checking
   // account straight from the legacy settings.checkInBalance/checkInDate,
@@ -103,7 +114,7 @@ export function normalize(parsed) {
   const primaryId = accounts[0].id ?? PRIMARY_ACCOUNT_ID;
   // Every transaction belongs to an account. Pre-migration items have no
   // accountId — they all belonged to the one implicit checking account.
-  const stamp = (it) => (it.accountId ? it : { ...it, accountId: primaryId });
+  const stamp = (it: any) => (it.accountId ? it : { ...it, accountId: primaryId });
 
   // Seed the account's balance history with the balance it already has, so
   // the Phase 2 chart starts from the verified figure rather than empty.
@@ -143,11 +154,11 @@ export function normalize(parsed) {
   //   and it would break normalize's purity).
   // Idempotent (items come out stripped, so a second pass is a no-op) and
   // deterministic (fixed ids, no uid()).
-  const cats = trackerCategories.map((c) => ({ ...c }));
-  const catById = new Map(cats.map((c) => [c.id, c]));
+  const cats = trackerCategories.map((c: any) => ({ ...c }));
+  const catById = new Map<string, any>(cats.map((c: any) => [c.id, c]));
   const balanceSnapshotsOut = { ...(parsed.balanceSnapshots || {}) };
-  const nextCatOrder = () => (cats.length ? Math.max(...cats.map((c) => c.order ?? 0)) + 1 : 0);
-  const migrateLoanItem = (it) => {
+  const nextCatOrder = () => (cats.length ? Math.max(...cats.map((c: any) => c.order ?? 0)) + 1 : 0);
+  const migrateLoanItem = (it: any) => {
     if (it.originalPrincipal == null && it.interestRate == null && it.interestStartDate == null) return it;
     const { originalPrincipal, interestRate, interestStartDate, ...rest } = it;
     if (originalPrincipal == null) return rest; // stray rate with no principal: nothing to carry

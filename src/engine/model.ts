@@ -63,7 +63,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
   // originalPrincipal is simply "not set up yet."
 
   // The 3 starting categories for a brand-new account (no prior data) — see
-  // stateShape.js for the migration that instead seeds an EXISTING user's
+  // stateShape.ts for the migration that instead seeds an EXISTING user's
   // legacy roth/saved/brokerage/loans as their own editable categories.
   export function defaultTrackerCategories(): TrackerCategory[] {
     return [
@@ -133,7 +133,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
     return {
       settings: {
         // (checkInBalance/checkInDate used to live here — now accounts[0].
-        // stateShape.js still READS them from a never-migrated state.)
+        // stateShape.ts still READS them from a never-migrated state.)
         budgetHorizon: addMonthsISO(todayISO(), 9),  // default: ~9 months out
         ledgerHorizon: addMonthsISO(todayISO(), 12), // default: ~12 months out
         theme: "light",

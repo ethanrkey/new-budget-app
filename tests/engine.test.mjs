@@ -5,7 +5,7 @@ import { computeCategoryHistory, computeMonthVariance, computeLoggedContribution
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.js";
 import { buildAllEvents } from "../src/engine/generate.ts";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.ts";
-import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.js";
+import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.ts";
 import { computeBudgetLayout } from "../src/engine/budgetLayout.ts";
 import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.js";
 import { parseBudgetCSV } from "../src/engine/csvImport.js";

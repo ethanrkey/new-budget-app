@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { parseBudgetCSV } from "../engine/csvImport.js";
 import { parseLedgerCSV } from "../engine/ledgerCsvImport.js";
-import { normalize } from "../engine/stateShape.js";
+import { normalize } from "../engine/stateShape.ts";
 import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../engine/backupShape.ts";
 import { downloadFile } from "../downloadFile.js";
 import { todayISO, primaryAccount } from "../engine/model.ts";

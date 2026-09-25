@@ -465,6 +465,26 @@ Later:
   contributions-only is the honest stat.
 - "Expected remaining vs. actual remaining" is never shown for a loan; it
   only scolds. Percent paid off is the motivating framing.
+- **`CategoryRef` is `string`, and `CATEGORIES` is keyed by `string` — do not
+  narrow either into a union.** An item's category may be one of the three
+  fixed ids, a tracker category id, or the id of a category that has since
+  been DELETED. Orphans are a supported state, not an error case: the engine
+  keeps their direction ("out"), the Budget clusters them under
+  Uncategorized, and EventForm renders them as "Uncategorized (deleted)". A
+  union type would make the orphan unrepresentable and the first "fix" would
+  be to coerce it to something — which is precisely the silent reassignment
+  the orphan handling exists to prevent. `noUncheckedIndexedAccess` already
+  gives the real safety here: a lookup miss is typed `undefined`, matching
+  the `?? "out"` every caller uses.
+- **Known gap: test fixtures can construct states production cannot.**
+  `primaryAccount()` falls back to legacy `settings.checkInBalance/checkInDate`
+  and can therefore return `balanceAsOf: undefined` — surfaced by typing it
+  (2026-09-25). Every real load goes through `normalize()`, which guarantees
+  an account, so this is unreachable in production; raw engine-test fixtures
+  skip normalize and can hit it. Documented rather than coerced, because a
+  default here would be a behavior change. The durable fix is a fixture helper
+  that runs `normalize()`, which would also stop the harness asserting against
+  shapes the app can never actually hold.
 - A loan owed above its principal reports 0% rather than a clamped negative,
   and says why in plain numbers. The peak-based, never-backwards bar was a
   deliberate user choice (2026-09-13) over "fill against owed today", which

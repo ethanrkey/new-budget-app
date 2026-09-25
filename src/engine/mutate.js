@@ -272,7 +272,7 @@ export function deleteMonthlyActual(state, itemId, monthKey) {
 // ---- Account balance updates (the "Update balance" confirm flow) ----
 // ONE atomic transition: the account's verified balance + its as-of date, a
 // history snapshot, AND the legacy settings mirror (rollback safety net —
-// see stateShape.js). Never partial: a half-applied update would desync the
+// see stateShape.ts). Never partial: a half-applied update would desync the
 // balance chain from its own anchor date. Nothing here runs until the user
 // clicks Confirm — the modal holds drafts, this commits.
 export function updateAccountBalance(state, accountId, amount, date) {
@@ -282,7 +282,7 @@ export function updateAccountBalance(state, accountId, amount, date) {
   const list = state.accountSnapshots?.[accountId] || [];
   // (Phase 1 also wrote a settings.checkInBalance/checkInDate mirror here as
   // a rollback safety net — retired in Phase 2; accounts[0] is the only
-  // source of truth, see stateShape.js.)
+  // source of truth, see stateShape.ts.)
   return {
     ...state,
     accounts,
