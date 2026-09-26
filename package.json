@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node tests/engine.test.mjs",
+    "test": "node tests/engine.test.mjs && node tests/migrations.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

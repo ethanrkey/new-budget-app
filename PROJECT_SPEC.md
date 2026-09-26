@@ -400,9 +400,23 @@ fifth tab never needs a migration.
 4. **The in-app Tutorial matches shipped features** (`src/components/Tutorial.jsx`);
    update it in the same commit as any feature change. A stale tutorial is
    worse than none.
-5. Data-shape changes are migration-safe: idempotent, deterministic,
-   asserted before/after on a legacy-shaped fixture, never fabricating
-   values the user didn't enter.
+5. Data-shape changes are migration-safe: **idempotent always**,
+   **deterministic for any state that carries data**, asserted before/after
+   on legacy-shaped fixtures, never fabricating values the user didn't enter.
+   `tests/migrations.test.mjs` is the standing guard — every migration path
+   with a golden snapshot; a new migration adds a fixture there in the same
+   commit.
+
+   The determinism guarantee is scoped on purpose. A state with NO items is
+   not deterministic across processes, and correctly so: `normalize()` seeds
+   a brand-new account with `defaultTrackerCategories()`, which mints fresh
+   `uid()`s. That is seeding, not migrating — there is no prior data whose
+   identity must be preserved. Migrations proper use fixed ids
+   (`seed-checking`, `seed-loan-<catId>`, `loan-<itemId>`) precisely so two
+   devices migrating the same legacy state produce byte-identical results.
+   Don't "fix" the seeding path to be deterministic and don't chase it as a
+   failure: the harness asserts idempotency everywhere and determinism only
+   where it is a real guarantee.
 
 ## 10. Roadmap
 

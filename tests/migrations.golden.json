@@ -1,0 +1,805 @@
+{
+ "legacyTrackerField": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 1000,
+    "balanceAsOf": "2026-01-01",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "a",
+    "name": "Roth",
+    "amount": 100,
+    "category": "roth",
+    "cadence": "monthly",
+    "startDate": "2026-01-05",
+    "order": 0,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [
+   {
+    "id": "b",
+    "name": "Gift",
+    "amount": 50,
+    "category": "saved",
+    "date": "2026-02-01",
+    "order": 1,
+    "accountId": "checking"
+   }
+  ],
+  "paidOverrides": {},
+  "trackerCategories": [
+   {
+    "id": "roth",
+    "name": "Roth",
+    "color": 5,
+    "order": 0,
+    "kind": "asset"
+   },
+   {
+    "id": "saved",
+    "name": "Saved",
+    "color": 2,
+    "order": 1,
+    "kind": "asset"
+   },
+   {
+    "id": "brokerage",
+    "name": "Brokerage",
+    "color": 0,
+    "order": 2,
+    "kind": "asset"
+   },
+   {
+    "id": "loans",
+    "name": "Loans",
+    "color": 3,
+    "order": 3,
+    "kind": "debt"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-01-01",
+     "amount": 1000
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {},
+  "monthlyActuals": {}
+ },
+ "onboardingBackfill": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 500,
+    "balanceAsOf": "2026-03-01",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "r",
+    "name": "Rent",
+    "amount": 1500,
+    "category": "bill",
+    "cadence": "monthly",
+    "startDate": "2026-03-02",
+    "order": 0,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [],
+  "paidOverrides": {},
+  "trackerCategories": [
+   {
+    "id": "roth",
+    "name": "Roth",
+    "color": 5,
+    "order": 0,
+    "kind": "asset"
+   },
+   {
+    "id": "saved",
+    "name": "Saved",
+    "color": 2,
+    "order": 1,
+    "kind": "asset"
+   },
+   {
+    "id": "brokerage",
+    "name": "Brokerage",
+    "color": 0,
+    "order": 2,
+    "kind": "asset"
+   },
+   {
+    "id": "loans",
+    "name": "Loans",
+    "color": 3,
+    "order": 3,
+    "kind": "debt"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-03-01",
+     "amount": 500
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {},
+  "monthlyActuals": {}
+ },
+ "legacyFourCategories": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 200,
+    "balanceAsOf": "2026-04-01",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "x",
+    "name": "Loan",
+    "amount": 300,
+    "category": "loans",
+    "cadence": "monthly",
+    "startDate": "2026-04-15",
+    "order": 0,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [],
+  "paidOverrides": {},
+  "trackerCategories": [
+   {
+    "id": "roth",
+    "name": "Roth",
+    "color": 5,
+    "order": 0,
+    "kind": "asset"
+   },
+   {
+    "id": "saved",
+    "name": "Saved",
+    "color": 2,
+    "order": 1,
+    "kind": "asset"
+   },
+   {
+    "id": "brokerage",
+    "name": "Brokerage",
+    "color": 0,
+    "order": 2,
+    "kind": "asset"
+   },
+   {
+    "id": "loans",
+    "name": "Loans",
+    "color": 3,
+    "order": 3,
+    "kind": "debt"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-04-01",
+     "amount": 200
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {},
+  "monthlyActuals": {}
+ },
+ "kindInference": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 0,
+    "balanceAsOf": "2026-05-01",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "y",
+    "name": "Car",
+    "amount": 200,
+    "category": "c1",
+    "cadence": "monthly",
+    "startDate": "2026-05-10",
+    "order": 0,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [],
+  "paidOverrides": {},
+  "trackerCategories": [
+   {
+    "id": "c1",
+    "name": "Car Debt",
+    "color": 1,
+    "order": 0,
+    "kind": "debt"
+   },
+   {
+    "id": "c2",
+    "name": "Vacation",
+    "color": 2,
+    "order": 1,
+    "kind": "asset"
+   },
+   {
+    "id": "loans",
+    "name": "Loans",
+    "color": 3,
+    "order": 2,
+    "kind": "debt"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-05-01",
+     "amount": 0
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {},
+  "monthlyActuals": {}
+ },
+ "accountsMigration": {
+  "settings": {
+   "budgetHorizon": "2026-12-01",
+   "ledgerHorizon": "2026-12-01",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 4321.98,
+    "balanceAsOf": "2026-06-01",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "m",
+    "name": "Rent",
+    "amount": 1000,
+    "category": "bill",
+    "cadence": "monthly",
+    "startDate": "2026-06-02",
+    "order": 0,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [
+   {
+    "id": "n",
+    "name": "Trip",
+    "amount": 400,
+    "category": "oneoff",
+    "date": "2026-07-04",
+    "order": 1,
+    "accountId": "checking"
+   }
+  ],
+  "paidOverrides": {},
+  "trackerCategories": [
+   {
+    "id": "roth",
+    "name": "Roth",
+    "color": 5,
+    "order": 0,
+    "kind": "asset"
+   },
+   {
+    "id": "saved",
+    "name": "Saved",
+    "color": 2,
+    "order": 1,
+    "kind": "asset"
+   },
+   {
+    "id": "brokerage",
+    "name": "Brokerage",
+    "color": 0,
+    "order": 2,
+    "kind": "asset"
+   },
+   {
+    "id": "loans",
+    "name": "Loans",
+    "color": 3,
+    "order": 3,
+    "kind": "debt"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-06-01",
+     "amount": 4321.98
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {},
+  "monthlyActuals": {}
+ },
+ "loanItemMigration": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 100,
+    "balanceAsOf": "2026-08-01",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "L1",
+    "name": "Student Loans",
+    "amount": 220,
+    "category": "loans",
+    "cadence": "monthly",
+    "dayOfMonth": 15,
+    "startDate": "2026-01-15",
+    "order": 0,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [],
+  "paidOverrides": {},
+  "trackerCategories": [
+   {
+    "id": "loans",
+    "name": "Student Loans",
+    "color": 3,
+    "order": 0,
+    "kind": "debt",
+    "originalPrincipal": 18000,
+    "interestRate": 5.8,
+    "interestStartDate": "2026-12-01"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-08-01",
+     "amount": 100
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {
+   "loans": [
+    {
+     "id": "seed-loan-loans",
+     "date": "2026-01-15",
+     "amount": 18000
+    }
+   ]
+  },
+  "monthlyActuals": {}
+ },
+ "twoLoansOneCategory": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 100,
+    "balanceAsOf": "2026-08-01",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "L1",
+    "name": "Loan A",
+    "amount": 220,
+    "category": "loans",
+    "cadence": "monthly",
+    "dayOfMonth": 15,
+    "startDate": "2026-01-15",
+    "order": 0,
+    "accountId": "checking"
+   },
+   {
+    "id": "L2",
+    "name": "Loan B",
+    "amount": 90,
+    "category": "loan-L2",
+    "cadence": "monthly",
+    "dayOfMonth": 20,
+    "startDate": "2026-02-20",
+    "order": 1,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [],
+  "paidOverrides": {},
+  "trackerCategories": [
+   {
+    "id": "loans",
+    "name": "Loans",
+    "color": 3,
+    "order": 0,
+    "kind": "debt",
+    "originalPrincipal": 18000,
+    "interestRate": 5.8,
+    "interestStartDate": null
+   },
+   {
+    "id": "loan-L2",
+    "name": "Loan B",
+    "color": 3,
+    "order": 1,
+    "kind": "debt",
+    "originalPrincipal": 2000,
+    "interestRate": 6.5,
+    "interestStartDate": null
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-08-01",
+     "amount": 100
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {
+   "loans": [
+    {
+     "id": "seed-loan-loans",
+     "date": "2026-01-15",
+     "amount": 18000
+    }
+   ],
+   "loan-L2": [
+    {
+     "id": "seed-loan-loan-L2",
+     "date": "2026-02-20",
+     "amount": 2000
+    }
+   ]
+  },
+  "monthlyActuals": {}
+ },
+ "tabOrderRepair": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "spending",
+    "dashboard",
+    "budget",
+    "ledger"
+   ],
+   "hasSeenOnboarding": false
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 10,
+    "balanceAsOf": "2026-09-01",
+    "order": 0
+   }
+  ],
+  "recurring": [],
+  "oneoffs": [],
+  "paidOverrides": {},
+  "trackerCategories": [
+   {
+    "id": "3vvy452c",
+    "name": "Savings",
+    "color": 2,
+    "order": 0,
+    "kind": "asset"
+   },
+   {
+    "id": "lvx1h03m",
+    "name": "Investments",
+    "color": 5,
+    "order": 1,
+    "kind": "asset"
+   },
+   {
+    "id": "reachgfx",
+    "name": "Debt",
+    "color": 1,
+    "order": 2,
+    "kind": "debt"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-09-01",
+     "amount": 10
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {},
+  "monthlyActuals": {}
+ },
+ "alreadyModern": {
+  "settings": {
+   "budgetHorizon": "2027-01-01",
+   "ledgerHorizon": "2027-01-01",
+   "theme": "dark",
+   "visibleTrackerCategoryIds": [
+    "k"
+   ],
+   "tabOrder": [
+    "ledger",
+    "budget",
+    "dashboard",
+    "spending"
+   ],
+   "hasSeenOnboarding": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 7,
+    "balanceAsOf": "2026-09-08",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "q",
+    "name": "Sub",
+    "amount": 9,
+    "category": "bill",
+    "cadence": "monthly",
+    "startDate": "2026-09-09",
+    "order": 0,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [],
+  "paidOverrides": {
+   "2026-09": [
+    "q"
+   ]
+  },
+  "trackerCategories": [
+   {
+    "id": "k",
+    "name": "Roth",
+    "color": 5,
+    "order": 0,
+    "kind": "asset"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "a",
+     "date": "2026-09-08",
+     "amount": 7
+    }
+   ]
+  },
+  "contributionLog": {
+   "k": [
+    {
+     "id": "c",
+     "date": "2026-09-02",
+     "amount": 50,
+     "source": "manual"
+    }
+   ]
+  },
+  "balanceSnapshots": {
+   "k": [
+    {
+     "id": "s",
+     "date": "2026-09-01",
+     "amount": 100
+    }
+   ]
+  },
+  "monthlyActuals": {
+   "q": {
+    "2026-09": 8
+   }
+  }
+ },
+ "empty": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": false
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 0,
+    "balanceAsOf": "2026-09-25",
+    "order": 0
+   }
+  ],
+  "recurring": [],
+  "oneoffs": [],
+  "paidOverrides": {},
+  "trackerCategories": [
+   {
+    "id": "3vvy452c",
+    "name": "Savings",
+    "color": 2,
+    "order": 0,
+    "kind": "asset"
+   },
+   {
+    "id": "lvx1h03m",
+    "name": "Investments",
+    "color": 5,
+    "order": 1,
+    "kind": "asset"
+   },
+   {
+    "id": "reachgfx",
+    "name": "Debt",
+    "color": 1,
+    "order": 2,
+    "kind": "debt"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-09-25",
+     "amount": 0
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {},
+  "monthlyActuals": {}
+ }
+}
