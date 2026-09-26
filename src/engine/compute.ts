@@ -1,14 +1,15 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.ts";
 import { CATEGORIES, endOfMonthISO, primaryAccount, toISODate } from "./model.ts";
+import type { BudgetColumn, BudgetState, ISODate, Ledger, LedgerRow, MonthKey } from "./types.ts";
 
 // LEDGER: every event with a running TD balance + stepped cumulative trackers.
-export function computeLedger(state, horizonISO) {
+export function computeLedger(state: BudgetState, horizonISO: ISODate): Ledger {
   const events = buildEvents(state, horizonISO);
   let bal = Number(primaryAccount(state).balance) || 0;
   // One running total per user-defined tracker category (id -> cumulative $).
   // Anything not in the fixed CATEGORIES is a tracker category by definition.
-  const cum = {};
+  const cum: Record<string, number> = {};
   for (const c of state.trackerCategories || []) cum[c.id] = 0;
 
   const rows = events.map((e) => {
@@ -20,8 +21,8 @@ export function computeLedger(state, horizonISO) {
     // step the matching tracker column — the category IS the tracker
     let stepped = null;
     if (!CATEGORIES[e.category] && e.category in cum) {
-      cum[e.category] += e.amount;
-      stepped = { key: e.category, value: round(cum[e.category]) };
+      cum[e.category]! += e.amount;
+      stepped = { key: e.category, value: round(cum[e.category]!) };
     }
 
     return {
@@ -36,9 +37,9 @@ export function computeLedger(state, horizonISO) {
 }
 
 // Group rows by "Mon YYYY" for the ledger's month headers.
-export function groupByMonth(rows) {
-  const groups = [];
-  let current = null;
+export function groupByMonth(rows: LedgerRow[]): Array<{ label: string; rows: LedgerRow[] }> {
+  const groups: Array<{ label: string; rows: LedgerRow[] }> = [];
+  let current: { label: string; rows: LedgerRow[] } | null = null;
   for (const r of rows) {
     const label = monthLabel(r.date);
     if (!current || current.label !== label) {
@@ -55,7 +56,7 @@ export function groupByMonth(rows) {
 const PAY_RE = /pay|salary|take.?home/i;
 
 // BUDGET: monthly grid, spreadsheet-style with sections.
-export function computeBudget(state, horizonISO) {
+export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetColumn[] {
     // The last column represents horizonISO's WHOLE calendar month (see
     // monthsBetween below — it's day-agnostic), but horizonISO itself is a
     // specific date that always shares checkInDate's day-of-month. Without
@@ -66,7 +67,7 @@ export function computeBudget(state, horizonISO) {
     const events = buildEvents(state, endOfMonthISO(horizonISO));
     const months = monthsBetween(primaryAccount(state).balanceAsOf, horizonISO);
 
-    const byMonth = {};
+    const byMonth: Record<string, any> = {};
     for (const m of months) byMonth[m.key] = { items: {}, takeHome: 0, payCount: 0 };
 
     for (const e of events) {
@@ -98,8 +99,8 @@ export function computeBudget(state, horizonISO) {
       const takeHome = b.takeHome;
       // split the aggregated-by-name items into non-paycheck income vs expenses
       let otherIn = 0, out = 0;
-      const incomeItems = {}, expenseItems = {};
-      for (const [name, obj] of Object.entries(b.items)) {
+      const incomeItems: Record<string, any> = {}, expenseItems: Record<string, any> = {};
+      for (const [name, obj] of Object.entries(b.items) as Array<[string, any]>) {
         if (obj.category === "income") {
           if (!PAY_RE.test(name)) otherIn += obj.val;
           incomeItems[name] = { val: obj.val, order: obj.order };
@@ -134,8 +135,8 @@ export function computeBudget(state, horizonISO) {
     return cols;
 }
   
-function incomeItemsExceptPay(incomeItems) {
-    const out = {};
+function incomeItemsExceptPay(incomeItems: Record<string, any>): Record<string, any> {
+    const out: Record<string, any> = {};
     for (const [name, obj] of Object.entries(incomeItems)) {
       if (!PAY_RE.test(name)) out[name] = obj;
     }
@@ -143,15 +144,15 @@ function incomeItemsExceptPay(incomeItems) {
 }
 
 // ---- helpers ----
-function round(n) { return Math.round(n * 100) / 100; }
+function round(n: number): number { return Math.round(n * 100) / 100; }
 
-function monthLabel(iso) {
+function monthLabel(iso: ISODate): string {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleString("en-US", { month: "short", year: "numeric" });
 }
 
-function monthsBetween(startISO, endISO) {
-  const out = [];
+function monthsBetween(startISO: ISODate, endISO: ISODate): Array<{ key: MonthKey; label: string }> {
+  const out: Array<{ key: MonthKey; label: string }> = [];
   const d = new Date(startISO.slice(0, 7) + "-01T00:00:00");
   const end = new Date(endISO.slice(0, 7) + "-01T00:00:00");
   let guard = 0;

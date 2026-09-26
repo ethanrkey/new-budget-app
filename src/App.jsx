@@ -7,14 +7,14 @@ import { downloadFile } from "./downloadFile.js";
 import { isStale } from "./engine/syncGuard.ts";
 import { getSession, onAuthChange, signOut } from "./auth.js";
 import { getDeviceTheme, setDeviceTheme } from "./theme.js";
-import { computeLedger, computeBudget } from "./engine/compute.js";
+import { computeLedger, computeBudget } from "./engine/compute.ts";
 import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
   updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
   addContribution, updateContribution, deleteContribution, countTaggedItems,
-} from "./engine/mutate.js";
+} from "./engine/mutate.ts";
 import { primaryAccount, sanitizeTabOrder } from "./engine/model.ts";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
@@ -130,7 +130,7 @@ export default function App() {
     setState((s) => togglePaidOverride(s, itemId, monthKey));
   }
   // Tracker category (savings/debt/investment) CRUD — deleting one never
-  // touches items still tagged with it (see mutate.js's addCategory et al.).
+  // touches items still tagged with it (see mutate.ts's addCategory et al.).
   function addTrackerCategory(name, color, kind) {
     setState((s) => addCategory(s, name, color, kind));
   }
@@ -144,7 +144,7 @@ export default function App() {
     setState((s) => moveCategory(s, id, direction));
   }
   // Dashboard: fund-balance snapshots + variable-bill monthly actuals — both
-  // fully editable/deletable after the fact (see mutate.js).
+  // fully editable/deletable after the fact (see mutate.ts).
   function logContribution(categoryId, amount, date) {
     setState((s) => addContribution(s, categoryId, amount, date));
   }
@@ -208,7 +208,7 @@ export default function App() {
 
   // The "Update balance" confirm — the ONLY path that moves the account's
   // verified balance. One atomic transition (balance + as-of + history
-  // snapshot + rollback mirror), see mutate.js. Nothing is written while the
+  // snapshot + rollback mirror), see mutate.ts. Nothing is written while the
   // modal's fields are being typed into.
   function confirmBalance(amount, date) {
     setState((s) => updateAccountBalance(s, primaryAccount(s).id, amount, date));
@@ -222,7 +222,7 @@ export default function App() {
     setState((s) => deleteAccountSnapshot(s, accountId, snapshotId));
   }
   // Loan setup / edit-terms — a loan is a debt-kind category; this never
-  // creates a transaction (see mutate.js setupLoan).
+  // creates a transaction (see mutate.ts setupLoan).
   function setupLoanHandler(payload) {
     setState((s) => setupLoan(s, payload));
   }

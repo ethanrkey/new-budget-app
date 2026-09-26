@@ -58,7 +58,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
   // loan's terms (originalPrincipal, interestRate as APR %, optional
   // interestStartDate), its outstanding balance is a logged snapshot in
   // balanceSnapshots exactly like an asset, and a payment is any
-  // transaction tagged to it (engine/loans.js). A payment REDUCES what's
+  // transaction tagged to it (engine/loans.ts). A payment REDUCES what's
   // owed, it doesn't accumulate like a deposit. A debt category with no
   // originalPrincipal is simply "not set up yet."
 
@@ -162,7 +162,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
       contributionLog: {}, // { [categoryId]: [{ id, date, amount, source, externalId? }] }
       // Real, actual-world numbers you log yourself — never generated from
       // transactions — used to reconcile the forecast against reality (the
-      // Dashboard tab). See engine/progress.js for how these are used.
+      // Dashboard tab). See engine/progress.ts for how these are used.
       balanceSnapshots: {}, // { [trackerCategoryId]: [{ id, date, amount }, ...] } — actual balance check-ins
       monthlyActuals: {},   // { [itemId]: { "YYYY-MM": amount } } — real spend for a variable bill's month
     };
@@ -179,7 +179,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
   // instances land in that month (see generate.ts).
   // `interestRate` (APR, as a percent e.g. 5.5) and `originalPrincipal`
   // (the loan's starting balance) apply only to a recurring rule tagged
-  // with a DEBT-kind tracker category — together they let engine/loans.js
+  // with a DEBT-kind tracker category — together they let engine/loans.ts
   // amortize this specific loan's expected remaining balance. Either can be
   // left null/unset; an unconfigured loan is simply skipped in the
   // category's cumulative debt total until both are filled in.
@@ -222,7 +222,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
   }
   // The last real calendar day of `iso`'s month — used where a horizon
   // needs to cover a WHOLE month rather than stop at a specific day (see
-  // computeBudget in compute.js: its horizon always shares checkInDate's
+  // computeBudget in compute.ts: its horizon always shares checkInDate's
   // day-of-month, e.g. always the "8th," so truncating event generation at
   // the exact horizon date silently drops any bill due later in that final
   // month — this is what a full calendar-month column should NOT do).

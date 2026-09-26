@@ -74,7 +74,7 @@ export function computeBudgetLayout(
   sectionItems.oneoff.sort((a, b) => ord(a) - ord(b));
 
   // Sort by `.order` rather than trusting the array's own position — moving
-  // a category (mutate.js's moveCategory) only swaps `.order` values, it
+  // a category (mutate.ts's moveCategory) only swaps `.order` values, it
   // never reshuffles the array itself, so `.order` is always the source of
   // truth for display sequence, never array index.
   const catOrder = [...trackerCategories].sort((a, b) => a.order - b.order).map((c) => c.id);

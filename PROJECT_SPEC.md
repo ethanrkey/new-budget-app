@@ -418,6 +418,14 @@ fifth tab never needs a migration.
    failure: the harness asserts idempotency everywhere and determinism only
    where it is a real guarantee.
 
+   **A new migration will diff the golden file for every item-bearing
+   fixture. That is the harness working, not breaking.** The response is to
+   read the diff, confirm every change is what the new migration intends and
+   nothing else moved, then regenerate with
+   `node tests/migrations.test.mjs --update` and commit the new golden file
+   alongside the migration. Never regenerate first and read after — the whole
+   value of the snapshot is that you had to look.
+
 ## 10. Roadmap
 
 **Gated decision — the storage model, decided BEFORE Expo work starts.**

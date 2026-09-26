@@ -64,8 +64,12 @@ export interface DebtCategory extends TrackerCategoryBase {
   kind: "debt";
   /** What was borrowed. Absent until the loan is set up. */
   originalPrincipal?: number;
-  /** APR as a percentage, e.g. 5.8 — not a fraction. */
-  interestRate?: number;
+  /**
+   * APR as a percentage, e.g. 5.8 — not a fraction. Explicitly nullable:
+   * setupLoan stores `null` when a loan is set up without a rate, so `null`
+   * and absent are both real states in saved data.
+   */
+  interestRate?: number | null;
   /** Nothing accrues before this date (a student loan's grace period). */
   interestStartDate?: ISODate | null;
 }

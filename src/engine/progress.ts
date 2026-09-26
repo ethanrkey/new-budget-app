@@ -14,18 +14,49 @@
 //    total was logged in monthlyActuals.
 import { occurrenceDates } from "./generate.ts";
 import { primaryAccount } from "./model.ts";
+import type {
+  BalanceSnapshot, BudgetState, Contribution, ISODate, MonthKey, RecurringItem,
+} from "./types.ts";
 
-function round(n) { return Math.round(n * 100) / 100; }
+export interface MonthVariance {
+  monthKey: MonthKey;
+  occurrences: number;
+  /** The rule's amount times how many times it fires that month. */
+  expected: number;
+  /** What was logged, or null when nothing has been. */
+  actual: number | null;
+  delta: number | null;
+}
+
+export interface LoggedContributions {
+  entries: Contribution[];
+  total: number;
+  byYear: Record<string, number>;
+  /** False when nothing was ever logged — distinct from a logged zero. */
+  logged: boolean;
+}
+
+export interface NetPosition {
+  net: number;
+  cash: number;
+  assets: number;
+  debt: number;
+  unloggedAssets: number;
+  unloggedDebts: number;
+}
+
+function round(n: number): number { return Math.round(n * 100) / 100; }
 
 // The last real day of `monthKey` ("YYYY-MM"), for bounding an occurrence
 // scan to exactly one month.
-function endOfMonth(monthKey) {
+function endOfMonth(monthKey: MonthKey): ISODate {
   const [y, m] = monthKey.split("-").map(Number);
-  const d = new Date(y, m, 0); // day 0 of next month = last day of this one
+  // A "YYYY-MM" key always yields two parts; see endOfMonthISO in model.ts.
+  const d = new Date(y!, m!, 0); // day 0 of next month = last day of this one
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function sortedSnapshots(state, categoryId) {
+function sortedSnapshots(state: BudgetState, categoryId: string): BalanceSnapshot[] {
   return [...(state.balanceSnapshots?.[categoryId] || [])].sort((a, b) =>
     a.date === b.date ? 0 : a.date < b.date ? -1 : 1
   );
@@ -44,10 +75,10 @@ function sortedSnapshots(state, categoryId) {
 // and `computeLoggedContributions` is the honest companion stat.
 //
 // NOTE the deliberate asymmetry: LOANS keep their projected line
-// (engine/loans.js). Amortization is real math about a known quantity —
+// (engine/loans.ts). Amortization is real math about a known quantity —
 // last logged balance + interest accrued − payments — not a guess about a
 // market. Don't "tidy up" by stripping both.
-export function computeCategoryHistory(state, categoryId) {
+export function computeCategoryHistory(state: BudgetState, categoryId: string): BalanceSnapshot[] {
   return sortedSnapshots(state, categoryId);
 }
 
@@ -55,7 +86,7 @@ export function computeCategoryHistory(state, categoryId) {
 // rule's flat per-occurrence estimate times however many times it actually
 // fires in that specific month — not always 1, now that variable bills can
 // be any cadence, not just monthly.
-export function computeMonthVariance(item, monthlyActuals, monthKey) {
+export function computeMonthVariance(item: RecurringItem, monthlyActuals: BudgetState["monthlyActuals"] | undefined, monthKey: MonthKey): MonthVariance {
   const occurrences = occurrenceDates(item, endOfMonth(monthKey)).filter((d) => d.slice(0, 7) === monthKey).length;
   const expected = round(item.amount * occurrences);
   const actual = monthlyActuals?.[item.id]?.[monthKey];
@@ -84,13 +115,13 @@ export function computeMonthVariance(item, monthlyActuals, monthKey) {
 // Entries carry `source` ("manual" today; an importer writes its own), so
 // Plaid-imported contributions land in this same list and everything here
 // keeps working unchanged.
-export function computeLoggedContributions(state, categoryId, asOfISO) {
+export function computeLoggedContributions(state: BudgetState, categoryId: string, asOfISO?: ISODate): LoggedContributions {
   const all = [...(state.contributionLog?.[categoryId] || [])].sort((a, b) =>
     a.date === b.date ? 0 : a.date < b.date ? -1 : 1
   );
   const entries = asOfISO ? all.filter((c) => c.date <= asOfISO) : all;
 
-  const byYear = {};
+  const byYear: Record<string, number> = {};
   let total = 0;
   for (const c of entries) {
     const y = c.date.slice(0, 4);
@@ -114,7 +145,7 @@ export function computeLoggedContributions(state, categoryId, asOfISO) {
 // been logged). A category with nothing to go on contributes 0 and is
 // COUNTED, so the UI can say "N not yet logged" instead of letting a low
 // number masquerade as the truth.
-export function computeNetPosition(state) {
+export function computeNetPosition(state: BudgetState): NetPosition {
   const cash = round(Number(primaryAccount(state).balance) || 0);
   let assets = 0, debt = 0, unloggedAssets = 0, unloggedDebts = 0;
   for (const cat of state.trackerCategories || []) {
@@ -146,11 +177,11 @@ export function computeNetPosition(state) {
 // The last `count` months as "YYYY-MM" keys, ending at (and including)
 // `anchorISO`'s month — the window the Spending tab's variable-spending
 // table shows for each flagged bill.
-export function lastMonthKeys(anchorISO, count) {
+export function lastMonthKeys(anchorISO: ISODate, count: number): MonthKey[] {
   const [y, m] = anchorISO.slice(0, 7).split("-").map(Number);
-  const out = [];
+  const out: MonthKey[] = [];
   for (let i = count - 1; i >= 0; i--) {
-    const d = new Date(y, m - 1 - i, 1);
+    const d = new Date(y!, m! - 1 - i, 1);
     out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
   return out;

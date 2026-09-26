@@ -7,7 +7,7 @@ const money = (n) =>
 
 // The one place the account's verified balance changes. Drafts live here;
 // nothing touches state until Confirm — which then commits balance + as-of
-// date + a history snapshot atomically (mutate.js updateAccountBalance).
+// date + a history snapshot atomically (mutate.ts updateAccountBalance).
 // The amount field starts EMPTY on purpose (placeholder shows the current
 // figure): pre-filling it would make one stray Confirm re-log the same
 // number as a fresh snapshot dated today.

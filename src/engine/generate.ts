@@ -11,10 +11,10 @@ function parse(isoStr: ISODate): Date { return new Date(isoStr + "T00:00:00"); }
 // Every date a recurring rule fires, from its own startDate up to
 // `horizonISO` (respecting its own endDate). Exported so callers that need
 // to know a rule's occurrences WITHOUT generating full events can reuse the
-// exact same expansion logic — engine/progress.js's cadence-aware "expected"
+// exact same expansion logic — engine/progress.ts's cadence-aware "expected"
 // for a variable bill (a biweekly item can land 2 or 3 times in a given
 // month, same "2 vs 3 paydays" thing that's already true for paychecks) and
-// engine/loans.js's amortization schedule both do this.
+// engine/loans.ts's amortization schedule both do this.
 export function occurrenceDates(rule: RecurringItem, horizonISO: ISODate): ISODate[] {
   const horizon = parse(horizonISO);
   const start = parse(rule.startDate);
@@ -35,7 +35,7 @@ export function occurrenceDates(rule: RecurringItem, horizonISO: ISODate): ISODa
 // Generate EVERY event (recurring expanded + one-offs) up to `horizonISO`,
 // with NO live-month filtering — unlike buildEvents below, this doesn't drop
 // already-past events. buildEvents uses this and then filters; the fund-
-// balance progress calculator (engine/progress.js) also needs this directly,
+// balance progress calculator (engine/progress.ts) also needs this directly,
 // since it specifically sums already-past transactions (everything since a
 // balance snapshot's date) that buildEvents would otherwise throw away.
 export function buildAllEvents(state: BudgetState, horizonISO: ISODate): BudgetEvent[] {

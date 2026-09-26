@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from "recharts";
-import { computeCategoryHistory, computeLoggedContributions, computeNetPosition, computeMonthVariance } from "../engine/progress.js";
-import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.js";
+import { computeCategoryHistory, computeLoggedContributions, computeNetPosition, computeMonthVariance } from "../engine/progress.ts";
+import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.ts";
 import { paletteColor, primaryAccount, todayISO } from "../engine/model.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
@@ -28,7 +28,7 @@ const BTN = "text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-g
 // The "reality layer": what's actually in your accounts, what you actually
 // put in, and how that compares to what the transaction log alone would
 // project. Ledger/Budget stay pure forecasting. Every card is ONE thing.
-// A loan is a debt-kind category (engine/loans.js) — set up here, never via
+// A loan is a debt-kind category (engine/loans.ts) — set up here, never via
 // the transaction editor. Variable spending lives on its own tab.
 export default function Dashboard({
   state, isDark,
@@ -362,7 +362,7 @@ function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, 
 
 // ---- Savings / investment ----
 // One line: the balances you logged. No projection — see
-// computeCategoryHistory in engine/progress.js for why (loans are different
+// computeCategoryHistory in engine/progress.ts for why (loans are different
 // and keep theirs).
 function AssetCard({ category, isDark, history, contributions, today, onLog, onLogContribution, onEdit,
   onUpdateSnapshot, onDeleteSnapshot, onUpdateContribution, onDeleteContribution }) {

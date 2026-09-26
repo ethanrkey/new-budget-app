@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { groupByMonth } from "../engine/compute.js";
+import { groupByMonth } from "../engine/compute.ts";
 import { todayISO, paletteColor } from "../engine/model.ts";
 import HorizonSlider from "./HorizonSlider.jsx";
 import InfoTip from "./InfoTip.jsx";

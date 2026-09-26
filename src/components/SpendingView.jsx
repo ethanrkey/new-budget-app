@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { computeMonthVariance, lastMonthKeys } from "../engine/progress.js";
+import { computeMonthVariance, lastMonthKeys } from "../engine/progress.ts";
 import { todayISO } from "../engine/model.ts";
 
 const money = (n) =>

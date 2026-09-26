@@ -1,8 +1,8 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
-import { computeLedger, computeBudget } from "../src/engine/compute.js";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.js";
-import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.js";
-import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.js";
+import { computeLedger, computeBudget } from "../src/engine/compute.ts";
+import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
+import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.ts";
+import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
 import { buildAllEvents } from "../src/engine/generate.ts";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.ts";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.ts";
@@ -105,7 +105,7 @@ function eq(label, got, want) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}  got=${JSON.stringify(got)} want=${JSON.stringify(want)}`);
 }
 
-// ---------- Scenario D: CRUD mutations (engine/mutate.js) ----------
+// ---------- Scenario D: CRUD mutations (engine/mutate.ts) ----------
 console.log("\n== Scenario D: upsert / delete ==");
 let s = {
   recurring: [{ id: "a", name: "Rent", amount: 1000, category: "bill", cadence: "monthly", order: 0 }],
@@ -493,7 +493,7 @@ eq("field explicitly true is preserved",
   normalize({ recurring: [], oneoffs: [], settings: { hasSeenOnboarding: true } }).settings.hasSeenOnboarding,
   true);
 
-// ---------- Scenario O: tracker-category CRUD (mutate.js) ----------
+// ---------- Scenario O: tracker-category CRUD (mutate.ts) ----------
 console.log("\n== Scenario O: addCategory / updateCategory / deleteCategory / moveCategory ==");
 let sO = { trackerCategories: legacyTrackerCategories() }; // roth(0), saved(1), brokerage(2), loans(3)
 
@@ -705,7 +705,7 @@ eq("...and the comparison goes back to 'nothing logged'",
 
 eq("lastMonthKeys: last 3 months ending at the anchor's month", lastMonthKeys("2026-09-15", 3), ["2026-07", "2026-08", "2026-09"]);
 
-// ---------- Scenario S: balance-snapshot CRUD (mutate.js) — fully editable/deletable ----------
+// ---------- Scenario S: balance-snapshot CRUD (mutate.ts) — fully editable/deletable ----------
 console.log("\n== Scenario S: addBalanceSnapshot / updateBalanceSnapshot / deleteBalanceSnapshot ==");
 let sS = { balanceSnapshots: {} };
 sS = addBalanceSnapshot(sS, "sav", 500, "2026-09-01");

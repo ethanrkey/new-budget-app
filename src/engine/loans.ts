@@ -22,20 +22,64 @@
 // between two snapshots covers [prior.date, snap.date) so no payment is
 // ever counted twice. (Assets use the opposite, end-of-day convention —
 // a deposit that day is already in the logged balance — which is why
-// progress.js's contributionsSince uses a strict `>`.)
+// progress.ts's contributionsSince uses a strict `>`.)
 import { buildAllEvents } from "./generate.ts";
+import type {
+  BalanceSnapshot, BudgetState, DebtCategory, ISODate, PaletteIndex, TrackerCategory,
+} from "./types.ts";
 
-function round(n) { return Math.round(n * 100) / 100; }
-function daysBetween(a, b) {
-  return Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+/** A logged balance annotated with what amortization expected at that moment. */
+export interface LoanHistoryEntry extends BalanceSnapshot {
+  expected: number;
+  variance: number;
 }
-function sortedSnapshots(state, categoryId) {
+
+/** One row of the collapsed debt card's list. */
+export interface DebtSummaryRow {
+  id: string;
+  name: string;
+  color: PaletteIndex;
+  /** null when nothing has been logged — never 0, which would understate. */
+  outstanding: number | null;
+  loggedOn: ISODate | null;
+  configured: boolean;
+}
+
+export interface DebtSummary {
+  total: number;
+  loans: DebtSummaryRow[];
+  count: number;
+  unlogged: number;
+}
+
+export interface LoanProgress {
+  latest: BalanceSnapshot | null;
+  outstanding: number | null;
+  original: number;
+  /** The most this loan has ever been worth owing. */
+  peak: number;
+  /** The denominator the bar actually uses: peak, or the original. */
+  basis: number;
+  everAboveOriginal: boolean;
+  /** Owed beyond borrowed, when there is any. */
+  aboveOriginal: number | null;
+  percentPaid: number | null;
+  expectedNow: number | null;
+  interestRate: number;
+  interestStartDate: ISODate | null;
+}
+
+function round(n: number): number { return Math.round(n * 100) / 100; }
+function daysBetween(a: ISODate, b: ISODate): number {
+  return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86400000);
+}
+function sortedSnapshots(state: BudgetState, categoryId: string): BalanceSnapshot[] {
   return [...(state.balanceSnapshots?.[categoryId] || [])].sort((a, b) =>
     a.date === b.date ? 0 : a.date < b.date ? -1 : 1
   );
 }
 
-export function isLoanConfigured(cat) {
+export function isLoanConfigured(cat: TrackerCategory | null | undefined): cat is DebtCategory & { originalPrincipal: number } {
   return !!cat && cat.kind === "debt" && cat.originalPrincipal != null;
 }
 
@@ -46,14 +90,14 @@ export function isLoanConfigured(cat) {
 // a same-day payment belongs to the segment AFTER it). Interest also
 // accrues on the trailing stretch after the last payment up to asOf —
 // a debt keeps accruing whether or not a payment happened.
-function amortizeFrom(state, cat, anchorAmount, anchorDate, asOfISO, includeEnd) {
+function amortizeFrom(state: BudgetState, cat: DebtCategory, anchorAmount: number, anchorDate: ISODate, asOfISO: ISODate, includeEnd: boolean): number {
   const apr = (cat.interestRate || 0) / 100;
   const accrualStart =
     cat.interestStartDate && cat.interestStartDate > anchorDate ? cat.interestStartDate : anchorDate;
   const payments = buildAllEvents(state, asOfISO).filter(
     (e) => e.category === cat.id && e.date >= anchorDate && (includeEnd ? e.date <= asOfISO : e.date < asOfISO)
   );
-  const interestFor = (balance, fromDate, toDate) => {
+  const interestFor = (balance: number, fromDate: ISODate, toDate: ISODate) => {
     if (toDate <= accrualStart) return 0;
     const from = fromDate > accrualStart ? fromDate : accrualStart;
     return balance * apr * (Math.max(0, daysBetween(from, toDate)) / 365);
@@ -71,9 +115,9 @@ function amortizeFrom(state, cat, anchorAmount, anchorDate, asOfISO, includeEnd)
 // Live projection: the last logged balance on/before asOf, carried forward.
 // `expected` is null when nothing has ever been logged — there's no anchor,
 // and inventing one from origination would be a number the user never saw.
-export function computeLoanExpected(state, cat, asOfISO) {
+export function computeLoanExpected(state: BudgetState, cat: TrackerCategory, asOfISO: ISODate): { anchor: BalanceSnapshot | null; expected: number | null } {
   const snaps = sortedSnapshots(state, cat.id).filter((s) => s.date <= asOfISO);
-  const anchor = snaps.length ? snaps[snaps.length - 1] : null;
+  const anchor = snaps.length ? snaps[snaps.length - 1]! : null;
   if (!anchor || !isLoanConfigured(cat)) return { anchor: null, expected: null };
   return { anchor, expected: amortizeFrom(state, cat, anchor.amount, anchor.date, asOfISO, true) };
 }
@@ -82,12 +126,12 @@ export function computeLoanExpected(state, cat, asOfISO) {
 // THAT MOMENT (carried from the prior snapshot) — drives the dashed
 // projected line. Recomputed from current transactions on every call,
 // never stored. The first snapshot is the baseline and matches itself.
-export function computeLoanHistory(state, cat) {
+export function computeLoanHistory(state: BudgetState, cat: TrackerCategory): LoanHistoryEntry[] {
   const snaps = sortedSnapshots(state, cat.id);
   return snaps.map((snap, i) => {
     if (i === 0 || !isLoanConfigured(cat)) return { ...snap, expected: snap.amount, variance: 0 };
     const prior = snaps[i - 1];
-    const expected = amortizeFrom(state, cat, prior.amount, prior.date, snap.date, false);
+    const expected = amortizeFrom(state, cat, prior!.amount, prior!.date, snap.date, false);
     return { ...snap, expected, variance: round(snap.amount - expected) };
   });
 }
@@ -101,7 +145,7 @@ export function computeLoanHistory(state, cat) {
 // contributes nothing and is counted in `unlogged` instead: the loan model
 // never invents an anchor from origination, and showing $0 for "I haven't
 // told you yet" would quietly understate what's owed.
-export function computeDebtSummary(state) {
+export function computeDebtSummary(state: BudgetState): DebtSummary {
   const cats = (state.trackerCategories || [])
     .filter((c) => c.kind === "debt")
     .sort((a, b) => a.order - b.order);
@@ -110,7 +154,7 @@ export function computeDebtSummary(state) {
   let unlogged = 0;
   const loans = cats.map((cat) => {
     const snaps = sortedSnapshots(state, cat.id);
-    const latest = snaps.length ? snaps[snaps.length - 1] : null;
+    const latest = snaps.length ? snaps[snaps.length - 1]! : null;
     if (latest) total += latest.amount;
     else unlogged++;
     return {
@@ -149,10 +193,10 @@ export function computeDebtSummary(state) {
 //    today. The branch is sticky (it keys off peak, not today's balance), so
 //    crossing back under the original principal can't jump the bar backwards
 //    by swapping denominators mid-payoff.
-export function computeLoanProgress(state, cat, asOfISO) {
+export function computeLoanProgress(state: BudgetState, cat: TrackerCategory, asOfISO: ISODate): LoanProgress | null {
   if (!isLoanConfigured(cat)) return null;
   const snaps = sortedSnapshots(state, cat.id);
-  const latest = snaps.length ? snaps[snaps.length - 1] : null;
+  const latest = snaps.length ? snaps[snaps.length - 1]! : null;
   const { expected } = computeLoanExpected(state, cat, asOfISO);
   const original = cat.originalPrincipal;
   const outstanding = latest ? latest.amount : null;
@@ -166,8 +210,8 @@ export function computeLoanProgress(state, cat, asOfISO) {
   let percentPaid = null;
   if (latest && basis > 0) {
     percentPaid = everAboveOriginal
-      ? Math.min(100, Math.max(0, round((1 - bestOwed / peak) * 100)))
-      : Math.min(100, Math.max(0, round((1 - outstanding / original) * 100)));
+      ? Math.min(100, Math.max(0, round((1 - bestOwed! / peak) * 100)))
+      : Math.min(100, Math.max(0, round((1 - outstanding! / original) * 100)));
   }
 
   return {
