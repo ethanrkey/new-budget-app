@@ -109,7 +109,7 @@ separate columns, here as everywhere else.
 
 ## Tech stack
 
-React 18 + Vite · TypeScript (the engine; the UI stays JSX) · Tailwind CSS v3 ·
+React 18 + Vite · TypeScript (the whole engine; the UI stays JSX) · Tailwind CSS v3 ·
 Recharts · Supabase (Postgres + Auth) · deployed on Vercel · GitHub Actions for
 CI. No state library, no component library, no backend of my own.
 
@@ -117,7 +117,7 @@ CI. No state library, no component library, no backend of my own.
 
 ```
 src/
-  engine/       pure calculation — no React, no network, no DOM
+  engine/       pure calculation in TypeScript — no React, no network, no DOM
   components/   React views; they render and call mutators, nothing else
   storage.js    the ONLY place that talks to the backend
   App.jsx       owns the single state object; loads it once, autosaves changes

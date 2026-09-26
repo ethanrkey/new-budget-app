@@ -66,9 +66,9 @@ tests/engine.test.mjs   the engine harness (see §8)
 supabase/schema.sql     the one table + RLS policies
 ```
 
-**JavaScript / TypeScript boundary.** `src/engine` is migrating to
-TypeScript, file by file, leaf dependencies first; `src/components` stays JSX
-and is not scheduled to convert. That split is deliberate: the engine holds the
+**JavaScript / TypeScript boundary.** `src/engine` is **fully TypeScript**
+(all 13 modules, completed 2026-09-25); `src/components` stays JSX and is not
+scheduled to convert. That split is deliberate: the engine holds the
 money math and is about to have a SECOND consumer (the Expo client), so its
 exported surface is a contract between two codebases rather than an internal
 detail — that is where a type is worth its keystrokes. Components are cosmetic

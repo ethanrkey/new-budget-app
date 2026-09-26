@@ -7,9 +7,9 @@ import { buildAllEvents } from "../src/engine/generate.ts";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.ts";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.ts";
 import { computeBudgetLayout } from "../src/engine/budgetLayout.ts";
-import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.js";
-import { parseBudgetCSV } from "../src/engine/csvImport.js";
-import { parseLedgerCSV } from "../src/engine/ledgerCsvImport.js";
+import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.ts";
+import { parseBudgetCSV } from "../src/engine/csvImport.ts";
+import { parseLedgerCSV } from "../src/engine/ledgerCsvImport.ts";
 import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../src/engine/backupShape.ts";
 import { isStale, makeRecoveryEnvelope, isRecoveryEnvelope } from "../src/engine/syncGuard.ts";
 

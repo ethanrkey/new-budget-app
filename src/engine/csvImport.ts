@@ -1,4 +1,4 @@
-// ---- Reconstruct recurring/oneoffs from a Budget CSV (engine/csv.js's
+// ---- Reconstruct recurring/oneoffs from a Budget CSV (engine/csv.ts's
 // budgetToCSV output) ----
 // Necessarily lossy: the monthly grid has no day-of-month, and Saving/Debt
 // rows don't record which of roth/saved/brokerage/loans they were (the CSV
@@ -6,19 +6,36 @@
 // reconstruction it can and returns `warnings` describing every guess, so
 // the caller can show them before committing anything to state.
 import { uid } from "./model.ts";
+import type { CategoryRef, ISODate, MonthKey, OneOffItem, RecurringItem, TrackerCategory } from "./types.ts";
+
+/**
+ * What an importer hands back. Items are PARTIAL — they carry no order or
+ * accountId; upsertItem stamps those. `checkInBalance` is null for formats
+ * that have no running-balance concept.
+ */
+export interface ParsedImport {
+  recurring: Array<Partial<RecurringItem> & { id: string; name: string; amount: number }>;
+  oneoffs: Array<Partial<OneOffItem> & { id: string; name: string; amount: number }>;
+  checkInBalance: number | null;
+  warnings: string[];
+  /** Only the per-transaction importer reports this. */
+  totalRows?: number;
+}
 
 const SECTION_HEADERS = new Set(["INCOME", "FIXED / RECURRING", "SAVING / DEBT", "ONE-OFF / SEASONAL"]);
 const SKIP_ROWS = new Set(["Starting point", "TOTAL IN", "TOTAL OUT", "MONTHLY NET", "CUMULATIVE NET"]);
-const MONTH_NUM = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+// Indexed by a parsed string, so keyed by string — the `in` guard in
+// monthLabelToKey is what proves a hit.
+const MONTH_NUM: Record<string, number> = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
 
 // Guess which of the user's OWN tracker categories a Saving/Debt row
 // belongs to, by matching its name against a keyword and then against the
 // user's category NAMES (the CSV only records the section, never the real
 // category id) — falls back to their first category, or the legacy "saved"
 // id if they somehow have none at all.
-function guessSavingCategory(name, trackerCategories) {
+function guessSavingCategory(name: string, trackerCategories: TrackerCategory[]): CategoryRef {
   const n = name.toLowerCase();
-  const find = (re) => trackerCategories.find((c) => re.test(c.name.toLowerCase()));
+  const find = (re: RegExp) => trackerCategories.find((c) => re.test(c.name.toLowerCase()));
   const fallback = () => trackerCategories[0]?.id ?? "saved";
   if (/roth|ira/.test(n)) return find(/roth|ira/)?.id ?? fallback();
   if (/loan|debt/.test(n)) return find(/loan|debt/)?.id ?? fallback();
@@ -29,7 +46,7 @@ function guessSavingCategory(name, trackerCategories) {
 // Minimal RFC 4180 line parser — quoted fields, doubled "" for an embedded
 // quote. Fine here because this export never puts a literal newline inside
 // a field (item names don't contain them).
-function parseCSVLine(line) {
+function parseCSVLine(line: string): string[] {
   const fields = [];
   let field = "", inQuotes = false;
   for (let i = 0; i < line.length; i++) {
@@ -48,19 +65,19 @@ function parseCSVLine(line) {
   fields.push(field);
   return fields;
 }
-function parseCSV(text) {
+function parseCSV(text: string): string[][] {
   return text.split(/\r\n|\n/).filter((l) => l.length > 0).map(parseCSVLine);
 }
 
-function monthLabelToKey(label) {
+function monthLabelToKey(label: string): MonthKey | null {
   const m = label.trim().match(/^(\w{3})\s+(\d{4})$/);
-  if (!m || !(m[1] in MONTH_NUM)) return null;
-  return `${m[2]}-${String(MONTH_NUM[m[1]] + 1).padStart(2, "0")}`;
+  if (!m || !(m[1]! in MONTH_NUM)) return null;
+  return `${m[2]}-${String(MONTH_NUM[m[1]!]! + 1).padStart(2, "0")}`;
 }
-function monthKeyToDate(key) { return `${key}-01`; } // exact day is lost information
-function addMonthsToKey(key, n) {
+function monthKeyToDate(key: MonthKey): ISODate { return `${key}-01`; } // exact day is lost information
+function addMonthsToKey(key: MonthKey, n: number): MonthKey {
   const [y, m] = key.split("-").map(Number);
-  const d = new Date(y, m - 1 + n, 1);
+  const d = new Date(y!, m! - 1 + n, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
@@ -73,23 +90,23 @@ function addMonthsToKey(key, n) {
 // old files must keep importing.
 const STARTING_BALANCE_LABELS = new Set(["Checking", "TD checking"]);
 
-export function parseBudgetCSV(text, trackerCategories = []) {
+export function parseBudgetCSV(text: string, trackerCategories: TrackerCategory[] = []): ParsedImport {
   const rows = parseCSV(text);
   if (rows.length < 2) throw new Error("This file is empty or has no data rows.");
 
-  const monthKeys = rows[0].slice(1).map(monthLabelToKey);
+  const monthKeys = rows[0]!.slice(1).map(monthLabelToKey);
   if (monthKeys.length === 0 || monthKeys.some((k) => !k)) {
     throw new Error('Could not read the month header row — is this a "Budget" export (not "Ledger")?');
   }
 
-  const recurring = [];
-  const oneoffs = [];
-  const warnings = [];
-  let checkInBalance = null;
+  const recurring: ParsedImport["recurring"] = [];
+  const oneoffs: ParsedImport["oneoffs"] = [];
+  const warnings: string[] = [];
+  let checkInBalance: number | null = null;
   let section = "INCOME";
 
   for (let r = 1; r < rows.length; r++) {
-    const [label, ...cells] = rows[r];
+    const [label, ...cells] = rows[r]!;
     if (!label) continue;
 
     if (SECTION_HEADERS.has(label)) { section = label; continue; }
@@ -102,7 +119,7 @@ export function parseBudgetCSV(text, trackerCategories = []) {
 
     const values = monthKeys.map((_, i) => (cells[i] === "" || cells[i] == null ? 0 : Number(cells[i])));
     const occurrences = monthKeys
-      .map((key, i) => ({ key, value: values[i] }))
+      .map((key, i) => ({ key: key!, value: values[i]! }))
       .filter((o) => Math.abs(o.value) > 0.005);
     if (occurrences.length === 0) continue;
 
@@ -118,13 +135,13 @@ export function parseBudgetCSV(text, trackerCategories = []) {
     }
 
     const isContiguous = occurrences.every(
-      (o, i) => i === 0 || addMonthsToKey(occurrences[i - 1].key, 1) === o.key
+      (o, i) => i === 0 || addMonthsToKey(occurrences[i - 1]!.key, 1) === o.key
     );
-    const sameAmount = occurrences.every((o) => Math.abs(o.value - occurrences[0].value) < 0.005);
+    const sameAmount = occurrences.every((o) => Math.abs(o.value - occurrences[0]!.value) < 0.005);
 
     if (occurrences.length > 1 && isContiguous && sameAmount) {
-      const startKey = occurrences[0].key;
-      const endKey = occurrences[occurrences.length - 1].key;
+      const startKey = occurrences[0]!.key;
+      const endKey = occurrences[occurrences.length - 1]!.key;
       // A monthly rule with no true end date can still show its very last
       // month as $0 in the export: if its day-of-month falls after the
       // horizon's cutoff day, that final instance never gets generated at
@@ -138,7 +155,7 @@ export function parseBudgetCSV(text, trackerCategories = []) {
       recurring.push({
         id: uid(),
         name,
-        amount: Math.abs(occurrences[0].value),
+        amount: Math.abs(occurrences[0]!.value),
         category,
         cadence: "monthly",
         startDate: monthKeyToDate(startKey),

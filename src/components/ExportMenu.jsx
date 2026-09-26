@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ledgerToCSV, budgetToCSV } from "../engine/csv.js";
+import { ledgerToCSV, budgetToCSV } from "../engine/csv.ts";
 import { todayISO } from "../engine/model.ts";
 import { downloadFile } from "../downloadFile.js";
 

@@ -2,19 +2,20 @@
 // (those live in the component that triggers the actual download)
 import { CATEGORIES } from "./model.ts";
 import { computeBudgetLayout } from "./budgetLayout.ts";
+import type { BudgetColumn, CategoryRef, Ledger, TrackerCategory } from "./types.ts";
 
-function csvCell(v) {
+function csvCell(v: unknown): string {
   const s = v === null || v === undefined ? "" : String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
-function csvRow(cells) {
+function csvRow(cells: unknown[]): string {
   return cells.map(csvCell).join(",");
 }
-function fmt(n) {
+function fmt(n: number | null | undefined): string {
   return n || n === 0 ? Number(n).toFixed(2) : "";
 }
 
-function categoryLabel(cat, trackerCategories) {
+function categoryLabel(cat: CategoryRef, trackerCategories: TrackerCategory[]): string {
   if (CATEGORIES[cat]) return CATEGORIES[cat].label;
   return trackerCategories.find((c) => c.id === cat)?.name ?? cat;
 }
@@ -25,7 +26,7 @@ function categoryLabel(cat, trackerCategories) {
 // with the columns open. `trackerCategories` is the user's own list (order
 // = column order); pass it explicitly so an export always matches whoever's
 // data it came from, not some hardcoded set.
-export function ledgerToCSV(ledger, trackerCategories = []) {
+export function ledgerToCSV(ledger: Ledger, trackerCategories: TrackerCategory[] = []): string {
   // `.order` is the source of truth for column sequence, not array
   // position — see budgetLayout.ts's identical note.
   const cats = [...trackerCategories].sort((a, b) => a.order - b.order);
@@ -47,11 +48,11 @@ export function ledgerToCSV(ledger, trackerCategories = []) {
 // The monthly grid, exactly as sectioned/ordered on screen (same
 // computeBudgetLayout() BudgetView renders from) — one row per line, one
 // column per month.
-export function budgetToCSV(budget, trackerCategories = []) {
+export function budgetToCSV(budget: BudgetColumn[], trackerCategories: TrackerCategory[] = []): string {
   if (budget.length === 0) return "";
   const layout = computeBudgetLayout(budget, trackerCategories);
   const lines = [csvRow(["", ...budget.map((c) => c.label)])];
-  const row = (label, pick) => lines.push(csvRow([label, ...budget.map((c) => fmt(pick(c)))]));
+  const row = (label: string, pick: (c: BudgetColumn) => number) => lines.push(csvRow([label, ...budget.map((c) => fmt(pick(c)))]));
 
   lines.push(csvRow(["INCOME"]));
   row("Starting point", (c) => c.startingPoint);

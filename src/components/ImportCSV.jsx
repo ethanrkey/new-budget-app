@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { parseBudgetCSV } from "../engine/csvImport.js";
-import { parseLedgerCSV } from "../engine/ledgerCsvImport.js";
+import { parseBudgetCSV } from "../engine/csvImport.ts";
+import { parseLedgerCSV } from "../engine/ledgerCsvImport.ts";
 import { normalize } from "../engine/stateShape.ts";
 import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../engine/backupShape.ts";
 import { downloadFile } from "../downloadFile.js";
@@ -10,7 +10,7 @@ const money = (n) =>
   Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 // Auto-detects which export format a file is and parses accordingly:
-// - Budget grid (engine/csv.js budgetToCSV): header row starts with a blank
+// - Budget grid (engine/csv.ts budgetToCSV): header row starts with a blank
 //   cell, then month labels. Lossy — monthly totals only.
 // - Clean per-transaction ledger (Date/Item/Direction/Amount columns, any
 //   order): far more accurate — real dates, exact amounts.

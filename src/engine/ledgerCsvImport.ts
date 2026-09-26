@@ -1,7 +1,7 @@
 // ---- Reconstruct recurring/oneoffs from a clean per-transaction CSV ----
 // Expected columns (case-insensitive, any order): Date, Item, Direction
 // (in/out), Amount. This is a far better recovery source than the Budget
-// grid (engine/csvImport.js) — real dates and exact amounts, no monthly
+// grid (engine/csvImport.ts) — real dates and exact amounts, no monthly
 // aggregation.
 //
 // Classification is deliberately tolerant, not strict: real recurring items
@@ -17,18 +17,20 @@
 // stopped" (no amount has enough support) — the latter stays as one-offs
 // with each real amount preserved exactly, by design.
 import { uid, toISODate } from "./model.ts";
+import type { CategoryRef, Direction, ISODate, MonthKey, TrackerCategory } from "./types.ts";
+import type { ParsedImport } from "./csvImport.ts";
 
-function findCol(header, patterns) {
+function findCol(header: string[], patterns: RegExp[]): number {
   for (let i = 0; i < header.length; i++) {
-    const h = header[i].trim().toLowerCase();
+    const h = header[i]!.trim().toLowerCase();
     if (patterns.some((p) => p.test(h))) return i;
   }
   return -1;
 }
 
 // Minimal RFC 4180 line parser (quoted fields, doubled "" for an embedded
-// quote) — same approach as engine/csvImport.js.
-function parseCSVLine(line) {
+// quote) — same approach as engine/csvImport.ts.
+function parseCSVLine(line: string): string[] {
   const fields = [];
   let field = "", inQuotes = false;
   for (let i = 0; i < line.length; i++) {
@@ -47,21 +49,21 @@ function parseCSVLine(line) {
   fields.push(field);
   return fields;
 }
-function parseCSV(text) {
+function parseCSV(text: string): string[][] {
   return text.split(/\r\n|\n/).filter((l) => l.length > 0).map(parseCSVLine);
 }
 
-function parseDate(raw) {
+function parseDate(raw: string): ISODate | null {
   const s = (raw || "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (us) {
     const [, mm, dd, yyyy] = us;
-    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+    return `${yyyy}-${mm!.padStart(2, "0")}-${dd!.padStart(2, "0")}`;
   }
   return null;
 }
-function parseAmount(raw) {
+function parseAmount(raw: string): number | null {
   const cleaned = (raw || "").replace(/[^0-9.-]/g, "");
   const n = Number(cleaned);
   return Number.isFinite(n) ? Math.abs(n) : null;
@@ -73,10 +75,10 @@ function parseAmount(raw) {
 // records the real category id either, so this is still a guess, just a
 // better-informed one than a hardcoded 4-category list. Falls back to the
 // user's first category, or the legacy "saved" id if they have none.
-function guessCategory(name, direction, isRecurring, trackerCategories) {
+function guessCategory(name: string, direction: Direction, isRecurring: boolean, trackerCategories: TrackerCategory[]): CategoryRef {
   if (direction === "in") return "income";
   const n = name.toLowerCase();
-  const find = (re) => trackerCategories.find((c) => re.test(c.name.toLowerCase()));
+  const find = (re: RegExp) => trackerCategories.find((c) => re.test(c.name.toLowerCase()));
   const fallback = () => trackerCategories[0]?.id ?? "saved";
   if (/roth|\bira\b/.test(n)) return find(/roth|ira/)?.id ?? fallback();
   if (/everbank|emergency|\bsaving/.test(n)) return find(/saved|savings/)?.id ?? fallback();
@@ -85,29 +87,29 @@ function guessCategory(name, direction, isRecurring, trackerCategories) {
   return isRecurring ? "bill" : "oneoff";
 }
 
-function monthKeyOf(dateStr) { return dateStr.slice(0, 7); }
-function addMonthsToKey(key, n) {
+function monthKeyOf(dateStr: ISODate): MonthKey { return dateStr.slice(0, 7); }
+function addMonthsToKey(key: MonthKey, n: number): MonthKey {
   const [y, m] = key.split("-").map(Number);
-  const d = new Date(y, m - 1 + n, 1);
+  const d = new Date(y!, m! - 1 + n, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
-function monthsBetweenKeys(aKey, bKey) {
+function monthsBetweenKeys(aKey: MonthKey, bKey: MonthKey): number {
   const [ay, am] = aKey.split("-").map(Number);
   const [by, bm] = bKey.split("-").map(Number);
-  return (by - ay) * 12 + (bm - am);
+  return (by! - ay!) * 12 + (bm! - am!);
 }
-function daysBetween(a, b) {
-  return Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+function daysBetween(a: ISODate, b: ISODate): number {
+  return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86400000);
 }
-function addDays(dateStr, n) {
+function addDays(dateStr: ISODate, n: number): ISODate {
   const d = new Date(dateStr + "T00:00:00");
   d.setDate(d.getDate() + n);
   return toISODate(d); // local — see toISODate in model.ts
 }
 // The date a MONTHLY item would next land on, after `lastDateStr`.
-function nextExpectedMonthlyDate(lastDateStr, dayOfMonth) {
+function nextExpectedMonthlyDate(lastDateStr: ISODate, dayOfMonth: number): ISODate {
   const [y, m] = addMonthsToKey(monthKeyOf(lastDateStr), 1).split("-").map(Number);
-  const daysInMonth = new Date(y, m, 0).getDate();
+  const daysInMonth = new Date(y!, m!, 0).getDate();
   const day = Math.min(dayOfMonth, daysInMonth);
   return `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
@@ -115,8 +117,9 @@ function nextExpectedMonthlyDate(lastDateStr, dayOfMonth) {
 // Most frequent value among `values` (rounded to cents). Ties broken toward
 // whichever candidate's most recent occurrence is later — a slight bias
 // toward "the current rate" when two amounts are equally common.
-function mode(values) {
-  const buckets = new Map();
+interface AmountMode { value: number; count: number; lastIndex: number }
+function mode(values: number[]): AmountMode | null {
+  const buckets = new Map<string, AmountMode>();
   values.forEach((v, i) => {
     const key = v.toFixed(2);
     const b = buckets.get(key) || { value: v, count: 0, lastIndex: -1 };
@@ -124,7 +127,7 @@ function mode(values) {
     b.lastIndex = i;
     buckets.set(key, b);
   });
-  let best = null;
+  let best: AmountMode | null = null;
   for (const b of buckets.values()) {
     if (!best || b.count > best.count || (b.count === best.count && b.lastIndex > best.lastIndex)) best = b;
   }
@@ -138,7 +141,7 @@ const BIWEEKLY_GAP = [12, 16]; // days
 const BIWEEKLY_MATCH_MIN = 0.6; // fraction of gaps that must look ~14 days apart
 
 // `group` must already be sorted by date and share one direction.
-function detectCadence(group) {
+function detectCadence(group: any[]): "monthly" | "biweekly" | null {
   if (group.length < MIN_OCCURRENCES) return null;
 
   const monthKeys = group.map((t) => monthKeyOf(t.date));
@@ -147,12 +150,12 @@ function detectCadence(group) {
   const noDoubleMonths = [...perMonth.values()].every((c) => c === 1);
 
   if (noDoubleMonths) {
-    const spanMonths = monthsBetweenKeys(monthKeys[0], monthKeys[monthKeys.length - 1]) + 1;
+    const spanMonths = monthsBetweenKeys(monthKeys[0]!, monthKeys[monthKeys.length - 1]!) + 1;
     if (group.length / spanMonths >= MONTHLY_COVERAGE_MIN) return "monthly";
   }
 
-  const gaps = group.slice(1).map((t, i) => daysBetween(group[i].date, t.date));
-  const biMatches = gaps.filter((g) => g >= BIWEEKLY_GAP[0] && g <= BIWEEKLY_GAP[1]).length;
+  const gaps = group.slice(1).map((t, i) => daysBetween(group[i]!.date, t.date));
+  const biMatches = gaps.filter((g) => g >= BIWEEKLY_GAP[0]! && g <= BIWEEKLY_GAP[1]!).length;
   if (gaps.length > 0 && biMatches / gaps.length >= BIWEEKLY_MATCH_MIN) return "biweekly";
 
   return null;
@@ -164,11 +167,11 @@ function detectCadence(group) {
 // import UI can render both formats' results identically. `trackerCategories`
 // is the importing user's own list — used to guess which category a
 // saving/debt/investment row belongs to (see guessCategory above).
-export function parseLedgerCSV(text, trackerCategories = []) {
+export function parseLedgerCSV(text: string, trackerCategories: TrackerCategory[] = []): ParsedImport {
   const rows = parseCSV(text);
   if (rows.length < 2) throw new Error("This file is empty or has no data rows.");
 
-  const header = rows[0];
+  const header = rows[0]!;
   const dateCol = findCol(header, [/^date$/]);
   const itemCol = findCol(header, [/^item$/, /^name$/, /^description$/]);
   const dirCol = findCol(header, [/^direction$/, /^type$/, /^in\/?out$/]);
@@ -177,18 +180,18 @@ export function parseLedgerCSV(text, trackerCategories = []) {
     throw new Error("Could not find Date / Item / Direction / Amount columns in the header row.");
   }
 
-  const warnings = [];
-  const txns = [];
-  let globalLastDate = null;
+  const warnings: string[] = [];
+  const txns: any[] = [];
+  let globalLastDate: ISODate | null = null;
 
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row || row.every((c) => c === "")) continue;
-    const date = parseDate(row[dateCol]);
+    const date = parseDate(row[dateCol] ?? "");
     const item = (row[itemCol] || "").trim();
     const dirRaw = (row[dirCol] || "").trim().toLowerCase();
     const direction = dirRaw === "in" ? "in" : dirRaw === "out" ? "out" : null;
-    const amount = parseAmount(row[amtCol]);
+    const amount = parseAmount(row[amtCol] ?? "");
     if (!date || !item || !direction || amount == null) {
       warnings.push(`Row ${r + 1}: could not parse this row (date="${row[dateCol] ?? ""}", direction="${row[dirCol] ?? ""}") — skipped.`);
       continue;
@@ -213,16 +216,16 @@ export function parseLedgerCSV(text, trackerCategories = []) {
     const cadence = sameDirection ? detectCadence(group) : null;
 
     const amountMode = cadence ? mode(group.map((t) => t.amount)) : null;
-    const qualifies = cadence && amountMode.count >= MIN_MODE_AMOUNT_COUNT;
+    const qualifies = cadence && amountMode!.count >= MIN_MODE_AMOUNT_COUNT;
 
     if (qualifies) {
       const first = group[0];
       const last = group[group.length - 1];
       const category = guessCategory(name, first.direction, true, trackerCategories);
-      const amount = amountMode.value;
-      const amountVaried = amountMode.count < group.length;
+      const amount = amountMode!.value;
+      const amountVaried = amountMode!.count < group.length;
 
-      let item;
+      let item: any;
       if (cadence === "monthly") {
         const dayCounts = new Map();
         for (const t of group) {
@@ -231,10 +234,10 @@ export function parseLedgerCSV(text, trackerCategories = []) {
         }
         let dayOfMonth = first.date.slice(8, 10), bestCount = -1;
         for (const [d, c] of dayCounts) if (c > bestCount) { dayOfMonth = d; bestCount = c; }
-        const stillActive = nextExpectedMonthlyDate(last.date, dayOfMonth) > globalLastDate;
+        const stillActive = nextExpectedMonthlyDate(last.date, dayOfMonth) > globalLastDate!;
         item = { cadence: "monthly", startDate: first.date, dayOfMonth, endDate: stillActive ? null : last.date };
       } else {
-        const stillActive = addDays(last.date, 14) > globalLastDate;
+        const stillActive = addDays(last.date, 14) > globalLastDate!;
         item = { cadence: "biweekly", startDate: first.date, endDate: stillActive ? null : last.date };
       }
 
