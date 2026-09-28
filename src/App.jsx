@@ -523,7 +523,13 @@ export default function App() {
       </nav>
 
       {/* Content */}
-      <main className="px-3 sm:px-6 pb-16">
+      {/* Ledger/Budget/Spending render an attached panel (square top-left,
+          active tab has no bottom border) so the tab and the panel read as one
+          folder. The Dashboard is the exception: it opens with free-floating
+          rounded cards, whose top-left corner collided with the active tab's
+          square bottom edge. It gets the gap; the attached panels must not,
+          or the active tab would hang over a hole. */}
+      <main className={`px-3 sm:px-6 pb-16 ${tab === "dashboard" ? "pt-4" : ""}`}>
         {tab === "ledger" ? (
           <LedgerView
             state={state}

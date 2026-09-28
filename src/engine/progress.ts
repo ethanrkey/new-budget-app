@@ -74,10 +74,12 @@ function sortedSnapshots(state: BudgetState, categoryId: string): BalanceSnapsho
 // balance history itself already answers "is this growing the way I expect",
 // and `computeLoggedContributions` is the honest companion stat.
 //
-// NOTE the deliberate asymmetry: LOANS keep their projected line
-// (engine/loans.ts). Amortization is real math about a known quantity —
-// last logged balance + interest accrued − payments — not a guess about a
-// market. Don't "tidy up" by stripping both.
+// NOTE the deliberate asymmetry, which is now ENGINE-level only: loans still
+// compute `expected` (engine/loans.ts) because amortization is real math about
+// a known quantity — last logged balance + interest accrued − payments — not a
+// guess about a market. The loan CARD no longer draws it as a chart (removed
+// on the user's call, 2026-09-28); the history list still shows it and the
+// harness still asserts it. Don't "tidy up" by stripping the loan math too.
 export function computeCategoryHistory(state: BudgetState, categoryId: string): BalanceSnapshot[] {
   return sortedSnapshots(state, categoryId);
 }

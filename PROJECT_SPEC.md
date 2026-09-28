@@ -275,10 +275,22 @@ Conventions worth knowing before touching numbers:
   expect", and `computeContributionsByYear` is the honest companion stat.
   `computeCategoryHistory` is now just the sorted balance history — the
   removal went all the way into the engine so a card can't render a
-  projection that no longer means anything. **The asymmetry with loans is
-  intentional:** amortization is real math about a known quantity. Don't
-  "tidy up" by stripping both; the harness asserts loan history still
-  carries `expected`.
+  projection that no longer means anything.
+
+  **The old asymmetry note no longer describes the UI.** It used to read
+  "loans keep their projected line, don't tidy up by stripping both."
+  Neither card draws a projection now: the amortization chart was removed
+  from the loan card on the user's call (2026-09-28), because they didn't
+  want it — not because the math stopped being sound. The asymmetry that
+  remains is at the ENGINE level, and it is still intentional:
+  `computeCategoryHistory` genuinely no longer computes a projection for
+  assets, while `computeLoanHistory` still computes `expected` for loans and
+  the harness still asserts it. That is deliberate — amortization is real
+  math about a known quantity, the loan card's history list still shows
+  `expected` per entry, and restoring the chart is a render change rather
+  than a re-derivation. So: don't delete the loan-side math to "match" the
+  asset side, and don't reintroduce an asset-side projection to "match" the
+  loan side.
 - **Nothing logged anywhere changes a forecast number** (2026-09-19). A
   variable item's logged monthly actual used to substitute into the event
   stream, split across that month's instances — so a $150 biweekly rule with

@@ -431,16 +431,16 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onL
 }
 
 // ---- Loan (one card per loan = per debt-kind category) ----
-// The LOGGED outstanding balance is the big number (truth). Amortization
-// drives the dashed projected line and nothing else on screen —
+// The LOGGED outstanding balance is the big number (truth). The card shows
+// that, the percent-paid-off bar and the terms — no chart: the amortization
+// chart was removed on the user's call (2026-09-28). The engine still
+// computes it (computeLoanHistory / expected), so putting the chart back is
+// a render change, not a re-derivation.
 // "expected remaining vs. actual remaining" appears nowhere by design.
 function LoanCard({ category, isDark, state, today, progress, history, onLog, onEdit, onUpdateSnapshot, onDeleteSnapshot }) {
   const color = paletteColor(category.color, isDark);
   const latest = progress.latest;
   const monthKey = today.slice(0, 7);
-
-  const data = history.map((h) => ({ date: h.date, amount: h.amount, expected: h.expected }));
-  if (latest && today > latest.date && progress.expectedNow != null) data.push({ date: today, expected: progress.expectedNow });
 
   // Planned vs. actually paid THIS MONTH — your behavior, summed across every
   // payment tagged to this loan. "Paid" comes from the same monthlyActuals
@@ -506,9 +506,6 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
       ) : (
         <p className="text-xs text-gray-400">Log today&apos;s outstanding balance to see how far along you are.</p>
       )}
-
-      <HistoryChart data={data} color={color} isDark={isDark} projected={!!latest}
-        emptyHint="Log the outstanding balance whenever you check it — two points make a trend." />
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>

@@ -15,10 +15,30 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { normalize } from "../src/engine/stateShape.ts";
 
-// uid() is Math.random-based, so a freshly seeded account gets different
-// category ids every run. Seeding the RNG makes the golden file stable and
-// makes two runs byte-comparable. Nothing in the engine depends on the
-// sequence — this only pins the ids so a diff means a real change.
+// Two sources of nondeterminism have to be pinned or the golden file rots on
+// its own, which would train everyone to regenerate it without reading it —
+// the exact failure mode the snapshot exists to prevent.
+//
+// 1. THE CLOCK. blankState() derives budgetHorizon/ledgerHorizon from
+//    todayISO(), and a state with no checkInDate gets an account dated today.
+//    Left alone the snapshot silently expires overnight. Frozen here; only
+//    `new Date()` with no arguments is affected, so every date string in the
+//    fixtures still parses normally.
+const FROZEN_TODAY = "2026-09-25T12:00:00";
+const RealDate = Date;
+const frozenMs = new RealDate(FROZEN_TODAY).getTime();
+globalThis.Date = class extends RealDate {
+  constructor(...args) {
+    if (args.length === 0) super(frozenMs);
+    else super(...args);
+  }
+  static now() { return frozenMs; }
+};
+
+// 2. uid() is Math.random-based, so a freshly seeded account gets different
+//    category ids every run. Seeding the RNG makes the golden file stable and
+//    makes two runs byte-comparable. Nothing in the engine depends on the
+//    sequence — this only pins the ids so a diff means a real change.
 let _seed = 123456789;
 Math.random = () => { _seed = (_seed * 1103515245 + 12345) & 0x7fffffff; return _seed / 0x7fffffff; };
 const reseed = () => { _seed = 123456789; };
