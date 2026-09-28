@@ -490,7 +490,11 @@ export default function App() {
       {/* Tabs — drag to reorder on desktop (HTML5 drag never fires from a
           touch drag, so phones just get plain tabs, which is what they want:
           a stray drag while scrolling would be worse than no reordering). */}
-      <nav className="px-3 sm:px-6 pt-3 flex gap-2">
+      {/* Scrolls rather than shrinking. Four tabs already overflow a 390px
+          phone by a few px, and sanitizeTabOrder exists so a fifth tab is
+          cheap to add — tighter padding buys a one-off 5px, scrolling holds
+          for any count. */}
+      <nav className="px-3 sm:px-6 pt-3 flex gap-2 overflow-x-auto no-scrollbar">
         {sanitizeTabOrder(state.settings.tabOrder).map((t) => (
           <button
             key={t}
@@ -507,7 +511,7 @@ export default function App() {
               setDragOverTab(null);
             }}
             title="Drag to reorder"
-            className={`px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition ${
+            className={`shrink-0 px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition ${
               tab === t
                 ? "bg-white dark:bg-gray-900 border border-b-0 border-gray-200 dark:border-gray-800"
                 : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"

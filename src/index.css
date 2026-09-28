@@ -43,3 +43,13 @@ body {
   padding-right: 0.75rem;
   opacity: 1;
 }
+/* Horizontally scrollable strips (the tab row) — hide the scrollbar itself.
+   Not cosmetic: a visible scrollbar in an `overflow-x` container also claims
+   vertical space, which would break the seam where the active tab meets the
+   panel below it. Touch users discover the scroll by swiping; on desktop the
+   tabs fit. */
+.no-scrollbar {
+  scrollbar-width: none;         /* Firefox */
+  -ms-overflow-style: none;      /* old Edge */
+}
+.no-scrollbar::-webkit-scrollbar { display: none; }

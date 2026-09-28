@@ -438,6 +438,18 @@ fifth tab never needs a migration.
    alongside the migration. Never regenerate first and read after — the whole
    value of the snapshot is that you had to look.
 
+   **The harness pins BOTH `Math.random` and the clock. Do not simplify
+   either back out.** `uid()` is random, so a freshly seeded account would
+   get new category ids every run; `blankState()` derives both horizons from
+   `todayISO()`, and a state with no `checkInDate` gets an account dated
+   today. Unpinned, the golden file expires on its own — it went red three
+   days after being written, with no code change (fixed 2026-09-28). That
+   failure mode is worse than having no snapshot at all: a test that cries
+   wolf on the calendar teaches everyone to run `--update` without reading
+   the diff, which is exactly the habit this guard exists to prevent. Only
+   `new Date()` with no arguments is frozen, so every date string in the
+   fixtures still parses normally.
+
 ## 10. Roadmap
 
 **Gated decision — the storage model, decided BEFORE Expo work starts.**
