@@ -313,21 +313,38 @@ Conventions worth knowing before touching numbers:
   (`devicePrefs.js`: `hero-collapsed`, `debts-expanded`) live in
   localStorage. They never sync, never conflict between devices, and never
   count as a change worth writing to Supabase.
-- **The chart palette is the category palette, and the two fixed buckets are
-  NEUTRAL on purpose.** Slices for a user's own categories use
-  `paletteColor`; Fixed bills, One-off, Uncategorized and Other use grey
-  steps. Adding a 9th and 10th hue would break the categorical colour rules,
-  and greys are immune to colour-vision deficiency, which is the right
-  property for "you never named this". **Finding worth keeping:** the
-  8-colour palette passes the validator on ADJACENT pairs (how it was
-  originally checked — worst ΔE 8.7 deutan) but FAILS on all pairs
-  (Cyan↔Teal 6.9 normal-vision, Pink↔Teal 3.8 deutan). In the Ledger and on
-  cards that never mattered, because categories appear in a fixed order. A
-  pie orders slices by amount, so any two can land adjacent. Re-stepping the
-  palette would repaint every existing user's categories, so the chart
-  instead carries the relief the validator asks for: a legend and inline
-  labels on every slice, so identity is never colour alone, plus the bar
-  view, which labels each row directly.
+- **RULE: any view that orders categories by value must not rest identity on
+  colour alone.** The relief is inline labels — the category's name next to
+  its mark, not only in a legend.
+
+  Why this is a rule and not a note about one chart: the 8-colour palette
+  passes the validator on ADJACENT pairs (how it was originally checked —
+  worst ΔE 8.7 deutan) but FAILS on all pairs (Cyan↔Teal 6.9 normal-vision,
+  Pink↔Teal 3.8 deutan, measured 2026-09-28). Everywhere the app renders
+  categories in a FIXED order — the Ledger's columns, the Budget's clusters,
+  Settings → Categories, the Dashboard's cards — only neighbours are ever
+  compared, so adjacent-pair validation is the right standard and the palette
+  meets it. The moment a view sorts by amount, rank, or anything data-driven,
+  any two categories can land side by side and the all-pairs numbers are what
+  apply. That covers the spending pie and bar, and equally a ranked list, a
+  sorted table, a treemap, or a heat map — anything built later that orders by
+  value.
+
+  Re-stepping the palette is NOT the fix: the colours are stored as indices on
+  the user's own categories, so changing them repaints categories people have
+  already chosen and named. Carry the relief in the view instead.
+
+  A related case, same rule: a mark too small to hold a label (a dot, a
+  sparkline point) must not be the only place a fact is stated. Such a mark
+  may indicate presence or density, but the identity behind it has to be
+  reachable as text — a tooltip, a detail panel, an adjacent list.
+
+  **The two fixed buckets are NEUTRAL on purpose.** Slices for the user's own
+  categories use `paletteColor`; Fixed bills, One-off, Uncategorized and Other
+  use grey steps. A 9th and 10th hue would break the categorical colour rules
+  outright, and grey is immune to colour-vision deficiency, which is the right
+  property for "you never named this" — it also lets the user's own colours
+  dominate.
 - **Colors are inline styles** (`paletteColor(index, isDark)`), never
   runtime-built Tailwind class names — the JIT scanner can't see those.
 - **Variable actuals and "mark paid" are different things:** paid zeroes an
