@@ -27,7 +27,7 @@ export default function SpendingView({ state, onSetMonthlyActual, onDeleteMonthl
   const monthKeys = lastMonthKeys(todayISO(), 6);
 
   return (
-    <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4">
+    <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 sm:p-4">
       <h2 className="text-sm font-semibold text-gray-600 dark:text-gray-300">Variable spending</h2>
       <p className="text-xs text-gray-400 mb-4">
         Items flagged &quot;Track actual vs. budgeted&quot; in their edit form — log the real monthly total

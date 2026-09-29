@@ -69,7 +69,7 @@ export default function LedgerView({
   const anyOpen = sortedCats.some((c) => visibleIds.has(c.id));
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 sm:p-4">
       {/* toolbar */}
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">

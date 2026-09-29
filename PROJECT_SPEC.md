@@ -357,10 +357,23 @@ Conventions worth knowing before touching numbers:
 
 ## 7. Tabs and features (default order: Dashboard · Budget · Ledger · Spending)
 
+Tabs are **underline-style**: no box, no border, the active one carrying a 2px
+bottom accent and heavier weight (inactive tabs hold a transparent rail of the
+same width so selecting one shifts nothing). This replaced a folder-seam
+treatment — an active tab with `border-b-0` merging into a panel with a square
+top-left corner — which only ever worked for three of the four tabs. Ledger,
+Budget and Spending render an attached panel; the Dashboard renders free-
+floating cards and so read as a boxed pill with nothing to connect to, and
+needed a Dashboard-only top gap to stop the two colliding. An underline reads
+the same whatever sits below it, so the special case is gone, the three panels
+are now fully rounded, and the header carries one less bordered container.
+`model.js` is also the wrong place to look for the tab list now — it is
+`model.ts`.
+
 Tabs are drag-reorderable on desktop (`settings.tabOrder`, persisted; the app
 opens on the first one). HTML5 drag never fires from a touch drag, so phones
 get plain tabs on purpose — a stray drag mid-scroll would be worse than no
-reordering. `TABS` in `model.js` stays the authority on which tabs exist and
+reordering. `TABS` in `model.ts` stays the authority on which tabs exist and
 `sanitizeTabOrder()` repairs a stored order on every load (drops a tab that no
 longer exists, appends one added since, collapses duplicates), so adding a
 fifth tab never needs a migration.

@@ -490,10 +490,12 @@ export default function App() {
       {/* Tabs — drag to reorder on desktop (HTML5 drag never fires from a
           touch drag, so phones just get plain tabs, which is what they want:
           a stray drag while scrolling would be worse than no reordering). */}
-      {/* Scrolls rather than shrinking. Four tabs already overflow a 390px
-          phone by a few px, and sanitizeTabOrder exists so a fifth tab is
-          cheap to add — tighter padding buys a one-off 5px, scrolling holds
-          for any count. */}
+      {/* Underline tabs, not a folder seam: the Dashboard renders free-floating
+          cards while the other three render an attached panel, and a seam can
+          only work for one of those. An underline reads the same either way,
+          and it removes a bordered container from an already busy header.
+          Scrolls rather than shrinking — four tabs already overflow a 390px
+          phone, and sanitizeTabOrder exists so a fifth is cheap to add. */}
       <nav className="px-3 sm:px-6 pt-3 flex gap-2 overflow-x-auto no-scrollbar">
         {sanitizeTabOrder(state.settings.tabOrder).map((t) => (
           <button
@@ -511,13 +513,13 @@ export default function App() {
               setDragOverTab(null);
             }}
             title="Drag to reorder"
-            className={`shrink-0 px-4 py-2 rounded-t-lg text-sm font-medium capitalize transition ${
+            className={`shrink-0 px-3 pb-2 pt-1 text-sm capitalize transition border-b-2 ${
               tab === t
-                ? "bg-white dark:bg-gray-900 border border-b-0 border-gray-200 dark:border-gray-800"
-                : "text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+                ? "border-gray-900 dark:border-gray-100 text-gray-900 dark:text-gray-100 font-semibold"
+                : "border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
             } ${draggingTab === t ? "opacity-40" : ""} ${
               dragOverTab === t && draggingTab && draggingTab !== t
-                ? "ring-2 ring-gray-400 dark:ring-gray-500"
+                ? "border-gray-400 dark:border-gray-500"
                 : ""
             }`}
           >
@@ -526,14 +528,11 @@ export default function App() {
         ))}
       </nav>
 
-      {/* Content */}
-      {/* Ledger/Budget/Spending render an attached panel (square top-left,
-          active tab has no bottom border) so the tab and the panel read as one
-          folder. The Dashboard is the exception: it opens with free-floating
-          rounded cards, whose top-left corner collided with the active tab's
-          square bottom edge. It gets the gap; the attached panels must not,
-          or the active tab would hang over a hole. */}
-      <main className={`px-3 sm:px-6 pb-16 ${tab === "dashboard" ? "pt-4" : ""}`}>
+      {/* Content — uniform spacing for every tab. The old Dashboard-only gap
+          existed to stop its rounded card colliding with the active tab's
+          square bottom edge; underline tabs have no edge to collide with, so
+          the special case is gone. */}
+      <main className="px-3 sm:px-6 pt-4 pb-16">
         {tab === "ledger" ? (
           <LedgerView
             state={state}

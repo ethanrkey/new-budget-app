@@ -29,7 +29,7 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
 
   if (isEmpty) {
     return (
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 sm:p-4">
         {horizonControl && <div className="mb-4">{horizonControl}</div>}
         <div className="text-center py-12 px-4">
           <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto text-sm">
@@ -128,7 +128,7 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-b-lg rounded-tr-lg p-3 sm:p-4 overflow-x-auto">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 sm:p-4 overflow-x-auto">
       {horizonControl && <div className="mb-4">{horizonControl}</div>}
       <table className="text-sm border-collapse min-w-full">
         <thead>
