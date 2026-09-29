@@ -251,3 +251,33 @@ export interface Ledger {
   rows: LedgerRow[];
   endingBalance: number;
 }
+
+// ---- Spending mix (derived, never stored) --------------------------------
+
+/**
+ * Which bucket a slice represents. `category` slices carry a palette index
+ * the user chose; the rest are deliberately NEUTRAL — the user never assigned
+ * them a colour, and the 8-hue palette is already fully spoken for, so
+ * inventing a 9th and 10th hue would break the categorical colour rules.
+ */
+export type SpendingBucket = "category" | "bill" | "oneoff" | "uncategorized" | "other";
+
+export interface SpendingSlice {
+  /** Category id, or a synthetic key for the folded buckets. */
+  key: string;
+  label: string;
+  amount: number;
+  /** 0-100, of the window's total planned outflow. */
+  percent: number;
+  /** Set only for `category` slices; the UI resolves it via paletteColor. */
+  color: PaletteIndex | null;
+  bucket: SpendingBucket;
+}
+
+export interface SpendingMix {
+  slices: SpendingSlice[];
+  total: number;
+  /** The window this covers — the same one the Ledger is showing. */
+  from: ISODate;
+  to: ISODate;
+}

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { groupByMonth } from "../engine/compute.ts";
+import { groupByMonth, computeSpendingByCategory } from "../engine/compute.ts";
 import { todayISO, paletteColor } from "../engine/model.ts";
 import HorizonSlider from "./HorizonSlider.jsx";
 import InfoTip from "./InfoTip.jsx";
+import SpendingMix from "./SpendingMix.jsx";
 
 const money = (n) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -145,6 +146,11 @@ export default function LedgerView({
           </div>
         </div>
       </div>
+
+      {/* Forecast-only breakdown of this same window. Sits above the table
+          and collapsed by default: the Ledger's job is the transaction list,
+          and on a phone a permanent chart pushes the first row off-screen. */}
+      <SpendingMix mix={computeSpendingByCategory(state, state.settings.ledgerHorizon)} isDark={isDark} />
 
       {/* table — scrolls horizontally on narrow screens */}
       <div className="overflow-x-auto">

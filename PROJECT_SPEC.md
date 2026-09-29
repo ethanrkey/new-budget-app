@@ -313,6 +313,21 @@ Conventions worth knowing before touching numbers:
   (`devicePrefs.js`: `hero-collapsed`, `debts-expanded`) live in
   localStorage. They never sync, never conflict between devices, and never
   count as a change worth writing to Supabase.
+- **The chart palette is the category palette, and the two fixed buckets are
+  NEUTRAL on purpose.** Slices for a user's own categories use
+  `paletteColor`; Fixed bills, One-off, Uncategorized and Other use grey
+  steps. Adding a 9th and 10th hue would break the categorical colour rules,
+  and greys are immune to colour-vision deficiency, which is the right
+  property for "you never named this". **Finding worth keeping:** the
+  8-colour palette passes the validator on ADJACENT pairs (how it was
+  originally checked — worst ΔE 8.7 deutan) but FAILS on all pairs
+  (Cyan↔Teal 6.9 normal-vision, Pink↔Teal 3.8 deutan). In the Ledger and on
+  cards that never mattered, because categories appear in a fixed order. A
+  pie orders slices by amount, so any two can land adjacent. Re-stepping the
+  palette would repaint every existing user's categories, so the chart
+  instead carries the relief the validator asks for: a legend and inline
+  labels on every slice, so identity is never colour alone, plus the bar
+  view, which labels each row directly.
 - **Colors are inline styles** (`paletteColor(index, isDark)`), never
   runtime-built Tailwind class names — the JIT scanner can't see those.
 - **Variable actuals and "mark paid" are different things:** paid zeroes an
@@ -333,6 +348,15 @@ fifth tab never needs a migration.
   balance; month headers; optional per-category cumulative columns
   (checklist picker); mark-a-bill-paid checkbox for current-month bills;
   multi-select delete; per-item color override; projection horizon slider.
+  A **Planned spending** panel sits above the table (`SpendingMix.jsx`,
+  collapsed by default, remembered per device): the window's projected
+  outflow broken down by category, as a pie or a horizontal bar — same data
+  (`computeSpendingByCategory`), two renderings, the choice also per device.
+  It reads `buildEvents`, the list the table renders, so it follows the
+  horizon slider. Forecast only, and the panel says so: income is excluded,
+  paid-marked instances are excluded (they contribute 0 to the projection),
+  and it never touches `monthlyActuals` or any logged value. An actual-
+  spending breakdown belongs on the Spending tab and is a different chart.
   A cumulative column opens to fit its own category name (`colVars` in
   LedgerView drives `--col-w`): the column is `nowrap` + `overflow:hidden` so
   it can animate open from zero width, and a fixed width silently clipped

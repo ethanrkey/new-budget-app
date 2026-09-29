@@ -1,7 +1,9 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.ts";
 import { CATEGORIES, endOfMonthISO, primaryAccount, toISODate } from "./model.ts";
-import type { BudgetColumn, BudgetState, ISODate, Ledger, LedgerRow, MonthKey } from "./types.ts";
+import type {
+  BudgetColumn, BudgetState, ISODate, Ledger, LedgerRow, MonthKey, SpendingMix, SpendingSlice,
+} from "./types.ts";
 
 // LEDGER: every event with a running TD balance + stepped cumulative trackers.
 export function computeLedger(state: BudgetState, horizonISO: ISODate): Ledger {
@@ -163,4 +165,77 @@ function monthsBetween(startISO: ISODate, endISO: ISODate): Array<{ key: MonthKe
     d.setMonth(d.getMonth() + 1);
   }
   return out;
+}
+// ---- Spending mix: where the PLANNED outflow goes, by category ----
+// Built from buildEvents — the same list the Ledger renders — so it covers
+// exactly the window the horizon slider is showing and moves with it.
+//
+// This is FORECAST data and says so on the card. It never touches
+// monthlyActuals, balanceSnapshots or contributionLog: an actual-spending
+// breakdown is a different chart on a different tab, and mixing the two is
+// the error this codebase keeps having to undo.
+//
+// Three deliberate exclusions:
+//  - income, so the slices sum to outflow rather than to churn;
+//  - paid-marked instances, which contribute 0 to the projection because the
+//    money is already inside the verified balance — counting them would show
+//    spending the forecast does not contain;
+//  - nothing else. Orphaned categories keep their amount under one
+//    "Uncategorized" slice rather than vanishing.
+//
+// Beyond MAX_SLICES the tail folds into "Other". The 8-colour palette is the
+// reason: a 9th category can't get a generated hue without breaking the
+// categorical colour rules, so it folds instead.
+const MAX_SLICES = 8;
+
+export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODate): SpendingMix {
+  const from = primaryAccount(state).balanceAsOf;
+  const events = buildEvents(state, horizonISO);
+  const cats = state.trackerCategories || [];
+
+  const totals = new Map<string, number>();
+  for (const e of events) {
+    if (e.direction !== "out" || e.paidOverride) continue;
+    totals.set(e.category, round((totals.get(e.category) ?? 0) + e.amount));
+  }
+
+  const describe = (categoryId: string): Pick<SpendingSlice, "label" | "color" | "bucket"> => {
+    if (categoryId === "bill") return { label: "Fixed bills", color: null, bucket: "bill" };
+    if (categoryId === "oneoff") return { label: "One-off", color: null, bucket: "oneoff" };
+    const cat = cats.find((c) => c.id === categoryId);
+    if (!cat) return { label: "Uncategorized", color: null, bucket: "uncategorized" };
+    return { label: cat.name, color: cat.color, bucket: "category" };
+  };
+
+  const total = round([...totals.values()].reduce((s, v) => s + v, 0));
+  let slices: SpendingSlice[] = [...totals.entries()]
+    .map(([key, amount]) => ({ key, amount, percent: 0, ...describe(key) }))
+    .sort((a, b) => b.amount - a.amount);
+
+  // Orphans from several deleted categories collapse into one slice.
+  const orphans = slices.filter((s) => s.bucket === "uncategorized");
+  if (orphans.length > 1) {
+    const merged = round(orphans.reduce((s, o) => s + o.amount, 0));
+    slices = slices.filter((s) => s.bucket !== "uncategorized");
+    slices.push({ key: "__uncategorized__", label: "Uncategorized", amount: merged, percent: 0, color: null, bucket: "uncategorized" });
+    slices.sort((a, b) => b.amount - a.amount);
+  }
+
+  if (slices.length > MAX_SLICES) {
+    const keep = slices.slice(0, MAX_SLICES - 1);
+    const rest = slices.slice(MAX_SLICES - 1);
+    keep.push({
+      key: "__other__",
+      label: `Other (${rest.length})`,
+      amount: round(rest.reduce((s, r) => s + r.amount, 0)),
+      percent: 0,
+      color: null,
+      bucket: "other",
+    });
+    slices = keep;
+  }
+
+  for (const s of slices) s.percent = total > 0 ? round((s.amount / total) * 100) : 0;
+
+  return { slices, total, from, to: horizonISO };
 }

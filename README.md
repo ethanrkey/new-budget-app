@@ -68,7 +68,10 @@ net carried forward. Rows are reorderable, the horizon is a slider.
 ![Ledger](docs/screenshots/ledger.png)
 
 The projection expanded into individual dated transactions with a running
-balance, grouped by month. Optional cumulative columns per savings category,
+balance, grouped by month, with a collapsible **Planned spending** breakdown
+above it — where the money in this window is going, by category, as a pie or a
+horizontal bar. It's the forecast, and it says so: no logged number touches
+it. Optional cumulative columns per savings category,
 per-item colors, mark-a-bill-paid for the current month, multi-select delete,
 and a horizon slider of its own.
 

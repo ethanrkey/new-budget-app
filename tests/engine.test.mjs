@@ -1,5 +1,5 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
-import { computeLedger, computeBudget } from "../src/engine/compute.ts";
+import { computeLedger, computeBudget, computeSpendingByCategory } from "../src/engine/compute.ts";
 import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
@@ -1418,6 +1418,84 @@ eq("they keep the dead category id rather than being reassigned", afterAK.recurr
 eq("an unknown category resolves to 'out', not the first entry in CATEGORIES",
   buildAllEvents(afterAK, "2026-11-01").find((e) => e.name === "Test deposit").direction, "out");
 check("balance after the first orphaned outflow still falls", computeLedger(afterAK, "2026-11-01").rows[0].balance, 950);
+
+// ---------- Scenario AL: computeSpendingByCategory (the Ledger's pie/bar) ----------
+console.log("\n== Scenario AL: spending mix is FORECAST, outflow only ==");
+const stateAL = normalize({
+  settings: { checkInBalance: 5000, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-11-30" },
+  recurring: [
+    { id: "pay", name: "Paycheck", amount: 2000, category: "income", cadence: "monthly", dayOfMonth: 1, startDate: "2026-09-01", order: 0 },
+    { id: "rent", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", dayOfMonth: 2, startDate: "2026-09-02", order: 1 },
+    { id: "gro", name: "Groceries", amount: 400, category: "bill", cadence: "monthly", dayOfMonth: 6, startDate: "2026-09-06", order: 2, variable: true },
+    { id: "roth", name: "Roth", amount: 500, category: "rothcat", cadence: "monthly", dayOfMonth: 5, startDate: "2026-09-05", order: 3 },
+  ],
+  oneoffs: [{ id: "trip", name: "Trip", amount: 300, category: "oneoff", date: "2026-10-11", order: 4 }],
+  paidOverrides: {},
+  trackerCategories: [{ id: "rothcat", name: "Roth", color: 5, order: 0, kind: "asset" }],
+  monthlyActuals: { gro: { "2026-09": 999 } }, // must be ignored entirely
+});
+const mixAL = computeSpendingByCategory(stateAL, "2026-11-30");
+const byKey = (m) => Object.fromEntries(m.slices.map((s) => [s.key, s.amount]));
+
+eq("income is never a slice", mixAL.slices.some((s) => s.key === "income"), false);
+eq("slices are the outflow categories", mixAL.slices.map((s) => s.key).sort(), ["bill", "oneoff", "rothcat"]);
+check("Fixed bills = 3x rent + 3x groceries over the window", byKey(mixAL).bill, 5700);
+check("the tracker category keeps its own total", byKey(mixAL).rothcat, 1500);
+check("the one-off is its own slice", byKey(mixAL).oneoff, 300);
+check("total is the sum of the slices", mixAL.total, 7500);
+eq("sorted biggest first", mixAL.slices.map((s) => s.amount), [5700, 1500, 300]);
+check("percents sum to 100", Math.round(mixAL.slices.reduce((t, s) => t + s.percent, 0)), 100);
+
+// A logged actual of 999 for September must not move a single number here.
+const noActualsAL = { ...stateAL, monthlyActuals: {} };
+eq("a logged monthly actual changes nothing — this is the forecast",
+  byKey(computeSpendingByCategory(noActualsAL, "2026-11-30")), byKey(mixAL));
+
+// Labels and colour routing.
+const rothSlice = mixAL.slices.find((s) => s.key === "rothcat");
+eq("a tracker category carries its palette index and name", [rothSlice.label, rothSlice.color, rothSlice.bucket], ["Roth", 5, "category"]);
+eq("the fixed buckets carry no palette index (they get neutral steps)",
+  mixAL.slices.filter((s) => s.key === "bill" || s.key === "oneoff").map((s) => s.color), [null, null]);
+
+// Paid-marked instances contribute 0 to the projection, so they contribute
+// 0 here too — otherwise the pie shows spending the forecast doesn't have.
+const paidAL = { ...stateAL, paidOverrides: { "2026-09": ["rent"] } };
+check("a paid-marked bill is excluded", byKey(computeSpendingByCategory(paidAL, "2026-11-30")).bill, 4200);
+
+// It follows the horizon slider, because it reads the same event list.
+check("a shorter horizon yields a smaller total", computeSpendingByCategory(stateAL, "2026-09-30").total < mixAL.total, true);
+eq("the window is reported for labelling", [mixAL.from, mixAL.to], ["2026-09-01", "2026-11-30"]);
+
+// An orphaned category keeps its money under one Uncategorized slice.
+const orphanAL = deleteCategory(stateAL, "rothcat");
+const orphanMix = computeSpendingByCategory(orphanAL, "2026-11-30");
+eq("a deleted category becomes Uncategorized, not a vanished slice",
+  orphanMix.slices.find((s) => s.bucket === "uncategorized")?.amount, 1500);
+check("the total is unchanged by the delete", orphanMix.total, mixAL.total);
+
+// Beyond 8 slices the tail folds rather than inventing a 9th hue.
+const manyAL = normalize({
+  settings: { checkInBalance: 9000, checkInDate: "2026-09-01", budgetHorizon: "2026-10-01", ledgerHorizon: "2026-09-30" },
+  recurring: Array.from({ length: 11 }, (_, i) => ({
+    id: `c${i}`, name: `Cat ${i}`, amount: 100 - i, category: `cat${i}`,
+    cadence: "monthly", dayOfMonth: 10, startDate: "2026-09-10", order: i,
+  })),
+  oneoffs: [], paidOverrides: {},
+  trackerCategories: Array.from({ length: 11 }, (_, i) => ({ id: `cat${i}`, name: `Cat ${i}`, color: i % 8, order: i, kind: "asset" })),
+});
+const manyMix = computeSpendingByCategory(manyAL, "2026-09-30");
+check("never more than 8 slices", manyMix.slices.length, 8);
+eq("the last one is the folded Other", manyMix.slices[7].bucket, "other");
+eq("Other names how many it folded", manyMix.slices[7].label, "Other (4)");
+check("folding loses no money", manyMix.slices.reduce((t, s) => t + s.amount, 0), manyMix.total);
+
+// Empty case.
+const emptyMix = computeSpendingByCategory(normalize({
+  settings: { checkInBalance: 100, checkInDate: "2026-09-01", budgetHorizon: "2026-10-01", ledgerHorizon: "2026-09-30" },
+  recurring: [], oneoffs: [], paidOverrides: {},
+}), "2026-09-30");
+eq("nothing planned -> no slices", emptyMix.slices, []);
+check("nothing planned -> zero total, not NaN", emptyMix.total, 0);
 
 // ---------- monthsDiff / addMonthsISO round trip (for the horizon sliders) ----------
 console.log("\n== monthsDiff / addMonthsISO ==");
