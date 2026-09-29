@@ -66,6 +66,7 @@ const SECTIONS = [
         ["Click any item name", "Edit or delete that item."],
       ]],
       ["p", "Each cumulative column is labeled with the category it tracks, and sized to fit that name — two loans called “Student Loan AA” and “Student Loan AB” stay tellable apart."],
+      ["p", "“List” and “Calendar” show the same transactions two ways. The calendar is a month grid: a coloured dot per transaction, the day's net, and a click on any day for the detail. The running balance only appears in the list — a month grid has nowhere to put it, and rather than fake one the calendar leaves it out."],
       ["p", "“Planned spending” at the top breaks the window down by category — pie or bar, your choice, and it follows the horizon slider. It is the forecast: your rules, with income and anything you've marked paid left out. It is not a record of what you actually spent; that comparison lives on the Spending tab."],
     ],
   },

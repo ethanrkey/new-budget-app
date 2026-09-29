@@ -2,7 +2,7 @@
 import { buildEvents } from "./generate.ts";
 import { CATEGORIES, endOfMonthISO, primaryAccount, toISODate } from "./model.ts";
 import type {
-  BudgetColumn, BudgetState, ISODate, Ledger, LedgerRow, MonthKey, SpendingMix, SpendingSlice,
+  BudgetColumn, BudgetState, DayGroup, ISODate, Ledger, LedgerRow, MonthKey, SpendingMix, SpendingSlice,
 } from "./types.ts";
 
 // LEDGER: every event with a running TD balance + stepped cumulative trackers.
@@ -56,6 +56,30 @@ export function groupByMonth(rows: LedgerRow[]): Array<{ label: string; rows: Le
 // An income item counts as "take-home" (a paycheck) when its name matches this;
 // anything else income is "other in" (money from Poppy, etc.).
 const PAY_RE = /pay|salary|take.?home/i;
+
+// Group rows by calendar day for the Ledger's calendar view. Returns a Map
+// keyed by ISO date so a month grid can look a day up directly, in the row
+// order the ledger already produced.
+//
+// `net` treats a paid-marked row as 0, exactly as the running balance does —
+// the day's figure and the balance must never tell different stories. The row
+// is still present in `rows` (and so still gets a dot), because it did happen.
+export function groupByDay(rows: LedgerRow[]): Map<ISODate, DayGroup> {
+  const days = new Map<ISODate, DayGroup>();
+  for (const r of rows) {
+    let day = days.get(r.date);
+    if (!day) {
+      day = { date: r.date, rows: [], net: 0, inflow: 0, outflow: 0 };
+      days.set(r.date, day);
+    }
+    day.rows.push(r);
+    const amount = r.paidOverride ? 0 : r.amount;
+    if (r.direction === "in") day.inflow = round(day.inflow + amount);
+    else day.outflow = round(day.outflow + amount);
+    day.net = round(day.inflow - day.outflow);
+  }
+  return days;
+}
 
 // BUDGET: monthly grid, spreadsheet-style with sections.
 export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetColumn[] {

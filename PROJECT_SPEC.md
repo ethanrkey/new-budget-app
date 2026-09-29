@@ -337,7 +337,11 @@ Conventions worth knowing before touching numbers:
   A related case, same rule: a mark too small to hold a label (a dot, a
   sparkline point) must not be the only place a fact is stated. Such a mark
   may indicate presence or density, but the identity behind it has to be
-  reachable as text — a tooltip, a detail panel, an adjacent list.
+  reachable as text — a tooltip, a detail panel, an adjacent list. The
+  calendar's day dots are the worked example: each carries a title/aria-label
+  naming its category, item and amount, and the day detail lists every
+  transaction with its category spelled out in words. The dot claims only
+  "something happened here".
 
   **The two fixed buckets are NEUTRAL on purpose.** Slices for the user's own
   categories use `paletteColor`; Fixed bills, One-off, Uncategorized and Other
@@ -365,6 +369,21 @@ fifth tab never needs a migration.
   balance; month headers; optional per-category cumulative columns
   (checklist picker); mark-a-bill-paid checkbox for current-month bills;
   multi-select delete; per-item color override; projection horizon slider.
+  A **List / Calendar** toggle switches the rendering (`CalendarView.jsx`,
+  per device via `devicePrefs`, `ledger-calendar`). The calendar is a month
+  grid over the same rows: category-coloured dots plus the day's net, click a
+  day for its transactions. **The running balance is list-only** — a
+  7-column grid has nowhere to put it, and it is the list's whole reason to
+  exist; a faked or omitted-but-implied balance would have two views
+  disagreeing about the app's most important number. Savings columns and
+  multi-select hide in calendar mode, being list-only concepts.
+  Per-day aggregation is `groupByDay` in the engine, and a paid-marked row
+  contributes 0 to the day's net exactly as it does to the running balance.
+  Dot overflow is CAPPED (`+N`), not wrapped: grid cells share a row height,
+  so wrapping makes the whole row taller and gives quiet neighbours
+  whitespace — it flattens the busy/quiet contrast instead of sharpening it.
+  Caps are 3 below `sm`, 5 above; below `sm` the cell also drops the net,
+  which does not fit a ~45px cell, and shows it in the day detail instead.
   A **Planned spending** panel sits above the table (`SpendingMix.jsx`,
   collapsed by default, remembered per device): the window's projected
   outflow broken down by category, as a pie or a horizontal bar — same data

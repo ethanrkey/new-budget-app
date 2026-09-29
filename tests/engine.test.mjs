@@ -1,5 +1,5 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
-import { computeLedger, computeBudget, computeSpendingByCategory } from "../src/engine/compute.ts";
+import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay } from "../src/engine/compute.ts";
 import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
@@ -1496,6 +1496,45 @@ const emptyMix = computeSpendingByCategory(normalize({
 }), "2026-09-30");
 eq("nothing planned -> no slices", emptyMix.slices, []);
 check("nothing planned -> zero total, not NaN", emptyMix.total, 0);
+
+// ---------- Scenario AM: groupByDay (the Ledger's calendar cells) ----------
+console.log("\n== Scenario AM: groupByDay ==");
+const stateAM = normalize({
+  settings: { checkInBalance: 1000, checkInDate: "2026-10-01", budgetHorizon: "2026-11-01", ledgerHorizon: "2026-10-31" },
+  recurring: [
+    { id: "pay", name: "Paycheck", amount: 2000, category: "income", cadence: "monthly", dayOfMonth: 13, startDate: "2026-10-13", order: 0 },
+    { id: "rent", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", dayOfMonth: 13, startDate: "2026-10-13", order: 1 },
+    { id: "gym", name: "Gym", amount: 40, category: "bill", cadence: "monthly", dayOfMonth: 13, startDate: "2026-10-13", order: 2 },
+  ],
+  oneoffs: [
+    { id: "a", name: "Coffee run", amount: 12, category: "oneoff", date: "2026-10-13", order: 3 },
+    { id: "b", name: "Book", amount: 25, category: "oneoff", date: "2026-10-13", order: 4 },
+    { id: "c", name: "Solo", amount: 80, category: "oneoff", date: "2026-10-20", order: 5 },
+  ],
+  paidOverrides: {},
+});
+const daysAM = groupByDay(computeLedger(stateAM, "2026-10-31").rows);
+const oct13 = daysAM.get("2026-10-13");
+check("a busy day collects every row", oct13.rows.length, 5);
+check("inflow", oct13.inflow, 2000);
+check("outflow", oct13.outflow, 1577);
+check("net is in minus out", oct13.net, 423);
+eq("rows keep the ledger's own order", oct13.rows.map((r) => r.name), ["Paycheck", "Rent", "Gym", "Coffee run", "Book"]);
+check("a quiet day is its own group", daysAM.get("2026-10-20").rows.length, 1);
+check("net of a lone outflow", daysAM.get("2026-10-20").net, -80);
+eq("days with nothing are simply absent", daysAM.has("2026-10-14"), false);
+check("every ledger row lands in exactly one day",
+  [...daysAM.values()].reduce((n, d) => n + d.rows.length, 0), computeLedger(stateAM, "2026-10-31").rows.length);
+
+// A paid-marked row still shows (it happened) but must not move the day's
+// figure, or the cell and the running balance would tell different stories.
+const paidAM = { ...stateAM, paidOverrides: { "2026-10": ["rent"] } };
+const paidDay = groupByDay(computeLedger(paidAM, "2026-10-31").rows).get("2026-10-13");
+check("a paid row is still listed", paidDay.rows.length, 5);
+check("...but contributes 0 to outflow", paidDay.outflow, 77);
+check("...and the day's net follows the balance", paidDay.net, 1923);
+
+eq("no rows -> empty map", groupByDay([]).size, 0);
 
 // ---------- monthsDiff / addMonthsISO round trip (for the horizon sliders) ----------
 console.log("\n== monthsDiff / addMonthsISO ==");

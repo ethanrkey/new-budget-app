@@ -281,3 +281,16 @@ export interface SpendingMix {
   from: ISODate;
   to: ISODate;
 }
+
+// ---- Calendar grouping (derived, never stored) ---------------------------
+
+/** One day's worth of ledger rows, for the Ledger's calendar view. */
+export interface DayGroup {
+  date: ISODate;
+  rows: LedgerRow[];
+  /** Money in minus money out for the day. Paid-marked rows contribute 0,
+   *  exactly as they do to the running balance. */
+  net: number;
+  inflow: number;
+  outflow: number;
+}

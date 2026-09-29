@@ -4,11 +4,16 @@ import { todayISO, paletteColor } from "../engine/model.ts";
 import HorizonSlider from "./HorizonSlider.jsx";
 import InfoTip from "./InfoTip.jsx";
 import SpendingMix from "./SpendingMix.jsx";
+import CalendarView from "./CalendarView.jsx";
+import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 
 const money = (n) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 const CURRENT_MONTH = todayISO().slice(0, 7);
+
+// List vs calendar is a display preference: per device, never synced.
+const CALENDAR_PREF = "ledger-calendar";
 
 // How wide a savings/debt column opens to. The column has to be nowrap +
 // overflow:hidden so it can animate open from zero width, which means a
@@ -32,6 +37,8 @@ export default function LedgerView({
   const [selected, setSelected] = useState(() => new Set());
   const [confirming, setConfirming] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [calendar, setCalendarState] = useState(() => getDeviceFlag(CALENDAR_PREF, false));
+  const setCalendar = (next) => { setDeviceFlag(CALENDAR_PREF, next); setCalendarState(next); };
 
   function toggleSelectMode() {
     setSelectMode((v) => !v);
@@ -66,7 +73,24 @@ export default function LedgerView({
       {/* toolbar */}
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <div className="relative">
+          <div className="flex items-center gap-1" role="group" aria-label="Ledger layout">
+            {[["List", false], ["Calendar", true]].map(([label, val]) => (
+              <button
+                key={label}
+                onClick={() => setCalendar(val)}
+                aria-pressed={calendar === val}
+                className={`text-sm px-2.5 py-2 sm:py-1.5 rounded-lg transition ${
+                  calendar === val
+                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-medium"
+                    : "border border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* Savings columns and multi-select are list-only concepts. */}
+          <div className={`relative ${calendar ? "hidden" : ""}`}>
             <button
               onClick={() => setColumnsOpen((v) => !v)}
               className="px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -105,7 +129,7 @@ export default function LedgerView({
               </>
             )}
           </div>
-          <InfoTip text="Running totals for your own savings/debt/investment categories — each column adds up every transaction in that category over time, so you can see the balance build (or pay down) as you go. Pick which ones show here." />
+          {!calendar && <InfoTip text="Running totals for your own savings/debt/investment categories — each column adds up every transaction in that category over time, so you can see the balance build (or pay down) as you go. Pick which ones show here." />}
           <HorizonSlider
             label="Project through"
             anchor={todayISO()}
@@ -114,7 +138,7 @@ export default function LedgerView({
             help="How far into the future the Ledger generates transactions. Independent from the Budget's own horizon — you can project the Ledger further (or less far) than the Budget."
           />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className={`flex items-center gap-2 flex-wrap ${calendar ? "hidden" : ""}`}>
           <button
             onClick={toggleSelectMode}
             className="px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -152,6 +176,15 @@ export default function LedgerView({
           and on a phone a permanent chart pushes the first row off-screen. */}
       <SpendingMix mix={computeSpendingByCategory(state, state.settings.ledgerHorizon)} isDark={isDark} />
 
+      {calendar ? (
+        <CalendarView
+          ledger={ledger}
+          trackerCategories={trackerCategories}
+          isDark={isDark}
+          onEditItem={(id) => onEditItem(baseId(id))}
+        />
+      ) : (
+      <>
       {/* table — scrolls horizontally on narrow screens */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">
@@ -214,6 +247,8 @@ export default function LedgerView({
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
