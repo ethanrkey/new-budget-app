@@ -410,6 +410,29 @@ fifth tab never needs a migration.
   paid-marked instances are excluded (they contribute 0 to the projection),
   and it never touches `monthlyActuals` or any logged value. An actual-
   spending breakdown belongs on the Spending tab and is a different chart.
+
+  **Graceful degradation when one bucket dominates.** Grouping by category is
+  the honest default, but it degenerates: an account whose outflow is almost
+  all "Fixed bills" gets one wedge at ~100%, which is true and tells you
+  nothing. At or above `DOMINANT_SHARE` (0.7) of the window's outflow, the
+  engine replaces that one bucket with its own transactions as slices —
+  `bucket: "item"`, carrying `parentLabel` plus `shade`/`shadeCount` — and
+  reports `{ label, percent }` on `mix.exploded`. Everything else stays a
+  category. The threshold is 70% rather than 50% on purpose: at 50% a
+  perfectly readable chart gets exploded, and the failure being fixed is the
+  degenerate near-100% shape, not merely a large slice. The breakout happens
+  BEFORE the 8-slice fold, so folding still applies afterwards and the slices
+  still sum to the total.
+
+  Two consequences for the view. Item slices are rendered as tints of their
+  parent's colour, not fresh palette hues — a 9th hue would collide with a
+  real category sitting in the same chart, and would lend a single
+  transaction a category's identity. Because the tints are steps of one hue,
+  the colour rule above applies at its strictest: every item slice carries
+  its parent's name inline ("Rent · Fixed bills") in the legend, the bars and
+  the tooltip. And the caption changes when the grouping does — it names the
+  bucket and its share — because the chart must never silently show a
+  different grouping than the one you saw last week.
   A cumulative column opens to fit its own category name (`colVars` in
   LedgerView drives `--col-w`): the column is `nowrap` + `overflow:hidden` so
   it can animate open from zero width, and a fixed width silently clipped

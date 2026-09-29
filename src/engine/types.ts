@@ -260,7 +260,7 @@ export interface Ledger {
  * them a colour, and the 8-hue palette is already fully spoken for, so
  * inventing a 9th and 10th hue would break the categorical colour rules.
  */
-export type SpendingBucket = "category" | "bill" | "oneoff" | "uncategorized" | "other";
+export type SpendingBucket = "category" | "bill" | "oneoff" | "uncategorized" | "other" | "item";
 
 export interface SpendingSlice {
   /** Category id, or a synthetic key for the folded buckets. */
@@ -269,14 +269,28 @@ export interface SpendingSlice {
   amount: number;
   /** 0-100, of the window's total planned outflow. */
   percent: number;
-  /** Set only for `category` slices; the UI resolves it via paletteColor. */
+  /** Set for `category` slices, and for `item` slices inherited from their
+   *  parent category; the UI resolves it via paletteColor. */
   color: PaletteIndex | null;
   bucket: SpendingBucket;
+  /** `item` slices only: the bucket they were broken out of, named so the
+   *  slice can say "Rent · Fixed bills" rather than passing as a category. */
+  parentLabel?: string;
+  /** `item` slices only: position among siblings, so the UI can tint a step
+   *  of the parent's colour instead of spending a fresh categorical hue. */
+  shade?: number;
+  shadeCount?: number;
 }
 
 export interface SpendingMix {
   slices: SpendingSlice[];
   total: number;
+  /**
+   * Set when one bucket was so dominant that the category view said nothing,
+   * and it was broken out into its own transactions. Carries what was
+   * exploded and its share, so the panel can explain itself.
+   */
+  exploded: { label: string; percent: number } | null;
   /** The window this covers — the same one the Ledger is showing. */
   from: ISODate;
   to: ISODate;

@@ -13,6 +13,12 @@ import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 // bar (reads proportions precisely, and labels every row inline). Both come
 // from computeSpendingByCategory — the toggle swaps the rendering, nothing
 // else. Collapse state and chart kind are per device, like the theme.
+//
+// Graceful degradation: when one bucket is nearly the whole window the
+// category view is a single wedge that says nothing, so the engine breaks
+// that bucket into its transactions and flags it as `mix.exploded`. Category
+// grouping stays the default — this only fires on the degenerate shape — so
+// the caption has to say which grouping you are looking at.
 const COLLAPSED_PREF = "ledger-mix-collapsed";
 const KIND_PREF = "ledger-mix-bar";
 
@@ -30,10 +36,43 @@ const NEUTRAL = {
   uncategorized: { light: "#94a3b8", dark: "#64748b" },
   other:         { light: "#94a3b8", dark: "#64748b" },
 };
-const sliceColor = (slice, isDark) =>
-  slice.bucket === "category"
-    ? paletteColor(slice.color, isDark)
-    : NEUTRAL[slice.bucket][isDark ? "dark" : "light"];
+
+// Items broken out of a dominant bucket are TINTS OF THEIR PARENT, not fresh
+// palette hues. A 9th hue would collide with a real category sitting in the
+// same chart, and would claim a category's identity for something that is
+// only one transaction. Steps run AWAY from the surface — darker on light,
+// lighter on dark — so the quietest step still holds its contrast.
+const mix2 = (hex, target, t) => {
+  const p = (h, i) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+  const c = [0, 1, 2].map((i) => Math.round(p(hex, i) + (p(target, i) - p(hex, i)) * t));
+  return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+};
+const TINT_TARGET = { light: "#0f172a", dark: "#f8fafc" };
+const TINT_RANGE = 0.55;
+
+const sliceColor = (slice, isDark) => {
+  if (slice.bucket === "category") return paletteColor(slice.color, isDark);
+  if (slice.bucket !== "item") return NEUTRAL[slice.bucket][isDark ? "dark" : "light"];
+  const base =
+    slice.color == null
+      ? NEUTRAL.bill[isDark ? "dark" : "light"]
+      : paletteColor(slice.color, isDark);
+  const steps = slice.shadeCount ?? 1;
+  const t = steps > 1 ? ((slice.shade ?? 0) / (steps - 1)) * TINT_RANGE : 0;
+  return mix2(base, TINT_TARGET[isDark ? "dark" : "light"], t);
+};
+
+// The palette rule: identity never rests on colour alone. An item slice is a
+// tint of its parent, so the parent's name rides along inline — otherwise
+// "Rent" and "Roth" are two blues with nothing to tell them apart.
+function SliceLabel({ d }) {
+  return (
+    <span className="truncate text-gray-700 dark:text-gray-300">
+      {d.label}
+      {d.parentLabel && <span className="text-gray-400"> · {d.parentLabel}</span>}
+    </span>
+  );
+}
 
 function prettyDate(iso) {
   return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -93,6 +132,17 @@ export default function SpendingMix({ mix, isDark }) {
               Projected from your rules for {prettyDate(mix.from)} – {prettyDate(mix.to)} — not what you&apos;ve
               logged. Income and bills you&apos;ve marked paid are excluded.
             </p>
+
+            {/* Only when the grouping changed under you. Naming the bucket and
+                its share explains why, rather than silently showing a
+                different chart than the one you saw last week. */}
+            {mix.exploded && !empty && (
+              <p className="text-xs text-gray-400 mb-3 -mt-1.5">
+                <span className="text-gray-500 dark:text-gray-400 font-medium">{mix.exploded.label}</span> is{" "}
+                {Math.round(mix.exploded.percent)}% of this window, so it&apos;s broken out by transaction — everything else
+                stays grouped by category.
+              </p>
+            )}
 
             {empty ? (
               <p className="text-sm text-gray-400 py-4 text-center">
@@ -155,9 +205,9 @@ function BarView({ data, total }) {
     <div className="space-y-2">
       {data.map((d) => (
         <div key={d.key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 items-baseline max-w-3xl">
-          <div className="flex items-baseline gap-2 min-w-0">
+          <div className="flex items-baseline gap-2 min-w-0 text-sm">
             <span className="h-2.5 w-2.5 rounded-sm shrink-0 self-center" style={{ backgroundColor: d.fill }} />
-            <span className="text-sm truncate text-gray-700 dark:text-gray-300">{d.label}</span>
+            <SliceLabel d={d} />
           </div>
           <span className="text-sm tabular-nums text-gray-600 dark:text-gray-400">
             {money(d.amount)} <span className="text-gray-400">· {d.percent}%</span>
@@ -180,7 +230,7 @@ function Legend({ data }) {
         <li key={d.key} className="flex items-baseline justify-between gap-3 text-sm">
           <span className="flex items-baseline gap-2 min-w-0">
             <span className="h-2.5 w-2.5 rounded-sm shrink-0 self-center" style={{ backgroundColor: d.fill }} />
-            <span className="truncate text-gray-700 dark:text-gray-300">{d.label}</span>
+            <SliceLabel d={d} />
           </span>
           <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">
             {money(d.amount)} <span className="text-gray-400">· {d.percent}%</span>
@@ -197,6 +247,7 @@ function MixTip({ active, payload }) {
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-2.5 py-1.5 shadow-sm text-xs">
       <div className="font-medium text-gray-700 dark:text-gray-200">{d.label}</div>
+      {d.parentLabel && <div className="text-gray-400">{d.parentLabel}</div>}
       <div className="tabular-nums text-gray-600 dark:text-gray-400">{money(d.amount)} · {d.percent}%</div>
     </div>
   );

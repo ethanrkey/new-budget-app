@@ -74,7 +74,9 @@ running balance stays in the list; a month grid has nowhere honest to put it.)
 Either way there's a collapsible **Planned spending** breakdown
 above it — where the money in this window is going, by category, as a pie or a
 horizontal bar. It's the forecast, and it says so: no logged number touches
-it. Optional cumulative columns per savings category,
+it. When a single category is nearly the whole window, one wedge at 100% says
+nothing, so it breaks out into its own transactions instead and the caption
+tells you that's what you're looking at. Optional cumulative columns per savings category,
 per-item colors, mark-a-bill-paid for the current month, multi-select delete,
 and a horizon slider of its own.
 
