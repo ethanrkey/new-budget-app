@@ -89,47 +89,6 @@ export default function LedgerView({
               </button>
             ))}
           </div>
-          {/* Savings columns and multi-select are list-only concepts. */}
-          <div className={`relative ${calendar ? "hidden" : ""}`}>
-            <button
-              onClick={() => setColumnsOpen((v) => !v)}
-              className="px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              Savings columns{anyOpen ? ` (${[...visibleIds].length})` : ""} ▾
-            </button>
-            {columnsOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setColumnsOpen(false)} />
-                <div className="absolute left-0 mt-1 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-20 p-2">
-                  {sortedCats.length === 0 ? (
-                    <p className="text-xs text-gray-400 px-2 py-1.5">No categories yet.</p>
-                  ) : (
-                    sortedCats.map((c) => (
-                      <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-sm">
-                        <input
-                          type="checkbox"
-                          checked={visibleIds.has(c.id)}
-                          onChange={() => toggleColumnVisible(c.id)}
-                          className="h-4 w-4"
-                        />
-                        <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: paletteColor(c.color, isDark) }} />
-                        <span className="truncate">{c.name}</span>
-                      </label>
-                    ))
-                  )}
-                  {onOpenCategoryManager && (
-                    <button
-                      onClick={() => { setColumnsOpen(false); onOpenCategoryManager(); }}
-                      className="mt-1 w-full text-left px-2 py-1.5 rounded text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 border-t border-gray-100 dark:border-gray-800"
-                    >
-                      ⚙ Manage categories…
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-          {!calendar && <InfoTip text="Running totals for your own savings/debt/investment categories — each column adds up every transaction in that category over time, so you can see the balance build (or pay down) as you go. Pick which ones show here." />}
           <HorizonSlider
             label="Project through"
             anchor={todayISO()}
@@ -185,6 +144,55 @@ export default function LedgerView({
         />
       ) : (
       <>
+      {/* Sits with the table it affects, not up in the toolbar: savings
+          columns do nothing to the Planned spending panel above, and placing
+          the control over that panel implied a relationship that isn't
+          there. The horizon slider stays in the toolbar — it DOES drive
+          both. */}
+      {!calendar && (
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-3">
+          <div className={`relative ${calendar ? "hidden" : ""}`}>
+          <button
+            onClick={() => setColumnsOpen((v) => !v)}
+            className="px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            Savings columns{anyOpen ? ` (${[...visibleIds].length})` : ""} ▾
+          </button>
+          {columnsOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setColumnsOpen(false)} />
+              <div className="absolute left-0 mt-1 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-20 p-2">
+                {sortedCats.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-2 py-1.5">No categories yet.</p>
+                ) : (
+                  sortedCats.map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-sm">
+                      <input
+                        type="checkbox"
+                        checked={visibleIds.has(c.id)}
+                        onChange={() => toggleColumnVisible(c.id)}
+                        className="h-4 w-4"
+                      />
+                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: paletteColor(c.color, isDark) }} />
+                      <span className="truncate">{c.name}</span>
+                    </label>
+                  ))
+                )}
+                {onOpenCategoryManager && (
+                  <button
+                    onClick={() => { setColumnsOpen(false); onOpenCategoryManager(); }}
+                    className="mt-1 w-full text-left px-2 py-1.5 rounded text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 border-t border-gray-100 dark:border-gray-800"
+                  >
+                    ⚙ Manage categories…
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+        <InfoTip text="Running totals for your own savings/debt/investment categories — each column adds up every transaction in that category over time, so you can see the balance build (or pay down) as you go. Pick which ones show here." />
+        </div>
+      )}
       {/* table — scrolls horizontally on narrow screens */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">

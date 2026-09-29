@@ -48,7 +48,10 @@ export default function SpendingMix({ mix, isDark }) {
 
   return (
     <section className="mb-4 border border-gray-200 dark:border-gray-800 rounded-xl">
-      <div className="flex items-center justify-between gap-3 px-3 py-2">
+      {/* The pie/bar control sits WITH the header it belongs to, not pinned
+          to the panel's right edge — on a wide screen that put it a long way
+          from the chart it controls. */}
+      <div className="flex items-center gap-2 sm:gap-3 px-3 py-2 flex-wrap">
         <button
           onClick={() => setCollapsed(!collapsed)}
           aria-expanded={!collapsed}
@@ -63,7 +66,7 @@ export default function SpendingMix({ mix, isDark }) {
           </svg>
         </button>
         {!collapsed && !empty && (
-          <div className="flex items-center gap-1 shrink-0" role="group" aria-label="Chart type">
+          <div className="flex items-center gap-1 shrink-0 -ml-0.5" role="group" aria-label="Chart type">
             {[["Pie", false], ["Bar", true]].map(([label, val]) => (
               <button
                 key={label}

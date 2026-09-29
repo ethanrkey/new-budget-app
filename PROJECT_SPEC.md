@@ -369,6 +369,10 @@ fifth tab never needs a migration.
   balance; month headers; optional per-category cumulative columns
   (checklist picker); mark-a-bill-paid checkbox for current-month bills;
   multi-select delete; per-item color override; projection horizon slider.
+  The **Savings columns** picker sits directly above the table rather than in
+  the toolbar: it is list-only and does nothing to the Planned spending panel,
+  so placing it over that panel implied a relationship that isn't there. The
+  horizon slider stays in the toolbar because it genuinely drives both.
   A **List / Calendar** toggle switches the rendering (`CalendarView.jsx`,
   per device via `devicePrefs`, `ledger-calendar`). The calendar is a month
   grid over the same rows: category-coloured dots plus the day's net, click a
