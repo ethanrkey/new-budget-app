@@ -14,11 +14,11 @@ import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 // from computeSpendingByCategory — the toggle swaps the rendering, nothing
 // else. Collapse state and chart kind are per device, like the theme.
 //
-// Graceful degradation: when one bucket is nearly the whole window the
-// category view is a single wedge that says nothing, so the engine breaks
-// that bucket into its transactions and flags it as `mix.exploded`. Category
-// grouping stays the default — this only fires on the degenerate shape — so
-// the caption has to say which grouping you are looking at.
+// The fixed buckets (bills, one-offs) arrive already broken out into their
+// own transactions — always, not on a threshold — because "Fixed bills" is
+// where uncategorised money lands and grouping by it says nothing. Tracker
+// categories arrive whole. That is the engine's call; this file only has to
+// colour and label the two kinds so they can't be mistaken for each other.
 const COLLAPSED_PREF = "ledger-mix-collapsed";
 const KIND_PREF = "ledger-mix-bar";
 
@@ -31,8 +31,12 @@ const money = (n) =>
 // palette's all-pairs separation is already tight). Greys are also immune to
 // colour-vision deficiency, which is the right property for "no category".
 const NEUTRAL = {
+  // Bills are cool grey, one-offs warm. Both fixed buckets now break out at
+  // once, so their tint ramps share the chart; two ramps off the same slate
+  // would overlap, and a warm/cool split separates them without spending a
+  // categorical hue.
   bill:          { light: "#64748b", dark: "#94a3b8" },
-  oneoff:        { light: "#475569", dark: "#cbd5e1" },
+  oneoff:        { light: "#78716c", dark: "#a8a29e" },
   uncategorized: { light: "#94a3b8", dark: "#64748b" },
   other:         { light: "#94a3b8", dark: "#64748b" },
 };
@@ -55,7 +59,7 @@ const sliceColor = (slice, isDark) => {
   if (slice.bucket !== "item") return NEUTRAL[slice.bucket][isDark ? "dark" : "light"];
   const base =
     slice.color == null
-      ? NEUTRAL.bill[isDark ? "dark" : "light"]
+      ? NEUTRAL[slice.parentBucket ?? "bill"][isDark ? "dark" : "light"]
       : paletteColor(slice.color, isDark);
   const steps = slice.shadeCount ?? 1;
   const t = steps > 1 ? ((slice.shade ?? 0) / (steps - 1)) * TINT_RANGE : 0;
@@ -132,17 +136,6 @@ export default function SpendingMix({ mix, isDark }) {
               Projected from your rules for {prettyDate(mix.from)} – {prettyDate(mix.to)} — not what you&apos;ve
               logged. Income and bills you&apos;ve marked paid are excluded.
             </p>
-
-            {/* Only when the grouping changed under you. Naming the bucket and
-                its share explains why, rather than silently showing a
-                different chart than the one you saw last week. */}
-            {mix.exploded && !empty && (
-              <p className="text-xs text-gray-400 mb-3 -mt-1.5">
-                <span className="text-gray-500 dark:text-gray-400 font-medium">{mix.exploded.label}</span> is{" "}
-                {Math.round(mix.exploded.percent)}% of this window, so it&apos;s broken out by transaction — everything else
-                stays grouped by category.
-              </p>
-            )}
 
             {empty ? (
               <p className="text-sm text-gray-400 py-4 text-center">

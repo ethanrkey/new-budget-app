@@ -411,28 +411,37 @@ fifth tab never needs a migration.
   and it never touches `monthlyActuals` or any logged value. An actual-
   spending breakdown belongs on the Spending tab and is a different chart.
 
-  **Graceful degradation when one bucket dominates.** Grouping by category is
-  the honest default, but it degenerates: an account whose outflow is almost
-  all "Fixed bills" gets one wedge at ~100%, which is true and tells you
-  nothing. At or above `DOMINANT_SHARE` (0.7) of the window's outflow, the
-  engine replaces that one bucket with its own transactions as slices —
-  `bucket: "item"`, carrying `parentLabel` plus `shade`/`shadeCount` — and
-  reports `{ label, percent }` on `mix.exploded`. Everything else stays a
-  category. The threshold is 70% rather than 50% on purpose: at 50% a
-  perfectly readable chart gets exploded, and the failure being fixed is the
-  degenerate near-100% shape, not merely a large slice. The breakout happens
-  BEFORE the 8-slice fold, so folding still applies afterwards and the slices
-  still sum to the total.
+  **The fixed buckets always break out by item; tracker categories never
+  do.** These are not two kinds of the same thing. A tracker category is a
+  bucket the user created and named deliberately, so grouping by it is the
+  whole reason it exists. `bill` is the DEFAULT bucket — where anything the
+  user didn't categorise lands — so drawing it as one slice is grouping by
+  "uncategorised", which carries no information at 40% any more than at
+  100%. So `ALWAYS_BY_ITEM` (`bill`, `oneoff`) is replaced by its own
+  transactions as slices — `bucket: "item"`, carrying `parentBucket`,
+  `parentLabel` and `shade`/`shadeCount` — unconditionally. Same-named
+  events inside a bucket sum, so three months of rent is one slice, not
+  three.
+
+  Unconditionally, and that word is load-bearing: there is no threshold and
+  no caption, so the chart cannot change shape as the horizon slider moves.
+  `Uncategorized` is deliberately NOT in the set — it is not a default
+  landing place, it only holds transactions whose category was deleted, and
+  seeing that lump whole is exactly what sends you off to re-file them. The
+  breakout happens BEFORE the 8-slice fold, so folding still applies
+  afterwards and the slices still sum to the total.
 
   Two consequences for the view. Item slices are rendered as tints of their
   parent's colour, not fresh palette hues — a 9th hue would collide with a
   real category sitting in the same chart, and would lend a single
-  transaction a category's identity. Because the tints are steps of one hue,
-  the colour rule above applies at its strictest: every item slice carries
-  its parent's name inline ("Rent · Fixed bills") in the legend, the bars and
-  the tooltip. And the caption changes when the grouping does — it names the
-  bucket and its share — because the chart must never silently show a
-  different grouping than the one you saw last week.
+  transaction a category's identity. Steps run AWAY from the surface (darker
+  on light, lighter on dark) so the quietest step still holds ≥4.7:1, and
+  bills tint off a cool grey while one-offs tint off a warm one, because
+  both fixed buckets are always present at once and two ramps struck off the
+  same slate overlapped. Because the tints are steps of one hue, the colour
+  rule above applies at its strictest: every item slice carries its parent's
+  name inline ("Rent · Fixed bills") in the legend, the bars and the tooltip.
+
   A cumulative column opens to fit its own category name (`colVars` in
   LedgerView drives `--col-w`): the column is `nowrap` + `overflow:hidden` so
   it can animate open from zero width, and a fixed width silently clipped
@@ -636,3 +645,16 @@ Later:
   deliberate user choice (2026-09-13) over "fill against owed today", which
   would tick down in a month with no payment: it can overstate where you
   stand today, and that trade was made knowingly.
+- **A dominance threshold for the spending chart was tried and removed**
+  (2026-09-28, removed 2026-09-29). The first cut broke a bucket out into
+  its transactions only when it passed 70% of the window's outflow, on the
+  reasoning that the failure was the degenerate one-wedge-at-100% shape.
+  That reasoning was wrong, and a future pass should not re-derive the
+  threshold as a clever idea. The fixed buckets are not categories in the
+  same sense as the others: `bill` is where uncategorised money lands by
+  default, so grouping by it says nothing at ANY share — 62% of a real
+  window was the biggest slice and the least informative one — not merely at
+  100%. A threshold also makes the chart change shape as the horizon slider
+  moves, which is a worse property than any grouping it could pick. The rule
+  is now unconditional and needs no explanatory caption, because nothing is
+  conditional to explain.

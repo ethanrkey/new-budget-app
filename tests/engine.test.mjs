@@ -1427,7 +1427,7 @@ const stateAL = normalize({
     { id: "pay", name: "Paycheck", amount: 2000, category: "income", cadence: "monthly", dayOfMonth: 1, startDate: "2026-09-01", order: 0 },
     { id: "rent", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", dayOfMonth: 2, startDate: "2026-09-02", order: 1 },
     { id: "gro", name: "Groceries", amount: 400, category: "bill", cadence: "monthly", dayOfMonth: 6, startDate: "2026-09-06", order: 2, variable: true },
-    { id: "roth", name: "Roth", amount: 1200, category: "rothcat", cadence: "monthly", dayOfMonth: 5, startDate: "2026-09-05", order: 3 },
+    { id: "roth", name: "Roth", amount: 500, category: "rothcat", cadence: "monthly", dayOfMonth: 5, startDate: "2026-09-05", order: 3 },
   ],
   oneoffs: [{ id: "trip", name: "Trip", amount: 300, category: "oneoff", date: "2026-10-11", order: 4 }],
   paidOverrides: {},
@@ -1438,14 +1438,18 @@ const mixAL = computeSpendingByCategory(stateAL, "2026-11-30");
 const byKey = (m) => Object.fromEntries(m.slices.map((s) => [s.key, s.amount]));
 
 eq("income is never a slice", mixAL.slices.some((s) => s.key === "income"), false);
-eq("slices are the outflow categories", mixAL.slices.map((s) => s.key).sort(), ["bill", "oneoff", "rothcat"]);
-check("Fixed bills = 3x rent + 3x groceries over the window", byKey(mixAL).bill, 5700);
-check("the tracker category keeps its own total", byKey(mixAL).rothcat, 3600);
-check("the one-off is its own slice", byKey(mixAL).oneoff, 300);
-check("total is the sum of the slices", mixAL.total, 9600);
-eq("sorted biggest first", mixAL.slices.map((s) => s.amount), [5700, 3600, 300]);
-eq("no bucket dominates, so nothing is broken out", mixAL.exploded, null);
+// The fixed buckets always break out; tracker categories never do.
+eq("bills arrive as their own transactions, one-offs too",
+  mixAL.slices.map((s) => s.key).sort(), ["bill::Groceries", "bill::Rent", "oneoff::Trip", "rothcat"]);
+check("3x rent is one slice, not three", byKey(mixAL)["bill::Rent"], 4500);
+check("3x groceries likewise", byKey(mixAL)["bill::Groceries"], 1200);
+check("the tracker category stays whole", byKey(mixAL).rothcat, 1500);
+check("the one-off is its own transaction", byKey(mixAL)["oneoff::Trip"], 300);
+check("total is the sum of the slices", mixAL.total, 7500);
+eq("sorted biggest first", mixAL.slices.map((s) => s.amount), [4500, 1500, 1200, 300]);
 check("percents sum to 100", Math.round(mixAL.slices.reduce((t, s) => t + s.percent, 0)), 100);
+check("breaking the fixed buckets out loses no money",
+  mixAL.slices.reduce((t, s) => t + s.amount, 0), mixAL.total);
 
 // A logged actual of 999 for September must not move a single number here.
 const noActualsAL = { ...stateAL, monthlyActuals: {} };
@@ -1455,13 +1459,23 @@ eq("a logged monthly actual changes nothing — this is the forecast",
 // Labels and colour routing.
 const rothSlice = mixAL.slices.find((s) => s.key === "rothcat");
 eq("a tracker category carries its palette index and name", [rothSlice.label, rothSlice.color, rothSlice.bucket], ["Roth", 5, "category"]);
-eq("the fixed buckets carry no palette index (they get neutral steps)",
-  mixAL.slices.filter((s) => s.key === "bill" || s.key === "oneoff").map((s) => s.color), [null, null]);
+const items = mixAL.slices.filter((s) => s.bucket === "item");
+eq("item slices carry no palette index (they get neutral steps)", items.map((s) => s.color), [null, null, null]);
+eq("each names the bucket it came from, so it can't pass as a category",
+  items.map((s) => s.parentLabel).sort(), ["Fixed bills", "Fixed bills", "One-off"]);
+eq("and names that bucket's kind, so the two ramps can differ",
+  [...new Set(items.map((s) => s.parentBucket))].sort(), ["bill", "oneoff"]);
+eq("shade steps are counted PER parent, not across the whole chart",
+  items.filter((s) => s.parentBucket === "bill").map((s) => [s.shade, s.shadeCount]), [[0, 2], [1, 2]]);
+eq("a lone one-off is its own one-step ramp",
+  items.filter((s) => s.parentBucket === "oneoff").map((s) => [s.shade, s.shadeCount]), [[0, 1]]);
+eq("a tracker category is never broken out, whatever its share",
+  mixAL.slices.filter((s) => s.key === "rothcat").map((s) => s.bucket), ["category"]);
 
 // Paid-marked instances contribute 0 to the projection, so they contribute
 // 0 here too — otherwise the pie shows spending the forecast doesn't have.
 const paidAL = { ...stateAL, paidOverrides: { "2026-09": ["rent"] } };
-check("a paid-marked bill is excluded", byKey(computeSpendingByCategory(paidAL, "2026-11-30")).bill, 4200);
+check("a paid-marked bill is excluded", byKey(computeSpendingByCategory(paidAL, "2026-11-30"))["bill::Rent"], 3000);
 
 // It follows the horizon slider, because it reads the same event list.
 check("a shorter horizon yields a smaller total", computeSpendingByCategory(stateAL, "2026-09-30").total < mixAL.total, true);
@@ -1471,7 +1485,9 @@ eq("the window is reported for labelling", [mixAL.from, mixAL.to], ["2026-09-01"
 const orphanAL = deleteCategory(stateAL, "rothcat");
 const orphanMix = computeSpendingByCategory(orphanAL, "2026-11-30");
 eq("a deleted category becomes Uncategorized, not a vanished slice",
-  orphanMix.slices.find((s) => s.bucket === "uncategorized")?.amount, 3600);
+  orphanMix.slices.find((s) => s.bucket === "uncategorized")?.amount, 1500);
+eq("Uncategorized stays whole — it is not a default bucket, it is a backlog",
+  orphanMix.slices.filter((s) => s.parentBucket === undefined && s.bucket === "uncategorized").length, 1);
 check("the total is unchanged by the delete", orphanMix.total, mixAL.total);
 
 // Beyond 8 slices the tail folds rather than inventing a 9th hue.
@@ -1498,11 +1514,11 @@ const emptyMix = computeSpendingByCategory(normalize({
 eq("nothing planned -> no slices", emptyMix.slices, []);
 check("nothing planned -> zero total, not NaN", emptyMix.total, 0);
 
-// ---------- Scenario AN: a dominant bucket breaks out into its items ----------
-console.log("\n== Scenario AN: dominant-bucket breakout ==");
-// The reported case: nearly everything is a "bill", so the category view is
-// one wedge at ~100% and says nothing. Past DOMINANT_SHARE the bucket is
-// broken out into its own transactions instead.
+// ---------- Scenario AN: fixed buckets break out, always ----------
+console.log("\n== Scenario AN: the fixed buckets are not categories ==");
+// The rule has no threshold: "Fixed bills" is where anything uncategorised
+// lands, so drawing it whole says nothing at 40% any more than at 100%, and
+// the chart must not change shape as the horizon slider moves.
 const mkAN = (rothAmount) => normalize({
   settings: { checkInBalance: 9000, checkInDate: "2026-09-01", budgetHorizon: "2026-10-01", ledgerHorizon: "2026-09-30" },
   recurring: [
@@ -1515,35 +1531,24 @@ const mkAN = (rothAmount) => normalize({
   trackerCategories: [{ id: "rothcat", name: "Roth", color: 5, order: 0, kind: "asset" }],
 });
 
-// 100% bills — the exact shape reported.
-const allBills = computeSpendingByCategory(mkAN(0), "2026-09-30");
-eq("one bucket at 100% is broken out", allBills.exploded?.label, "Fixed bills");
-check("...and the share is reported for the caption", allBills.exploded.percent, 100);
-eq("slices are now the transactions", allBills.slices.map((s) => s.label), ["Rent", "Groceries", "Spotify"]);
-eq("every broken-out slice is marked as an item", allBills.slices.every((s) => s.bucket === "item"), true);
-eq("each names the bucket it came from, so it can't pass as a category",
-  [...new Set(allBills.slices.map((s) => s.parentLabel))], ["Fixed bills"]);
-eq("items inherit the parent's colour rather than taking a fresh hue",
-  [...new Set(allBills.slices.map((s) => s.color))], [null]);
-eq("siblings are indexed so the UI can tint steps", allBills.slices.map((s) => s.shade), [0, 1, 2]);
-check("breaking out loses no money", allBills.slices.reduce((t, s) => t + s.amount, 0), allBills.total);
-check("percents still sum to 100", Math.round(allBills.slices.reduce((t, s) => t + s.percent, 0)), 100);
+// Bills at 100%, at 78%, at 51%: the same shape every time.
+for (const [share, roth] of [["100%", 0], ["78%", 600], ["51%", 2000]]) {
+  const m = computeSpendingByCategory(mkAN(roth), "2026-09-30");
+  eq(`bills at ${share}: still broken out by transaction`,
+    m.slices.filter((s) => s.bucket === "item").map((s) => s.label), ["Rent", "Groceries", "Spotify"]);
+  eq(`bills at ${share}: the tracker category is untouched`,
+    m.slices.filter((s) => s.bucket === "category").map((s) => s.label), roth ? ["Roth"] : []);
+  check(`bills at ${share}: no money lost`, m.slices.reduce((t, s) => t + s.amount, 0), m.total);
+}
 
-// Just over the line: bills 2082 of 2682 = 77.6% -> breaks out, Roth stays.
-const over = computeSpendingByCategory(mkAN(600), "2026-09-30");
-eq("over the threshold, the dominant bucket breaks out", over.exploded?.label, "Fixed bills");
-eq("other categories stay grouped as categories",
-  over.slices.filter((s) => s.bucket === "category").map((s) => s.label), ["Roth"]);
-eq("the mix is items plus the untouched categories",
-  over.slices.map((s) => s.label).sort(), ["Groceries", "Rent", "Roth", "Spotify"]);
-check("still loses no money", over.slices.reduce((t, s) => t + s.amount, 0), over.total);
+// Shrinking the horizon must not re-group the chart.
+const wide = computeSpendingByCategory(mkAN(600), "2026-09-30");
+const narrow = computeSpendingByCategory(mkAN(600), "2026-09-06");
+eq("the grouping does not change with the horizon slider",
+  narrow.slices.map((s) => s.bucket), ["item", "category", "item"]);
+check("only the amounts change", wide.total > narrow.total, true);
 
-// Comfortably under: bills 2082 of 4082 = 51% -> left grouped, as designed.
-const under = computeSpendingByCategory(mkAN(2000), "2026-09-30");
-eq("under the threshold nothing is broken out", under.exploded, null);
-eq("category grouping stays the default", under.slices.map((s) => s.label), ["Fixed bills", "Roth"]);
-
-// A dominant TRACKER category breaks out too — the rule isn't bills-only.
+// A dominant TRACKER category stays whole — it is a bucket the user made.
 const loanHeavy = computeSpendingByCategory(normalize({
   settings: { checkInBalance: 9000, checkInDate: "2026-09-01", budgetHorizon: "2026-10-01", ledgerHorizon: "2026-09-30" },
   recurring: [
@@ -1554,9 +1559,9 @@ const loanHeavy = computeSpendingByCategory(normalize({
   oneoffs: [], paidOverrides: {},
   trackerCategories: [{ id: "aa", name: "Student Loan AA", color: 0, order: 0, kind: "debt", originalPrincipal: 18000, interestRate: 5.8 }],
 }), "2026-09-30");
-eq("a dominant tracker category breaks out as well", loanHeavy.exploded?.label, "Student Loan AA");
-eq("its items keep the category's palette index", [...new Set(loanHeavy.slices.filter((s) => s.bucket === "item").map((s) => s.color))], [0]);
-eq("items of that loan", loanHeavy.slices.filter((s) => s.bucket === "item").map((s) => s.label), ["Loan payment", "Extra principal"]);
+eq("a tracker category at 93% is still one slice",
+  loanHeavy.slices.map((s) => [s.label, s.bucket]), [["Student Loan AA", "category"], ["Rent", "item"]]);
+check("...keeping its palette index", loanHeavy.slices[0].color, 0);
 
 // The 8-slice fold still applies after breaking out, and still loses nothing.
 const manyItems = computeSpendingByCategory(normalize({

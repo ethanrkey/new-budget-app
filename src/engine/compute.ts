@@ -212,17 +212,18 @@ function monthsBetween(startISO: ISODate, endISO: ISODate): Array<{ key: MonthKe
 // categorical colour rules, so it folds instead.
 const MAX_SLICES = 8;
 
-// When one bucket is this much of the window, the category view has stopped
-// saying anything — a single wedge at ~100% conveys nothing you didn't
-// already know — so it is broken out into its own transactions instead.
+// The two FIXED buckets are not categories in the sense the others are. A
+// tracker category is a bucket the user made and named on purpose; "bill" is
+// where anything they did NOT categorise lands. Drawing it as one slice is
+// grouping by "uncategorised", which says as little at 40% as at 100% — so
+// these always break out by item. No threshold: the chart must not change
+// shape as the horizon slider moves. Tracker categories always stay whole;
+// grouping them is the whole reason they exist.
 //
-// 70 rather than 50 on purpose. At 50 a chart that still works gets exploded:
-// bills at 60% against three categories splitting the rest is a readable
-// comparison, and scattering bills into eight item slices would bury those
-// categories. The failure this guards against is the degenerate shape, not
-// merely a large share. Category grouping stays the default and the honest
-// grouping; this is the graceful degradation.
-const DOMINANT_SHARE = 0.7;
+// "Uncategorized" stays whole too, deliberately. It is not a place things
+// land by default — it only holds transactions whose category was deleted —
+// and seeing that lump whole is what sends you off to re-file them.
+const ALWAYS_BY_ITEM: ReadonlySet<string> = new Set(["bill", "oneoff"]);
 
 export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODate): SpendingMix {
   const from = primaryAccount(state).balanceAsOf;
@@ -243,10 +244,45 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
     return { label: cat.name, color: cat.color, bucket: "category" };
   };
 
+  // The transactions inside one bucket, biggest first, same-named ones
+  // summed — three months of "Rent" is one slice, not three.
+  const itemsOf = (categoryId: string): [string, number][] => {
+    const byItem = new Map<string, number>();
+    for (const e of events) {
+      if (e.direction !== "out" || e.paidOverride || e.category !== categoryId) continue;
+      byItem.set(e.name, round((byItem.get(e.name) ?? 0) + e.amount));
+    }
+    return [...byItem.entries()].sort((a, b) => b[1] - a[1]);
+  };
+
   const total = round([...totals.values()].reduce((s, v) => s + v, 0));
-  let slices: SpendingSlice[] = [...totals.entries()]
-    .map(([key, amount]) => ({ key, amount, percent: 0, ...describe(key) }))
-    .sort((a, b) => b.amount - a.amount);
+  let slices: SpendingSlice[] = [];
+  for (const [key, amount] of totals) {
+    const d = describe(key);
+    // Items inherit the parent's colour, tinted per sibling by the UI,
+    // rather than taking fresh categorical hues — a 9th hue would collide
+    // with a real category sitting in this same chart, and would lend one
+    // transaction a category's identity.
+    const fixed = d.bucket === "bill" || d.bucket === "oneoff" ? d.bucket : null;
+    const items = fixed ? itemsOf(key) : [];
+    if (fixed && items.length > 0) {
+      items.forEach(([name, amt], i) => slices.push({
+        key: `${key}::${name}`,
+        label: name,
+        amount: amt,
+        percent: 0,
+        color: d.color,
+        bucket: "item",
+        parentBucket: fixed,
+        parentLabel: d.label,
+        shade: i,
+        shadeCount: items.length,
+      }));
+      continue;
+    }
+    slices.push({ key, amount, percent: 0, ...d });
+  }
+  slices.sort((a, b) => b.amount - a.amount);
 
   // Orphans from several deleted categories collapse into one slice.
   const orphans = slices.filter((s) => s.bucket === "uncategorized");
@@ -255,40 +291,6 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
     slices = slices.filter((s) => s.bucket !== "uncategorized");
     slices.push({ key: "__uncategorized__", label: "Uncategorized", amount: merged, percent: 0, color: null, bucket: "uncategorized" });
     slices.sort((a, b) => b.amount - a.amount);
-  }
-
-  // Break out a dominant bucket into its own transactions. Applies to ANY
-  // bucket, not just bills: if every outflow went to one loan, the same
-  // reasoning holds. Items inherit the parent's colour (tinted per sibling by
-  // the UI) rather than taking fresh categorical hues, which would collide
-  // with a real category using that hue in this same chart.
-  let exploded: SpendingMix["exploded"] = null;
-  const top = slices[0];
-  if (top && total > 0 && top.amount / total >= DOMINANT_SHARE) {
-    const byItem = new Map<string, number>();
-    for (const e of events) {
-      if (e.direction !== "out" || e.paidOverride || e.category !== top.key) continue;
-      byItem.set(e.name, round((byItem.get(e.name) ?? 0) + e.amount));
-    }
-    const items = [...byItem.entries()].sort((a, b) => b[1] - a[1]);
-    // Only worth it if it actually adds resolution. A bucket holding one
-    // item still explodes — "Rent 100%" beats "Fixed bills 100%" — but a
-    // bucket the events can't account for is left alone.
-    if (items.length > 0) {
-      exploded = { label: top.label, percent: round((top.amount / total) * 100) };
-      const itemSlices: SpendingSlice[] = items.map(([name, amount], i) => ({
-        key: `${top.key}::${name}`,
-        label: name,
-        amount,
-        percent: 0,
-        color: top.color,
-        bucket: "item",
-        parentLabel: top.label,
-        shade: i,
-        shadeCount: items.length,
-      }));
-      slices = [...slices.slice(1), ...itemSlices].sort((a, b) => b.amount - a.amount);
-    }
   }
 
   if (slices.length > MAX_SLICES) {
@@ -307,5 +309,5 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
 
   for (const s of slices) s.percent = total > 0 ? round((s.amount / total) * 100) : 0;
 
-  return { slices, total, exploded, from, to: horizonISO };
+  return { slices, total, from, to: horizonISO };
 }

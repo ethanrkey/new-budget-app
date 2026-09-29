@@ -260,6 +260,9 @@ export interface Ledger {
  * them a colour, and the 8-hue palette is already fully spoken for, so
  * inventing a 9th and 10th hue would break the categorical colour rules.
  */
+// `item` is one transaction broken out of a fixed bucket — always, not on a
+// threshold. See ALWAYS_BY_ITEM in compute.ts for why the fixed buckets and
+// the tracker categories are treated differently.
 export type SpendingBucket = "category" | "bill" | "oneoff" | "uncategorized" | "other" | "item";
 
 export interface SpendingSlice {
@@ -273,6 +276,9 @@ export interface SpendingSlice {
    *  parent category; the UI resolves it via paletteColor. */
   color: PaletteIndex | null;
   bucket: SpendingBucket;
+  /** `item` slices only: which fixed bucket it came from, so the view tints
+   *  off that bucket's own neutral rather than a shared one. */
+  parentBucket?: "bill" | "oneoff";
   /** `item` slices only: the bucket they were broken out of, named so the
    *  slice can say "Rent · Fixed bills" rather than passing as a category. */
   parentLabel?: string;
@@ -285,12 +291,6 @@ export interface SpendingSlice {
 export interface SpendingMix {
   slices: SpendingSlice[];
   total: number;
-  /**
-   * Set when one bucket was so dominant that the category view said nothing,
-   * and it was broken out into its own transactions. Carries what was
-   * exploded and its share, so the panel can explain itself.
-   */
-  exploded: { label: string; percent: number } | null;
   /** The window this covers — the same one the Ledger is showing. */
   from: ISODate;
   to: ISODate;
