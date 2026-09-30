@@ -2,13 +2,16 @@ import { addMonthsISO, monthsDiff } from "../engine/model.ts";
 import InfoTip from "./InfoTip.jsx";
 
 const MIN_MONTHS = 3;
-const MAX_MONTHS = 36;
+const DEFAULT_MAX_MONTHS = 36;
 
 // A single horizon control: "Project through <Mon YYYY> (<N> mo)". `anchor` is
 // the ISO date the month-count is measured from (the check-in date); `horizon`
 // is the current ISO horizon date; `onChange` receives the new ISO horizon.
-export default function HorizonSlider({ label, anchor, horizon, onChange, help }) {
-  const months = Math.min(MAX_MONTHS, Math.max(MIN_MONTHS, monthsDiff(anchor, horizon)));
+// `maxMonths` is per-caller: the Ledger caps at a year (see LEDGER_MAX_MONTHS),
+// the Budget keeps the long range, because a monthly grid two years out is
+// still useful where a transaction list is not.
+export default function HorizonSlider({ label, anchor, horizon, onChange, help, maxMonths = DEFAULT_MAX_MONTHS }) {
+  const months = Math.min(maxMonths, Math.max(MIN_MONTHS, monthsDiff(anchor, horizon)));
   const horizonLabel = new Date(horizon + "T00:00:00").toLocaleString("en-US", {
     month: "short", year: "numeric",
   });
@@ -19,7 +22,7 @@ export default function HorizonSlider({ label, anchor, horizon, onChange, help }
       <input
         type="range"
         min={MIN_MONTHS}
-        max={MAX_MONTHS}
+        max={maxMonths}
         value={months}
         onChange={(e) => onChange(addMonthsISO(anchor, Number(e.target.value)))}
         className="w-28 sm:w-40 accent-gray-900 dark:accent-white ml-1"

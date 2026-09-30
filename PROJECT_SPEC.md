@@ -382,6 +382,13 @@ fifth tab never needs a migration.
   balance; month headers; optional per-category cumulative columns
   (checklist picker); mark-a-bill-paid checkbox for current-month bills;
   multi-select delete; per-item color override; projection horizon slider.
+  **The Ledger projects at most 12 months** (`LEDGER_MAX_MONTHS`), against
+  the Budget's 36: nobody plans transaction-by-transaction two years out, so
+  most of the old range was dead slider. The cap is applied on READ, by
+  `ledgerHorizonOf()`, not by migrating stored data — shortening a cap must
+  not rewrite a horizon the user saved. Every reader goes through that one
+  helper (the slider, `computeLedger`, the spending chart), so they cannot
+  disagree about the window, and the next drag writes a value back in range.
   The **Savings columns** picker sits directly above the table rather than in
   the toolbar: it is list-only and does nothing to the Planned spending panel,
   so placing it over that panel implied a relationship that isn't there. The
@@ -453,7 +460,27 @@ fifth tab never needs a migration.
   paycheck landing that month, checking, other income), fixed/recurring,
   saving/debt clustered by category, one-offs, totals, cumulative net.
   Reorder rows by arrows or drag (never across a section/cluster). Its own
-  horizon slider.
+  horizon slider, still the full 36 months — a monthly grid two years out is
+  genuinely useful where a transaction list is not.
+
+  The grid scrolls horizontally with the month column pinned (`STICKY_COL`),
+  and three separate things had to be true for that to work (2026-09-29; all
+  three were broken):
+  1. **The scroller carries no horizontal padding.** It used to be the card
+     itself, padding and all — and that padding stays *inside* the scrollport,
+     so columns slid through the strip to the left of a cell pinned at
+     `left: 0`. The scroller now bleeds to the card's edges (`-mx-3 sm:-mx-4`)
+     and the pinned column supplies that inset itself.
+  2. **The pinned cell is opaque.** The tinted total rows used
+     `dark:bg-*-950/30`, so in dark mode numbers showed straight through the
+     cell that was supposed to hide them. The pinned copy of each tint is
+     flattened against the dark surface (`#0d1f22`, `#21141e`); the row's own
+     tint stays translucent, since nothing scrolls under a whole row.
+  3. **The right edge is a pseudo-element, not a `box-shadow`.** Chrome does
+     not paint `box-shadow` on a cell inside a `border-collapse: collapse`
+     table — it was tried and silently dropped. `position: sticky` makes the
+     cell a containing block, so an `after:` strip hangs outside its right
+     edge with no extra wrapper.
 - **Dashboard** — the reality layer: hero net position (verified checking +
   last logged asset balances − last logged loan balances, with an explicit
   "N not logged yet" count), collapsible and remembered per device; a card

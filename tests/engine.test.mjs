@@ -4,7 +4,7 @@ import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, 
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
 import { buildAllEvents } from "../src/engine/generate.ts";
-import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID } from "../src/engine/model.ts";
+import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID, LEDGER_MAX_MONTHS, ledgerHorizonOf } from "../src/engine/model.ts";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.ts";
 import { computeBudgetLayout } from "../src/engine/budgetLayout.ts";
 import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.ts";
@@ -1576,6 +1576,38 @@ check("broken out, then folded to at most 8", manyItems.slices.length, 8);
 eq("the fold is still the last slice", manyItems.slices[7].bucket, "other");
 check("folding after a breakout still loses no money",
   manyItems.slices.reduce((t, s) => t + s.amount, 0), manyItems.total);
+
+// ---------- Scenario AO: the Ledger's horizon is capped ----------
+console.log("\n== Scenario AO: ledgerHorizonOf caps a stored horizon ==");
+// The Ledger is a near-term guide, so it projects at most a year. Shortening
+// the cap must NOT rewrite a stored horizon — that is user data — so the cap
+// is applied on read, by the one helper every reader goes through.
+const capISO = addMonthsISO(todayISO(), LEDGER_MAX_MONTHS);
+check("the cap is a year", LEDGER_MAX_MONTHS, 12);
+eq("a horizon inside the cap is returned untouched",
+  ledgerHorizonOf({ settings: { ledgerHorizon: addMonthsISO(todayISO(), 6) } }), addMonthsISO(todayISO(), 6));
+eq("a horizon exactly at the cap is untouched",
+  ledgerHorizonOf({ settings: { ledgerHorizon: capISO } }), capISO);
+eq("a horizon saved under the old 36-month range is capped on read",
+  ledgerHorizonOf({ settings: { ledgerHorizon: addMonthsISO(todayISO(), 30) } }), capISO);
+eq("the stored value itself is never rewritten", (() => {
+  const st = { settings: { ledgerHorizon: addMonthsISO(todayISO(), 30) } };
+  ledgerHorizonOf(st);
+  return st.settings.ledgerHorizon;
+})(), addMonthsISO(todayISO(), 30));
+
+// The point of capping on read: table and chart read the same window.
+const overCap = normalize({
+  settings: { checkInBalance: 5000, checkInDate: todayISO(), budgetHorizon: addMonthsISO(todayISO(), 24), ledgerHorizon: addMonthsISO(todayISO(), 30) },
+  recurring: [{ id: "r", name: "Rent", amount: 100, category: "bill", cadence: "monthly", dayOfMonth: 1, startDate: todayISO(), order: 0 }],
+  oneoffs: [], paidOverrides: {}, trackerCategories: [],
+});
+const cappedLedger = computeLedger(overCap, ledgerHorizonOf(overCap));
+const cappedMix = computeSpendingByCategory(overCap, ledgerHorizonOf(overCap));
+eq("the ledger stops at the cap", cappedLedger.rows.every((r) => r.date <= capISO), true);
+eq("and the spending chart covers exactly the same window", cappedMix.to, capISO);
+check("a capped ledger is shorter than the uncapped one would be",
+  cappedLedger.rows.length < computeLedger(overCap, addMonthsISO(todayISO(), 30)).rows.length, true);
 
 // ---------- Scenario AM: groupByDay (the Ledger's calendar cells) ----------
 console.log("\n== Scenario AM: groupByDay ==");

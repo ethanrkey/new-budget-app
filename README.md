@@ -78,7 +78,8 @@ it. Bills and one-offs are always shown as their own transactions rather than
 as one slice — "Fixed bills" is where anything uncategorized lands, so grouping
 by it tells you nothing — while the categories you made stay whole. Optional cumulative columns per savings category,
 per-item colors, mark-a-bill-paid for the current month, multi-select delete,
-and a horizon slider of its own.
+and a horizon slider of its own, capped at a year — the Ledger is a near-term
+guide, and the Budget is the tab for a long projection.
 
 Anything dated before your last verified balance is dropped rather than
 double-counted — that money is already *in* the number.

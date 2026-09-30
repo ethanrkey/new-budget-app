@@ -3,6 +3,24 @@ import HorizonSlider from "./HorizonSlider.jsx";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../engine/budgetLayout.ts";
 import { paletteColor, todayISO } from "../engine/model.ts";
 
+// Every cell of the pinned first column wears this. Three things matter and
+// each was separately broken: it must be OPAQUE (a tinted row used
+// `bg-*-950/30`, so numbers showed straight through it in dark mode), it must
+// sit ABOVE the cells scrolling under it, and it needs a soft right edge so
+// it reads as pinned rather than as a rendering fault.
+//
+// The edge is a pseudo-element, not a box-shadow: Chrome does not paint
+// box-shadow on a cell inside a `border-collapse: collapse` table, which it
+// silently dropped when tried. `position: sticky` makes the cell a
+// containing block, so the strip can hang just outside its right edge
+// without any extra wrapper.
+const STICKY_COL =
+  "sticky left-0 z-10 pl-3 sm:pl-4 " +
+  "after:content-[''] after:pointer-events-none after:absolute after:inset-y-0 " +
+  "after:right-0 after:w-2 after:translate-x-full " +
+  "after:bg-gradient-to-r after:from-gray-900/15 after:to-transparent " +
+  "dark:after:from-black/50";
+
 const money = (n) =>
   (n < 0 ? "-" : "") +
   Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -128,12 +146,17 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 sm:p-4 overflow-x-auto">
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-3 sm:p-4">
       {horizonControl && <div className="mb-4">{horizonControl}</div>}
+      {/* The scroller bleeds to the card's edges. When it carried the card's
+          own padding, that padding stayed inside the scrollport and columns
+          slid through the strip to the left of the pinned cell, which is
+          pinned to the scrollport edge, not to the padding box. */}
+      <div className="overflow-x-auto -mx-3 sm:-mx-4">
       <table className="text-sm border-collapse min-w-full">
         <thead>
           <tr className="text-gray-500 border-b-2 border-gray-300 dark:border-gray-700">
-            <th className="py-2 px-3 text-left font-semibold sticky left-0 bg-white dark:bg-gray-900">MONTH</th>
+            <th className={`py-2 pr-3 text-left font-semibold bg-white dark:bg-gray-900 ${STICKY_COL}`}>MONTH</th>
             {budget.map((c) => (
               <th key={c.key} className={th}>{c.label}</th>
             ))}
@@ -179,17 +202,18 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
           <TotalRow label="CUMULATIVE NET" cols={budget} pick={(c) => c.cumulative} net fill="dark" bold />
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
 
 function SectionHeader({ label, span, tone }) {
   const bg = tone === "income"
-    ? "bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300"
+    ? "bg-green-50 dark:bg-[#0d1f22] text-green-800 dark:text-green-300"
     : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300";
   return (
     <tr>
-      <td colSpan={span} className={`py-1.5 px-3 font-semibold text-xs tracking-wide ${bg} sticky left-0`}>
+      <td colSpan={span} className={`py-1.5 px-3 font-semibold text-xs tracking-wide ${bg} sticky left-0 z-10`}>
         {label}
       </td>
     </tr>
@@ -209,7 +233,7 @@ function DataRow({
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${isDragging ? "opacity-30" : ""} ${isDragOver ? "border-t-2 border-t-gray-900 dark:border-t-white" : ""}`}
     >
-      <td className="py-2 sm:py-1.5 px-3 sticky left-0 bg-white dark:bg-gray-900 whitespace-nowrap">
+      <td className={`py-2 sm:py-1.5 pr-3 bg-white dark:bg-gray-900 whitespace-nowrap ${STICKY_COL}`}>
         <span className="inline-flex items-center gap-1">
           {reorderable && (
             <span className="inline-flex flex-col opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition -my-1">
@@ -247,9 +271,16 @@ function TotalRow({ label, cols, pick, tone, net, fill, bold }) {
     fill === "income" ? "bg-green-50 dark:bg-green-950/30"
     : fill === "expense" ? "bg-red-50 dark:bg-red-950/30"
     : fill === "dark" ? "bg-gray-800 text-white dark:bg-gray-700" : "";
+  // The same tints, flattened against the dark surface (#111827) at the 30%
+  // they are drawn at, because the pinned cell has to be opaque.
+  const stickyFill =
+    fill === "income" ? "bg-green-50 dark:bg-[#0d1f22]"
+    : fill === "expense" ? "bg-red-50 dark:bg-[#21141e]"
+    : fill === "dark" ? "bg-gray-800 text-white dark:bg-gray-700"
+    : "bg-white dark:bg-gray-900";
   return (
     <tr className={`border-t-2 border-gray-300 dark:border-gray-700 ${bold ? "font-bold" : "font-semibold"} ${fillCls}`}>
-      <td className={`py-1.5 px-3 sticky left-0 whitespace-nowrap ${fillCls || "bg-white dark:bg-gray-900"}`}>{label}</td>
+      <td className={`py-1.5 pr-3 whitespace-nowrap ${stickyFill} ${STICKY_COL}`}>{label}</td>
       {cols.map((c) => {
         const v = pick(c);
         const color = fill === "dark" ? "text-white"

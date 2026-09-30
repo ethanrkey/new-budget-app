@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { groupByMonth, computeSpendingByCategory } from "../engine/compute.ts";
-import { todayISO, paletteColor } from "../engine/model.ts";
+import { todayISO, paletteColor, ledgerHorizonOf, LEDGER_MAX_MONTHS } from "../engine/model.ts";
 import HorizonSlider from "./HorizonSlider.jsx";
 import InfoTip from "./InfoTip.jsx";
 import SpendingMix from "./SpendingMix.jsx";
@@ -92,7 +92,8 @@ export default function LedgerView({
           <HorizonSlider
             label="Project through"
             anchor={todayISO()}
-            horizon={state.settings.ledgerHorizon}
+            horizon={ledgerHorizonOf(state)}
+            maxMonths={LEDGER_MAX_MONTHS}
             onChange={(iso) => setSettings({ ledgerHorizon: iso })}
             help="How far into the future the Ledger generates transactions. Independent from the Budget's own horizon — you can project the Ledger further (or less far) than the Budget."
           />
@@ -133,7 +134,7 @@ export default function LedgerView({
       {/* Forecast-only breakdown of this same window. Sits above the table
           and collapsed by default: the Ledger's job is the transaction list,
           and on a phone a permanent chart pushes the first row off-screen. */}
-      <SpendingMix mix={computeSpendingByCategory(state, state.settings.ledgerHorizon)} isDark={isDark} />
+      <SpendingMix mix={computeSpendingByCategory(state, ledgerHorizonOf(state))} isDark={isDark} />
 
       {calendar ? (
         <CalendarView

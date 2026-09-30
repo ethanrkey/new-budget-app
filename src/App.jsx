@@ -15,7 +15,7 @@ import {
   updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
   addContribution, updateContribution, deleteContribution, countTaggedItems,
 } from "./engine/mutate.ts";
-import { primaryAccount, sanitizeTabOrder } from "./engine/model.ts";
+import { primaryAccount, sanitizeTabOrder, ledgerHorizonOf } from "./engine/model.ts";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import Dashboard from "./components/Dashboard.jsx";
@@ -402,7 +402,7 @@ export default function App() {
 
   // computed views (recompute whenever state changes); harmless empty shape while loading
   const ledger = useMemo(
-    () => (state ? computeLedger(state, state.settings.ledgerHorizon) : { rows: [], endingBalance: 0 }),
+    () => (state ? computeLedger(state, ledgerHorizonOf(state)) : { rows: [], endingBalance: 0 }),
     [state]
   );
   const budget = useMemo(
@@ -429,7 +429,7 @@ export default function App() {
             title="Import a CSV, or restore a full JSON backup"
             className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
           >
-            ⬆<span className="hidden sm:inline"> Import</span>
+            ⬇<span className="hidden sm:inline"> Import</span>
           </button>
           <ExportMenu ledger={ledger} budget={budget} trackerCategories={state.trackerCategories} state={state} />
           <button

@@ -59,7 +59,7 @@ const SECTIONS = [
     body: [
       ["p", "Every projected transaction, in date order, with a running balance. Grouped by month."],
       ["dl", [
-        ["Project through", "How far out to run the projection."],
+        ["Project through", "How far out to run the projection, up to a year. The Ledger is a near-term guide; the Budget tab is where a longer projection lives, and it has its own slider that runs further."],
         ["Savings columns", "Pick which of your categories get a cumulative column, so you can watch a fund build up alongside your checking balance."],
         ["The checkbox on a current-month bill", "Marks it paid: it stays visible but stops affecting the balance, because a payment you've already made is inside your verified balance."],
         ["Select", "Multi-select rows and delete them in one go."],

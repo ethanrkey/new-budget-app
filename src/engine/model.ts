@@ -217,6 +217,22 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
     const b = new Date(bISO.slice(0, 7) + "-01T00:00:00");
     return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
   }
+  // The Ledger projects at most a year. It is a near-term guide — nobody
+  // plans transaction-by-transaction two years out — so most of a 36-month
+  // range was dead slider. The BUDGET's horizon is deliberately not capped
+  // this way: a long projection is genuinely useful on a monthly grid.
+  export const LEDGER_MAX_MONTHS = 12;
+
+  // The Ledger's EFFECTIVE horizon. A state saved when the cap was longer
+  // keeps its stored value untouched — shortening a cap must not rewrite
+  // user data — but every reader goes through here, so the slider, the
+  // table and the spending chart can never disagree about the window. The
+  // next drag of the slider writes a value back inside the range.
+  export function ledgerHorizonOf(state: { settings: { ledgerHorizon: ISODate } }): ISODate {
+    const cap = addMonthsISO(todayISO(), LEDGER_MAX_MONTHS);
+    return state.settings.ledgerHorizon > cap ? cap : state.settings.ledgerHorizon;
+  }
+
   export function uid(): string {
     return Math.random().toString(36).slice(2, 10);
   }
