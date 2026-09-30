@@ -303,11 +303,22 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
       percent: 0,
       color: null,
       bucket: "other",
+      // The fold KEEPS its members rather than discarding them. "Other" is
+      // otherwise the one slice you can learn nothing from — the same
+      // complaint as a single "Fixed bills" wedge, a layer down — so the
+      // view can open it on demand. They keep the colours they already had;
+      // nothing new is allocated from the palette.
+      children: rest,
     });
     slices = keep;
   }
 
-  for (const s of slices) s.percent = total > 0 ? round((s.amount / total) * 100) : 0;
+  for (const s of slices) {
+    s.percent = total > 0 ? round((s.amount / total) * 100) : 0;
+    // Children are percentages OF THE WINDOW, not of Other, so an expanded
+    // row can be compared with the slices above it.
+    for (const c of s.children ?? []) c.percent = total > 0 ? round((c.amount / total) * 100) : 0;
+  }
 
   return { slices, total, from, to: horizonISO };
 }

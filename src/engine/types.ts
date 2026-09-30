@@ -286,6 +286,10 @@ export interface SpendingSlice {
    *  of the parent's colour instead of spending a fresh categorical hue. */
   shade?: number;
   shadeCount?: number;
+  /** `other` slices only: the slices folded into it, in the same order they
+   *  would have had, each with its own colour and its percent OF THE WINDOW.
+   *  The view can list them without re-deriving anything. */
+  children?: SpendingSlice[];
 }
 
 export interface SpendingMix {

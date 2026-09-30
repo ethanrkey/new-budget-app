@@ -438,6 +438,31 @@ fifth tab never needs a migration.
   breakout happens BEFORE the 8-slice fold, so folding still applies
   afterwards and the slices still sum to the total.
 
+  **The fold is openable, and opens differently per view.** Past
+  `MAX_SLICES` the tail still folds into "Other", but the fold now KEEPS its
+  members (`children` on the slice, each with its percent of the window), so
+  "Other" is no longer the one slice you can learn nothing from — the same
+  complaint as a single "Fixed bills" wedge, one layer down. Clicking it:
+
+  - **Pie: the wedge never changes.** Seventeen wedges would be unreadable
+    and 1-2% slivers unhittable, so the expansion happens in the LEGEND
+    beside the pie. The expanded rows carry their own colours with no wedge
+    to point at, which the legend says once ("All inside the grey wedge")
+    rather than per row; segmenting the wedge is more machinery than it is
+    worth.
+  - **Bar: the rows expand in place**, full list with amounts and
+    percentages. A longer list is the bar's advantage.
+
+  Both views still show the same data — they already differ in how much of
+  it is drawn versus listed. "Other" stays last in both: it is a remainder,
+  not a peer, which is why it keeps its position even when it outranks named
+  slices by amount. The open/closed state is component state, NOT
+  `devicePrefs`: it is a drill-down you open to answer a question, not a
+  layout preference worth remembering. Raising `MAX_SLICES` instead was
+  rejected (it makes the default pie unreadable to fix an occasional
+  problem), as was a tooltip listing the contents (tooltips do not exist on
+  touch, and this app is used on a phone daily).
+
   Two consequences for the view. Item slices are rendered as tints of their
   parent's colour, not fresh palette hues — a 9th hue would collide with a
   real category sitting in the same chart, and would lend a single

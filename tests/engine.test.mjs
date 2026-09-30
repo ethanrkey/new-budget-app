@@ -1577,6 +1577,24 @@ eq("the fold is still the last slice", manyItems.slices[7].bucket, "other");
 check("folding after a breakout still loses no money",
   manyItems.slices.reduce((t, s) => t + s.amount, 0), manyItems.total);
 
+// "Other" keeps its members so the view can open it: at 11% of a window it
+// was the one slice you could learn nothing from.
+const other = manyItems.slices[7];
+check("Other carries the slices it folded", other.children.length, 5);
+check("...which sum to exactly what it shows",
+  round2(other.children.reduce((t, c) => t + c.amount, 0)), other.amount);
+eq("...keeping the colours they already had — nothing new is allocated",
+  other.children.every((c) => c.color === null && c.bucket === "item"), true);
+eq("...and their own labels, so an opened row still says what it is",
+  other.children.map((c) => c.label), ["Bill 7", "Bill 8", "Bill 9", "Bill 10", "Bill 11"]);
+eq("children are sorted with the rest, biggest first",
+  other.children.map((c) => c.amount), [165, 160, 155, 150, 145]);
+check("a child's percent is OF THE WINDOW, not of Other",
+  other.children[0].percent, round2((165 / manyItems.total) * 100));
+eq("only the fold has children", manyItems.slices.slice(0, 7).every((s) => s.children === undefined), true);
+eq("an unfolded chart has no children anywhere",
+  mixAL.slices.every((s) => s.children === undefined), true);
+
 // ---------- Scenario AO: the Ledger's horizon is capped ----------
 console.log("\n== Scenario AO: ledgerHorizonOf caps a stored horizon ==");
 // The Ledger is a near-term guide, so it projects at most a year. Shortening

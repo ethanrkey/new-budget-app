@@ -19,6 +19,14 @@ import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 // where uncategorised money lands and grouping by it says nothing. Tracker
 // categories arrive whole. That is the engine's call; this file only has to
 // colour and label the two kinds so they can't be mistaken for each other.
+//
+// "Other" folds the tail past 8 slices, and at 11% of a window it was the
+// one slice you could learn nothing from. It opens on click — differently
+// per view, on purpose. The PIE never re-shapes: its wedge stays whole and
+// grey (seventeen wedges would be unreadable, and 1-2% slivers unhittable),
+// and the expansion happens in the legend beside it. The BAR expands its
+// rows in place, which is the bar's whole advantage. Both views show the
+// same data; they already differ in how much is drawn versus listed.
 const COLLAPSED_PREF = "ledger-mix-collapsed";
 const KIND_PREF = "ledger-mix-bar";
 
@@ -78,6 +86,33 @@ function SliceLabel({ d }) {
   );
 }
 
+// The row every list shares: swatch, label, amount, percent.
+function Amount({ d }) {
+  return (
+    <span className="shrink-0 text-sm tabular-nums text-gray-600 dark:text-gray-400">
+      {money(d.amount)} <span className="text-gray-400">· {d.percent}%</span>
+    </span>
+  );
+}
+
+function Swatch({ fill }) {
+  return <span className="h-2.5 w-2.5 rounded-sm shrink-0 self-center" style={{ backgroundColor: fill }} />;
+}
+
+function Chevron({ open }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+      strokeLinejoin="round" aria-hidden="true"
+      className={`h-3 w-3 shrink-0 text-gray-400 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+// Folded rows are indented under the Other row they came out of, so a
+// coloured swatch beside them can't be read as a slice of its own rank.
+const NESTED = "ml-1 pl-3 border-l border-gray-200 dark:border-gray-800";
+
 function prettyDate(iso) {
   return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -85,8 +120,16 @@ function prettyDate(iso) {
 export default function SpendingMix({ mix, isDark }) {
   const [collapsed, setCollapsed] = useStickyFlag(COLLAPSED_PREF, true);
   const [asBar, setAsBar] = useStickyFlag(KIND_PREF, false);
+  // Component state, not devicePrefs: opening Other is a drill-down you do
+  // to answer a question, not a layout preference worth remembering.
+  const [otherOpen, setOtherOpen] = useState(false);
 
-  const data = mix.slices.map((s) => ({ ...s, fill: sliceColor(s, isDark) }));
+  const withFill = (s) => ({
+    ...s,
+    fill: sliceColor(s, isDark),
+    children: s.children?.map((c) => ({ ...c, fill: sliceColor(c, isDark) })),
+  });
+  const data = mix.slices.map(withFill);
   const empty = data.length === 0;
 
   return (
@@ -142,9 +185,9 @@ export default function SpendingMix({ mix, isDark }) {
                 Nothing going out in this window yet.
               </p>
             ) : asBar ? (
-              <BarView data={data} total={mix.total} />
+              <BarView data={data} total={mix.total} otherOpen={otherOpen} onToggleOther={setOtherOpen} />
             ) : (
-              <PieView data={data} isDark={isDark} />
+              <PieView data={data} isDark={isDark} otherOpen={otherOpen} onToggleOther={setOtherOpen} />
             )}
           </div>
         </div>
@@ -163,7 +206,7 @@ function useStickyFlag(name, fallback) {
   ];
 }
 
-function PieView({ data, isDark }) {
+function PieView({ data, isDark, otherOpen, onToggleOther }) {
   return (
     <div className="flex flex-col sm:flex-row items-center gap-4">
       <div className="h-52 w-full sm:w-52 shrink-0">
@@ -188,48 +231,111 @@ function PieView({ data, isDark }) {
       </div>
       {/* The legend is not decoration: the category palette's separation is
           tight enough that identity must never rest on colour alone. */}
-      <Legend data={data} />
+      <Legend data={data} otherOpen={otherOpen} onToggleOther={onToggleOther} />
     </div>
   );
 }
 
-function BarView({ data, total }) {
+function BarView({ data, total, otherOpen, onToggleOther }) {
   return (
     <div className="space-y-2">
-      {data.map((d) => (
-        <div key={d.key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 items-baseline max-w-3xl">
-          <div className="flex items-baseline gap-2 min-w-0 text-sm">
-            <span className="h-2.5 w-2.5 rounded-sm shrink-0 self-center" style={{ backgroundColor: d.fill }} />
-            <SliceLabel d={d} />
-          </div>
-          <span className="text-sm tabular-nums text-gray-600 dark:text-gray-400">
-            {money(d.amount)} <span className="text-gray-400">· {d.percent}%</span>
-          </span>
-          <div className="col-span-2 h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${total > 0 ? (d.amount / total) * 100 : 0}%`, backgroundColor: d.fill }} />
-          </div>
-        </div>
-      ))}
+      {data.map((d) => {
+        const rows = [
+          d.children ? (
+            <button
+              key={d.key}
+              onClick={() => onToggleOther(!otherOpen)}
+              aria-expanded={otherOpen}
+              className="w-full text-left rounded hover:bg-gray-50 dark:hover:bg-gray-800/60 -mx-1 px-1"
+            >
+              <BarRow d={d} total={total} chevron={<Chevron open={otherOpen} />} />
+            </button>
+          ) : (
+            <BarRow key={d.key} d={d} total={total} />
+          ),
+        ];
+        if (d.children && otherOpen) {
+          rows.push(
+            <div key={`${d.key}-kids`} className={`${NESTED} space-y-2 pt-1`}>
+              {d.children.map((c) => <BarRow key={c.key} d={c} total={total} />)}
+            </div>,
+          );
+        }
+        return rows;
+      })}
+    </div>
+  );
+}
+
+function BarRow({ d, total, chevron }) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 items-baseline max-w-3xl">
+      <div className="flex items-baseline gap-2 min-w-0 text-sm">
+        <Swatch fill={d.fill} />
+        <SliceLabel d={d} />
+        {chevron}
+      </div>
+      <Amount d={d} />
+      <div className="col-span-2 h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${total > 0 ? (d.amount / total) * 100 : 0}%`, backgroundColor: d.fill }} />
+      </div>
     </div>
   );
 }
 
 // Capped width: on a wide screen a full-bleed legend strands each value
 // metres from its own label.
-function Legend({ data }) {
+function Legend({ data, otherOpen, onToggleOther }) {
   return (
     <ul className="grow w-full min-w-0 max-w-lg space-y-1">
-      {data.map((d) => (
-        <li key={d.key} className="flex items-baseline justify-between gap-3 text-sm">
-          <span className="flex items-baseline gap-2 min-w-0">
-            <span className="h-2.5 w-2.5 rounded-sm shrink-0 self-center" style={{ backgroundColor: d.fill }} />
-            <SliceLabel d={d} />
-          </span>
-          <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">
-            {money(d.amount)} <span className="text-gray-400">· {d.percent}%</span>
-          </span>
-        </li>
-      ))}
+      {data.map((d) => {
+        const rows = [
+          <li key={d.key} className="text-sm">
+            {d.children ? (
+              <button
+                onClick={() => onToggleOther(!otherOpen)}
+                aria-expanded={otherOpen}
+                className="w-full flex items-baseline justify-between gap-3 text-left rounded hover:bg-gray-50 dark:hover:bg-gray-800/60 -mx-1 px-1"
+              >
+                <span className="flex items-baseline gap-2 min-w-0">
+                  <Swatch fill={d.fill} />
+                  <span className="truncate text-gray-700 dark:text-gray-300">{d.label}</span>
+                  <Chevron open={otherOpen} />
+                </span>
+                <Amount d={d} />
+              </button>
+            ) : (
+              <span className="flex items-baseline justify-between gap-3">
+                <span className="flex items-baseline gap-2 min-w-0">
+                  <Swatch fill={d.fill} />
+                  <SliceLabel d={d} />
+                </span>
+                <Amount d={d} />
+              </span>
+            )}
+          </li>,
+        ];
+        if (d.children && otherOpen) {
+          rows.push(
+            <li key={`${d.key}-kids`} className={NESTED}>
+              {/* Said once, not per row: these have colours but no wedge. */}
+              <p className="text-xs text-gray-400 mb-1">All inside the grey wedge.</p>
+              <ul className="space-y-1">
+                {d.children.map((c) => (
+                  <li key={c.key} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="flex items-baseline gap-2 min-w-0">
+                      <Swatch fill={c.fill} />
+                      <SliceLabel d={c} />
+                    </span>
+                    <Amount d={c} />
+                  </li>
+                ))}
+              </ul>
+            </li>,
+          );
+        }
+        return rows;
+      })}
     </ul>
   );
 }

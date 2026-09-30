@@ -76,7 +76,9 @@ above it — where the money in this window is going, by category, as a pie or a
 horizontal bar. It's the forecast, and it says so: no logged number touches
 it. Bills and one-offs are always shown as their own transactions rather than
 as one slice — "Fixed bills" is where anything uncategorized lands, so grouping
-by it tells you nothing — while the categories you made stay whole. Optional cumulative columns per savings category,
+by it tells you nothing — while the categories you made stay whole. Past
+eight slices the tail folds into "Other", which opens on click: in the legend
+for the pie (whose wedge never changes shape), in place for the bar. Optional cumulative columns per savings category,
 per-item colors, mark-a-bill-paid for the current month, multi-select delete,
 and a horizon slider of its own, capped at a year — the Ledger is a near-term
 guide, and the Budget is the tab for a long projection.
