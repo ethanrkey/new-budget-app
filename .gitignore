@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Secrets. `*.local` already covers .env.local, which is what Vite reads —
+# but a bare `.env` was NOT ignored, and this repo is public. One `git add -A`
+# with a service_role key sitting in .env would publish it irreversibly.
+.env
+.env.*
+!.env.example
+
 # Personal financial data — never commit real transaction exports/imports
 *.csv
 

@@ -135,7 +135,7 @@ src/
   storage.js    the ONLY place that talks to the backend
   App.jsx       owns the single state object; loads it once, autosaves changes
 tests/          the engine test suite (plain Node, no framework)
-supabase/       schema.sql — one table, RLS policies
+supabase/       schema.sql — one table, RLS policies (audited live 2026-10-02; see PROJECT_SPEC §5)
 ```
 
 **Everything with a number in it lives in `src/engine`** as a pure function of

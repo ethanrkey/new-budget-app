@@ -194,9 +194,43 @@ balance updates). Nothing is append-only.
 ## 5. Storage, auth, security
 
 - **Supabase Postgres**, one table `budget_states (user_id uuid PK → auth.users, state jsonb, updated_at)`.
-  RLS enabled; select/insert/update policies are `auth.uid() = user_id`.
-  Verified empirically with the anon key: unfiltered select returns 0 rows,
-  a write to another user_id is rejected (42501).
+  RLS enabled; select/insert/update policies are `auth.uid() = user_id`,
+  scoped `to authenticated`. There is deliberately NO delete policy — the app
+  never deletes a row, so delete is denied fail-closed. `supabase/schema.sql`
+  carries the reasoning and the verification queries.
+
+  **Adversarial audit, 2026-10-02.** The repo is public and the anon key
+  ships in the client, so RLS is the entire security model and a policy gap
+  is a full breach. Run against the live project, not the file:
+
+  | Probe | Result |
+  |---|---|
+  | anon `select *` | `[]`, `content-range: */0` |
+  | anon `insert` | **42501, "new row violates row-level security policy"** |
+  | anon `update` where `user_id not.is.null`, `return=representation` | `[]` — zero rows changed |
+  | anon `delete` where `user_id not.is.null`, `return=representation` | `[]` — zero rows deleted |
+  | tables exposed in the anon OpenAPI root | none |
+  | anonymous sign-in | disabled (`anonymous_provider_disabled`) |
+
+  The insert rejection is the one that proves **RLS is actually ON**: with
+  RLS off that insert succeeds. An empty select alone would not have, since
+  an empty table looks the same. Note that PostgREST answers 200/204 for an
+  update/delete that matched nothing, so the success codes mean nothing on
+  their own — `return=representation` is what distinguishes "denied" from
+  "done", and both came back empty.
+
+  **Not yet tested, and it is the one real gap:** authenticated user B
+  reading user A's row. A second account could not be created — the project's
+  confirmation email fails (`500 Error sending confirmation email`) and
+  anonymous sign-in is off. The probes above cannot rule out an EXTRA
+  permissive policy scoped `to authenticated` (policies are OR'd, so one
+  `using (true)` would open everything). Closing it needs one of: the
+  `pg_policy` query in `schema.sql` run in the SQL editor, which is decisive
+  about the policy set; or a real second account's JWT.
+
+  **Secondary finding:** that failing confirmation email means magic-link
+  login — documented here as the fallback when Google OAuth is unavailable —
+  is also down. It is an availability risk, not a security one.
 - **Auth:** Google OAuth and magic link, `persistSession` + `autoRefreshToken`.
   `redirectTo` is `window.location.origin` (works on localhost and prod).
 - **Every write is conditional on the version we loaded.** `loadState`
