@@ -194,8 +194,12 @@ balance updates). Nothing is append-only.
 ## 5. Storage, auth, security
 
 - **Supabase Postgres**, one table `budget_states (user_id uuid PK → auth.users, state jsonb, updated_at)`.
-  RLS enabled; select/insert/update policies are `auth.uid() = user_id`,
-  scoped `to authenticated`. There is deliberately NO delete policy — the app
+  RLS enabled; select/insert/update policies are `auth.uid() = user_id`.
+  `schema.sql` also scopes them `to authenticated`; the live project still
+  has them on PUBLIC (`polroles = {-}`, as of 2026-10-02) because that
+  scoping has not been applied yet. Harmless either way — `auth.uid()` is
+  null for anon, so the predicate denies — but the file and the database
+  differ until `schema.sql` is re-run. There is deliberately NO delete policy — the app
   never deletes a row, so delete is denied fail-closed. `supabase/schema.sql`
   carries the reasoning and the verification queries.
 
@@ -219,14 +223,22 @@ balance updates). Nothing is append-only.
   their own — `return=representation` is what distinguishes "denied" from
   "done", and both came back empty.
 
-  **Not yet tested, and it is the one real gap:** authenticated user B
-  reading user A's row. A second account could not be created — the project's
-  confirmation email fails (`500 Error sending confirmation email`) and
-  anonymous sign-in is off. The probes above cannot rule out an EXTRA
-  permissive policy scoped `to authenticated` (policies are OR'd, so one
-  `using (true)` would open everything). Closing it needs one of: the
-  `pg_policy` query in `schema.sql` run in the SQL editor, which is decisive
-  about the policy set; or a real second account's JWT.
+  **The policy list is the authoritative check, not the probes.** Black-box
+  probing cannot be sufficient on its own, and the row above is why:
+  PostgREST answers 200/204 for an update or delete that matched nothing, so
+  a denied write and a successful one are indistinguishable by status code.
+  Worse, probing as anon can never rule out an EXTRA permissive policy
+  scoped to authenticated — policies are OR'd, so a single `using (true)`
+  would open the whole table while every anon probe still came back clean.
+  Only enumerating `pg_policy` settles it.
+
+  Enumerated directly against `pg_policy` on 2026-10-02: exactly three
+  rows — select (`r`), insert (`a`), update (`w`) — no extras, no `true`,
+  every `using`/`with check` expression `auth.uid() = user_id`. That closes
+  the cross-account question without needing a second account's JWT: with
+  RLS proven on and no policy granting more than one's own row, there is no
+  expression under which user B's `auth.uid()` matches user A's `user_id`.
+  Re-run that query after ANY change to the table's policies.
 
   **Secondary finding:** that failing confirmation email means magic-link
   login — documented here as the fallback when Google OAuth is unavailable —
