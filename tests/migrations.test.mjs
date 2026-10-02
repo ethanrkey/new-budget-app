@@ -18,6 +18,11 @@ import {
   splitState, assembleState, diffEntities, tombstoneAlarm,
   anchorMatchesNewestSnapshot, ENTITY_SCHEMA_VERSION,
 } from "../src/engine/entities.ts";
+import {
+  upsertItem, deleteItem, addCategory, deleteCategory, addBalanceSnapshot,
+  addContribution, setMonthlyActual, setOverride, clearOverride, updateAccountBalance,
+} from "../src/engine/mutate.ts";
+import { primaryAccount, uid } from "../src/engine/model.ts";
 
 // Two sources of nondeterminism have to be pinned or the golden file rots on
 // its own, which would train everyone to regenerate it without reading it —
@@ -242,6 +247,84 @@ ok("every empty override owner is dropped", j(pruned.overrides) === "{}");
 ok("pruning is idempotent", j(normalize(structuredClone(pruned))) === j(pruned));
 ok("a pruned state round-trips through entities",
   j(normalize(structuredClone(assembleState(splitState(pruned))))) === j(pruned));
+
+// ---- Convergence: the WRITE path, not just the shape ----------------------
+// The round-trip identity proves splitState/assembleState are lossless for a
+// GIVEN state. It says nothing about whether a store updated only by diffs
+// still equals the document after a sequence of real edits — a tombstone
+// never emitted, an upsert keyed wrong, a rename leaving an orphan row would
+// all sail past it, because it never touches a store at all.
+//
+// This is the coverage the dual-write soak would have given, done better: a
+// soak samples whatever one user happened to click over a week, this walks
+// hundreds of orderings in milliseconds. The store here is only ever mutated
+// by applying a diff, exactly as the database will be.
+console.log("\n== entity split: a diff-fed store converges ==");
+
+const applyDiff = (store, diff) => {
+  for (const t of diff.tombstones) store.delete(`${t.kind}:${t.id}`);
+  for (const e of diff.upserts) store.set(`${e.kind}:${e.id}`, e);
+  return store;
+};
+
+const MUTATIONS = [
+  ["add a recurring rule", (st) => upsertItem(st, { id: uid(), name: "Rule " + uid().slice(0, 3), amount: 50, category: "bill", cadence: "monthly", dayOfMonth: 4, startDate: "2026-09-04", order: st.recurring.length })],
+  ["add a one-off", (st) => upsertItem(st, { id: uid(), name: "Once " + uid().slice(0, 3), amount: 25, category: "oneoff", date: "2026-10-09", order: st.oneoffs.length })],
+  ["edit an item's amount", (st) => st.recurring[0] ? upsertItem(st, { ...st.recurring[0], amount: st.recurring[0].amount + 7 }) : st],
+  ["rename an item", (st) => st.recurring[0] ? upsertItem(st, { ...st.recurring[0], name: st.recurring[0].name + "x" }) : st],
+  ["delete an item", (st) => st.recurring[0] ? deleteItem(st, st.recurring[0].id) : st],
+  ["add a category", (st) => addCategory(st, "Cat " + uid().slice(0, 3), 2, "asset")],
+  ["delete a category", (st) => st.trackerCategories[0] ? deleteCategory(st, st.trackerCategories[0].id) : st],
+  ["log a category balance", (st) => st.trackerCategories[0] ? addBalanceSnapshot(st, st.trackerCategories[0].id, 1000, "2026-09-14") : st],
+  ["log another on a new date", (st) => st.trackerCategories[0] ? addBalanceSnapshot(st, st.trackerCategories[0].id, 1100, "2026-10-14") : st],
+  ["correct a logged balance (same date)", (st) => st.trackerCategories[0] ? addBalanceSnapshot(st, st.trackerCategories[0].id, 1234, "2026-09-14") : st],
+  ["log a contribution", (st) => st.trackerCategories[0] ? addContribution(st, st.trackerCategories[0].id, 100, "2026-09-15") : st],
+  ["set a monthly actual", (st) => st.recurring[0] ? setMonthlyActual(st, st.recurring[0].id, "2026-09", 88) : st],
+  ["override one occurrence", (st) => st.recurring[0] ? setOverride(st, st.recurring[0].id, "2026-10-04", 300) : st],
+  ["clear that override", (st) => st.recurring[0] ? clearOverride(st, st.recurring[0].id, "2026-10-04") : st],
+  ["update the verified balance", (st) => updateAccountBalance(st, primaryAccount(st).id, 2500 + (st.recurring.length * 13), "2026-10-20")],
+];
+
+let converged = true;
+let firstBreak = "";
+for (const seedRun of [1, 2, 3, 4, 5]) {
+  reseed();
+  let doc = normalize(structuredClone(FIXTURES.alreadyModern.state));
+  const store = new Map(splitState(doc).map((e) => [`${e.kind}:${e.id}`, e]));
+  let prev = splitState(doc);
+
+  for (let step = 0; step < 40; step++) {
+    const [label, fn] = MUTATIONS[Math.floor(Math.random() * MUTATIONS.length)];
+    const next = normalize(structuredClone(fn(doc)));
+    const nextRows = splitState(next);
+    applyDiff(store, diffEntities(prev, nextRows));
+
+    const fromStore = normalize(structuredClone(assembleState([...store.values()])));
+    if (j(fromStore) !== j(next)) {
+      converged = false;
+      firstBreak = `run ${seedRun}, step ${step}, after "${label}"`;
+      break;
+    }
+    doc = next;
+    prev = nextRows;
+  }
+  if (!converged) break;
+}
+ok("a store fed only diffs still equals the document after 200 edits", converged, firstBreak);
+
+// The two shapes a diff bug actually takes, pinned directly.
+reseed();
+const convBase = normalize(structuredClone(FIXTURES.alreadyModern.state));
+const convRows = splitState(convBase);
+const afterDelete = splitState(normalize(deleteItem(convBase, convBase.recurring[0].id)));
+const delStore = applyDiff(new Map(convRows.map((e) => [`${e.kind}:${e.id}`, e])), diffEntities(convRows, afterDelete));
+ok("a deleted item leaves no row behind in the store",
+  ![...delStore.values()].some((e) => e.kind === "recurring" && e.id === convBase.recurring[0].id));
+
+const renamed = splitState(normalize(upsertItem(convBase, { ...convBase.recurring[0], name: "Renamed" })));
+const renStore = applyDiff(new Map(convRows.map((e) => [`${e.kind}:${e.id}`, e])), diffEntities(convRows, renamed));
+ok("a rename updates in place and orphans nothing",
+  [...renStore.values()].filter((e) => e.kind === "recurring").length === convBase.recurring.length);
 
 console.log("\n== entity split: diff and alarms ==");
 reseed();

@@ -911,9 +911,20 @@ since preferences are not money and last-write-wins is fine for them.
   functions, so `storage.js` keeps doing transport only. Export, import and
   the recovery envelope are unchanged, because `assembleState` produces
   exactly the document shape they already speak.
-- Rollout is expand–migrate–contract with jsonb authoritative until the last
-  phase, so rollback is a client flag until the frozen column is the only
-  copy. An **out-of-date tab must be told to reload** — a save failure is
+- **Rollout collapsed to one pass (2026-10-02).** The phased version was
+  sized for a divergence window that does not exist here: three testers who
+  signed in once and never returned, one real user, and a JSON backup on
+  disk. What the dual-write soak uniquely caught was CONVERGENCE — the
+  round-trip identity proves split/assemble is lossless for a given state
+  and says nothing about whether a store updated only by diffs still equals
+  the document after a sequence of edits. That is now a property test
+  (`a diff-fed store converges`, 5 runs × 40 random mutations), which is
+  better coverage than a soak: it walks hundreds of orderings in
+  milliseconds instead of sampling whatever one user clicked in a week.
+  Two conditions on the single pass: **verify the backfill against the
+  frozen jsonb BEFORE switching writes** (switch first and the comparison
+  baseline has already moved), and know that rollback after cutover loses
+  post-cutover edits, where the phased version's rollback was lossless. An **out-of-date tab must be told to reload** — a save failure is
   currently `console.error` only, which is silent, and that lands before the
   dual-write phase, not before cutover.
 
