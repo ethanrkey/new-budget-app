@@ -702,6 +702,12 @@ fifth tab never needs a migration.
   decision (JS project, no PropTypes); everything else is signal.
 - **CI** (`.github/workflows/ci.yml`) runs lint → test → build on every push
   and pull request. Vercel deploys `main`.
+- `node tests/real-blobs.test.mjs` — the pre-migration gate. Needs
+  `.blobs/` from `scripts/export_blobs.mjs`; skips cleanly without it.
+  Verified against synthetic blobs 2026-10-02: a clean one passes all
+  checks, and one shaped like real duplicate-date snapshot data fails on
+  the round-trip, the key collision, the duplicate date (named), the
+  anchor, and both projections.
 - UI changes get a browser pass (a throwaway Puppeteer harness against
   fixture data, light/dark, desktop/mobile) before commit; the harness is
   never committed.
@@ -773,7 +779,14 @@ no write queue, no replay, and therefore no merge algorithm to design.
 *Landed so far:* `engine/entities.ts` — `splitState`, `assembleState`,
 `diffEntities`, pure, with the round-trip identity
 `assembleState(splitState(s)) == s` asserted over every golden fixture. No
-database, no client changes yet.
+database, no client changes yet. Plus the gate in front of phase 0:
+`scripts/export_blobs.mjs` (service_role, writes to gitignored `.blobs/`,
+prints only hashes and counts) and `tests/real-blobs.test.mjs`, which runs
+the same property over real blobs and additionally checks duplicate snapshot
+dates, the stored anchor, and ledger/budget output equality. Not in
+`npm test` — it skips without `.blobs/`, which only exists on a machine that
+deliberately exported it. **No live data moves until every real blob
+round-trips.**
 
 Entities: each recurring item; each one-off; each tracker category; each
 balance snapshot; each contribution; each monthly actual (item+month); each

@@ -21,6 +21,9 @@ dist-ssr
 
 # Personal financial data — never commit real transaction exports/imports
 *.csv
+# Real state blobs exported for pre-migration verification (scripts/export_blobs.mjs).
+# Same rule as *.csv: four people's complete financial history, never in the repo.
+.blobs/
 
 # Editor directories and files
 .vscode/*
