@@ -170,7 +170,7 @@ const SECTIONS = [
       ["dl", [
         ["Export → CSV", "The Ledger or the Budget grid as a spreadsheet."],
         ["Export → Full backup (JSON)", "Everything: items, categories, every logged balance, every monthly actual, settings. This is the one that's actually a backup."],
-        ["Import → CSV", "A budget grid or a per-transaction export. It detects recurrence from repeated amounts and dates, and tells you what it guessed."],
+        ["Import → CSV", "A budget grid or a per-transaction export. It detects recurrence from repeated amounts and dates, and tells you what it guessed. It brings in items only — importing never changes your verified balance, because a file can't tell you when you checked it."],
         ["Import → Restore backup", "Replaces your data with a JSON backup — and downloads a copy of your current data first, automatically, before it touches anything."],
       ]],
       ["note", "Take a backup before anything drastic. It's one click and it has saved this project before."],

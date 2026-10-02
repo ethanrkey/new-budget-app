@@ -109,7 +109,8 @@ separate columns, here as everywhere else.
   the same rule as this README.
 - **Import** a budget-grid CSV, a per-transaction CSV (it detects recurrence),
   or restore a full JSON backup — which downloads a safety copy of your current
-  data first.
+  data first. A CSV import brings in items only: it never moves your verified
+  balance, which has one entry point and needs a date you supply.
 - **Export** the Ledger or Budget as CSV, or the whole account as JSON.
 - Fully editable, fully deletable logged values. Nothing is append-only.
 - **Safe on more than one device** — a phone holding an out-of-date copy can't

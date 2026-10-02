@@ -197,7 +197,7 @@ export function addBalanceSnapshot(state: BudgetState, categoryId: string, amoun
   const list = state.balanceSnapshots?.[categoryId] || [];
   return {
     ...state,
-    balanceSnapshots: { ...state.balanceSnapshots, [categoryId]: [...list, { id: uid(), date, amount }] },
+    balanceSnapshots: { ...state.balanceSnapshots, [categoryId]: upsertSnapshotByDate(list, date, amount) },
   };
 }
 
@@ -294,6 +294,20 @@ export function deleteMonthlyActual(state: BudgetState, itemId: string, monthKey
 // see stateShape.ts). Never partial: a half-applied update would desync the
 // balance chain from its own anchor date. Nothing here runs until the user
 // clicks Confirm — the modal holds drafts, this commits.
+// A balance is a statement about a DATE: "as of the 28th, the account held
+// X". Two rows for one date are contradictory, not two observations, so a
+// second one corrects the first in place (keeping its id, since it is the
+// same observation revised). Real data had Sep 28 logged twice at the same
+// figure and Oct 1 holding two different ones.
+//
+// Contributions are deliberately NOT deduped this way: two deposits on one
+// day are two real events, and collapsing them would lose money.
+function upsertSnapshotByDate(list: BalanceSnapshot[], date: ISODate, amount: number): BalanceSnapshot[] {
+  const at = list.findIndex((s) => s.date === date);
+  if (at === -1) return [...list, { id: uid(), date, amount }];
+  return list.map((s, i) => (i === at ? { ...s, amount } : s));
+}
+
 export function updateAccountBalance(state: BudgetState, accountId: string, amount: number, date: ISODate): BudgetState {
   const accounts = state.accounts.map((a) =>
     a.id === accountId ? { ...a, balance: amount, balanceAsOf: date } : a
@@ -305,7 +319,7 @@ export function updateAccountBalance(state: BudgetState, accountId: string, amou
   return {
     ...state,
     accounts,
-    accountSnapshots: { ...state.accountSnapshots, [accountId]: [...list, { id: uid(), date, amount }] },
+    accountSnapshots: { ...state.accountSnapshots, [accountId]: upsertSnapshotByDate(list, date, amount) },
   };
 }
 

@@ -19,10 +19,11 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
   const [date, setDate] = useState(todayISO());
   const valid = amount !== "" && !isNaN(Number(amount)) && !!date;
 
-  const [confirm, submitted] = useSubmitOnce(() => {
-    if (!valid) return;
-    onConfirm(Number(amount), date);
-  });
+  // The validity check sits OUTSIDE the guard on purpose: useSubmitOnce
+  // burns its one shot the moment it is called, so checking inside it meant
+  // one Enter on an empty field disabled the modal for good.
+  const [submit, submitted] = useSubmitOnce(() => onConfirm(Number(amount), date));
+  const confirm = () => { if (valid) submit(); };
 
   const field = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
   const label = "block text-xs font-medium text-gray-500 mb-1";

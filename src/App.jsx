@@ -186,14 +186,15 @@ export default function App() {
       for (const item of [...parsed.recurring, ...parsed.oneoffs]) {
         next = upsertItem(next, item);
       }
-      // A Budget-grid CSV carries a balance but no verification date (it's
-      // "as of the export," which we can't know) — keep the current as-of
-      // date and just move the balance, through the same atomic path as a
-      // manual update so the history snapshot + rollback mirror stay in sync.
-      if (parsed.checkInBalance != null) {
-        const acct = primaryAccount(next);
-        next = updateAccountBalance(next, acct.id, parsed.checkInBalance, acct.balanceAsOf);
-      }
+      // The CSV's balance is deliberately IGNORED. It carries no
+      // verification date — "as of the export", which we cannot know — so
+      // adopting it stamped a fabricated observation onto the account's
+      // current as-of date. Round-tripping your own export therefore logged
+      // a second snapshot identical to the one already there, which is
+      // exactly the duplicate history that turned up in real data (Sep 28
+      // twice at $444.49; Oct 1 holding two different figures). An import
+      // brings in FORECAST items; the verified balance has one entry point,
+      // and it is the Update balance modal, where you supply the date.
       return next;
     });
   }

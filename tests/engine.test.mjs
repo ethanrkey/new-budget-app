@@ -1595,6 +1595,47 @@ eq("only the fold has children", manyItems.slices.slice(0, 7).every((s) => s.chi
 eq("an unfolded chart has no children anywhere",
   mixAL.slices.every((s) => s.children === undefined), true);
 
+// ---------- Scenario AP: a balance is one number per date ----------
+console.log("\n== Scenario AP: same-date snapshots correct, not stack ==");
+// Real data had Sep 28 logged twice at $444.49 and Oct 1 holding both
+// $536.00 and $143.00. A balance is a statement ABOUT A DATE, so a second
+// one for that date corrects the first.
+let snapAP = normalize({
+  settings: { checkInBalance: 1000, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  recurring: [], oneoffs: [], paidOverrides: {}, trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }],
+});
+const acctAP = primaryAccount(snapAP).id;
+const snapsOf = (st) => (st.accountSnapshots[acctAP] ?? []).map((x) => [x.date, x.amount]);
+
+snapAP = updateAccountBalance(snapAP, acctAP, 444.49, "2026-09-28");
+eq("a new date appends", snapsOf(snapAP), [["2026-09-01", 1000], ["2026-09-28", 444.49]]);
+const idBefore = snapAP.accountSnapshots[acctAP][1].id;
+
+snapAP = updateAccountBalance(snapAP, acctAP, 444.49, "2026-09-28");
+eq("the same date and figure does not stack", snapsOf(snapAP), [["2026-09-01", 1000], ["2026-09-28", 444.49]]);
+snapAP = updateAccountBalance(snapAP, acctAP, 536, "2026-09-28");
+eq("a corrected figure replaces it rather than contradicting it",
+  snapsOf(snapAP), [["2026-09-01", 1000], ["2026-09-28", 536]]);
+eq("the correction keeps the row's id — it is the same observation revised",
+  snapAP.accountSnapshots[acctAP][1].id, idBefore);
+check("the account's own balance follows the latest write", primaryAccount(snapAP).balance, 536);
+snapAP = updateAccountBalance(snapAP, acctAP, 143, "2026-10-01");
+eq("a different date still appends",
+  snapsOf(snapAP), [["2026-09-01", 1000], ["2026-09-28", 536], ["2026-10-01", 143]]);
+
+// Category balances are the same kind of statement.
+let catAP = addBalanceSnapshot(snapAP, "roth", 5000, "2026-09-28");
+catAP = addBalanceSnapshot(catAP, "roth", 5200, "2026-09-28");
+eq("a category balance is also one number per date",
+  catAP.balanceSnapshots.roth.map((x) => [x.date, x.amount]), [["2026-09-28", 5200]]);
+
+// Contributions are NOT deduped: two deposits on one day are two events.
+let contribAP = addContribution(snapAP, "roth", 100, "2026-09-28");
+contribAP = addContribution(contribAP, "roth", 250, "2026-09-28");
+check("two contributions on one day both survive", contribAP.contributionLog.roth.length, 2);
+check("...and neither is lost",
+  contribAP.contributionLog.roth.reduce((t, c) => t + c.amount, 0), 350);
+
 // ---------- Scenario AO: the Ledger's horizon is capped ----------
 console.log("\n== Scenario AO: ledgerHorizonOf caps a stored horizon ==");
 // The Ledger is a near-term guide, so it projects at most a year. Shortening

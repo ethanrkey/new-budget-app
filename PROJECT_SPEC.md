@@ -710,3 +710,19 @@ Later:
   moves, which is a worse property than any grouping it could pick. The rule
   is now unconditional and needs no explanatory caption, because nothing is
   conditional to explain.
+- **A logged balance is one number per date** (2026-10-02). `updateAccountBalance`
+  and `addBalanceSnapshot` upsert by date: a second entry for a date already
+  present corrects it in place, keeping the row's id, because "as of the
+  28th the account held X" is a statement about that date and two answers
+  are a contradiction, not two observations. Contributions deliberately do
+  NOT work this way — two deposits on one day are two real events, and
+  collapsing them would lose money.
+- **A CSV import never touches the verified balance** (2026-10-02). It used
+  to adopt the balance out of a Budget-grid CSV and stamp it onto the
+  account's existing as-of date, because the file carries no date of its
+  own. Round-tripping your own export therefore logged a snapshot identical
+  to the one already there; that was the cause of the duplicate history
+  found in real data, not the submit guard, which was tested and holds. An
+  import brings in forecast items. The verified balance has exactly one
+  entry point and it is the Update balance modal, where the user supplies
+  the date.
