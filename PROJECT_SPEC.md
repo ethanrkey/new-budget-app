@@ -25,6 +25,48 @@ Ledger and Budget never disagree because both are derived from the same event
 list. The Dashboard never *projects* checking; it shows the verified balance.
 The Ledger owns projection.
 
+### Principle 1 — one point of entry
+
+> **Reality enters the forecast at exactly one point — the verified account
+> balance and its as-of date — and nowhere else.**
+
+This replaces the older, softer statement that forecast and reality "are
+separate" (rewritten 2026-10-02). The 2026-09-24 audit proposed the change
+and the argument for it is the reason it is worth having: *separate* is a
+judgment call, and judgment calls get re-litigated every time someone wants
+an exception. *Exactly one point* is a pass/fail test. For any write, ask
+one question — **does this take something observed and let it change the
+projection?** If yes, it is a violation unless it is the verified balance
+and its date. There is no third answer and nothing to argue about.
+
+**Why that one exception is sanctioned.** A forecast has to start from
+something true. Rules alone give you deltas; without an anchor there is
+nothing to add them to, and a projection from an invented starting figure
+is worse than no projection. So the verified balance is load-bearing, and
+it is allowed in on terms that keep it honest: the user supplies both the
+number and the date they checked it, deliberately, through one modal. The
+date is half the exception, not a detail — an observation with no date
+cannot be placed in time, so it cannot legitimately anchor anything.
+`buildEvents` then drops every event before `balanceAsOf`, because those
+are already inside the number.
+
+**What the test catches.** Each of these was argued about before the
+principle made it mechanical:
+
+- Logged monthly actuals used to write back into the projection — an
+  observation changing the forecast. Removed 2026-09-19.
+- A CSV import adopted the balance from the file and stamped it onto
+  whatever as-of date was current — an observation, undated, changing the
+  anchor. Removed 2026-10-02; it was also the cause of duplicate snapshot
+  history.
+- Mark-a-bill-paid writes `paidOverrides` from the observation "I already
+  paid this" and zeroes the event in the forecast. It is a violation on its
+  face, and it is doing a job the anchor already does.
+
+The second principle — **each section is one thing** — stands as written in
+§7: a tab answers one question, and a control that belongs to a different
+question belongs on a different surface.
+
 ## 1a. Name, icon, PWA
 
 The app is **Key Budget**. `index.html` carries the title, description, the
