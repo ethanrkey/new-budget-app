@@ -69,7 +69,7 @@ const SECTIONS = [
       ["p", "“List” and “Calendar” show the same transactions two ways. The calendar is a month grid: a coloured dot per transaction, the day's net, and a click on any day for the detail. The running balance only appears in the list — a month grid has nowhere to put it, and rather than fake one the calendar leaves it out."],
       ["p", "“Planned spending” at the top breaks the window down by category — pie or bar, your choice, and it follows the horizon slider. It is the forecast: your rules, with income left out. It is not a record of what you actually spent; that comparison lives on the Spending tab."],
       ["p", "Bills and one-offs are always shown as the individual transactions inside them, never as one slice: \"Fixed bills\" is just where anything you didn't categorize lands, so a wedge labelled that tells you nothing. The categories you made yourself stay whole. Each broken-out slice keeps its bucket's name beside it, like \"Rent · Fixed bills\"."],
-      ["p", "Past eight slices the rest fold into \"Other\" so the chart stays readable. Click it to see what's in there — the bar chart opens the rows in place, and the pie lists them beside the chart without redrawing the wedge."],
+      ["p", "Past eight slices the rest fold into \"Other\" so the chart stays readable. Click it to see what's in there — the bar chart opens the rows in place, and the pie lists them beside the chart without redrawing the wedge. Either way the \"Other\" line is replaced by its parts, with a link to fold them back."],
     ],
   },
   {
@@ -159,7 +159,7 @@ const SECTIONS = [
         ["Appearance", "Light or dark, remembered PER DEVICE — light on the laptop and dark on the phone is a normal thing to want, so the choice doesn't sync."],
         ["Categories", "The manager described above."],
         ["Sign out", "Your data stays on the server, tied to your account."],
-        ["Wipe data", "Deletes everything for your account, behind a full confirmation. Export a backup first."],
+        ["Wipe data", "Resets your account to brand new — every rule, category, logged balance and contribution, and your verified balance back to $0.00 — behind a full confirmation that lists it all. You'll get the welcome wizard again afterwards. Export a backup first."],
       ]],
     ],
   },

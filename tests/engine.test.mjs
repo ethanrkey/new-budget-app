@@ -1,10 +1,10 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay } from "../src/engine/compute.ts";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
+import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
 import { buildAllEvents } from "../src/engine/generate.ts";
-import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID, LEDGER_MAX_MONTHS, ledgerHorizonOf } from "../src/engine/model.ts";
+import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID, LEDGER_MAX_MONTHS, ledgerHorizonOf, blankState } from "../src/engine/model.ts";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.ts";
 import { computeBudgetLayout } from "../src/engine/budgetLayout.ts";
 import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.ts";
@@ -1676,6 +1676,57 @@ check("...and it does move the balance to match",
 // Migration 9: absent → {}, and nothing is invented.
 eq("a legacy state gets an empty overrides map",
   normalize({ settings: { checkInBalance: 1, checkInDate: "2026-09-01" }, recurring: [], oneoffs: [] }).overrides, {});
+
+// ---------- Scenario AR: Wipe Data leaves a NEW account ----------
+console.log("\n== Scenario AR: a wipe is a brand-new account ==");
+// It used to keep settings, the balance, categories and every logged
+// snapshot, so hasSeenOnboarding survived and a wiped account came back
+// looking used, with no welcome wizard.
+const livedIn = normalize({
+  settings: { checkInBalance: 4321, checkInDate: "2026-09-01", budgetHorizon: "2027-06-01", ledgerHorizon: "2026-12-31",
+    theme: "dark", visibleTrackerCategoryIds: ["roth"], tabOrder: ["spending", "ledger", "budget", "dashboard"], hasSeenOnboarding: true },
+  recurring: [{ id: "r", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", dayOfMonth: 2, startDate: "2026-09-02", order: 0 }],
+  oneoffs: [{ id: "o", name: "Gift", amount: 60, category: "oneoff", date: "2026-09-20", order: 1 }],
+  trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }],
+  balanceSnapshots: { roth: [{ id: "s", date: "2026-08-01", amount: 9100 }] },
+  contributionLog: { roth: [{ id: "c", date: "2026-08-02", amount: 500, source: "manual" }] },
+  monthlyActuals: { r: { "2026-09": 1490 } },
+  overrides: { r: { "2026-10-02": 1600 } },
+});
+const wiped = wipeToNewAccount();
+const freshAR = blankState();
+
+// Same shape as a brand-new account, field for field.
+eq("the wiped state has exactly a new account's fields",
+  Object.keys(wiped).sort(), Object.keys(freshAR).sort());
+eq("...and the same settings fields", Object.keys(wiped.settings).sort(), Object.keys(freshAR.settings).sort());
+
+// Nothing from the lived-in account survives.
+eq("no items", [wiped.recurring.length, wiped.oneoffs.length], [0, 0]);
+eq("no logged balances, contributions, actuals or overrides",
+  [wiped.balanceSnapshots, wiped.contributionLog, wiped.monthlyActuals, wiped.overrides, wiped.accountSnapshots],
+  [{}, {}, {}, {}, {}]);
+check("the verified balance is back to zero", primaryAccount(wiped).balance, 0);
+eq("...as of today", primaryAccount(wiped).balanceAsOf, todayISO());
+
+// THE BUG: the first-run flag used to survive, so no wizard greeted you.
+eq("hasSeenOnboarding is false, so the welcome wizard runs again",
+  wiped.settings.hasSeenOnboarding, false);
+eq("the lived-in account really did have it set", livedIn.settings.hasSeenOnboarding, true);
+eq("display settings reset too", [wiped.settings.theme, wiped.settings.visibleTrackerCategoryIds], ["light", []]);
+eq("tab order returns to the default", wiped.settings.tabOrder, [...TABS]);
+
+// Equal to a brand-new account once the two deliberately-random parts are
+// normalised away: category uids, which blankState() mints freshAR for any
+// new account, and horizons, which it derives from today.
+const canon = (st) => JSON.stringify({
+  ...st,
+  trackerCategories: st.trackerCategories.map((c, i) => ({ ...c, id: `cat${i}` })),
+});
+eq("a wipe is byte-identical to a brand-new account", canon(wiped), canon(freshAR));
+
+// And it really is a freshAR start, not a filtered old one.
+eq("a wiped account projects nothing", computeLedger(wiped, wiped.settings.ledgerHorizon).rows, []);
 
 // ---------- Scenario AO: the Ledger's horizon is capped ----------
 console.log("\n== Scenario AO: ledgerHorizonOf caps a stored horizon ==");

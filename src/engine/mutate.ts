@@ -1,7 +1,7 @@
 // ---- Pure state transitions for create / update / delete of budget items ----
 // UI-free so the future iOS app reuses them. An "item" is a RecurringRule (has
 // a `cadence`) or a OneOff (has a `date`).
-import { uid, primaryAccount, sanitizeTabOrder } from "./model.ts";
+import { uid, primaryAccount, sanitizeTabOrder, blankState } from "./model.ts";
 import { occurrenceDates } from "./generate.ts";
 import type {
   AssetCategory, BalanceSnapshot, BudgetItem, BudgetState, Contribution, DebtCategory,
@@ -91,6 +91,15 @@ function withoutKeys<T>(map: Record<string, T> | undefined, keys: string[]): Rec
   const next = { ...(map || {}) };
   for (const k of keys) delete next[k];
   return next;
+}
+
+// Wipe Data. Deliberately `blankState()` and nothing cleverer: "wipe" has
+// to mean a new account, or the flags that make an account feel used —
+// hasSeenOnboarding above all — survive it and the app greets a wiped
+// account as a returning one. Everything logged goes too; the Settings
+// confirmation says so, and Export is one click away in the same modal.
+export function wipeToNewAccount(): BudgetState {
+  return blankState();
 }
 
 // ---- Per-occurrence amount overrides ----

@@ -28,9 +28,22 @@ export default function WipeData({ onWipe }) {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-semibold mb-2 text-expense">Wipe all data?</h2>
+            {/* This copy has to enumerate. It used to say "every recurring
+                rule and one-off transaction", which was true when that was
+                all it cleared — the wipe now resets the account to new, so
+                understating it would be the app lying about a destructive
+                action. */}
+            <p className="text-sm text-gray-500 mb-3">
+              This resets your account to brand new, here and in Supabase. There is no undo.
+            </p>
+            <ul className="text-sm text-gray-500 mb-4 list-disc pl-5 space-y-0.5">
+              <li>Every recurring rule, one-off and per-date edit</li>
+              <li>Your savings, investment and loan categories, and their terms</li>
+              <li>Every balance you logged, every contribution, every monthly actual</li>
+              <li>Your verified checking balance, back to $0.00</li>
+            </ul>
             <p className="text-sm text-gray-500 mb-4">
-              This permanently deletes every recurring rule and one-off transaction, in this app and
-              in your Supabase account. There is no undo.
+              Export a backup first if you might want any of it — it&apos;s one click away under Export.
             </p>
             <div className="flex gap-3">
               <button onClick={() => setOpen(false)} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">

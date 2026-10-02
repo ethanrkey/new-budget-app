@@ -10,7 +10,7 @@ import { getDeviceTheme, setDeviceTheme } from "./theme.js";
 import { computeLedger, computeBudget } from "./engine/compute.ts";
 import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList,
-  setOverride, clearOverride, orphanedOverrideDates,
+  setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
   updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
@@ -105,12 +105,15 @@ export default function App() {
   // A deliberate full clear-out is the one legitimate case for saving an
   // empty state — it's a normal setState like any other mutation here, so it
   // isn't affected by (and doesn't need to route around) the load-error fix.
-  // Clears monthlyActuals too (they're keyed to items that no longer exist),
-  // but deliberately leaves balanceSnapshots alone — those are your own
-  // logged real-world account balances, not forecast data, and Wipe Data
-  // should never quietly delete something you can't get back.
+  // Wipe Data leaves a GENUINE new account, not a half-cleared one. It used
+  // to keep settings, the account balance, categories and every logged
+  // snapshot — so hasSeenOnboarding survived and the app came back looking
+  // used, with no welcome wizard, which is not what "wipe" means to anyone.
+  // wipeToNewAccount() is blankState(), so what you get is byte-for-byte
+  // what a brand-new account gets (modulo the fresh category uids and
+  // today-derived horizons, which a new account mints too).
   function wipeData() {
-    setState((s) => ({ ...s, recurring: [], oneoffs: [], monthlyActuals: {} }));
+    setState(() => wipeToNewAccount());
   }
 
   // Open the edit form for a ledger row id ("<itemId>@<date>") or a bare
@@ -437,7 +440,14 @@ export default function App() {
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Header */}
       <header className="border-b border-gray-200 dark:border-gray-800 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-        <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Budget</h1>
+        {/* The brass of the app icon. #eebb4d is the icon's own gold and is
+            10:1 on the dark surface, but 1.70:1 on the light one — unreadable
+            — so light mode takes the same hue (42deg) stepped down to 30%
+            lightness, 4.91:1 on gray-50. Two steps of one hue, exactly like
+            the category palette. */}
+        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-[#8e670b] dark:text-[#eebb4d]">
+          Key Budget
+        </h1>
         <div className="flex items-center gap-1.5 sm:gap-3">
           <button
             onClick={() => setImportOpen(true)}

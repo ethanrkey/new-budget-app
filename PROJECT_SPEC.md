@@ -71,7 +71,11 @@ question belongs on a different surface.
 
 ## 1a. Name, icon, PWA
 
-The app is **Key Budget**. `index.html` carries the title, description, the
+The app is **Key Budget**, and the header says so, in the icon's own brass.
+`#eebb4d` is the gold in `favicon.svg` and is 10:1 on the dark surface but
+**1.70:1 on the light one** — unreadable — so light mode takes the same hue
+(42°) stepped down to 30% lightness, `#8e670b`, 4.91:1 on gray-50. Two steps
+of one hue, exactly like the category palette. `index.html` carries the title, description, the
 favicon set and the iOS home-screen icons; `public/manifest.webmanifest` makes
 it installable (`display: standalone`, so a home-screen launch has no browser
 chrome). Icons are generated, not hand-drawn — a horizontal brass key (🔑-shaped: bow
@@ -589,9 +593,13 @@ fifth tab never needs a migration.
   - **Bar: the rows expand in place**, full list with amounts and
     percentages. A longer list is the bar's advantage.
 
-  Both views still show the same data — they already differ in how much of
-  it is drawn versus listed. "Other" stays last in both: it is a remainder,
-  not a peer, which is why it keeps its position even when it outranks named
+  Open, the "Other" row is REPLACED by its children rather than sitting
+  above them — the same $2,350 as a summary row and again as its parts read
+  as double-counting — so the fold needs its own way back, a
+  "Fold N back into Other" control under the expanded rows. Both views still
+  show the same data; they already differ in how much of it is drawn versus
+  listed. "Other" stays last in both while closed: it is a remainder, not a
+  peer, which is why it keeps its position even when it outranks named
   slices by amount. The open/closed state is component state, NOT
   `devicePrefs`: it is a drill-down you open to answer a question, not a
   layout preference worth remembering. Raising `MAX_SLICES` instead was
@@ -879,3 +887,16 @@ Later:
   and can be re-filed, while an override keyed by a `ruleId` that no longer
   exists can never be seen, edited or reached again. It is unreachable
   garbage, not a record.
+- **Wipe Data leaves a genuine new account** (2026-10-02). It used to clear
+  only items and monthly actuals, deliberately sparing logged balances on
+  the grounds that they are real-world data you cannot get back. That was
+  the wrong trade for an action called "wipe all data": `hasSeenOnboarding`
+  survived with everything else, so a wiped account came back looking used,
+  with no welcome wizard, which is not what anyone means by the word. It is
+  now exactly `blankState()` — `wipeToNewAccount()` in `mutate.ts`, one
+  tested definition — and the confirmation enumerates what goes, because
+  understating a destructive action is the app lying. Export sits one click
+  away in the same modal. The only first-run flag is `hasSeenOnboarding`;
+  per-device prefs (theme, collapse states) are not account data and
+  deliberately survive, and the legacy `budget-app-state-v1` import cannot
+  resurrect wiped data because it only runs when no row exists at all.

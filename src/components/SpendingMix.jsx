@@ -109,10 +109,6 @@ function Chevron({ open }) {
   );
 }
 
-// Folded rows are indented under the Other row they came out of, so a
-// coloured swatch beside them can't be read as a slice of its own rank.
-const NESTED = "ml-1 pl-3 border-l border-gray-200 dark:border-gray-800";
-
 function prettyDate(iso) {
   return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -240,28 +236,30 @@ function BarView({ data, total, otherOpen, onToggleOther }) {
   return (
     <div className="space-y-2">
       {data.map((d) => {
-        const rows = [
-          d.children ? (
-            <button
-              key={d.key}
-              onClick={() => onToggleOther(!otherOpen)}
-              aria-expanded={otherOpen}
-              className="w-full text-left rounded hover:bg-gray-50 dark:hover:bg-gray-800/60 -mx-1 px-1"
-            >
-              <BarRow d={d} total={total} chevron={<Chevron open={otherOpen} />} />
-            </button>
-          ) : (
-            <BarRow key={d.key} d={d} total={total} />
-          ),
-        ];
+        // Open: the parent row is REPLACED by its children, not stacked
+        // above them — the same $2,350 as a row and again as its parts
+        // reads as double-counting.
         if (d.children && otherOpen) {
-          rows.push(
-            <div key={`${d.key}-kids`} className={`${NESTED} space-y-2 pt-1`}>
+          return (
+            <div key={d.key} className="space-y-2">
               {d.children.map((c) => <BarRow key={c.key} d={c} total={total} />)}
-            </div>,
+              <Collapse n={d.children.length} onClick={() => onToggleOther(false)} />
+            </div>
           );
         }
-        return rows;
+        if (d.children) {
+          return (
+            <button
+              key={d.key}
+              onClick={() => onToggleOther(true)}
+              aria-expanded={false}
+              className="w-full text-left rounded hover:bg-gray-50 dark:hover:bg-gray-800/60 -mx-1 px-1"
+            >
+              <BarRow d={d} total={total} chevron={<Chevron open={false} />} />
+            </button>
+          );
+        }
+        return <BarRow key={d.key} d={d} total={total} />;
       })}
     </div>
   );
@@ -289,18 +287,38 @@ function Legend({ data, otherOpen, onToggleOther }) {
   return (
     <ul className="grow w-full min-w-0 max-w-lg space-y-1">
       {data.map((d) => {
-        const rows = [
+        // Same rule as the bar: open replaces, it does not nest under a
+        // summary that would read as double-counting.
+        if (d.children && otherOpen) {
+          return (
+            <li key={d.key}>
+              <ul className="space-y-1">
+                {d.children.map((c) => (
+                  <li key={c.key} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="flex items-baseline gap-2 min-w-0">
+                      <Swatch fill={c.fill} />
+                      <SliceLabel d={c} />
+                    </span>
+                    <Amount d={c} />
+                  </li>
+                ))}
+              </ul>
+              <Collapse n={d.children.length} onClick={() => onToggleOther(false)} />
+            </li>
+          );
+        }
+        return (
           <li key={d.key} className="text-sm">
             {d.children ? (
               <button
-                onClick={() => onToggleOther(!otherOpen)}
-                aria-expanded={otherOpen}
+                onClick={() => onToggleOther(true)}
+                aria-expanded={false}
                 className="w-full flex items-baseline justify-between gap-3 text-left rounded hover:bg-gray-50 dark:hover:bg-gray-800/60 -mx-1 px-1"
               >
                 <span className="flex items-baseline gap-2 min-w-0">
                   <Swatch fill={d.fill} />
                   <span className="truncate text-gray-700 dark:text-gray-300">{d.label}</span>
-                  <Chevron open={otherOpen} />
+                  <Chevron open={false} />
                 </span>
                 <Amount d={d} />
               </button>
@@ -313,30 +331,25 @@ function Legend({ data, otherOpen, onToggleOther }) {
                 <Amount d={d} />
               </span>
             )}
-          </li>,
-        ];
-        if (d.children && otherOpen) {
-          rows.push(
-            <li key={`${d.key}-kids`} className={NESTED}>
-              {/* Said once, not per row: these have colours but no wedge. */}
-              <p className="text-xs text-gray-400 mb-1">All inside the grey wedge.</p>
-              <ul className="space-y-1">
-                {d.children.map((c) => (
-                  <li key={c.key} className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="flex items-baseline gap-2 min-w-0">
-                      <Swatch fill={c.fill} />
-                      <SliceLabel d={c} />
-                    </span>
-                    <Amount d={c} />
-                  </li>
-                ))}
-              </ul>
-            </li>,
-          );
-        }
-        return rows;
+          </li>
+        );
       })}
     </ul>
+  );
+}
+
+// The way back. With the summary row gone there is nothing left to click
+// again, so the fold needs its own control.
+function Collapse({ n, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-expanded
+      className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 py-1 -mx-1 px-1 rounded"
+    >
+      <Chevron open />
+      Fold {n} back into Other
+    </button>
   );
 }
 
