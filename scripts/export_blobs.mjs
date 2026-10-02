@@ -1,6 +1,12 @@
 // Export every user's state blob for pre-migration verification.
 //
-//   SUPABASE_SERVICE_ROLE_KEY=... node scripts/export_blobs.mjs
+//   node scripts/export_blobs.mjs                      # every user
+//   node scripts/export_blobs.mjs --only you@example.com  # one user's row
+//
+// Prefer --only. Every extra blob is somebody's complete financial history
+// sitting on a laptop, and the marginal shape coverage from a second user
+// onboarded through the same wizard is usually small. Delete .blobs/ as soon
+// as the run is green.
 //
 // (or put SUPABASE_SERVICE_ROLE_KEY in .env.local, which is gitignored, and
 // this reads it from there — the key never has to be typed into a shell.)
@@ -43,9 +49,25 @@ if (!url || !key) {
   process.exit(1);
 }
 
-const res = await fetch(`${url}/rest/v1/budget_states?select=user_id,state,updated_at`, {
-  headers: { apikey: key, Authorization: `Bearer ${key}` },
-});
+const headers = { apikey: key, Authorization: `Bearer ${key}` };
+
+// --only <email>: resolve that one account and export nothing else.
+const onlyAt = process.argv.indexOf("--only");
+let filter = null;
+if (onlyAt !== -1) {
+  const email = process.argv[onlyAt + 1];
+  if (!email) { console.error("--only needs an email"); process.exit(1); }
+  const u = await fetch(`${url}/auth/v1/admin/users?per_page=200`, { headers });
+  if (!u.ok) { console.error(`user lookup failed: ${u.status}`); process.exit(1); }
+  const { users } = await u.json();
+  const match = users.find((x) => x.email?.toLowerCase() === email.toLowerCase());
+  if (!match) { console.error(`no account for that address (${users.length} users seen)`); process.exit(1); }
+  filter = match.id;
+  console.log(`scoped to one account\n`);
+}
+
+const q = filter ? `&user_id=eq.${filter}` : "";
+const res = await fetch(`${url}/rest/v1/budget_states?select=user_id,state,updated_at${q}`, { headers });
 if (!res.ok) {
   console.error(`read failed: ${res.status} ${await res.text()}`);
   process.exit(1);

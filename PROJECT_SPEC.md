@@ -315,6 +315,17 @@ every load and is **idempotent and deterministic** (fixed seed ids, never
 9. `overrides` absent → `{}` (2026-10-02). A brand-new field; nothing is
    backfilled, because an override is a deliberate statement about one date
    and no prior state could imply one.
+10. per-owner containers holding nothing → **dropped** (2026-10-02).
+    `monthlyActuals: { itemId: {} }`, `balanceSnapshots: { catId: [] }` and
+    the rest: deleting the last entry under an owner left the owner behind,
+    where it rode along in every save forever. Nothing in the app enumerates
+    these maps by key, so an empty container is indistinguishable from
+    absence to every reader — it was only ever distinguishable to a
+    byte-comparison. **Found by the entity round-trip over a real blob**:
+    `splitState` emits no row for an empty container, so `assembleState`
+    could not put one back. Not one of the nine fixtures before it contained
+    one, which is exactly why they missed it; the golden diff for this
+    migration is additions only.
 
 Conventions worth knowing before touching numbers:
 
@@ -787,6 +798,16 @@ dates, the stored anchor, and ledger/budget output equality. Not in
 `npm test` — it skips without `.blobs/`, which only exists on a machine that
 deliberately exported it. **No live data moves until every real blob
 round-trips.**
+
+*First real-blob run, 2026-10-02* (the author's own row, 9,867 bytes, 105
+entity rows): 17 of 17 checks pass — but only after it found a real defect
+the fixtures could not. One `monthlyActuals` owner held `{}`, which split
+emits no row for and assemble cannot restore, so the identity failed on
+data no fixture contained. Fixed as migration 10 rather than by weakening
+the property. Both projections had already matched, which is what
+confirmed the empty container was semantically dead rather than meaningful.
+This is the case for running the property over real data and not only over
+fixtures.
 
 Entities: each recurring item; each one-off; each tracker category; each
 balance snapshot; each contribution; each monthly actual (item+month); each

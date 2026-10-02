@@ -119,6 +119,21 @@ const FIXTURES = {
     monthlyActuals: { q: { "2026-09": 8 } },
     overrides: { q: { "2026-09-09": 14 } } } },
 
+  // 10. per-owner containers left holding nothing. Deleting the last entry
+  //     under an owner used to leave the owner behind, riding along in every
+  //     save forever. Found by the entity round-trip over a REAL blob — not
+  //     one of the nine fixtures above contained an empty container, which is
+  //     exactly why they missed it.
+  emptyContainers: { data: true, state: {
+    settings: { checkInBalance: 500, checkInDate: "2026-09-01" },
+    recurring: [{ id: "e1", name: "Electric", amount: 112, category: "bill", cadence: "monthly", startDate: "2026-09-05", order: 0 }],
+    oneoffs: [],
+    trackerCategories: [{ id: "k", name: "Roth", color: 5, order: 0, kind: "asset" }],
+    balanceSnapshots: { k: [{ id: "s", date: "2026-09-01", amount: 100 }], gone: [] },
+    contributionLog: { k: [] },
+    monthlyActuals: { e1: { "2026-09": 120 }, e2: {} },
+    overrides: { e1: {}, nope: {} } } },
+
   // the empty case: seeds a new account, migrates nothing
   empty: { data: false, state: {} },
 };
@@ -213,6 +228,20 @@ for (const [name, { state }] of Object.entries(FIXTURES)) {
     count("override") === sizes(normalized.overrides) &&
     count("settings") === 1);
 }
+
+// Migration 10 explicitly: the empty owners go, the populated ones stay.
+console.log("\n== migration 10: empty containers are pruned ==");
+reseed();
+const pruned = normalize(structuredClone(FIXTURES.emptyContainers.state));
+ok("an empty snapshot list's owner is dropped", !("gone" in pruned.balanceSnapshots));
+ok("...but a populated one stays", pruned.balanceSnapshots.k?.length === 1);
+ok("an empty contribution log is dropped", j(pruned.contributionLog) === "{}");
+ok("an empty monthlyActuals owner is dropped", !("e2" in pruned.monthlyActuals));
+ok("...but a populated one stays", pruned.monthlyActuals.e1?.["2026-09"] === 120);
+ok("every empty override owner is dropped", j(pruned.overrides) === "{}");
+ok("pruning is idempotent", j(normalize(structuredClone(pruned))) === j(pruned));
+ok("a pruned state round-trips through entities",
+  j(normalize(structuredClone(assembleState(splitState(pruned))))) === j(pruned));
 
 console.log("\n== entity split: diff and alarms ==");
 reseed();

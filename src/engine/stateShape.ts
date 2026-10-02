@@ -60,6 +60,24 @@ function inferCategoryKind(cat: any): "asset" | "debt" {
 // Merge a raw loaded/imported object onto blankState() so every field always
 // exists, running item migrations and the onboarding-seen / tracker-category
 // migrations below.
+// Migration 10 (2026-10-02): drop per-owner containers that hold nothing.
+// `monthlyActuals: { itemId: {} }` and `balanceSnapshots: { catId: [] }` are
+// residue — deleting the last entry under an owner used to leave the owner
+// behind, where it then rode along in every save forever. Nothing in the app
+// enumerates these maps by key, so an empty container is indistinguishable
+// from absence to every reader; it was only ever distinguishable to a
+// byte-comparison. Found by running the entity round-trip over a real blob:
+// splitState emits no row for an empty container, so assembleState could not
+// put one back, and the identity failed on data no fixture contained.
+function pruneEmpty<T extends Record<string, unknown[] | Record<string, unknown>>>(map: T): T {
+  const out = {} as T;
+  for (const [k, v] of Object.entries(map)) {
+    const size = Array.isArray(v) ? v.length : Object.keys(v ?? {}).length;
+    if (size > 0) out[k as keyof T] = v as T[keyof T];
+  }
+  return out;
+}
+
 export function normalize(parsed: RawState): BudgetState;
 // The implementation signature is intentionally `any`. Callers get the precise
 // RawState -> BudgetState contract above; the body below is untouched, so the
@@ -201,19 +219,19 @@ export function normalize(parsed: any): BudgetState {
     //
     // Brand-new fields, no legacy shape to fold in — an existing account
     // simply never had any actuals logged yet.
-    balanceSnapshots: balanceSnapshotsOut,
-    monthlyActuals: parsed.monthlyActuals || {},
+    balanceSnapshots: pruneEmpty(balanceSnapshotsOut),
+    monthlyActuals: pruneEmpty(parsed.monthlyActuals || {}),
     // Migration 9 (2026-10-02): per-occurrence overrides. A brand-new field,
     // so absent → {}. Nothing is backfilled: an override is a deliberate
     // statement about one date and there is nothing in a prior state that
     // could imply one.
-    overrides: parsed.overrides || {},
+    overrides: pruneEmpty(parsed.overrides || {}),
     // Contributions logged by hand (or, later, imported). Absent on every
     // account that predates the feature — an empty log is the correct and
     // honest starting point, since we can't know what was contributed before
     // anyone was recording it. Deliberately NOT backfilled from ledger
     // transactions: those are a forecast.
-    contributionLog: parsed.contributionLog || {},
-    accountSnapshots,
+    contributionLog: pruneEmpty(parsed.contributionLog || {}),
+    accountSnapshots: pruneEmpty(accountSnapshots),
   };
 }

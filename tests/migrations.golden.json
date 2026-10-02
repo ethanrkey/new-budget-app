@@ -739,6 +739,78 @@
    }
   }
  },
+ "emptyContainers": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 500,
+    "balanceAsOf": "2026-09-01",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "e1",
+    "name": "Electric",
+    "amount": 112,
+    "category": "bill",
+    "cadence": "monthly",
+    "startDate": "2026-09-05",
+    "order": 0,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [],
+  "trackerCategories": [
+   {
+    "id": "k",
+    "name": "Roth",
+    "color": 5,
+    "order": 0,
+    "kind": "asset"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-09-01",
+     "amount": 500
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {
+   "k": [
+    {
+     "id": "s",
+     "date": "2026-09-01",
+     "amount": 100
+    }
+   ]
+  },
+  "monthlyActuals": {
+   "e1": {
+    "2026-09": 120
+   }
+  },
+  "overrides": {}
+ },
  "empty": {
   "settings": {
    "budgetHorizon": "2027-06-25",
