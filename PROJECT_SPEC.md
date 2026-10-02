@@ -713,6 +713,24 @@ fifth tab never needs a migration.
   decision (JS project, no PropTypes); everything else is signal.
 - **CI** (`.github/workflows/ci.yml`) runs lint → test → build on every push
   and pull request. Vercel deploys `main`.
+- **Reading a round-trip failure.** A hash mismatch is alarming and usually
+  is not what it looks like, so triage it by what ELSE failed:
+  - Hash mismatch **with identical ledger AND budget output** = something
+    semantically dead, not numerically wrong. Residue, key order, an empty
+    container — the projections are computed from every number in the state,
+    so if they agree, no number the user can see has moved. This diagnosed
+    migration 10 in one line.
+  - Hash mismatch **with the projections also differing** = a real value
+    changed; find it before doing anything else.
+  - Either way, diff by PATH and print paths only, never values: a real blob
+    is somebody's finances and the diff output is the thing most likely to
+    get pasted somewhere. One path was all it took both times.
+- `node scripts/probe_shapes.mjs` — shape-only census of every stored row:
+  key names, counts, which migrations apply on load, which era it was
+  written in, and the round-trip verdict, computed in memory with nothing
+  written to disk. Run this BEFORE exporting anyone's blob: a row that
+  round-trips has already told you everything an export would, and an
+  export is somebody's complete financial history on a laptop.
 - `node tests/real-blobs.test.mjs` — the pre-migration gate. Needs
   `.blobs/` from `scripts/export_blobs.mjs`; skips cleanly without it.
   Verified against synthetic blobs 2026-10-02: a clean one passes all
@@ -808,6 +826,18 @@ the property. Both projections had already matched, which is what
 confirmed the empty container was semantically dead rather than meaningful.
 This is the case for running the property over real data and not only over
 fixtures.
+
+*Shape census of all four rows, 2026-10-02* (`scripts/probe_shapes.mjs`,
+in memory, nothing persisted). Three round-trip clean, including one blob
+written pre-migrations 3/5/6 and never re-saved since — the one era no
+fixture could imitate, and it passes. The fourth fails on
+`accounts[0].balance` alone, with `balanceAsOf` agreeing: that account's
+most recent snapshot was edited, which deliberately does NOT move the
+anchor today, so the stored balance and the newest reading disagree about
+the same date. Deriving the anchor resolves it to the edited reading.
+**That is decision ③ working, not a defect — but it changes a visible
+number for that user at migration time, so they should be told.** No
+export was needed to learn any of this.
 
 Entities: each recurring item; each one-off; each tracker category; each
 balance snapshot; each contribution; each monthly actual (item+month); each
