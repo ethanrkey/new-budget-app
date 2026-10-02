@@ -799,12 +799,17 @@ since preferences are not money and last-write-wins is fine for them.
   nine policy sets is nine chances for a future `using (true)`. The cost is
   no foreign keys, so referential integrity stays the engine's job; it
   already is, because orphaned ids are a supported state by design.
-- **Snapshots are keyed BY DATE**, not by their own uid. "As of the 28th the
-  account held X" is a statement about a date, so two rows for one date are a
-  contradiction; the primary key then enforces what `upsertSnapshotByDate`
-  enforces in memory, and two devices logging one date collide on one row
-  instead of both surviving. Contributions deliberately keep uid keys: two
-  deposits in a day are two real events.
+- **Snapshots are keyed BY DATE**, not by their own uid, and this is
+  STRUCTURAL rather than a convention — do not "fix" it into a uid later.
+  "As of the 28th the account held X" is a statement about a date, so two
+  rows for one date are a contradiction, not two readings. One balance per
+  date was application logic (`upsertSnapshotByDate` in `mutate.ts`) and
+  becomes a PRIMARY KEY: a mutator can be bypassed, added alongside, or
+  forgotten by a second client, and a primary key cannot. Two devices
+  logging one date then collide on one row and resolve through the ordinary
+  version guard instead of both surviving. Contributions deliberately keep
+  uid keys: two deposits in a day are two real events, and a date key would
+  lose money.
 - **The verified balance is DERIVED from the newest snapshot**, not stored
   alongside it. That deletes a conflict class rather than solving one: "the
   later as-of date wins" becomes `max(date)` over append-only rows, with no
@@ -973,3 +978,16 @@ Later:
   per-device prefs (theme, collapse states) are not account data and
   deliberately survive, and the legacy `budget-app-state-v1` import cannot
   resurrect wiped data because it only runs when no row exists at all.
+- **`splitState` is lossless even though the anchor is derived**
+  (2026-10-02). `assembleState` ignores the account entity's stored
+  `balance`/`balanceAsOf` and reads the newest snapshot instead — so it
+  would be tempting to stop writing them at all. Split keeps them anyway,
+  and the reason is direction: **split is the write path.** Anything it
+  drops is gone from the database and unrecoverable, while anything
+  assemble ignores is merely unused and can be read again the moment that
+  turns out to be wrong. An asymmetric risk gets the asymmetric answer —
+  lossless going down, opinionated coming up.
+  `anchorMatchesNewestSnapshot()` exists for the gap between the two: where
+  a stored anchor disagrees with the newest snapshot, assemble will
+  deliberately move it, and that is reported before a migration rather than
+  discovered after one.
