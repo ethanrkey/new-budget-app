@@ -258,6 +258,14 @@ balance updates). Nothing is append-only.
   document. Conflicts are never retried: this device's document IS the stale
   one. Versions are compared as opaque tokens, never ordered, so clock skew
   between devices can't be misread (`engine/syncGuard.js isStale`).
+- **A save that does not land says so.** `SyncNotice` has a third kind,
+  `error`: a write that fails for any reason other than a conflict used to
+  be `console.error` only, so the app went on looking normal while nothing
+  it did reached the server — the worst shape a failure can take, because
+  the user keeps working. It clears itself on the next successful save and
+  offers a reload. This matters most during the storage migration, when an
+  out-of-date tab is EXPECTED to be refused, but a silent save failure was
+  never acceptable in any phase.
 - **Nothing in memory is discarded without a recovery copy first.**
   `stashRecoveryCopy()` writes the about-to-be-replaced state to
   `localStorage["budget-app-recovery-v1"]` in a self-describing envelope

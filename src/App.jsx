@@ -342,10 +342,17 @@ export default function App() {
     if (skipNextSave.current) { skipNextSave.current = false; return; }
     saveState(session.user.id, state)
       .then((res) => {
-        if (res?.ok) return;
+        if (res?.ok) { setSyncNotice((n) => (n?.kind === "error" ? null : n)); return; }
         if (res?.reason === "conflict") return adoptServerState(session.user.id, state, "conflict");
+        // Anything else: the write did not land and we are NOT reloading, so
+        // the only honest thing is to say so. Silently carrying on while
+        // nothing reaches the server is the worst shape this can take.
+        setSyncNotice({ kind: "error" });
       })
-      .catch((err) => console.error("save failed", err));
+      .catch((err) => {
+        console.error("save failed", err);
+        setSyncNotice({ kind: "error" });
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, session?.user?.id]);
 
@@ -471,6 +478,7 @@ export default function App() {
         notice={syncNotice}
         onDownload={downloadRecoveryCopy}
         onDismiss={() => setSyncNotice(null)}
+        onReload={() => window.location.reload()}
       />
 
       {/* Account strip — read-only; the balance only changes via the
