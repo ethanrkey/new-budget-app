@@ -140,7 +140,7 @@ export default function LedgerView({
           ledger={ledger}
           trackerCategories={trackerCategories}
           isDark={isDark}
-          onEditItem={(id) => onEditItem(baseId(id))}
+          onEditItem={onEditItem}
         />
       ) : (
       <>
@@ -228,7 +228,7 @@ export default function LedgerView({
                 selectMode={selectMode}
                 selected={selected}
                 onToggleSelected={toggleSelected}
-                onEdit={(id) => onEditItem(baseId(id))}
+                onEdit={onEditItem}
                 onDelete={(id) => onDeleteItem(baseId(id))}
               />
             ))}
@@ -349,4 +349,8 @@ function dayOf(iso) {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleString("en-US", { month: "short", day: "numeric" });
 }
+// A ledger row id is "<itemId>@<date>". DELETE strips the date because it
+// removes the whole rule; EDIT must NOT, because the date is what lets the
+// form offer "This date" as a scope. Stripping it here was the bug that let
+// a single-month edit rewrite every month (2026-10-02).
 function baseId(id) { return id.split("@")[0]; }

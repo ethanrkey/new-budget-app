@@ -737,9 +737,17 @@ fifth tab never needs a migration.
   checks, and one shaped like real duplicate-date snapshot data fails on
   the round-trip, the key collision, the duplicate date (named), the
   anchor, and both projections.
-- UI changes get a browser pass (a throwaway Puppeteer harness against
-  fixture data, light/dark, desktop/mobile) before commit; the harness is
-  never committed.
+- UI changes get a browser pass (a throwaway harness against fixture data,
+  light/dark, desktop/mobile) before commit; the harness is never committed.
+  **Exercise the real entry point, not the component in isolation.** A
+  per-occurrence edit shipped with its form verified standalone and its
+  routing never clicked: `LedgerView` stripped the occurrence date off the
+  row id before the handler saw it, so every "this date" edit silently
+  rewrote the whole rule (2026-10-02). The form was flawless and the
+  feature was broken. JSX wiring has no automated coverage in this repo by
+  decision, which makes the browser pass the only guard there is — so it
+  starts from a click on the actual surface, and the harness asserts what
+  the handler RECEIVED, not just what the form renders.
 
 ## 9. Maintenance rules (standing — apply to every commit)
 
