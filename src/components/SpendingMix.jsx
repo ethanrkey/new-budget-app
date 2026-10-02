@@ -177,7 +177,7 @@ export default function SpendingMix({ mix, isDark }) {
             {/* Says what this is, every time. It is the forecast. */}
             <p className="text-xs text-gray-400 mb-3">
               Projected from your rules for {prettyDate(mix.from)} – {prettyDate(mix.to)} — not what you&apos;ve
-              logged. Income and bills you&apos;ve marked paid are excluded.
+              logged. Income is excluded.
             </p>
 
             {empty ? (

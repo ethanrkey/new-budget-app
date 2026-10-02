@@ -180,15 +180,6 @@ export function moveCategory(state: BudgetState, id: string, direction: -1 | 1):
   };
 }
 
-// Toggle a "paid this month" override for an item. `monthKey` is "YYYY-MM".
-export function togglePaidOverride(state: BudgetState, itemId: string, monthKey: MonthKey): BudgetState {
-  const current = state.paidOverrides?.[monthKey] || [];
-  const next = current.includes(itemId)
-    ? current.filter((id) => id !== itemId)
-    : [...current, itemId];
-  return { ...state, paidOverrides: { ...state.paidOverrides, [monthKey]: next } };
-}
-
 // ---- Fund-balance snapshots (Dashboard "actual" balances) ----
 // Every logged value is fully editable/deletable after the fact — these are
 // corrections to your own record-keeping, not an append-only audit log.

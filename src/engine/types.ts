@@ -12,7 +12,7 @@
 
 /** A calendar date, "YYYY-MM-DD". Never an instant — see toISODate in model. */
 export type ISODate = string;
-/** A calendar month, "YYYY-MM". The key for paidOverrides and monthlyActuals. */
+/** A calendar month, "YYYY-MM". The key for monthlyActuals. */
 export type MonthKey = string;
 /** An index into CATEGORY_PALETTE, not a hex colour. */
 export type PaletteIndex = number;
@@ -175,7 +175,6 @@ export interface BudgetState {
   recurring: RecurringItem[];
   oneoffs: OneOffItem[];
   /** Bills ticked off as already paid, by month. */
-  paidOverrides: Record<MonthKey, string[]>;
   trackerCategories: TrackerCategory[];
   balanceSnapshots: Record<string, BalanceSnapshot[]>;
   contributionLog: Record<string, Contribution[]>;
@@ -203,7 +202,6 @@ export interface BudgetEvent {
   color: PaletteIndex | null;
   order: number;
   /** Paid this month: still shown, but contributes 0 to the balance. */
-  paidOverride: boolean;
   date: ISODate;
 }
 

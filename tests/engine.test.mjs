@@ -1,6 +1,6 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay } from "../src/engine/compute.ts";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
+import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
 import { buildAllEvents } from "../src/engine/generate.ts";
@@ -151,7 +151,6 @@ const stateE = {
     { id: "e2", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-09-02", order: 1 },
   ],
   oneoffs: [],
-  paidOverrides: {},
 };
 // computeBudget doesn't sort (that's BudgetView's job, by .order) — it just
 // has to carry each item's order through so the UI can.
@@ -169,35 +168,28 @@ eq("Budget respects the swap (order-wise; caller sorts by .order)",
   Object.entries(sepE.expenseItems).sort((a, b) => a[1].order - b[1].order).map(([n]) => n),
   ["Rent", "Internet"]);
 
-// ---------- Scenario F: mark-bill-paid override ----------
-// Fixed dates (not todayISO()) so the test is deterministic and independent
-// of the checkInDate event-filter added for the live-month convention.
-console.log("\n== Scenario F: paidOverride zeroes a bill's effect ==");
-const stateF = {
-  settings: { checkInBalance: 2000, checkInDate: "2026-09-10", budgetHorizon: "2026-11-10",
-    ledgerHorizon: "2026-11-10", theme: "light", showCumulative: false },
-  recurring: [
-    { id: "f1", name: "Electric", amount: 100, category: "bill", cadence: "monthly", startDate: "2026-09-15", order: 0 },
-  ],
+// ---------- Scenario F: mark-paid is GONE ----------
+console.log("\n== Scenario F: a legacy paidOverrides field is dropped ==");
+// Removed 2026-10-02 (migration 8). A paid bill is already inside the
+// verified balance and buildEvents drops everything before balanceAsOf, so
+// the flag was a second mechanism doing the anchor's job — and it wrote a
+// forecast number from an observation, which principle 1 forbids outright.
+const legacyPaid = normalize({
+  settings: { checkInBalance: 2000, checkInDate: "2026-09-10", budgetHorizon: "2026-11-10", ledgerHorizon: "2026-11-10" },
+  recurring: [{ id: "f1", name: "Electric", amount: 100, category: "bill", cadence: "monthly", startDate: "2026-09-15", order: 0 }],
   oneoffs: [],
-  paidOverrides: {},
-};
-const beforePaid = computeLedger(stateF, stateF.settings.ledgerHorizon);
-check("unpaid: balance drops by 100 this month", beforePaid.rows[0].balance, 1900);
-check("unpaid: not flagged paidOverride", beforePaid.rows[0].paidOverride ? 1 : 0, 0);
-
-const stateFPaid = togglePaidOverride(stateF, "f1", "2026-09");
-const afterPaid = computeLedger(stateFPaid, stateFPaid.settings.ledgerHorizon);
-check("paid: balance unaffected this month", afterPaid.rows[0].balance, 2000);
-check("paid: row still shows the real amount", afterPaid.rows[0].amount, 100);
-check("paid: flagged paidOverride", afterPaid.rows[0].paidOverride ? 1 : 0, 1);
-// next month's instance of the same rule must NOT be affected
-const nextMonthRow = afterPaid.rows.find((r) => r.date.slice(0, 7) !== "2026-09");
-check("paid override doesn't leak into next month", nextMonthRow?.paidOverride ? 1 : 0, 0);
-
-const budgetFPaid = computeBudget(stateFPaid, stateFPaid.settings.budgetHorizon);
-const sepFCol = budgetFPaid.find((c) => c.key === "2026-09");
-check("Budget: paid bill contributes $0 this month", sepFCol.totalOut, 0);
+  paidOverrides: { "2026-09": ["f1"] },
+  trackerCategories: [],
+});
+eq("the field is not carried forward", legacyPaid.paidOverrides, undefined);
+const ledgerF = computeLedger(legacyPaid, "2026-11-10");
+check("a bill a legacy state called paid still counts in full", ledgerF.rows[0].balance, 1900);
+check("...and the row shows its real amount", ledgerF.rows[0].amount, 100);
+eq("no event carries a paid flag any more", ledgerF.rows.every((r) => r.paidOverride === undefined), true);
+const budgetF = computeBudget(legacyPaid, "2026-11-10");
+check("the Budget counts it too", budgetF.find((c) => c.key === "2026-09").totalOut, 100);
+eq("and the spending chart stops filtering on it",
+  computeSpendingByCategory(legacyPaid, "2026-11-10").slices.map((x) => x.label), ["Electric"]);
 
 // ---------- Scenario G: live-month convention ----------
 console.log("\n== Scenario G: live month = checkInDate's month ==");
@@ -211,7 +203,6 @@ const stateG = {
     { id: "g-rent", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-08-20", dayOfMonth: 20, order: 1 },
   ],
   oneoffs: [],
-  paidOverrides: {},
 };
 const budgetG = computeBudget(stateG, stateG.settings.budgetHorizon);
 const ledgerG = computeLedger(stateG, stateG.settings.ledgerHorizon);
@@ -236,7 +227,6 @@ const stateH = {
     ledgerHorizon: "2026-10-01", theme: "light", showCumulative: false },
   recurring: [],
   oneoffs: [{ id: "h1", name: "Coffee", amount: 5, category: "oneoff", date: "2026-09-01", order: 0 }],
-  paidOverrides: {},
 };
 const ledgerH = computeLedger(stateH, stateH.settings.ledgerHorizon);
 check("same-day item is not dropped", ledgerH.rows.length, 1);
@@ -280,7 +270,6 @@ const stateJ = {
     { id: "j-bill1", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-09-02", order: 2 },
   ],
   oneoffs: [],
-  paidOverrides: {},
   trackerCategories: legacyTrackerCategories(),
 };
 const budgetJ = computeBudget(stateJ, stateJ.settings.budgetHorizon);
@@ -303,7 +292,6 @@ const stateK = {
     { id: "k-roth", name: 'Bob\'s "Roth"', amount: 500, category: "roth", cadence: "monthly", startDate: "2026-09-03", order: 1 },
   ],
   oneoffs: [],
-  paidOverrides: {},
   trackerCategories: legacyTrackerCategories(),
 };
 const ledgerK = computeLedger(stateK, stateK.settings.ledgerHorizon);
@@ -347,7 +335,6 @@ const stateL = {
   oneoffs: [
     { id: "l-gift", name: "Birthday gift", amount: 60, category: "oneoff", date: "2026-09-20", order: 5 },
   ],
-  paidOverrides: {},
   trackerCategories: legacyTrackerCategories(),
 };
 const budgetL = computeBudget(stateL, stateL.settings.budgetHorizon);
@@ -532,7 +519,6 @@ const stateOrphan = {
     { id: "orphan-1", name: "Old Crypto Stash", amount: 100, category: cryptoId, cadence: "monthly", startDate: "2026-09-01", order: 0 },
   ],
   oneoffs: [],
-  paidOverrides: {},
   trackerCategories: sO.trackerCategories, // cryptoId no longer exists here
 };
 const budgetOrphan = computeBudget(stateOrphan, stateOrphan.settings.budgetHorizon);
@@ -605,7 +591,6 @@ const stateQ = {
     { id: "inv-dep", name: "Investment deposit", amount: 50, category: "inv", cadence: "monthly", startDate: "2026-01-10", dayOfMonth: 10, order: 1 },
   ],
   oneoffs: [],
-  paidOverrides: {},
   trackerCategories: [
     { id: "sav", name: "Savings", color: 2, order: 0 },
     { id: "inv", name: "Investments", color: 5, order: 1 },
@@ -645,7 +630,7 @@ const loanCatQ = { id: "lq", name: "Loan Q", color: 3, order: 2, kind: "debt", o
 const loanStateQ = normalize({
   settings: { checkInBalance: 0, checkInDate: "2026-01-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
   recurring: [{ id: "lq-pay", name: "Loan payment", amount: 200, category: "lq", cadence: "monthly", startDate: "2026-01-15", dayOfMonth: 15, order: 0 }],
-  oneoffs: [], paidOverrides: {},
+  oneoffs: [],
   trackerCategories: [loanCatQ],
   balanceSnapshots: { lq: [{ id: "lq1", date: "2026-01-01", amount: 5000 }, { id: "lq2", date: "2026-03-01", amount: 4620 }] },
 });
@@ -666,7 +651,6 @@ let stateR = {
     { id: "elec", name: "Electric", amount: 150, category: "bill", cadence: "monthly", startDate: "2026-09-05", dayOfMonth: 5, order: 0, variable: true },
   ],
   oneoffs: [],
-  paidOverrides: {},
   trackerCategories: [],
   balanceSnapshots: {},
   monthlyActuals: {},
@@ -754,7 +738,7 @@ let stateU = normalize({
   settings: { checkInBalance: 4000, checkInDate: "2026-09-01", budgetHorizon: "2026-11-01", ledgerHorizon: "2026-10-31" },
   recurring: [{ id: "ab", name: "Student Loan AB", amount: 150, category: "bill", variable: true,
     cadence: "biweekly", startDate: "2026-09-15", order: 0 }],
-  oneoffs: [], paidOverrides: {}, trackerCategories: [],
+  oneoffs: [], trackerCategories: [],
   monthlyActuals: { ab: { "2026-09": 150 } },
 });
 const sepU = buildAllEvents(stateU, "2026-10-31").filter((e) => e.date.startsWith("2026-09"));
@@ -778,7 +762,7 @@ let stateV = normalize({
   settings: { checkInBalance: 0, checkInDate: "2026-01-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
   // A big planned contribution in the ledger that must NEVER be counted as real.
   recurring: [{ id: "v-plan", name: "Roth auto", amount: 500, category: "roth", cadence: "monthly", dayOfMonth: 1, startDate: "2025-01-01", order: 0 }],
-  oneoffs: [], paidOverrides: {},
+  oneoffs: [],
   trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }, { id: "k401", name: "401k", color: 2, order: 1, kind: "asset" }],
 });
 eq("normalize backfills an empty contribution log", stateV.contributionLog, {});
@@ -822,7 +806,6 @@ const realState = {
     { id: "loan1", name: "Student Loan", amount: 220, category: "debt", cadence: "monthly", startDate: "2026-01-15", dayOfMonth: 15, order: 2, originalPrincipal: 18000, interestRate: 5.8 },
   ],
   oneoffs: [{ id: "gift", name: "Birthday gift", amount: 60, category: "oneoff", date: "2026-09-20", order: 3 }],
-  paidOverrides: { "2026-09": ["rent"] },
   trackerCategories: [
     { id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" },
     { id: "debt", name: "Debt", color: 1, order: 1, kind: "debt" },
@@ -845,7 +828,10 @@ eq("...and the payment item is stripped of loan fields but keeps its category", 
 eq("...the variable flag survives", restored.recurring.find((r) => r.id === "elec").variable, true);
 eq("...balanceSnapshots survive, both categories", countSnapshots(restored.balanceSnapshots), 2);
 eq("...monthlyActuals survive", countMonthlyActuals(restored.monthlyActuals), 1);
-eq("...paidOverrides survive", restored.paidOverrides, { "2026-09": ["rent"] });
+// Migration 8: an OLD backup still carries the retired field; restoring it
+// must drop it rather than quietly reviving a removed feature's data.
+eq("...a retired paidOverrides field is dropped, not restored",
+  normalize({ ...roundTripped, paidOverrides: { "2026-09": ["rent"] } }).paidOverrides, undefined);
 
 // A backup from BEFORE trackerCategories/balanceSnapshots/monthlyActuals/kind
 // existed still restores safely — normalize()'s existing migrations apply
@@ -888,7 +874,6 @@ const stateZ = {
     { id: "rent-z", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-09-25", dayOfMonth: 25, order: 0 },
   ],
   oneoffs: [],
-  paidOverrides: {},
   trackerCategories: [],
   balanceSnapshots: {},
   monthlyActuals: {},
@@ -916,7 +901,6 @@ const legacyAA = {
     { id: "roth-aa", name: "Roth IRA", amount: 500, category: "roth", cadence: "monthly", startDate: "2026-01-05", dayOfMonth: 5, order: 2 },
   ],
   oneoffs: [{ id: "gift", name: "Gift", amount: 60, category: "oneoff", date: "2026-09-20", order: 3 }],
-  paidOverrides: { "2026-09": ["rent"] },
   trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }],
   balanceSnapshots: { roth: [{ id: "s1", date: "2026-08-01", amount: 9100 }] },
   monthlyActuals: {},
@@ -1004,7 +988,7 @@ const payA = { id: "payA", name: "Student Loan payment", amount: 100, category: 
 const acctW = [{ id: "checking", name: "Checking", kind: "checking", balance: 0, balanceAsOf: "2026-01-01", order: 0 }];
 const stateW = {
   settings: { budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01", theme: "light" },
-  accounts: acctW, recurring: [payA], oneoffs: [], paidOverrides: {},
+  accounts: acctW, recurring: [payA], oneoffs: [],
   trackerCategories: [loanCat],
   balanceSnapshots: { sl: [{ id: "s0", date: "2026-01-05", amount: 1000 }] }, // "on Jan 5 I owed $1000" — the seed a migration writes
   accountSnapshots: {}, monthlyActuals: {},
@@ -1065,7 +1049,7 @@ check("...without adding a snapshot", edited.balanceSnapshots[setUp.trackerCateg
 const stateNet = {
   settings: { budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01", theme: "light" },
   accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 4210.55, balanceAsOf: "2026-09-08", order: 0 }],
-  recurring: [], oneoffs: [], paidOverrides: {},
+  recurring: [], oneoffs: [],
   trackerCategories: [
     { id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" },
     { id: "brokerage", name: "Brokerage", color: 0, order: 1, kind: "asset" },                    // never logged
@@ -1095,7 +1079,6 @@ const legacyAC = {
     { id: "car-pay", name: "Car", amount: 300, category: "carloan", cadence: "monthly", startDate: "2026-05-10", dayOfMonth: 10, order: 2 },
   ],
   oneoffs: [],
-  paidOverrides: {},
   trackerCategories: [
     { id: "loans", name: "Loans", color: 3, order: 0, kind: "debt" },
     { id: "carloan", name: "Car Loan", color: 1, order: 1, kind: "debt" },
@@ -1141,7 +1124,7 @@ check("the migrated Student Loans projects from the user's logged 16240 (Aug 1) 
 console.log("\n== Scenario AD: setupAsset ==");
 const baseAD = normalize({
   settings: { checkInBalance: 1000, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
-  recurring: [], oneoffs: [], paidOverrides: {}, trackerCategories: [],
+  recurring: [], oneoffs: [], trackerCategories: [],
 });
 const catCountAD = baseAD.trackerCategories.length;
 
@@ -1174,7 +1157,7 @@ console.log("\n== Scenario AE: \"Checking\" / legacy \"TD checking\" starting-ba
 const stateAE = normalize({
   settings: { checkInBalance: 4321.98, checkInDate: "2026-09-01", budgetHorizon: "2026-11-01", ledgerHorizon: "2026-11-01" },
   recurring: [{ id: "ae-rent", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-09-02", order: 0 }],
-  oneoffs: [], paidOverrides: {}, trackerCategories: [],
+  oneoffs: [], trackerCategories: [],
 });
 const csvAE = budgetToCSV(computeBudget(stateAE, "2026-11-01"), stateAE.trackerCategories);
 check("export writes the row as \"Checking\"", /(^|\r\n)Checking,/.test(csvAE), true);
@@ -1194,7 +1177,7 @@ console.log("\n== Scenario AG: loan progress above original principal ==");
 const abCat = { id: "ab", name: "Student Loan AB", color: 5, order: 0, kind: "debt", originalPrincipal: 2000, interestRate: 6.5 };
 const mkAB = (snapshots, payments = []) => normalize({
   settings: { checkInBalance: 500, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
-  recurring: [], oneoffs: payments, paidOverrides: {},
+  recurring: [], oneoffs: payments,
   trackerCategories: [abCat],
   balanceSnapshots: { ab: snapshots },
 });
@@ -1246,7 +1229,7 @@ check("paid off entirely reaches 100%", computeLoanProgress(mkAB([
 const aaCat = { id: "aa", name: "Student Loan AA", color: 6, order: 1, kind: "debt", originalPrincipal: 18000, interestRate: 5.8 };
 const aa = computeLoanProgress(normalize({
   settings: { checkInBalance: 500, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
-  recurring: [], oneoffs: [], paidOverrides: {},
+  recurring: [], oneoffs: [],
   trackerCategories: [aaCat],
   balanceSnapshots: { aa: [{ id: "t1", date: "2026-05-01", amount: 17010 }, { id: "t2", date: "2026-09-01", amount: 16120 }] },
 }), aaCat, "2026-09-13");
@@ -1268,7 +1251,7 @@ eq("garbage falls back to the default", sanitizeTabOrder("nope"), TABS);
 // Migration: an account saved before tabs were reorderable has no tabOrder.
 const legacyAF = normalize({
   settings: { checkInBalance: 100, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
-  recurring: [], oneoffs: [], paidOverrides: {},
+  recurring: [], oneoffs: [],
 });
 eq("normalize backfills the default order", legacyAF.settings.tabOrder, TABS);
 eq("normalize repairs a stale stored order", normalize({ ...legacyAF, settings: { ...legacyAF.settings, tabOrder: ["spending", "gone"] } }).settings.tabOrder, ["spending", "dashboard", "budget", "ledger"]);
@@ -1300,7 +1283,7 @@ eq("neither known is not stale", isStale(null, null), false);
 const liveAH = normalize({
   settings: { checkInBalance: 1234.56, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
   recurring: [{ id: "ah1", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-09-02", order: 0 }],
-  oneoffs: [], paidOverrides: {},
+  oneoffs: [],
 });
 const env = makeRecoveryEnvelope(liveAH, "conflict", "2026-09-14T12:00:00.000Z");
 eq("envelope is self-describing", [env.kind, env.version, env.reason], ["budget-app-recovery", 1, "conflict"]);
@@ -1350,7 +1333,7 @@ eq("endOfMonthISO in a leap year", endOfMonthISO("2028-02-01"), "2028-02-29");
 console.log("\n== Scenario AJ: computeDebtSummary ==");
 const stateAJ = normalize({
   settings: { checkInBalance: 500, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
-  recurring: [], oneoffs: [], paidOverrides: {},
+  recurring: [], oneoffs: [],
   trackerCategories: [
     // deliberately out of display order, and mixed in with assets
     { id: "car", name: "Car Loan", color: 6, order: 3, kind: "debt", originalPrincipal: 14500, interestRate: 4.2 },
@@ -1382,7 +1365,7 @@ check("...and so does the unlogged count", sumAJ.unlogged, computeNetPosition(st
 // Degenerate cases the card has to survive.
 const noDebtAJ = computeDebtSummary(normalize({
   settings: { checkInBalance: 0, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
-  recurring: [], oneoffs: [], paidOverrides: {}, trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }],
+  recurring: [], oneoffs: [], trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }],
 }));
 eq("no debt categories -> empty list", noDebtAJ.loans, []);
 check("no debt categories -> zero total, not NaN", noDebtAJ.total, 0);
@@ -1394,7 +1377,6 @@ const beforeAK = normalize({
   settings: { checkInBalance: 1000, checkInDate: "2026-09-01", budgetHorizon: "2026-11-01", ledgerHorizon: "2026-11-01" },
   recurring: [{ id: "ak1", name: "Test deposit", amount: 50, category: "testacct", cadence: "monthly", dayOfMonth: 10, startDate: "2026-09-10", order: 0 }],
   oneoffs: [{ id: "ak2", name: "Extra deposit", amount: 75, category: "testacct", date: "2026-10-20", order: 1 }],
-  paidOverrides: {},
   trackerCategories: [{ id: "testacct", name: "Test account", color: 1, order: 0, kind: "asset" }],
 });
 check("count of transactions the delete confirm must report", countTaggedItems(beforeAK, "testacct"), 2);
@@ -1430,7 +1412,6 @@ const stateAL = normalize({
     { id: "roth", name: "Roth", amount: 500, category: "rothcat", cadence: "monthly", dayOfMonth: 5, startDate: "2026-09-05", order: 3 },
   ],
   oneoffs: [{ id: "trip", name: "Trip", amount: 300, category: "oneoff", date: "2026-10-11", order: 4 }],
-  paidOverrides: {},
   trackerCategories: [{ id: "rothcat", name: "Roth", color: 5, order: 0, kind: "asset" }],
   monthlyActuals: { gro: { "2026-09": 999 } }, // must be ignored entirely
 });
@@ -1472,11 +1453,6 @@ eq("a lone one-off is its own one-step ramp",
 eq("a tracker category is never broken out, whatever its share",
   mixAL.slices.filter((s) => s.key === "rothcat").map((s) => s.bucket), ["category"]);
 
-// Paid-marked instances contribute 0 to the projection, so they contribute
-// 0 here too — otherwise the pie shows spending the forecast doesn't have.
-const paidAL = { ...stateAL, paidOverrides: { "2026-09": ["rent"] } };
-check("a paid-marked bill is excluded", byKey(computeSpendingByCategory(paidAL, "2026-11-30"))["bill::Rent"], 3000);
-
 // It follows the horizon slider, because it reads the same event list.
 check("a shorter horizon yields a smaller total", computeSpendingByCategory(stateAL, "2026-09-30").total < mixAL.total, true);
 eq("the window is reported for labelling", [mixAL.from, mixAL.to], ["2026-09-01", "2026-11-30"]);
@@ -1497,7 +1473,7 @@ const manyAL = normalize({
     id: `c${i}`, name: `Cat ${i}`, amount: 100 - i, category: `cat${i}`,
     cadence: "monthly", dayOfMonth: 10, startDate: "2026-09-10", order: i,
   })),
-  oneoffs: [], paidOverrides: {},
+  oneoffs: [],
   trackerCategories: Array.from({ length: 11 }, (_, i) => ({ id: `cat${i}`, name: `Cat ${i}`, color: i % 8, order: i, kind: "asset" })),
 });
 const manyMix = computeSpendingByCategory(manyAL, "2026-09-30");
@@ -1509,7 +1485,7 @@ check("folding loses no money", manyMix.slices.reduce((t, s) => t + s.amount, 0)
 // Empty case.
 const emptyMix = computeSpendingByCategory(normalize({
   settings: { checkInBalance: 100, checkInDate: "2026-09-01", budgetHorizon: "2026-10-01", ledgerHorizon: "2026-09-30" },
-  recurring: [], oneoffs: [], paidOverrides: {},
+  recurring: [], oneoffs: [],
 }), "2026-09-30");
 eq("nothing planned -> no slices", emptyMix.slices, []);
 check("nothing planned -> zero total, not NaN", emptyMix.total, 0);
@@ -1527,7 +1503,7 @@ const mkAN = (rothAmount) => normalize({
     { id: "spot", name: "Spotify", amount: 12, category: "bill", cadence: "monthly", dayOfMonth: 9, startDate: "2026-09-09", order: 2 },
     ...(rothAmount ? [{ id: "roth", name: "Roth IRA", amount: rothAmount, category: "rothcat", cadence: "monthly", dayOfMonth: 5, startDate: "2026-09-05", order: 3 }] : []),
   ],
-  oneoffs: [], paidOverrides: {},
+  oneoffs: [],
   trackerCategories: [{ id: "rothcat", name: "Roth", color: 5, order: 0, kind: "asset" }],
 });
 
@@ -1556,7 +1532,7 @@ const loanHeavy = computeSpendingByCategory(normalize({
     { id: "p2", name: "Extra principal", amount: 400, category: "aa", cadence: "monthly", dayOfMonth: 20, startDate: "2026-09-20", order: 1 },
     { id: "b", name: "Rent", amount: 100, category: "bill", cadence: "monthly", dayOfMonth: 2, startDate: "2026-09-02", order: 2 },
   ],
-  oneoffs: [], paidOverrides: {},
+  oneoffs: [],
   trackerCategories: [{ id: "aa", name: "Student Loan AA", color: 0, order: 0, kind: "debt", originalPrincipal: 18000, interestRate: 5.8 }],
 }), "2026-09-30");
 eq("a tracker category at 93% is still one slice",
@@ -1570,7 +1546,7 @@ const manyItems = computeSpendingByCategory(normalize({
     id: `b${i}`, name: `Bill ${i}`, amount: 200 - i * 5, category: "bill",
     cadence: "monthly", dayOfMonth: 10, startDate: "2026-09-10", order: i,
   })),
-  oneoffs: [], paidOverrides: {}, trackerCategories: [],
+  oneoffs: [], trackerCategories: [],
 }), "2026-09-30");
 check("broken out, then folded to at most 8", manyItems.slices.length, 8);
 eq("the fold is still the last slice", manyItems.slices[7].bucket, "other");
@@ -1602,7 +1578,7 @@ console.log("\n== Scenario AP: same-date snapshots correct, not stack ==");
 // one for that date corrects the first.
 let snapAP = normalize({
   settings: { checkInBalance: 1000, checkInDate: "2026-09-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
-  recurring: [], oneoffs: [], paidOverrides: {}, trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }],
+  recurring: [], oneoffs: [], trackerCategories: [{ id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" }],
 });
 const acctAP = primaryAccount(snapAP).id;
 const snapsOf = (st) => (st.accountSnapshots[acctAP] ?? []).map((x) => [x.date, x.amount]);
@@ -1659,7 +1635,7 @@ eq("the stored value itself is never rewritten", (() => {
 const overCap = normalize({
   settings: { checkInBalance: 5000, checkInDate: todayISO(), budgetHorizon: addMonthsISO(todayISO(), 24), ledgerHorizon: addMonthsISO(todayISO(), 30) },
   recurring: [{ id: "r", name: "Rent", amount: 100, category: "bill", cadence: "monthly", dayOfMonth: 1, startDate: todayISO(), order: 0 }],
-  oneoffs: [], paidOverrides: {}, trackerCategories: [],
+  oneoffs: [], trackerCategories: [],
 });
 const cappedLedger = computeLedger(overCap, ledgerHorizonOf(overCap));
 const cappedMix = computeSpendingByCategory(overCap, ledgerHorizonOf(overCap));
@@ -1682,7 +1658,6 @@ const stateAM = normalize({
     { id: "b", name: "Book", amount: 25, category: "oneoff", date: "2026-10-13", order: 4 },
     { id: "c", name: "Solo", amount: 80, category: "oneoff", date: "2026-10-20", order: 5 },
   ],
-  paidOverrides: {},
 });
 const daysAM = groupByDay(computeLedger(stateAM, "2026-10-31").rows);
 const oct13 = daysAM.get("2026-10-13");
@@ -1696,14 +1671,6 @@ check("net of a lone outflow", daysAM.get("2026-10-20").net, -80);
 eq("days with nothing are simply absent", daysAM.has("2026-10-14"), false);
 check("every ledger row lands in exactly one day",
   [...daysAM.values()].reduce((n, d) => n + d.rows.length, 0), computeLedger(stateAM, "2026-10-31").rows.length);
-
-// A paid-marked row still shows (it happened) but must not move the day's
-// figure, or the cell and the running balance would tell different stories.
-const paidAM = { ...stateAM, paidOverrides: { "2026-10": ["rent"] } };
-const paidDay = groupByDay(computeLedger(paidAM, "2026-10-31").rows).get("2026-10-13");
-check("a paid row is still listed", paidDay.rows.length, 5);
-check("...but contributes 0 to outflow", paidDay.outflow, 77);
-check("...and the day's net follows the balance", paidDay.net, 1923);
 
 eq("no rows -> empty map", groupByDay([]).size, 0);
 

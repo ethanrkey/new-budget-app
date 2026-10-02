@@ -9,7 +9,7 @@ import { getSession, onAuthChange, signOut } from "./auth.js";
 import { getDeviceTheme, setDeviceTheme } from "./theme.js";
 import { computeLedger, computeBudget } from "./engine/compute.ts";
 import {
-  upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, togglePaidOverride,
+  upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
   updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
@@ -107,7 +107,7 @@ export default function App() {
   // logged real-world account balances, not forecast data, and Wipe Data
   // should never quietly delete something you can't get back.
   function wipeData() {
-    setState((s) => ({ ...s, recurring: [], oneoffs: [], paidOverrides: {}, monthlyActuals: {} }));
+    setState((s) => ({ ...s, recurring: [], oneoffs: [], monthlyActuals: {} }));
   }
 
   // open the edit form for a ledger row id ("<itemId>@<date>") or bare item id
@@ -125,9 +125,6 @@ export default function App() {
   }
   function reorderDrop(names, name, beforeName) {
     setState((s) => reorderList(s, names, name, beforeName));
-  }
-  function togglePaid(itemId, monthKey) {
-    setState((s) => togglePaidOverride(s, itemId, monthKey));
   }
   // Tracker category (savings/debt/investment) CRUD — deleting one never
   // touches items still tagged with it (see mutate.ts's addCategory et al.).
@@ -181,7 +178,7 @@ export default function App() {
   function importCSV(parsed, replace) {
     setState((s) => {
       let next = replace
-        ? { ...s, recurring: [], oneoffs: [], paidOverrides: {} }
+        ? { ...s, recurring: [], oneoffs: [] }
         : s;
       for (const item of [...parsed.recurring, ...parsed.oneoffs]) {
         next = upsertItem(next, item);
@@ -544,7 +541,6 @@ export default function App() {
             onEditItem={editById}
             onDeleteItem={removeItem}
             onDeleteMany={removeItems}
-            onTogglePaid={togglePaid}
             onOpenOnboarding={() => setShowOnboarding(true)}
             onOpenCategoryManager={() => setCategoryManagerFrom("ledger")}
           />

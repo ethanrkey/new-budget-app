@@ -59,9 +59,11 @@ principle made it mechanical:
   whatever as-of date was current — an observation, undated, changing the
   anchor. Removed 2026-10-02; it was also the cause of duplicate snapshot
   history.
-- Mark-a-bill-paid writes `paidOverrides` from the observation "I already
-  paid this" and zeroes the event in the forecast. It is a violation on its
-  face, and it is doing a job the anchor already does.
+- Mark-a-bill-paid wrote `paidOverrides` from the observation "I already
+  paid this" and zeroed the event in the forecast. A violation on its face,
+  and redundant besides: a paid bill is already inside the verified balance,
+  and `buildEvents` drops everything before `balanceAsOf`. Deleted
+  2026-10-02 (migration 8) rather than demoted — see the decision log.
 
 The second principle — **each section is one thing** — stands as written in
 §7: a tab answers one question, and a control that belongs to a different
@@ -158,7 +160,6 @@ holds it in React state; every mutation is a pure function in
   recurring: [ { id, name, amount, category, cadence, dayOfMonth, startDate, endDate|null,
                  order, accountId, color|null, variable? } ],
   oneoffs:   [ { id, name, amount, category, date, order, accountId, color|null } ],
-  paidOverrides: { "YYYY-MM": [itemId] },          // a bill marked paid this month → zero effect on balance, still shown
   trackerCategories: [                             // the user's own savings / investment / debt buckets
     { id, name, color /* palette index */, order, kind: "asset" | "debt",
       // debt-kind only — a debt category IS a loan:
@@ -252,6 +253,14 @@ every load and is **idempotent and deterministic** (fixed seed ids, never
    a payment; a second configured item in the same category spawns its own
    category (`loan-<itemId>`); balance anchor seeded as `originalPrincipal`
    as of the payment's start only if the user never logged one.
+8. `paidOverrides` → **dropped**, not carried (2026-10-02). Mark-a-bill-paid
+   was deleted; the field is stripped from `parsed` explicitly, because
+   `normalize()` spreads the parsed blob and would otherwise carry a dead
+   field forward in every save forever. Nothing reads it, nothing is
+   reconstructed from it, and no number changes except that bills a legacy
+   state called paid now count in full — which is the point: they were
+   already inside the verified balance, so zeroing them double-counted the
+   anchor's job.
 
 Conventions worth knowing before touching numbers:
 
@@ -393,9 +402,9 @@ Conventions worth knowing before touching numbers:
   dominate.
 - **Colors are inline styles** (`paletteColor(index, isDark)`), never
   runtime-built Tailwind class names — the JIT scanner can't see those.
-- **Variable actuals and "mark paid" are different things:** paid zeroes an
-  instance's effect (already reflected in the verified balance); an actual
-  substitutes a real amount that still counts.
+- **A logged actual never changes a forecast number.** It is kept for the
+  Spending tab's comparison and nothing else. (This bullet used to contrast
+  actuals with "mark paid"; mark-paid was deleted 2026-10-02.)
 
 ## 7. Tabs and features (default order: Dashboard · Budget · Ledger · Spending)
 
@@ -422,7 +431,7 @@ fifth tab never needs a migration.
 
 - **Ledger** — every projected transaction, dated, with a running checking
   balance; month headers; optional per-category cumulative columns
-  (checklist picker); mark-a-bill-paid checkbox for current-month bills;
+  (checklist picker);
   multi-select delete; per-item color override; projection horizon slider.
   **The Ledger projects at most 12 months** (`LEDGER_MAX_MONTHS`), against
   the Budget's 36: nobody plans transaction-by-transaction two years out, so
@@ -443,8 +452,8 @@ fifth tab never needs a migration.
   exist; a faked or omitted-but-implied balance would have two views
   disagreeing about the app's most important number. Savings columns and
   multi-select hide in calendar mode, being list-only concepts.
-  Per-day aggregation is `groupByDay` in the engine, and a paid-marked row
-  contributes 0 to the day's net exactly as it does to the running balance.
+  Per-day aggregation is `groupByDay` in the engine, so a day's net and the
+  running balance can never tell different stories.
   Dot overflow is CAPPED (`+N`), not wrapped: grid cells share a row height,
   so wrapping makes the whole row taller and gives quiet neighbours
   whitespace — it flattens the busy/quiet contrast instead of sharpening it.
@@ -456,7 +465,6 @@ fifth tab never needs a migration.
   (`computeSpendingByCategory`), two renderings, the choice also per device.
   It reads `buildEvents`, the list the table renders, so it follows the
   horizon slider. Forecast only, and the panel says so: income is excluded,
-  paid-marked instances are excluded (they contribute 0 to the projection),
   and it never touches `monthlyActuals` or any logged value. An actual-
   spending breakdown belongs on the Spending tab and is a different chart.
 
@@ -768,3 +776,13 @@ Later:
   import brings in forecast items. The verified balance has exactly one
   entry point and it is the Update balance modal, where the user supplies
   the date.
+- **Mark-a-bill-paid was deleted, not demoted** (2026-10-02). The checkbox
+  zeroed a current-month bill's effect on the projection. It was a second
+  mechanism doing a job one mechanism already does: a bill you have paid is
+  inside the verified balance, and `buildEvents` already drops every event
+  before `balanceAsOf`. It also carried two defects — it rendered only for
+  the current month, and an override left on a past month could not be
+  un-ticked because the checkbox was gone. Under principle 1 it is a flat
+  violation: an observation ("I paid this") writing a forecast number.
+  Display-only was considered and rejected; a flag nothing acts on is just
+  a second place to maintain. Closes audit items #1 and #6.

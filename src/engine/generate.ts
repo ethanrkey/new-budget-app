@@ -42,19 +42,18 @@ export function buildAllEvents(state: BudgetState, horizonISO: ISODate): BudgetE
   const events: BudgetEvent[] = [];
   const horizon = parse(horizonISO);
 
-  const paidOverrides = state.paidOverrides || {};
 
   // 1) expand each recurring rule
   for (const rule of state.recurring) {
     for (const dt of occurrenceDates(rule, horizonISO)) {
-      events.push(makeEvent(rule, dt, paidOverrides));
+      events.push(makeEvent(rule, dt));
     }
   }
 
   // 2) add one-offs within horizon
   for (const o of state.oneoffs) {
     if (parse(o.date) <= horizon) {
-      events.push(makeEvent(o, o.date, paidOverrides));
+      events.push(makeEvent(o, o.date));
     }
   }
 
@@ -85,10 +84,6 @@ export function buildEvents(state: BudgetState, horizonISO: ISODate): BudgetEven
   return events.filter((e) => e.date >= checkInDate);
 }
 
-// `paidOverrides` is `{ "YYYY-MM": [itemId,...] }` — bills checked off as already
-// paid for that month. The event still appears (so it stays visible), but its
-// magnitude is zeroed so it stops moving the balance / budget totals again.
-//
 // An event's amount is ALWAYS the rule's amount. `monthlyActuals` used to
 // substitute a logged actual here (split across a month's instances), which
 // meant a $150 biweekly rule with a $150 logged month rendered as two $75
@@ -98,11 +93,8 @@ export function buildEvents(state: BudgetState, horizonISO: ISODate): BudgetEven
 // contributions never write back either. Logged actuals still exist and are
 // still yours — the Spending tab compares them against the rule. Nothing
 // logged anywhere changes a forecast number.
-function makeEvent(src: BudgetItem, date: ISODate, paidOverrides: Record<MonthKey, string[]>): BudgetEvent {
+function makeEvent(src: BudgetItem, date: ISODate): BudgetEvent {
   const dir = CATEGORIES[src.category]?.direction ?? "out";
-  const monthKey = date.slice(0, 7);
-  const paidOverride =
-    src.category === "bill" && (paidOverrides?.[monthKey]?.includes(src.id) ?? false);
   return {
     id: src.id + "@" + date,
     name: src.name,
@@ -111,7 +103,6 @@ function makeEvent(src: BudgetItem, date: ISODate, paidOverrides: Record<MonthKe
     category: src.category,
     color: src.color ?? null, // optional per-item palette-index override
     order: src.order,
-    paidOverride,
     date,
   };
 }

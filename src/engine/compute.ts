@@ -15,10 +15,7 @@ export function computeLedger(state: BudgetState, horizonISO: ISODate): Ledger {
   for (const c of state.trackerCategories || []) cum[c.id] = 0;
 
   const rows = events.map((e) => {
-    // a paid-override zeroes this event's effect on the balance, but it still
-    // shows in the ledger (struck through) so the row stays visible
-    const delta = e.paidOverride ? 0 : e.amount;
-    bal += e.direction === "in" ? delta : -delta;
+    bal += e.direction === "in" ? e.amount : -e.amount;
 
     // step the matching tracker column — the category IS the tracker
     let stepped = null;
@@ -73,9 +70,8 @@ export function groupByDay(rows: LedgerRow[]): Map<ISODate, DayGroup> {
       days.set(r.date, day);
     }
     day.rows.push(r);
-    const amount = r.paidOverride ? 0 : r.amount;
-    if (r.direction === "in") day.inflow = round(day.inflow + amount);
-    else day.outflow = round(day.outflow + amount);
+    if (r.direction === "in") day.inflow = round(day.inflow + r.amount);
+    else day.outflow = round(day.outflow + r.amount);
     day.net = round(day.inflow - day.outflow);
   }
   return days;
@@ -100,9 +96,7 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
       const key = e.date.slice(0, 7);
       if (!byMonth[key]) continue;
       const b = byMonth[key];
-      // a paid-override drops this instance's contribution (already handled this month)
-      const amount = e.paidOverride ? 0 : e.amount;
-      const signed = e.direction === "in" ? amount : -amount;
+      const signed = e.direction === "in" ? e.amount : -e.amount;
       b.items[e.name] = {
         val: (b.items[e.name]?.val || 0) + signed,
         category: e.category,
@@ -232,7 +226,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
 
   const totals = new Map<string, number>();
   for (const e of events) {
-    if (e.direction !== "out" || e.paidOverride) continue;
+    if (e.direction !== "out") continue;
     totals.set(e.category, round((totals.get(e.category) ?? 0) + e.amount));
   }
 
@@ -249,7 +243,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
   const itemsOf = (categoryId: string): [string, number][] => {
     const byItem = new Map<string, number>();
     for (const e of events) {
-      if (e.direction !== "out" || e.paidOverride || e.category !== categoryId) continue;
+      if (e.direction !== "out" || e.category !== categoryId) continue;
       byItem.set(e.name, round((byItem.get(e.name) ?? 0) + e.amount));
     }
     return [...byItem.entries()].sort((a, b) => b[1] - a[1]);

@@ -10,7 +10,6 @@ import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 const money = (n) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-const CURRENT_MONTH = todayISO().slice(0, 7);
 
 // List vs calendar is a display preference: per device, never synced.
 const CALENDAR_PREF = "ledger-calendar";
@@ -27,7 +26,7 @@ const colVars = (name) => ({ "--col-w": `max(6.5rem, calc(${(name || "").length}
 
 export default function LedgerView({
   state, setSettings, ledger, trackerCategories = [], isDark,
-  onEditItem, onDeleteItem, onDeleteMany, onTogglePaid, onOpenOnboarding, onOpenCategoryManager,
+  onEditItem, onDeleteItem, onDeleteMany, onOpenOnboarding, onOpenCategoryManager,
 }) {
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
   const visibleIds = new Set(state.settings.visibleTrackerCategoryIds || []);
@@ -231,7 +230,6 @@ export default function LedgerView({
                 onToggleSelected={toggleSelected}
                 onEdit={(id) => onEditItem(baseId(id))}
                 onDelete={(id) => onDeleteItem(baseId(id))}
-                onTogglePaid={(id, monthKey) => onTogglePaid(baseId(id), monthKey)}
               />
             ))}
           </tbody>
@@ -262,7 +260,7 @@ export default function LedgerView({
   );
 }
 
-function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, selectMode, selected, onToggleSelected, onEdit, onDelete, onTogglePaid }) {
+function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, selectMode, selected, onToggleSelected, onEdit, onDelete }) {
   return (
     <>
       <tr className="bg-gray-50 dark:bg-gray-850">
@@ -271,8 +269,6 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
         </td>
       </tr>
       {group.rows.map((r) => {
-        const isBill = r.category === "bill";
-        const canMarkPaid = isBill && r.date.slice(0, 7) === CURRENT_MONTH;
         const itemId = baseId(r.id);
         // an optional per-item color override (recurring items/bills too, not
         // just tracker categories) beats the default bill-purple/plain text
@@ -293,24 +289,9 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               </td>
             )}
             <td className="py-2 sm:py-1.5 pr-3 text-gray-500 whitespace-nowrap">
-              {/* Fixed-width slot on EVERY row (empty when not applicable) so
-                  the date text starts at the same x on paid-eligible and
-                  ordinary rows alike — the checkbox used to be rendered
-                  inline only on eligible rows, shifting those dates right. */}
-              <span className="inline-block w-5 mr-1 align-middle">
-                {canMarkPaid && (
-                  <input
-                    type="checkbox"
-                    checked={!!r.paidOverride}
-                    onChange={() => onTogglePaid(r.id, r.date.slice(0, 7))}
-                    title="Mark paid this month"
-                    className="align-middle h-4 w-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 checked:opacity-100 transition cursor-pointer"
-                  />
-                )}
-              </span>
               {dayOf(r.date)}
             </td>
-            <td className={`py-2 sm:py-1.5 pr-3 ${r.paidOverride ? "opacity-40" : ""}`}>
+            <td className="py-2 sm:py-1.5 pr-3">
               <button
                 onClick={() => onEdit(r.id)}
                 className="text-left hover:underline decoration-dotted underline-offset-2"
@@ -319,12 +300,11 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               >
                 {r.name}
               </button>
-              {r.paidOverride && <span className="ml-1.5 text-xs text-gray-400">· paid</span>}
             </td>
             <td className="py-2 sm:py-1.5 pr-3 text-right text-income">
               {r.direction === "in" ? money(r.amount) : ""}
             </td>
-            <td className={`py-2 sm:py-1.5 pr-3 text-right text-expense ${r.paidOverride ? "line-through opacity-40" : ""}`}>
+            <td className="py-2 sm:py-1.5 pr-3 text-right text-expense">
               {r.direction === "out" ? money(r.amount) : ""}
             </td>
             <td className={`py-2 sm:py-1.5 pr-3 text-right font-medium ${r.negative ? "text-expense" : ""}`}>

@@ -147,7 +147,6 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
       accounts: defaultAccounts(0, todayISO()),
       recurring: [], // rules that auto-generate events (each carries accountId)
       oneoffs: [],   // individual dated events (each carries accountId)
-      paidOverrides: {}, // { "YYYY-MM": [ruleId,...] } — bills marked paid (feature 9)
       trackerCategories: defaultTrackerCategories(),
       // Every confirmed balance update on an account also records a snapshot
       // here — same { id, date, amount } entries as balanceSnapshots below,

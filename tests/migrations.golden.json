@@ -46,7 +46,6 @@
     "accountId": "checking"
    }
   ],
-  "paidOverrides": {},
   "trackerCategories": [
    {
     "id": "roth",
@@ -127,7 +126,6 @@
    }
   ],
   "oneoffs": [],
-  "paidOverrides": {},
   "trackerCategories": [
    {
     "id": "roth",
@@ -208,7 +206,6 @@
    }
   ],
   "oneoffs": [],
-  "paidOverrides": {},
   "trackerCategories": [
    {
     "id": "roth",
@@ -289,7 +286,6 @@
    }
   ],
   "oneoffs": [],
-  "paidOverrides": {},
   "trackerCategories": [
    {
     "id": "c1",
@@ -373,7 +369,6 @@
     "accountId": "checking"
    }
   ],
-  "paidOverrides": {},
   "trackerCategories": [
    {
     "id": "roth",
@@ -455,7 +450,6 @@
    }
   ],
   "oneoffs": [],
-  "paidOverrides": {},
   "trackerCategories": [
    {
     "id": "loans",
@@ -538,7 +532,6 @@
    }
   ],
   "oneoffs": [],
-  "paidOverrides": {},
   "trackerCategories": [
    {
     "id": "loans",
@@ -615,7 +608,6 @@
   ],
   "recurring": [],
   "oneoffs": [],
-  "paidOverrides": {},
   "trackerCategories": [
    {
     "id": "3vvy452c",
@@ -691,11 +683,6 @@
    }
   ],
   "oneoffs": [],
-  "paidOverrides": {
-   "2026-09": [
-    "q"
-   ]
-  },
   "trackerCategories": [
    {
     "id": "k",
@@ -765,7 +752,6 @@
   ],
   "recurring": [],
   "oneoffs": [],
-  "paidOverrides": {},
   "trackerCategories": [
    {
     "id": "3vvy452c",

@@ -164,7 +164,7 @@ function Dots({ day, catColor, catName }) {
         <span
           key={r.id}
           title={`${catName(r.category)} · ${r.name} · ${money(r.amount)}`}
-          className={`h-1.5 w-1.5 rounded-full ${r.paidOverride ? "opacity-40" : ""} ${
+          className={`h-1.5 w-1.5 rounded-full ${
             i >= DOT_CAP.narrow ? "hidden sm:inline-block" : "inline-block"
           }`}
           style={{ backgroundColor: catColor(r.category) }}
@@ -207,9 +207,8 @@ function DayDetail({ day, catColor, catName, onEditItem, onClose }) {
                 <span className="truncate text-gray-700 dark:text-gray-300">{r.name}</span>
                 {/* The dot's meaning, in words — the relief the colour rule asks for. */}
                 <span className="text-xs text-gray-400 shrink-0">{catName(r.category)}</span>
-                {r.paidOverride && <span className="text-xs text-gray-400 shrink-0">· paid</span>}
               </span>
-              <span className={`shrink-0 tabular-nums ${r.direction === "in" ? "text-income" : "text-expense"} ${r.paidOverride ? "line-through opacity-40" : ""}`}>
+              <span className={`shrink-0 tabular-nums ${r.direction === "in" ? "text-income" : "text-expense"}`}>
                 {r.direction === "in" ? "+" : "−"}{money(r.amount)}
               </span>
             </button>

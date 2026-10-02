@@ -79,7 +79,7 @@ as one slice — "Fixed bills" is where anything uncategorized lands, so groupin
 by it tells you nothing — while the categories you made stay whole. Past
 eight slices the tail folds into "Other", which opens on click: in the legend
 for the pie (whose wedge never changes shape), in place for the bar. Optional cumulative columns per savings category,
-per-item colors, mark-a-bill-paid for the current month, multi-select delete,
+per-item colors, multi-select delete,
 and a horizon slider of its own, capped at a year — the Ledger is a near-term
 guide, and the Budget is the tab for a long projection.
 

@@ -179,17 +179,28 @@ export function normalize(parsed: any): BudgetState {
     return rest;
   };
 
+  // Migration 8 strips the retired field explicitly: `...parsed` below
+  // would otherwise carry `paidOverrides` forward in every saved blob
+  // forever, long after the last line that reads it is gone.
+  const carried = { ...parsed };
+  delete carried.paidOverrides;
+
   return {
     ...base,
-    ...parsed,
+    ...carried,
     settings,
     accounts,
     recurring: recurring.map(stamp).map(migrateLoanItem),
     oneoffs: oneoffs.map(stamp).map(migrateLoanItem),
-    paidOverrides: parsed.paidOverrides || {},
     trackerCategories: cats,
+    // Migration 8 (2026-10-02): the old `paidOverrides` field is DROPPED,
+    // not carried forward. Mark-a-bill-paid is gone — a paid bill is already
+    // inside the verified balance, and buildEvents drops everything before
+    // balanceAsOf, so the flag was a second mechanism doing a job the anchor
+    // already does. Nothing reads it any more, so it is simply not copied.
+    //
     // Brand-new fields, no legacy shape to fold in — an existing account
-    // simply never had any actuals logged yet, same as paidOverrides above.
+    // simply never had any actuals logged yet.
     balanceSnapshots: balanceSnapshotsOut,
     monthlyActuals: parsed.monthlyActuals || {},
     // Contributions logged by hand (or, later, imported). Absent on every
