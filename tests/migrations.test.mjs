@@ -14,6 +14,10 @@
 // Adding a migration means adding a fixture here in the same commit.
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { normalize } from "../src/engine/stateShape.ts";
+import {
+  splitState, assembleState, diffEntities, tombstoneAlarm,
+  anchorMatchesNewestSnapshot, ENTITY_SCHEMA_VERSION,
+} from "../src/engine/entities.ts";
 
 // Two sources of nondeterminism have to be pinned or the golden file rots on
 // its own, which would train everyone to regenerate it without reading it —
@@ -159,6 +163,89 @@ if (updating) {
   const extra = Object.keys(golden).filter((k) => !(k in FIXTURES));
   ok("no stale fixtures left in the golden file", extra.length === 0, extra.join(",") || "");
 }
+
+// ---- The entity split: the safety property for the storage migration -----
+// The document is moving to one row per entity. splitState/assembleState are
+// that change's whole testable surface, and this is the proof it is lossless:
+//
+//   assembleState(splitState(s)) deep-equals s
+//
+// Asserted over every golden fixture, so every migration path is covered by
+// construction. Before any live data is touched, the same property is run
+// over real exported blobs — fixtures prove the shapes we thought of.
+console.log("\n== entity split: round-trip identity ==");
+for (const [name, { state }] of Object.entries(FIXTURES)) {
+  reseed();
+  const normalized = normalize(structuredClone(state));
+  const entities = splitState(normalized);
+  const rebuilt = assembleState(entities);
+
+  // normalize() on the way back out is what the real load path does, and it
+  // is what makes the comparison meaningful: assembleState produces the RAW
+  // document shape, not the normalized one.
+  ok(`${name}: round-trips through entities unchanged`,
+    j(normalize(structuredClone(rebuilt))) === j(normalized));
+
+  ok(`${name}: every row carries the schema stamp`,
+    entities.every((e) => e.schemaVersion === ENTITY_SCHEMA_VERSION));
+  ok(`${name}: no two rows share a key`,
+    new Set(entities.map((e) => `${e.kind}:${e.id}`)).size === entities.length);
+
+  // The anchor is derived from the newest snapshot, so a state whose stored
+  // balance disagrees with it will NOT round-trip — by design. Checked here
+  // so a disagreement is found before a migration, not after.
+  ok(`${name}: stored anchor already agrees with its newest snapshot`,
+    anchorMatchesNewestSnapshot(normalized));
+
+  // Nothing is lost on the way down either: every collection's count is
+  // reproduced in the rows. A hash match alone cannot catch rows ADDED.
+  const count = (k) => entities.filter((e) => e.kind === k).length;
+  const sizes = (m) => Object.values(m || {}).reduce((n, v) => n + (Array.isArray(v) ? v.length : Object.keys(v).length), 0);
+  ok(`${name}: row counts match the document's own counts`,
+    count("recurring") === normalized.recurring.length &&
+    count("oneoff") === normalized.oneoffs.length &&
+    count("category") === normalized.trackerCategories.length &&
+    count("account") === normalized.accounts.length &&
+    count("accountSnapshot") === sizes(normalized.accountSnapshots) &&
+    count("snapshot") === sizes(normalized.balanceSnapshots) &&
+    count("contribution") === sizes(normalized.contributionLog) &&
+    count("actual") === sizes(normalized.monthlyActuals) &&
+    count("override") === sizes(normalized.overrides) &&
+    count("settings") === 1);
+}
+
+console.log("\n== entity split: diff and alarms ==");
+reseed();
+const diffBase = normalize(structuredClone(FIXTURES.alreadyModern.state));
+const baseRows = splitState(diffBase);
+
+ok("an unchanged state sends nothing",
+  j(diffEntities(baseRows, splitState(diffBase))) === j({ upserts: [], tombstones: [] }));
+
+// Editing one rule sends ONE row — the entire point of the change.
+const editedOne = splitState({ ...diffBase, recurring: diffBase.recurring.map((r) => ({ ...r, amount: r.amount + 1 })) });
+const d1 = diffEntities(baseRows, editedOne);
+ok("editing one item sends exactly that row", d1.upserts.length === 1 && d1.upserts[0].kind === "recurring", j(d1.tombstones));
+ok("...and tombstones nothing", d1.tombstones.length === 0);
+
+// A removal becomes a tombstone, never an absence.
+const removed = splitState({ ...diffBase, recurring: [] });
+const d2 = diffEntities(baseRows, removed);
+ok("a removed item becomes a tombstone", d2.tombstones.length === 1 && d2.tombstones[0].kind === "recurring");
+ok("...carrying the id so a stale device cannot outrank it", !!d2.tombstones[0].id);
+
+// An unrelated edit on each of two devices must not collide.
+const deviceA = splitState({ ...diffBase, settings: { ...diffBase.settings, theme: "light" } });
+const deviceB = splitState({ ...diffBase, trackerCategories: diffBase.trackerCategories.map((c) => ({ ...c, name: c.name + "!" })) });
+const keysOf = (dd) => dd.upserts.map((e) => `${e.kind}:${e.id}`);
+ok("two devices editing different things touch disjoint rows",
+  keysOf(diffEntities(baseRows, deviceA)).every((k) => !keysOf(diffEntities(baseRows, deviceB)).includes(k)));
+
+// The tombstone alarm replaces the old whole-document empty-state check.
+ok("wiping nearly everything trips the alarm",
+  tombstoneAlarm(baseRows, diffEntities(baseRows, splitState(normalize({})))) === true);
+ok("an ordinary single deletion does not", tombstoneAlarm(baseRows, d2) === false);
+ok("an empty history cannot trip it", tombstoneAlarm([], { upserts: [], tombstones: [] }) === false);
 
 console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
 process.exit(failures === 0 ? 0 : 1);

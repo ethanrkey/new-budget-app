@@ -757,21 +757,81 @@ fifth tab never needs a migration.
 
 ## 10. Roadmap
 
-**Gated decision — the storage model, decided BEFORE Expo work starts.**
-The single `state` jsonb document is a known ceiling, deliberately unaddressed:
-it is why this shipped fast and it is correct for one user on the web. Every
-roadmap item leans on it, though. Realtime means diffing whole documents;
-multi-account and credit cards grow the blob monotonically; Plaid imports are
-bulk appends to `contributionLog`; and mobile is the worst case — a phone on
-cell service re-uploading the entire document on every debounced save. The
-conflict guard is honest, but the unit of write is *everything*, so two devices
-editing different categories is a merge that could be won and currently cannot
-be. Options: (a) stay whole-document and add Supabase Realtime for push;
-(b) split the hot collections (transactions, snapshots, contributions) into
-real tables and keep settings as a blob; (c) a hybrid. Any of them stays cheap
-because `storage.js` is the only backend touchpoint. **This is decided before
-the mobile sync layer is built, not after** — building on whole-document writes
-and then splitting the schema means doing the work twice.
+**Gated decision — the storage model: DECIDED 2026-10-02.** Moving from one
+`state` jsonb document per user to one row per entity, before the Expo client
+rather than after, because building the mobile sync layer on whole-document
+writes and then splitting means doing it twice. The ceiling the document
+model hit: any two concurrent edits conflict even when unrelated, and a phone
+on cell service re-uploads the entire financial history on every debounced
+save. Architecture around it is settled — server-authoritative, encrypted at
+rest with the operator holding keys (explicitly NOT end-to-end: recoverability
+beats secrecy for financial records, and clearing a browser must not lose
+everything), account required, and **offline is READ-ONLY** — cached state for
+viewing, writes gated on connectivity. That last one is load-bearing: there is
+no write queue, no replay, and therefore no merge algorithm to design.
+
+*Landed so far:* `engine/entities.ts` — `splitState`, `assembleState`,
+`diffEntities`, pure, with the round-trip identity
+`assembleState(splitState(s)) == s` asserted over every golden fixture. No
+database, no client changes yet.
+
+Entities: each recurring item; each one-off; each tracker category; each
+balance snapshot; each contribution; each monthly actual (item+month); each
+per-occurrence override (rule+date); each account; and settings as ONE blob,
+since preferences are not money and last-write-wins is fine for them.
+
+- **One table, not nine.** `budget_entities(user_id, kind, entity_id, data
+  jsonb, version, schema_version, deleted_at, updated_at)`. RLS is the entire
+  security model, policies are OR'd, and the failure mode is a full breach —
+  nine policy sets is nine chances for a future `using (true)`. The cost is
+  no foreign keys, so referential integrity stays the engine's job; it
+  already is, because orphaned ids are a supported state by design.
+- **Snapshots are keyed BY DATE**, not by their own uid. "As of the 28th the
+  account held X" is a statement about a date, so two rows for one date are a
+  contradiction; the primary key then enforces what `upsertSnapshotByDate`
+  enforces in memory, and two devices logging one date collide on one row
+  instead of both surviving. Contributions deliberately keep uid keys: two
+  deposits in a day are two real events.
+- **The verified balance is DERIVED from the newest snapshot**, not stored
+  alongside it. That deletes a conflict class rather than solving one: "the
+  later as-of date wins" becomes `max(date)` over append-only rows, with no
+  rule to enforce. One intended behaviour change — correcting the NEWEST
+  snapshot now moves the anchor, where correcting September still leaves
+  October alone.
+- **Deletes are tombstones**, never absences, so a delete outranks a stale
+  device's copy. No client DELETE policy: purging runs server-side only.
+  Retention is 90 days for forensics, but **read-only offline is what sets
+  the real floor** — with no write queue there is nothing for a long-dark
+  device to replay, so the window only has to outlive online devices
+  refetching, which is seconds. Do not design for long-offline replay.
+- **Per-entity version counter**, not a timestamp: a counter has no clock in
+  it, which suits a codebase that already refuses to trust device clocks.
+  Same-entity conflicts adopt remote and stash local, extending the existing
+  guard rather than inventing a second one.
+- **`schema_version` is stamped per row** and a client reading a higher
+  number than it understands must refuse to sync and go read-only rather
+  than write back a mangled row — App Store builds lag, the web app never
+  does. **This path is UNPROVEN:** the stamp is in place because retrofitting
+  it would be a second migration, but there is no lagging build to test the
+  refusal against, and it must not be read as verified.
+- **The diff baseline is `normalize(assemble(rows))`, never the raw rows.**
+  `normalize()` seeds a snapshot for an account with none and mints default
+  categories for a new account, so diffing against raw rows would make every
+  load write phantom rows.
+- **The empty-state alarm is rewritten, not ported.** There is no document to
+  be empty; the equivalent danger is one sync tombstoning most of a user's
+  rows, so `tombstoneAlarm` measures that as a ratio plus a floor.
+- `storage.js` stays the single backend touchpoint, and this strengthens the
+  property rather than straining it: split/assemble/diff are pure engine
+  functions, so `storage.js` keeps doing transport only. Export, import and
+  the recovery envelope are unchanged, because `assembleState` produces
+  exactly the document shape they already speak.
+- Rollout is expand–migrate–contract with jsonb authoritative until the last
+  phase, so rollback is a client flag until the frozen column is the only
+  copy. An **out-of-date tab must be told to reload** — a save failure is
+  currently `console.error` only, which is silent, and that lands before the
+  dual-write phase, not before cutover.
+
 
 Later:
 - iOS client: Expo / React Native, reusing `src/engine` verbatim rather than
