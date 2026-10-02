@@ -3,13 +3,23 @@
 // migration logic is unchanged from the localStorage era; only the transport
 // changed, per the architecture principle in PROJECT_SPEC.md.
 //
-// Writes are CONDITIONAL on the version (`updated_at`) we loaded. A device
-// holding a stale copy — a phone that's been open since before you changed
-// something on a laptop — matches zero rows and is told so, instead of
-// overwriting newer data with its whole stale document. See engine/syncGuard.ts.
+// Storage is ONE ROW PER ENTITY (`budget_entities`), not one document per
+// user. A save sends only the entities that actually changed, so two devices
+// editing different things no longer conflict at all — which is the point.
+//
+// Writes stay CONDITIONAL, now per entity: each update carries the `version`
+// counter we loaded for that row and matches zero rows if somebody else got
+// there first. A counter rather than a timestamp, because a counter has no
+// clock in it and this codebase does not trust device clocks.
+//
+// The shape/merge/migration logic is still unchanged from the localStorage
+// era: splitState/assembleState are pure engine functions, so this file
+// remains transport only. If diffing ever drifts in here, the split went
+// wrong.
 import { supabase } from "./supabase.js";
 import { normalize } from "./engine/stateShape.ts";
 import { makeRecoveryEnvelope, isRecoveryEnvelope } from "./engine/syncGuard.ts";
+import { splitState, assembleState, diffEntities, tombstoneAlarm } from "./engine/entities.ts";
 
 const LOCAL_KEY = "budget-app-state-v1";        // legacy localStorage key, for one-time import
 const RECOVERY_KEY = "budget-app-recovery-v1";  // last in-memory copy we had to discard
@@ -21,11 +31,23 @@ const SAVE_DEBOUNCE_MS = 500;
 // second would false-positive as a conflict while the first write was still
 // in flight. Writes are also serialized below for the same reason.
 let currentUserId = null;
+// The cheap "did anything change while I was away?" token: the newest
+// updated_at across this user's rows. Compared as an opaque string, never
+// ordered — same rule as before.
 let currentVersion = null;
+// Per-entity: "kind:id" -> version counter, for the conditional writes.
+let versions = new Map();
+// The baseline a save diffs against. ALWAYS normalize(assemble(rows)), never
+// the raw rows: normalize() seeds a snapshot for an account that has none and
+// mints default categories for a new account, so diffing against raw rows
+// would make every load write phantom rows it never had.
+let baseline = [];
 
 export function getVersion() {
   return currentVersion;
 }
+
+const keyOf = (e) => `${e.kind}:${e.id}`;
 
 function readLocalBackup() {
   try {
@@ -34,10 +56,6 @@ function readLocalBackup() {
   } catch {
     return {};
   }
-}
-
-function isEmptyState(state) {
-  return (state?.recurring?.length ?? 0) === 0 && (state?.oneoffs?.length ?? 0) === 0;
 }
 
 // ---- The recovery copy ----
@@ -77,63 +95,84 @@ export function clearRecoveryCopy() {
 // reason is "conflict" (the row moved on under us — do NOT retry blindly) or
 // "error". Never upserts: an upsert can't express "only if unchanged".
 async function writeState(userId, state) {
-  const version = userId === currentUserId ? currentVersion : null;
-  // Defense in depth: if this write would erase previously-saved data, that's
-  // suspicious enough to log loudly even though we don't block it outright —
-  // a deliberate full clear-out (delete every item one by one) is a legitimate
-  // state too, and silently refusing to persist it would be its own data-loss
-  // bug. The real protections are elsewhere: loadState() can no longer
-  // manufacture a fake empty state, and the version check below stops a stale
-  // device writing at all.
-  if (isEmptyState(state)) {
-    const { data: existing } = await supabase
-      .from("budget_states").select("state").eq("user_id", userId).maybeSingle();
-    if (existing?.state && !isEmptyState(existing.state)) {
-      console.error(
-        "⚠️ Saving an EMPTY state over a cloud row that currently has data. " +
-        "This is allowed (e.g. you deleted everything on purpose) but is logged " +
-        "here in case it's not what you intended."
-      );
-    }
+  if (userId !== currentUserId) {
+    // Never write one account's rows against another's bookkeeping.
+    return { ok: false, reason: "error" };
   }
 
-  const nextVersion = new Date().toISOString();
-
-  // No version means we loaded a user with no row at all: this is the first
-  // write. A unique-violation here means a row appeared since — treat that as
-  // a conflict rather than forcing our copy over it.
-  if (!version) {
-    const { data, error } = await supabase
-      .from("budget_states")
-      .insert({ user_id: userId, state, updated_at: nextVersion })
-      .select("updated_at")
-      .maybeSingle();
-    if (error) {
-      if (error.code === "23505") return { ok: false, reason: "conflict" };
-      console.error("saveState failed", error);
-      return { ok: false, reason: "error", error };
-    }
-    currentUserId = userId;
-    currentVersion = data?.updated_at ?? nextVersion;
+  const next = splitState(state);
+  const diff = diffEntities(baseline, next);
+  if (diff.upserts.length === 0 && diff.tombstones.length === 0) {
     return { ok: true, version: currentVersion };
   }
 
-  const { data, error } = await supabase
-    .from("budget_states")
-    .update({ state, updated_at: nextVersion })
-    .eq("user_id", userId)
-    .eq("updated_at", version) // <- the guard: only if nobody else has written
-    .select("updated_at")
-    .maybeSingle();
-
-  if (error) {
-    console.error("saveState failed", error);
-    return { ok: false, reason: "error", error };
+  // The entity-level replacement for the old whole-document "saving an empty
+  // state over a non-empty one" alarm. That check could not be ported —
+  // there is no document to be empty — and it stands where a real data-loss
+  // incident already happened, so its equivalent has to stand somewhere.
+  // Logged, not blocked: wiping your own account is a legitimate thing to do.
+  if (tombstoneAlarm(baseline, diff)) {
+    console.error(
+      `⚠️ This save removes ${diff.tombstones.length} of ${baseline.length} stored rows. ` +
+      "Allowed (a deliberate wipe looks exactly like this) but logged in case it isn't what you meant."
+    );
   }
-  // Zero rows matched: the row still exists (RLS would have errored otherwise),
-  // so its updated_at moved — another device wrote while we held this copy.
-  if (!data) return { ok: false, reason: "conflict" };
-  currentVersion = data.updated_at;
+
+  // Upserts BEFORE tombstones, and abort on the first refusal. These are
+  // separate statements, not one transaction, so a conflict part-way leaves
+  // the rows that already landed in place; ordering it this way means a
+  // conflict stops us before anything is removed. The caller's response to a
+  // conflict is to adopt the server's copy after stashing a recovery copy,
+  // so nothing is lost — but a single RPC doing this in one transaction is
+  // the honest fix and is on the roadmap.
+  for (const e of diff.upserts) {
+    const known = versions.get(keyOf(e));
+    const row = {
+      user_id: userId, kind: e.kind, entity_id: e.id,
+      data: e.data, schema_version: e.schemaVersion,
+    };
+
+    if (known === undefined) {
+      const { data, error } = await supabase
+        .from("budget_entities").insert(row).select("version,updated_at").maybeSingle();
+      if (error) {
+        // A row appeared since we loaded: treat as a conflict, never force.
+        if (error.code === "23505") return { ok: false, reason: "conflict" };
+        console.error("saveState insert failed", error);
+        return { ok: false, reason: "error", error };
+      }
+      versions.set(keyOf(e), data.version);
+      currentVersion = data.updated_at;
+      continue;
+    }
+
+    const { data, error } = await supabase
+      .from("budget_entities")
+      .update({ data: e.data, schema_version: e.schemaVersion, deleted_at: null })
+      .eq("user_id", userId).eq("kind", e.kind).eq("entity_id", e.id)
+      .eq("version", known) // <- the guard
+      .select("version,updated_at").maybeSingle();
+    if (error) { console.error("saveState update failed", error); return { ok: false, reason: "error", error }; }
+    if (!data) return { ok: false, reason: "conflict" }; // zero rows: it moved under us
+    versions.set(keyOf(e), data.version);
+    currentVersion = data.updated_at;
+  }
+
+  for (const ref of diff.tombstones) {
+    const known = versions.get(`${ref.kind}:${ref.id}`);
+    const q = supabase
+      .from("budget_entities")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("user_id", userId).eq("kind", ref.kind).eq("entity_id", ref.id);
+    const { data, error } = await (known === undefined ? q : q.eq("version", known))
+      .select("version,updated_at").maybeSingle();
+    if (error) { console.error("saveState tombstone failed", error); return { ok: false, reason: "error", error }; }
+    if (!data) return { ok: false, reason: "conflict" };
+    versions.delete(`${ref.kind}:${ref.id}`);
+    currentVersion = data.updated_at;
+  }
+
+  baseline = next;
   return { ok: true, version: currentVersion };
 }
 
@@ -152,26 +191,38 @@ async function writeState(userId, state) {
 // autosave until a load actually succeeds.
 export async function loadState(userId) {
   const { data, error } = await supabase
-    .from("budget_states")
-    .select("state, updated_at")
+    .from("budget_entities")
+    .select("kind,entity_id,data,version,schema_version,updated_at")
     .eq("user_id", userId)
-    .maybeSingle();
+    .is("deleted_at", null);
 
   if (error) {
     throw new Error(`Failed to load your data from Supabase: ${error.message}`);
   }
 
-  if (data?.state) {
-    currentUserId = userId;
-    currentVersion = data.updated_at;
-    return { state: normalize(data.state), version: currentVersion };
+  currentUserId = userId;
+  versions = new Map();
+  currentVersion = null;
+  for (const r of data) {
+    versions.set(`${r.kind}:${r.entity_id}`, r.version);
+    if (!currentVersion || r.updated_at > currentVersion) currentVersion = r.updated_at;
   }
 
-  // Confirmed (not inferred from an error) — no row exists yet for this user.
-  // Safe to treat as a brand-new account and import any local backup.
+  if (data.length > 0) {
+    const state = normalize(assembleState(
+      data.map((r) => ({ kind: r.kind, id: r.entity_id, data: r.data, schemaVersion: r.schema_version }))
+    ));
+    // The baseline is the ASSEMBLED-AND-NORMALIZED state, not these rows —
+    // see the note on `baseline` above. Getting this wrong makes every load
+    // write phantom rows.
+    baseline = splitState(state);
+    return { state, version: currentVersion };
+  }
+
+  // Confirmed (not inferred from an error) — this user has no rows at all.
+  // A brand-new account: seed it and write the seed, exactly as before.
   const imported = normalize(readLocalBackup());
-  currentUserId = userId;
-  currentVersion = null; // no row yet -> the first write is an insert
+  baseline = [];
   const result = await writeState(userId, imported);
   try { localStorage.removeItem(LOCAL_KEY); } catch { /* ignore */ }
   return { state: imported, version: result.ok ? result.version : null };
@@ -181,10 +232,15 @@ export async function loadState(userId) {
 // check when the app regains focus. Returns null if it can't tell — callers
 // treat that as "no news", never as "changed".
 export async function fetchVersion(userId) {
+  // The newest row wins: one cheap query, still an opaque token, and any
+  // write to any entity moves it. Tombstones count — a delete elsewhere is
+  // exactly the kind of change this is here to notice.
   const { data, error } = await supabase
-    .from("budget_states")
+    .from("budget_entities")
     .select("updated_at")
     .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) {
     console.error("version check failed", error);
@@ -231,4 +287,6 @@ export function hasPendingSave() {
 export function resetSyncState() {
   currentUserId = null;
   currentVersion = null;
+  versions = new Map();
+  baseline = [];
 }

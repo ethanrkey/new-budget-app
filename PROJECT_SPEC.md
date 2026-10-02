@@ -814,46 +814,38 @@ rather than after, because building the mobile sync layer on whole-document
 writes and then splitting means doing it twice. The ceiling the document
 model hit: any two concurrent edits conflict even when unrelated, and a phone
 on cell service re-uploads the entire financial history on every debounced
-save. Architecture around it is settled — server-authoritative, encrypted at
-rest with the operator holding keys (explicitly NOT end-to-end: recoverability
-beats secrecy for financial records, and clearing a browser must not lose
-everything), account required, and **offline is READ-ONLY** — cached state for
-viewing, writes gated on connectivity. That last one is load-bearing: there is
+save. Architecture around it is settled — server-authoritative, account required,
+and **offline is READ-ONLY** (cached state for viewing, writes gated on
+connectivity).
+
+**Encryption at rest: DECIDED, not pending** (2026-10-01, reaffirmed
+2026-10-02). Supabase's disk-level encryption and nothing more — no
+column-level keys, not end-to-end. Column-level with user-held keys means a
+recovery phrase, and a user who clears their browser must not lose
+everything: recoverability was chosen over secrecy deliberately, for
+financial records. So `budget_entities.data` is plaintext jsonb exactly as
+`budget_states.state` was, and the table design does not change. That last one is load-bearing: there is
 no write queue, no replay, and therefore no merge algorithm to design.
 
-*Landed so far:* `engine/entities.ts` — `splitState`, `assembleState`,
+*Landed:* `engine/entities.ts` — `splitState`, `assembleState`,
 `diffEntities`, pure, with the round-trip identity
-`assembleState(splitState(s)) == s` asserted over every golden fixture. No
-database, no client changes yet. Plus the gate in front of phase 0:
-`scripts/export_blobs.mjs` (service_role, writes to gitignored `.blobs/`,
-prints only hashes and counts) and `tests/real-blobs.test.mjs`, which runs
-the same property over real blobs and additionally checks duplicate snapshot
-dates, the stored anchor, and ledger/budget output equality. Not in
-`npm test` — it skips without `.blobs/`, which only exists on a machine that
-deliberately exported it. **No live data moves until every real blob
-round-trips.**
+`assembleState(splitState(s)) == s` over every golden fixture, the
+convergence property (a store fed only diffs still equals the document after
+200 random edits), `scripts/export_blobs.mjs`, `scripts/probe_shapes.mjs`
+and `tests/real-blobs.test.mjs`. 17/17 on real data; migration 10 came out
+of that run.
 
-*First real-blob run, 2026-10-02* (the author's own row, 9,867 bytes, 105
-entity rows): 17 of 17 checks pass — but only after it found a real defect
-the fixtures could not. One `monthlyActuals` owner held `{}`, which split
-emits no row for and assemble cannot restore, so the identity failed on
-data no fixture contained. Fixed as migration 10 rather than by weakening
-the property. Both projections had already matched, which is what
-confirmed the empty container was semantically dead rather than meaningful.
-This is the case for running the property over real data and not only over
-fixtures.
-
-*Shape census of all four rows, 2026-10-02* (`scripts/probe_shapes.mjs`,
-in memory, nothing persisted). Three round-trip clean, including one blob
-written pre-migrations 3/5/6 and never re-saved since — the one era no
-fixture could imitate, and it passes. The fourth fails on
-`accounts[0].balance` alone, with `balanceAsOf` agreeing: that account's
-most recent snapshot was edited, which deliberately does NOT move the
-anchor today, so the stored balance and the newest reading disagree about
-the same date. Deriving the anchor resolves it to the edited reading.
-**That is decision ③ working, not a defect — but it changes a visible
-number for that user at migration time, so they should be told.** No
-export was needed to learn any of this.
+*The one pass, in order — and the order is not cosmetic:*
+1. `supabase/entities.sql` — table, RLS, policies, version trigger.
+2. `scripts/backfill_entities.mjs --write` — reuses `splitState` rather than
+   re-implementing it as a jsonb unnesting query, which would be a second
+   untested implementation the round-trip property would never exercise.
+3. `scripts/verify_entities.mjs` — **before any write switches over.** Reads
+   both tables independently and compares documents, per-collection counts,
+   unknown kinds, and every projected number. Switch writes first and the
+   baseline it would compare against has already moved.
+4. `supabase/freeze_budget_states.sql` — the trigger that makes an old tab
+   fail loudly instead of forking the data.
 
 Entities: each recurring item; each one-off; each tracker category; each
 balance snapshot; each contribution; each monthly actual (item+month); each
