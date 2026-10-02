@@ -10,6 +10,7 @@ import { getDeviceTheme, setDeviceTheme } from "./theme.js";
 import { computeLedger, computeBudget } from "./engine/compute.ts";
 import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList,
+  setOverride, clearOverride, orphanedOverrideDates,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
   updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
@@ -42,6 +43,7 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // raw rule/one-off being edited
+  const [editingDate, setEditingDate] = useState(null); // which occurrence, when opened from a Ledger row
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -66,7 +68,7 @@ export default function App() {
   const [dragOverTab, setDragOverTab] = useState(null);
 
   const formOpen = adding || editing != null;
-  const closeForm = () => { setAdding(false); setEditing(null); setAddPresetCategory(null); };
+  const closeForm = () => { setAdding(false); setEditing(null); setEditingDate(null); setAddPresetCategory(null); };
 
   // `presetCategory` pre-selects a category in the Add form (used by the
   // Dashboard's "+ Add a loan" shortcut on an unconfigured Debt category) —
@@ -74,6 +76,7 @@ export default function App() {
   function openAddModal(presetCategory = null) {
     setQuickEntryOpen(false);
     setEditing(null);
+    setEditingDate(null);
     setAddPresetCategory(presetCategory);
     setAdding(true);
   }
@@ -110,15 +113,29 @@ export default function App() {
     setState((s) => ({ ...s, recurring: [], oneoffs: [], monthlyActuals: {} }));
   }
 
-  // open the edit form for a ledger row id ("<itemId>@<date>") or bare item id
+  // Open the edit form for a ledger row id ("<itemId>@<date>") or a bare
+  // item id. The DATE half is kept: it is what lets the form offer "this
+  // date" as a scope. A bare id (the Budget's row names) has no occurrence,
+  // so that form edits the rule, which is the only thing it could mean.
   function editById(id) {
-    const it = findItem(state, id.split("@")[0]);
-    if (it) setEditing(it);
+    const [itemId, date] = id.split("@");
+    const it = findItem(state, itemId);
+    if (it) { setEditing(it); setEditingDate(date ?? null); }
   }
   // open the edit form from a Budget row name — only when it maps to exactly one item
   function editByName(name) {
     const matches = itemsByName(state, name);
-    if (matches.length === 1) setEditing(matches[0]);
+    if (matches.length === 1) { setEditing(matches[0]); setEditingDate(null); }
+  }
+
+  // ---- Per-occurrence overrides ----
+  function saveOverride(ruleId, date, amount) {
+    setState((s) => setOverride(s, ruleId, date, amount));
+    closeForm();
+  }
+  function removeOverride(ruleId, date) {
+    setState((s) => clearOverride(s, ruleId, date));
+    closeForm();
   }
   function reorderNames(nameA, nameB) {
     setState((s) => swapOrder(s, nameA, nameB));
@@ -593,6 +610,11 @@ export default function App() {
           presetCategory={addPresetCategory}
           trackerCategories={state.trackerCategories}
           isDark={isDark}
+          occurrenceDate={editingDate}
+          overrideAmount={editing && editingDate ? state.overrides?.[editing.id]?.[editingDate] ?? null : null}
+          onSaveOverride={saveOverride}
+          onClearOverride={removeOverride}
+          onCheckOrphans={(next) => orphanedOverrideDates(state, next, ledgerHorizonOf(state))}
           onSave={saveItem}
           onCancel={closeForm}
           onDelete={editing ? () => removeItem(editing.id) : undefined}

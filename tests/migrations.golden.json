@@ -87,7 +87,8 @@
   },
   "contributionLog": {},
   "balanceSnapshots": {},
-  "monthlyActuals": {}
+  "monthlyActuals": {},
+  "overrides": {}
  },
  "onboardingBackfill": {
   "settings": {
@@ -167,7 +168,8 @@
   },
   "contributionLog": {},
   "balanceSnapshots": {},
-  "monthlyActuals": {}
+  "monthlyActuals": {},
+  "overrides": {}
  },
  "legacyFourCategories": {
   "settings": {
@@ -247,7 +249,8 @@
   },
   "contributionLog": {},
   "balanceSnapshots": {},
-  "monthlyActuals": {}
+  "monthlyActuals": {},
+  "overrides": {}
  },
  "kindInference": {
   "settings": {
@@ -320,7 +323,8 @@
   },
   "contributionLog": {},
   "balanceSnapshots": {},
-  "monthlyActuals": {}
+  "monthlyActuals": {},
+  "overrides": {}
  },
  "accountsMigration": {
   "settings": {
@@ -410,7 +414,8 @@
   },
   "contributionLog": {},
   "balanceSnapshots": {},
-  "monthlyActuals": {}
+  "monthlyActuals": {},
+  "overrides": {}
  },
  "loanItemMigration": {
   "settings": {
@@ -481,7 +486,8 @@
     }
    ]
   },
-  "monthlyActuals": {}
+  "monthlyActuals": {},
+  "overrides": {}
  },
  "twoLoansOneCategory": {
   "settings": {
@@ -580,7 +586,8 @@
     }
    ]
   },
-  "monthlyActuals": {}
+  "monthlyActuals": {},
+  "overrides": {}
  },
  "tabOrderRepair": {
   "settings": {
@@ -642,7 +649,8 @@
   },
   "contributionLog": {},
   "balanceSnapshots": {},
-  "monthlyActuals": {}
+  "monthlyActuals": {},
+  "overrides": {}
  },
  "alreadyModern": {
   "settings": {
@@ -724,6 +732,11 @@
    "q": {
     "2026-09": 8
    }
+  },
+  "overrides": {
+   "q": {
+    "2026-09-09": 14
+   }
   }
  },
  "empty": {
@@ -786,6 +799,7 @@
   },
   "contributionLog": {},
   "balanceSnapshots": {},
-  "monthlyActuals": {}
+  "monthlyActuals": {},
+  "overrides": {}
  }
 }

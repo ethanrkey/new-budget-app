@@ -205,6 +205,7 @@ function DayDetail({ day, catColor, catName, onEditItem, onClose }) {
               <span className="flex items-baseline gap-2 min-w-0">
                 <span className="h-2 w-2 rounded-full shrink-0 self-center" style={{ backgroundColor: catColor(r.category) }} />
                 <span className="truncate text-gray-700 dark:text-gray-300">{r.name}</span>
+                {r.overridden && <span className="text-xs text-gray-400 shrink-0">· edited</span>}
                 {/* The dot's meaning, in words — the relief the colour rule asks for. */}
                 <span className="text-xs text-gray-400 shrink-0">{catName(r.category)}</span>
               </span>

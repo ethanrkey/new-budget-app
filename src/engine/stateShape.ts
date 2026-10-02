@@ -203,6 +203,11 @@ export function normalize(parsed: any): BudgetState {
     // simply never had any actuals logged yet.
     balanceSnapshots: balanceSnapshotsOut,
     monthlyActuals: parsed.monthlyActuals || {},
+    // Migration 9 (2026-10-02): per-occurrence overrides. A brand-new field,
+    // so absent → {}. Nothing is backfilled: an override is a deliberate
+    // statement about one date and there is nothing in a prior state that
+    // could imply one.
+    overrides: parsed.overrides || {},
     // Contributions logged by hand (or, later, imported). Absent on every
     // account that predates the feature — an empty log is the correct and
     // honest starting point, since we can't know what was contributed before

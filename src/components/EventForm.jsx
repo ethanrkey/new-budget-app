@@ -3,7 +3,17 @@ import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
 import ColorSwatches from "./ColorSwatches.jsx";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
-export default function EventForm({ onSave, onCancel, onDelete, initial, trackerCategories = [], isDark, presetCategory }) {
+const money = (n) =>
+  (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
+const prettyDate = (iso) =>
+  new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+export default function EventForm({
+  onSave, onCancel, onDelete, initial, trackerCategories = [], isDark, presetCategory,
+  // Per-occurrence editing. `occurrenceDate` is the ledger row that was
+  // clicked; the rest are only meaningful alongside it.
+  occurrenceDate = null, overrideAmount = null, onSaveOverride, onClearOverride, onCheckOrphans,
+}) {
   // presetCategory (e.g. from the Dashboard's "+ Add a loan" shortcut on an
   // unconfigured Debt category) pre-selects that category and nudges the
   // form straight to Recurring — a loan payment has to be, so there's no
@@ -19,6 +29,25 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
   const [endDate, setEndDate] = useState(initial?.endDate ?? "");
   const [variable, setVariable] = useState(initial?.variable ?? false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // ---- Scope: this date, or the whole rule ----
+  // Offered only when a specific occurrence of a RECURRING rule was clicked;
+  // a one-off is already a single occurrence and has nothing to choose.
+  const canScope = !!occurrenceDate && !!initial?.cadence;
+  // Default to the single occurrence, because the two mistakes are not
+  // symmetric. Defaulting to the rule means someone fixing one month
+  // silently rewrites every month, including ones already reconciled —
+  // quiet, and hard to spot. Defaulting to the occurrence means someone
+  // meaning the rule fixes one month and notices next month. The
+  // RECOVERABLE error is the one that should happen by accident.
+  const [scope, setScope] = useState("occurrence");
+  const occScope = canScope && scope === "occurrence";
+  const [occAmount, setOccAmount] = useState(
+    overrideAmount != null ? String(overrideAmount) : String(initial?.amount ?? "")
+  );
+  // Orphan warning: moving a rule's day leaves date-keyed overrides behind.
+  // Never silent — the user is told how many before it happens.
+  const [pendingOrphans, setPendingOrphans] = useState(null);
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
   const selectedCat = sortedCats.find((c) => c.id === category);
   // The item's category was deleted. A <select> whose value matches no option
@@ -41,7 +70,10 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
   // `id: initial?.id ?? uid()` means a double-fire on a NEW item mints a
   // second id and saves a duplicate transaction, not an overwrite.
   const [submit, submitted] = useSubmitOnce(() => {
-    if (!name || amount === "" || isNaN(Number(amount))) return;
+    if (occScope) {
+      onSaveOverride(initial.id, occurrenceDate, Math.abs(Number(occAmount)));
+      return;
+    }
     const base = {
       id: initial?.id ?? uid(),
       name: name.trim(),
@@ -64,6 +96,23 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
     }
   });
 
+  // Validity and the orphan check sit OUTSIDE the guard: useSubmitOnce burns
+  // its one shot the moment it is called, so a warning raised inside it
+  // would leave "Save anyway" dead.
+  const validOcc = occAmount !== "" && !isNaN(Number(occAmount));
+  const valid = occScope ? validOcc : !!name && amount !== "" && !isNaN(Number(amount));
+  function trySave() {
+    if (!valid) return;
+    if (!occScope && mode === "recurring" && initial?.cadence && onCheckOrphans && pendingOrphans === null) {
+      const lost = onCheckOrphans({
+        ...initial, cadence, startDate, endDate: endDate || null,
+        dayOfMonth: new Date(startDate + "T00:00:00").getDate(),
+      });
+      if (lost.length > 0) { setPendingOrphans(lost); return; }
+    }
+    submit();
+  }
+
   const field = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
   const label = "block text-xs font-medium text-gray-500 mb-1";
 
@@ -75,6 +124,70 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
       >
         <h2 className="text-lg font-semibold mb-4">{initial ? "Edit" : "Add"} transaction</h2>
 
+        {canScope && (
+          <div className="mb-4">
+            {/* Two 44px targets side by side: it fits at 320px because the
+                date is on its own line rather than inside a button label. */}
+            <div className="flex gap-2" role="group" aria-label="What to change">
+              {[["occurrence", "This date"], ["rule", "Every time"]].map(([val, text]) => (
+                <button
+                  key={val}
+                  onClick={() => { setScope(val); setPendingOrphans(null); }}
+                  aria-pressed={scope === val}
+                  className={`flex-1 min-h-[44px] py-2 rounded-lg text-sm font-medium transition ${
+                    scope === val
+                      ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                      : "border border-gray-300 dark:border-gray-700"
+                  }`}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">
+              {occScope
+                ? <>Changing {initial.name} on {prettyDate(occurrenceDate)} only. Every other date keeps the rule&apos;s amount.</>
+                : <>Changing the rule for {initial.name} — every date, past and future. Dates you&apos;ve already given their own amount keep it.</>}
+            </p>
+          </div>
+        )}
+
+        {occScope ? (
+          <div className="space-y-3">
+            <div>
+              <label className={label}>Amount on {prettyDate(occurrenceDate)}</label>
+              <input
+                className={field}
+                type="number"
+                step="0.01"
+                autoFocus
+                value={occAmount}
+                onChange={(e) => setOccAmount(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") trySave(); }}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                The rule says {money(initial.amount)}.
+                {overrideAmount != null && " This date is already overridden."}
+              </p>
+            </div>
+            {/* Everything else belongs to the rule, so it is not shown here
+                rather than shown disabled — a greyed field you can never
+                use on this screen is just clutter. */}
+            <p className="text-xs text-gray-500">
+              Name, category, cadence and dates belong to the rule. Switch to
+              <strong className="font-medium"> Every time</strong> to change those.
+            </p>
+            {overrideAmount != null && (
+              <button
+                onClick={() => onClearOverride(initial.id, occurrenceDate)}
+                className="text-sm text-gray-500 underline decoration-dotted underline-offset-2"
+              >
+                Remove this date&apos;s override
+              </button>
+            )}
+          </div>
+        ) : (
+        <>
         {/* mode toggle */}
         <div className="flex gap-2 mb-4">
           {["oneoff", "recurring"].map((m) => (
@@ -178,12 +291,38 @@ export default function EventForm({ onSave, onCancel, onDelete, initial, tracker
           )}
         </div>
 
+        </>
+        )}
+
+        {pendingOrphans && (
+          <div className="mt-4 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-3 text-sm">
+            <p className="font-medium text-amber-900 dark:text-amber-200">
+              This drops {pendingOrphans.length} date{pendingOrphans.length === 1 ? "" : "s"} you gave its own amount.
+            </p>
+            <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+              An override belongs to a date. Moving the rule means it no longer lands on{" "}
+              {pendingOrphans.slice(0, 3).map(prettyDate).join(", ")}
+              {pendingOrphans.length > 3 && ` and ${pendingOrphans.length - 3} more`}, so{" "}
+              {pendingOrphans.length === 1 ? "that date reverts" : "those dates revert"} to the rule&apos;s amount.
+            </p>
+          </div>
+        )}
+
         <div className="flex gap-3 mt-6">
           <button onClick={onCancel} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">Cancel</button>
-          <button onClick={submit} disabled={submitted} className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40">Save</button>
+          <button
+            onClick={trySave}
+            disabled={!valid || submitted}
+            className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40"
+          >
+            {pendingOrphans ? "Save anyway" : "Save"}
+          </button>
         </div>
 
-        {onDelete && (
+        {/* Delete removes the whole RULE, which is not what "This date"
+            means — the destructive action in that scope is "Remove this
+            date's override", which sits with the amount it affects. */}
+        {onDelete && !occScope && (
           <div className="mt-3 text-center">
             {confirmDelete ? (
               <span className="text-sm text-expense">

@@ -163,7 +163,8 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
       // transactions — used to reconcile the forecast against reality (the
       // Dashboard tab). See engine/progress.ts for how these are used.
       balanceSnapshots: {}, // { [trackerCategoryId]: [{ id, date, amount }, ...] } — actual balance check-ins
-      monthlyActuals: {},   // { [itemId]: { "YYYY-MM": amount } } — real spend for a variable bill's month
+      monthlyActuals: {},  // { [itemId]: { "YYYY-MM": amount } } — real spend for a variable bill's month
+      overrides: {},       // { [ruleId]: { "YYYY-MM-DD": amount } } — per-occurrence plan edits
     };
   }
 

@@ -43,10 +43,12 @@ export function buildAllEvents(state: BudgetState, horizonISO: ISODate): BudgetE
   const horizon = parse(horizonISO);
 
 
+  const overrides = state.overrides || {};
+
   // 1) expand each recurring rule
   for (const rule of state.recurring) {
     for (const dt of occurrenceDates(rule, horizonISO)) {
-      events.push(makeEvent(rule, dt));
+      events.push(makeEvent(rule, dt, overrides[rule.id]?.[dt]));
     }
   }
 
@@ -84,7 +86,10 @@ export function buildEvents(state: BudgetState, horizonISO: ISODate): BudgetEven
   return events.filter((e) => e.date >= checkInDate);
 }
 
-// An event's amount is ALWAYS the rule's amount. `monthlyActuals` used to
+// An event's amount is the rule's amount unless the user has overridden
+// THIS occurrence (`state.overrides[ruleId][date]`) — "Electric is $112 but
+// $180 in July". That is the user editing the plan, which is forecast data,
+// not an observation being imported, so principle 1 is untouched. `monthlyActuals` used to
 // substitute a logged actual here (split across a month's instances), which
 // meant a $150 biweekly rule with a $150 logged month rendered as two $75
 // rows the rule itself couldn't explain. That write-back was removed
@@ -93,16 +98,18 @@ export function buildEvents(state: BudgetState, horizonISO: ISODate): BudgetEven
 // contributions never write back either. Logged actuals still exist and are
 // still yours — the Spending tab compares them against the rule. Nothing
 // logged anywhere changes a forecast number.
-function makeEvent(src: BudgetItem, date: ISODate): BudgetEvent {
+function makeEvent(src: BudgetItem, date: ISODate, override?: number): BudgetEvent {
   const dir = CATEGORIES[src.category]?.direction ?? "out";
+  const overridden = override !== undefined;
   return {
     id: src.id + "@" + date,
     name: src.name,
-    amount: Math.abs(src.amount),
+    amount: Math.abs(overridden ? override : src.amount),
     direction: dir,
     category: src.category,
     color: src.color ?? null, // optional per-item palette-index override
     order: src.order,
+    overridden,
     date,
   };
 }

@@ -1,6 +1,6 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay } from "../src/engine/compute.ts";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
+import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
 import { buildAllEvents } from "../src/engine/generate.ts";
@@ -1611,6 +1611,71 @@ contribAP = addContribution(contribAP, "roth", 250, "2026-09-28");
 check("two contributions on one day both survive", contribAP.contributionLog.roth.length, 2);
 check("...and neither is lost",
   contribAP.contributionLog.roth.reduce((t, c) => t + c.amount, 0), 350);
+
+// ---------- Scenario AQ: per-occurrence overrides ----------
+console.log("\n== Scenario AQ: one date can differ from its rule ==");
+// "Electric is $112 as a rule but $180 in July." Forecast data — the user
+// editing the plan — so principle 1 is untouched.
+const baseAQ = normalize({
+  settings: { checkInBalance: 5000, checkInDate: "2026-09-01", budgetHorizon: "2027-01-01", ledgerHorizon: "2026-12-31" },
+  recurring: [{ id: "elec", name: "Electric", amount: 112, category: "bill", cadence: "monthly", dayOfMonth: 5, startDate: "2026-09-05", order: 0 }],
+  oneoffs: [], trackerCategories: [],
+});
+const amountsOf = (st) => computeLedger(st, "2026-12-31").rows.map((r) => [r.date, r.amount, r.overridden]);
+eq("with no overrides every occurrence is the rule's amount",
+  amountsOf(baseAQ), [["2026-09-05", 112, false], ["2026-10-05", 112, false], ["2026-11-05", 112, false], ["2026-12-05", 112, false]]);
+
+const octAQ = setOverride(baseAQ, "elec", "2026-10-05", 180);
+eq("one occurrence takes its own amount and is flagged",
+  amountsOf(octAQ), [["2026-09-05", 112, false], ["2026-10-05", 180, true], ["2026-11-05", 112, false], ["2026-12-05", 112, false]]);
+check("the running balance follows the override",
+  computeLedger(octAQ, "2026-12-31").rows[1].balance, 5000 - 112 - 180);
+check("the Budget sees it too — one event list",
+  computeBudget(octAQ, "2027-01-01").find((c) => c.key === "2026-10").totalOut, 180);
+check("and so does the spending chart",
+  computeSpendingByCategory(octAQ, "2026-12-31").slices.find((x) => x.label === "Electric").amount, 112 * 3 + 180);
+
+// THE REQUIREMENT: editing the rule must not wipe an override.
+const raisedAQ = upsertItem(octAQ, { ...octAQ.recurring[0], amount: 120 });
+eq("raising the rule leaves the overridden date alone",
+  amountsOf(raisedAQ), [["2026-09-05", 120, false], ["2026-10-05", 180, true], ["2026-11-05", 120, false], ["2026-12-05", 120, false]]);
+eq("renaming the rule likewise",
+  computeLedger(upsertItem(octAQ, { ...octAQ.recurring[0], name: "Power" }), "2026-12-31").rows[1].amount, 180);
+
+// Removing it puts the date back on the rule, and leaves no residue.
+const clearedAQ = clearOverride(octAQ, "elec", "2026-10-05");
+eq("clearing reverts that date", amountsOf(clearedAQ), amountsOf(baseAQ));
+eq("...and leaves no empty bucket behind", clearedAQ.overrides, {});
+
+// Date-keyed, never remapped: rescheduling orphans, and the UI is told.
+const movedRule = { ...octAQ.recurring[0], dayOfMonth: 12, startDate: "2026-09-12" };
+eq("the orphan check names the dates that would stop applying",
+  orphanedOverrideDates(octAQ, movedRule, "2026-12-31"), ["2026-10-05"]);
+eq("a rule that still lands on the date orphans nothing",
+  orphanedOverrideDates(octAQ, { ...octAQ.recurring[0], amount: 999 }, "2026-12-31"), []);
+eq("no overrides at all means nothing to warn about",
+  orphanedOverrideDates(baseAQ, movedRule, "2026-12-31"), []);
+const movedAQ = upsertItem(octAQ, movedRule);
+eq("after the move the date reverts to the rule",
+  computeLedger(movedAQ, "2026-12-31").rows.every((r) => r.amount === 112), true);
+eq("the override itself is kept, not silently deleted",
+  movedAQ.overrides.elec, { "2026-10-05": 180 });
+
+// Deleting the rule takes its overrides: unlike an orphaned transaction,
+// an override under a dead ruleId can never be seen or reached again.
+eq("deleting the rule drops its overrides", deleteItem(octAQ, "elec").overrides, {});
+eq("multi-select delete too", deleteItems(octAQ, ["elec", "nope"]).overrides, {});
+eq("deleting a DIFFERENT rule leaves them", deleteItem(octAQ, "other").overrides, { elec: { "2026-10-05": 180 } });
+
+// An override of 0 is a real statement ("skipped this month"), not absence.
+const zeroAQ = setOverride(baseAQ, "elec", "2026-10-05", 0);
+eq("zero is an override, not a missing one", amountsOf(zeroAQ)[1], ["2026-10-05", 0, true]);
+check("...and it does move the balance to match",
+  computeLedger(zeroAQ, "2026-12-31").rows[1].balance, 5000 - 112);
+
+// Migration 9: absent → {}, and nothing is invented.
+eq("a legacy state gets an empty overrides map",
+  normalize({ settings: { checkInBalance: 1, checkInDate: "2026-09-01" }, recurring: [], oneoffs: [] }).overrides, {});
 
 // ---------- Scenario AO: the Ledger's horizon is capped ----------
 console.log("\n== Scenario AO: ledgerHorizonOf caps a stored horizon ==");

@@ -180,6 +180,14 @@ export interface BudgetState {
   contributionLog: Record<string, Contribution[]>;
   accountSnapshots: Record<string, BalanceSnapshot[]>;
   monthlyActuals: Record<string, Record<MonthKey, number>>;
+  /**
+   * Per-occurrence amount overrides: `{ [ruleId]: { [ISODate]: amount } }`.
+   * "Electric is $112 as a rule but $180 in July." This is FORECAST data —
+   * the user editing the plan, not importing an observation — so it is
+   * legal under principle 1 without argument. Keyed by date, never remapped
+   * when a rule's schedule moves: an override is a statement about a date.
+   */
+  overrides: Record<string, Record<ISODate, number>>;
 }
 
 /**
@@ -201,7 +209,10 @@ export interface BudgetEvent {
   category: CategoryRef;
   color: PaletteIndex | null;
   order: number;
-  /** Paid this month: still shown, but contributes 0 to the balance. */
+  /** True when this occurrence's amount came from an override rather than
+   *  from the rule. The Ledger marks it: an amount that disagrees with its
+   *  own rule looks like a bug without one. */
+  overridden: boolean;
   date: ISODate;
 }
 

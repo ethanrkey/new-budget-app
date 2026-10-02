@@ -112,7 +112,8 @@ const FIXTURES = {
     balanceSnapshots: { k: [{ id: "s", date: "2026-09-01", amount: 100 }] },
     contributionLog: { k: [{ id: "c", date: "2026-09-02", amount: 50, source: "manual" }] },
     accountSnapshots: { checking: [{ id: "a", date: "2026-09-08", amount: 7 }] },
-    monthlyActuals: { q: { "2026-09": 8 } } } },
+    monthlyActuals: { q: { "2026-09": 8 } },
+    overrides: { q: { "2026-09-09": 14 } } } },
 
   // the empty case: seeds a new account, migrates nothing
   empty: { data: false, state: {} },

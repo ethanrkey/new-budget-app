@@ -300,6 +300,12 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               >
                 {r.name}
               </button>
+              {/* An amount that disagrees with its own rule looks like a bug
+                  without this. It marks FORECAST data the user set on
+                  purpose, not an observation. */}
+              {r.overridden && (
+                <span className="ml-1.5 text-xs text-gray-400" title="This date has its own amount">· edited</span>
+              )}
             </td>
             <td className="py-2 sm:py-1.5 pr-3 text-right text-income">
               {r.direction === "in" ? money(r.amount) : ""}

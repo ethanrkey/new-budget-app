@@ -169,6 +169,7 @@ holds it in React state; every mutation is a pure function in
   contributionLog:  { [categoryId]: [ { id, date, amount, source, externalId? } ] }, // what you ACTUALLY put in
   accountSnapshots: { [accountId]:  [ { id, date, amount } ] },  // one per confirmed checking-balance update
   monthlyActuals:   { [itemId]: { "YYYY-MM": amount } },         // real total for a variable bill/payment that month
+  overrides:        { [ruleId]: { "YYYY-MM-DD": amount } },      // ONE occurrence's amount — forecast data, see §7
 }
 ```
 
@@ -261,6 +262,9 @@ every load and is **idempotent and deterministic** (fixed seed ids, never
    state called paid now count in full — which is the point: they were
    already inside the verified balance, so zeroing them double-counted the
    anchor's job.
+9. `overrides` absent → `{}` (2026-10-02). A brand-new field; nothing is
+   backfilled, because an override is a deliberate statement about one date
+   and no prior state could imply one.
 
 Conventions worth knowing before touching numbers:
 
@@ -431,7 +435,7 @@ fifth tab never needs a migration.
 
 - **Ledger** — every projected transaction, dated, with a running checking
   balance; month headers; optional per-category cumulative columns
-  (checklist picker);
+  (checklist picker); per-occurrence amount overrides (below);
   multi-select delete; per-item color override; projection horizon slider.
   **The Ledger projects at most 12 months** (`LEDGER_MAX_MONTHS`), against
   the Budget's 36: nobody plans transaction-by-transaction two years out, so
@@ -440,6 +444,42 @@ fifth tab never needs a migration.
   not rewrite a horizon the user saved. Every reader goes through that one
   helper (the slider, `computeLedger`, the spending chart), so they cannot
   disagree about the window, and the next drag writes a value back in range.
+  **Per-occurrence overrides.** `overrides: { [ruleId]: { [ISODate]: amount } }`
+  — "Electric is $112 as a rule but $180 in July." This is FORECAST data (the
+  user editing the plan, not importing an observation), so principle 1 is
+  untouched. `makeEvent` substitutes the amount and flags the event
+  `overridden`, which the Ledger and Calendar mark `· edited`: an amount
+  that disagrees with its own rule looks like a bug without a marker.
+
+  Clicking a Ledger row opens the edit form with the scope chosen UP FRONT —
+  **This date** / **Every time** — not Google Calendar's edit-then-ask. Most
+  of this form's fields (name, cadence, dates) mean nothing for a single
+  occurrence, so asking afterwards would let someone change the cadence and
+  then be asked "only this date?". Choosing first lets the form show the
+  restriction instead of springing it: in occurrence scope only the amount
+  is offered, Delete is hidden (it removes the whole rule, which is not what
+  that scope means), and "Remove this date's override" sits with the amount
+  it affects.
+
+  **The default is This date**, and the reason is worth keeping because a
+  future pass would flip it: the two mistakes are not symmetric. Defaulting
+  to the rule means someone fixing one month silently rewrites every month,
+  including ones already reconciled — quiet and hard to spot. Defaulting to
+  the occurrence means someone meaning the rule fixes one month and notices
+  next month. **The recoverable error is the one that should happen by
+  accident.** A one-off row gets no control at all; it is already a single
+  occurrence.
+
+  Overrides are keyed by DATE and never remapped. Editing the rule — amount,
+  name, anything — leaves them alone, which is the whole point: an override
+  is a deliberate statement about that month. But moving the rule's day
+  means it no longer LANDS on an overridden date, and that date reverts.
+  That is never silent: `orphanedOverrideDates()` is checked before the save
+  and the form names how many dates would stop applying, with a
+  "Save anyway". The overrides themselves are kept, not deleted, so moving
+  the rule back restores them. Remapping into the new day was rejected — it
+  guesses at intent and has no meaning at all for weekly or biweekly rules.
+
   The **Savings columns** picker sits directly above the table rather than in
   the toolbar: it is list-only and does nothing to the Planned spending panel,
   so placing it over that panel implied a relationship that isn't there. The
@@ -786,3 +826,10 @@ Later:
   violation: an observation ("I paid this") writing a forecast number.
   Display-only was considered and rejected; a flag nothing acts on is just
   a second place to maintain. Closes audit items #1 and #6.
+- **Deleting a rule deletes its overrides** (2026-10-02) — the opposite of
+  an orphaned transaction, which deliberately keeps its dead category id.
+  The distinction is reachability, and a future pass should not "fix" this
+  into a tombstone: an orphaned transaction is still visible in the Ledger
+  and can be re-filed, while an override keyed by a `ruleId` that no longer
+  exists can never be seen, edited or reached again. It is unreachable
+  garbage, not a record.

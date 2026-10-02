@@ -2,9 +2,10 @@
 // UI-free so the future iOS app reuses them. An "item" is a RecurringRule (has
 // a `cadence`) or a OneOff (has a `date`).
 import { uid, primaryAccount, sanitizeTabOrder } from "./model.ts";
+import { occurrenceDates } from "./generate.ts";
 import type {
   AssetCategory, BalanceSnapshot, BudgetItem, BudgetState, Contribution, DebtCategory,
-  ISODate, MonthKey, PaletteIndex, TabId,
+  ISODate, MonthKey, PaletteIndex, RecurringItem, TabId,
 } from "./types.ts";
 
 /**
@@ -63,6 +64,7 @@ export function deleteItem(state: BudgetState, id: string): BudgetState {
     ...state,
     recurring: state.recurring.filter((r) => r.id !== id),
     oneoffs: state.oneoffs.filter((o) => o.id !== id),
+    overrides: withoutKeys(state.overrides, [id]),
   };
 }
 
@@ -75,7 +77,54 @@ export function deleteItems(state: BudgetState, ids: string[]): BudgetState {
     ...state,
     recurring: state.recurring.filter((r) => !idSet.has(r.id)),
     oneoffs: state.oneoffs.filter((o) => !idSet.has(o.id)),
+    overrides: withoutKeys(state.overrides, ids),
   };
+}
+
+// Deleting a rule takes its overrides with it. This is the OPPOSITE of what
+// happens to a transaction tagged to a deleted category, which deliberately
+// stays orphaned — and the difference is the point: an orphaned transaction
+// is still visible in the Ledger and can be re-filed, while an override
+// keyed by a ruleId that no longer exists can never be seen, edited or
+// reached again. It is unreachable garbage, not a record.
+function withoutKeys<T>(map: Record<string, T> | undefined, keys: string[]): Record<string, T> {
+  const next = { ...(map || {}) };
+  for (const k of keys) delete next[k];
+  return next;
+}
+
+// ---- Per-occurrence amount overrides ----
+// "Electric is $112 as a rule but $180 in July." Forecast data: the user
+// editing the plan for one date, not importing an observation.
+export function setOverride(state: BudgetState, ruleId: string, date: ISODate, amount: number): BudgetState {
+  return {
+    ...state,
+    overrides: { ...state.overrides, [ruleId]: { ...(state.overrides?.[ruleId] || {}), [date]: Math.abs(amount) } },
+  };
+}
+
+export function clearOverride(state: BudgetState, ruleId: string, date: ISODate): BudgetState {
+  const forRule = { ...(state.overrides?.[ruleId] || {}) };
+  delete forRule[date];
+  const overrides = { ...state.overrides };
+  // Drop the rule's bucket entirely once it is empty, so a state that has
+  // had every override removed is byte-identical to one that never had any.
+  if (Object.keys(forRule).length === 0) delete overrides[ruleId];
+  else overrides[ruleId] = forRule;
+  return { ...state, overrides };
+}
+
+// Which of a rule's overrides would stop applying if it were saved as
+// `next` — because overrides are keyed by DATE and a rescheduled rule no
+// longer lands on them. Nothing here mutates; the UI asks first so the loss
+// is never silent, which is the whole reason this is exported.
+export function orphanedOverrideDates(state: BudgetState, next: RecurringItem, horizonISO: ISODate): ISODate[] {
+  const dates = Object.keys(state.overrides?.[next.id] || {});
+  if (dates.length === 0) return [];
+  const furthest = dates.reduce((a, b) => (a > b ? a : b));
+  const through = furthest > horizonISO ? furthest : horizonISO;
+  const stillLands = new Set(occurrenceDates(next, through));
+  return dates.filter((d) => !stillLands.has(d)).sort();
 }
 
 // Find the raw item behind a given id (ledger row ids are "<itemId>@<date>").
