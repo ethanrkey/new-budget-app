@@ -57,7 +57,9 @@ export default function DashboardScreen() {
           <Text style={styles.label}>Net position</Text>
           <Text style={styles.chev}>{heroOpen ? "⌃" : "⌄"}</Text>
         </View>
-        <Text style={[styles.heroNum, net.net < 0 && { color: T.expense }]}>{money(net.net)}</Text>
+        <Text style={[styles.heroNum, net.net < 0 ? { color: T.expense } : net.net > 0 ? { color: T.income } : null]}>
+          {money(net.net)}
+        </Text>
         {heroOpen && (
           <View style={styles.heroRows}>
             <Line k="Checking (verified)" v={money(net.cash)} />

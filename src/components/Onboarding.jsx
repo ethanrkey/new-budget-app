@@ -263,8 +263,14 @@ export default function Onboarding({ initialBalance, onComplete }) {
             <div className="space-y-2">
               {bills.map((b, i) => (
                 <div key={i} className="flex gap-2 items-center">
-                  <input className={field} placeholder="Name (e.g. Spotify)" value={b.name} onChange={(e) => updateBill(i, "name", e.target.value)} />
-                  <input className={`${field} w-24`} type="number" placeholder="0.00" value={b.amount} onChange={(e) => updateBill(i, "amount", e.target.value)} />
+                  <label className="flex-1 min-w-0">
+                    <span className="block text-[11px] text-gray-400 mb-0.5">Name</span>
+                    <input className={field} placeholder="e.g. Spotify" value={b.name} onChange={(e) => updateBill(i, "name", e.target.value)} />
+                  </label>
+                  <label className="w-24 shrink-0">
+                    <span className="block text-[11px] text-gray-400 mb-0.5">Amount</span>
+                    <input className={field} type="number" placeholder="0.00" value={b.amount} onChange={(e) => updateBill(i, "amount", e.target.value)} />
+                  </label>
                   {/* The day is a GUESS — today's date — and it used to be
                       made silently. A date box per row doubles this
                       screen's width on a phone and is where people stop,
@@ -276,13 +282,16 @@ export default function Onboarding({ initialBalance, onComplete }) {
                       in the one place that is already asking, and a wrong
                       date changes the ledger's ordering and therefore the
                       running balance. Defaults to today, visibly. */}
-                  <input
-                    className={`${field} w-16`}
-                    type="number" min="1" max="31"
-                    aria-label="Day of month"
-                    value={b.day ?? String(defaultBillDay)}
-                    onChange={(e) => updateBill(i, "day", e.target.value)}
-                  />
+                  <label className="shrink-0">
+                    <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">Due day</span>
+                    <input
+                      className={`${field} w-16`}
+                      type="number" min="1" max="31"
+                      aria-label="Day of month"
+                      value={b.day ?? String(defaultBillDay)}
+                      onChange={(e) => updateBill(i, "day", e.target.value)}
+                    />
+                  </label>
                   {bills.length > 1 && (
                     <button onClick={() => removeBillRow(i)} className="text-gray-300 hover:text-expense px-1" title="Remove">✕</button>
                   )}

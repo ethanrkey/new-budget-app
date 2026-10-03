@@ -1,7 +1,7 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay } from "../src/engine/compute.ts";
 import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
-import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys } from "../src/engine/progress.ts";
+import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys, activeMonthKeys, fixedSoFar } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
 import { buildAllEvents } from "../src/engine/generate.ts";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID, LEDGER_MAX_MONTHS, ledgerHorizonOf, blankState } from "../src/engine/model.ts";
@@ -1245,7 +1245,7 @@ console.log("\n== Scenario AF: settings.tabOrder ==");
 eq("a brand-new account gets the default order", sanitizeTabOrder(undefined), TABS);
 eq("a stored order is kept as-is", sanitizeTabOrder(["spending", "ledger", "budget", "dashboard"]), ["spending", "ledger", "budget", "dashboard"]);
 // User data can be stale or corrupt — never drop a real tab, never invent one.
-eq("a tab that no longer exists is dropped", sanitizeTabOrder(["spending", "reports", "dashboard"]), ["spending", "dashboard", "budget", "ledger"]);
+eq("a tab that no longer exists is dropped", sanitizeTabOrder(["spending", "reports", "dashboard"]), ["spending", "dashboard", "ledger", "budget"]);
 eq("a tab added since the order was saved is appended", sanitizeTabOrder(["ledger", "budget"]), ["ledger", "budget", "dashboard", "spending"]);
 eq("duplicates collapse", sanitizeTabOrder(["ledger", "ledger", "budget"]), ["ledger", "budget", "dashboard", "spending"]);
 eq("garbage falls back to the default", sanitizeTabOrder("nope"), TABS);
@@ -1256,12 +1256,12 @@ const legacyAF = normalize({
   recurring: [], oneoffs: [],
 });
 eq("normalize backfills the default order", legacyAF.settings.tabOrder, TABS);
-eq("normalize repairs a stale stored order", normalize({ ...legacyAF, settings: { ...legacyAF.settings, tabOrder: ["spending", "gone"] } }).settings.tabOrder, ["spending", "dashboard", "budget", "ledger"]);
+eq("normalize repairs a stale stored order", normalize({ ...legacyAF, settings: { ...legacyAF.settings, tabOrder: ["spending", "gone"] } }).settings.tabOrder, ["spending", "dashboard", "ledger", "budget"]);
 eq("normalize is idempotent on tabOrder", normalize(normalize(legacyAF)).settings.tabOrder, legacyAF.settings.tabOrder);
 
 // Dragging.
-eq("drag spending in front of budget", moveTab(legacyAF, "spending", "budget").settings.tabOrder, ["dashboard", "spending", "budget", "ledger"]);
-eq("drag dashboard onto the last tab", moveTab(legacyAF, "dashboard", "spending").settings.tabOrder, ["budget", "ledger", "dashboard", "spending"]);
+eq("drag spending in front of budget", moveTab(legacyAF, "spending", "budget").settings.tabOrder, ["dashboard", "ledger", "spending", "budget"]);
+eq("drag dashboard onto the last tab", moveTab(legacyAF, "dashboard", "spending").settings.tabOrder, ["ledger", "budget", "dashboard", "spending"]);
 eq("dropping a tab on itself changes nothing", moveTab(legacyAF, "budget", "budget").settings.tabOrder, TABS);
 eq("an unknown dragged id is ignored", moveTab(legacyAF, "nope", "budget").settings.tabOrder, TABS);
 check("reordering touches nothing but settings.tabOrder",
@@ -1730,6 +1730,44 @@ eq("a wipe is byte-identical to a brand-new account", canon(wiped), canon(freshA
 
 // And it really is a freshAR start, not a filtered old one.
 eq("a wiped account projects nothing", computeLedger(wiped, wiped.settings.ledgerHorizon).rows, []);
+
+// ---------- Scenario AS: the Spending tab only shows live months ----------
+console.log("\n== Scenario AS: dead months, and a bill that stopped varying ==");
+const elec = { id: "elec", name: "Electric", amount: 112, category: "bill", cadence: "monthly",
+  dayOfMonth: 14, startDate: "2026-08-14", order: 0, variable: true };
+const windowAS = ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10"];
+
+// A month before the rule existed has nothing due, so a row for it can
+// never say anything — and a logged actual against it priced as a
+// variance reads as overspending when the truth is nothing was owed.
+eq("months before the rule started are dropped",
+  activeMonthKeys(elec, {}, windowAS), ["2026-08", "2026-09", "2026-10"]);
+check("a month with nothing due reports zero occurrences",
+  computeMonthVariance(elec, {}, "2026-07").occurrences, 0);
+
+// ...but an actual logged against a dead month is KEPT. Hiding data the
+// user entered is the silent drop this codebase keeps having to fix.
+eq("a dead month with a logged actual is kept, not hidden",
+  activeMonthKeys(elec, { elec: { "2026-07": 150 } }, windowAS),
+  ["2026-07", "2026-08", "2026-09", "2026-10"]);
+
+// The untrack nudge: an observation about what happened, never a warning
+// about what might. Silent until the evidence exists.
+eq("no nudge without enough months", fixedSoFar(elec, { elec: { "2026-08": 112 } }, windowAS), null);
+eq("no nudge while it still varies",
+  fixedSoFar(elec, { elec: { "2026-08": 112, "2026-09": 118, "2026-10": 112 } }, windowAS), null);
+eq("three months matching exactly is a nudge",
+  fixedSoFar(elec, { elec: { "2026-08": 112, "2026-09": 112, "2026-10": 112 } }, windowAS),
+  { months: 3, amount: 112 });
+// The case the other designs miss: variable once, fixed now.
+eq("a bill that USED to vary still nudges once it has settled",
+  fixedSoFar({ ...elec, startDate: "2026-06-14" },
+    { elec: { "2026-06": 130, "2026-07": 112, "2026-08": 112, "2026-09": 112, "2026-10": 112 } },
+    windowAS, 3),
+  null);
+check("...and does nudge once the varying months leave the window",
+  fixedSoFar({ ...elec, startDate: "2026-06-14" },
+    { elec: { "2026-07": 112, "2026-08": 112, "2026-09": 112, "2026-10": 112 } }, windowAS, 3)?.months, 4);
 
 // ---------- Scenario AO: the Ledger's horizon is capped ----------
 console.log("\n== Scenario AO: ledgerHorizonOf caps a stored horizon ==");

@@ -205,6 +205,31 @@ export function activeMonthKeys(
   });
 }
 
+/**
+ * Has this item proved it does not vary? An OBSERVATION about what
+ * happened, not a warning about what might: a fixed $150 payment flagged
+ * "track actual vs budgeted" has nothing to measure, and the honest
+ * moment to say so is after the data says so — which also catches the
+ * bill that genuinely was variable and has become fixed.
+ *
+ * Needs at least `minMonths` logged months, every one matching its
+ * expectation exactly. Returns null when there is not enough evidence,
+ * which is the common case and must stay silent.
+ */
+export function fixedSoFar(
+  item: RecurringItem,
+  monthlyActuals: BudgetState["monthlyActuals"] | undefined,
+  months: MonthKey[],
+  minMonths = 3
+): { months: number; amount: number } | null {
+  const logged = months
+    .map((mk) => computeMonthVariance(item, monthlyActuals, mk))
+    .filter((v) => v.actual != null && v.occurrences > 0);
+  if (logged.length < minMonths) return null;
+  if (!logged.every((v) => v.delta === 0)) return null;
+  return { months: logged.length, amount: logged[0]!.actual! };
+}
+
 export function lastMonthKeys(anchorISO: ISODate, count: number): MonthKey[] {
   const [y, m] = anchorISO.slice(0, 7).split("-").map(Number);
   const out: MonthKey[] = [];

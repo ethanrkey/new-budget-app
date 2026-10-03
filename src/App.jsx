@@ -697,6 +697,7 @@ export default function App() {
             />
           ) : (
             <SpendingView
+              onUntrack={(item) => setState((st) => upsertItem(st, { ...item, variable: false }))}
               state={state}
               onSetMonthlyActual={logMonthlyActual}
               onDeleteMonthlyActual={clearMonthlyActual}

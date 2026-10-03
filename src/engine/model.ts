@@ -114,7 +114,11 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
   // forecast. A user can drag them into any order (settings.tabOrder); this
   // list stays the authority on which tabs EXIST, so sanitizeTabOrder() below
   // can drop a tab that's gone and append one that's new.
-  export const TABS: readonly TabId[] = ["dashboard", "budget", "ledger", "spending"];
+  // Dashboard first: it is where you STAND, and that is what someone
+  // opens the app to see. The Ledger and Budget are the plan, and the
+  // guided tour still starts there — the tour navigates wherever it
+  // likes and does not have to match this order.
+  export const TABS: readonly TabId[] = ["dashboard", "ledger", "budget", "spending"];
 
   // A stored order is user data and can be stale (an old tab that no longer
   // exists, a new tab added since it was saved, a duplicate from a bad write).

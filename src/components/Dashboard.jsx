@@ -193,7 +193,13 @@ function Hero({ net }) {
             own overflow, or the content keeps its natural height throughout. */}
         <div className="overflow-hidden">
           <div className={`pt-1 pb-1 transition-opacity duration-200 motion-reduce:transition-none ${collapsed ? "opacity-0" : "opacity-100"}`}>
-            <div className={`text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums ${net.net < 0 ? "text-expense" : ""}`}>
+            {/* The headline number earns a colour in BOTH directions.
+                Neutral-when-positive undersold the one figure on the page
+                that is meant to be the answer; red-only made the colour
+                mean "bad news" rather than "this is your position". */}
+            <div className={`text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums ${
+              net.net < 0 ? "text-expense" : net.net > 0 ? "text-income" : ""
+            }`}>
               {money(net.net)}
             </div>
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">

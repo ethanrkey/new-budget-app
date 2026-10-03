@@ -203,11 +203,18 @@ export async function loadState(userId) {
 
   currentUserId = userId;
   versions = new Map();
-  currentVersion = null;
-  for (const r of data) {
-    versions.set(`${r.kind}:${r.entity_id}`, r.version);
-    if (!currentVersion || r.updated_at > currentVersion) currentVersion = r.updated_at;
-  }
+  for (const r of data) versions.set(`${r.kind}:${r.entity_id}`, r.version);
+
+  // THE TOKEN MUST BE DEFINED THE SAME WAY IN BOTH PLACES. This used to
+  // take the max over the rows just selected — which are the LIVE ones —
+  // while fetchVersion takes the max over ALL rows, tombstones included.
+  // After any save whose last operation is a tombstone (the wizard's
+  // seeded-default prune is exactly that), the two disagreed the moment
+  // the page loaded, so the next focus event decided the device was stale,
+  // stashed a recovery copy, replaced the in-memory state and showed the
+  // alarming "your data had already been updated somewhere else" banner —
+  // on an account nobody else had touched. One definition, one query.
+  currentVersion = await fetchVersion(userId);
 
   if (data.length > 0) {
     const state = normalize(assembleState(

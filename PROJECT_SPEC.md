@@ -1505,3 +1505,24 @@ Later:
   month of data.** Four or five are needed to see whether the aggregate
   gap is stable and informative or just noise, and designing the
   aggregation before knowing which it is means building on a guess.
+- **One definition of the sync token, in one place** (2026-10-03).
+  `loadState` took the max `updated_at` over the rows it had just
+  selected — the LIVE ones — while `fetchVersion` took the max over ALL
+  rows, tombstones included. After any save whose last operation is a
+  tombstone (the wizard's seeded-default prune is exactly that), the two
+  disagreed from the moment the page loaded, so the next focus event
+  judged the device stale, stashed a recovery copy, replaced the
+  in-memory state, and showed "your data had already been updated
+  somewhere else" on an account nobody else had touched. `loadState` now
+  calls `fetchVersion`. **There is no service worker in this project**,
+  so a stale build surviving a deploy is not a thing that can happen —
+  that hypothesis was checked and ruled out rather than assumed.
+- **The untrack nudge is an observation, not a warning** (2026-10-03).
+  A fixed $150 payment flagged "track actual vs budgeted" has no
+  variance to measure, but the app does not argue at the moment of
+  flagging: `fixedSoFar` waits until at least three logged months have
+  matched their expectation exactly, then offers one line — "$300 every
+  month across 3 months. Nothing to track here. Untrack it." A warning
+  about what might happen is a guess; a statement about what did happen
+  is not, and it also catches the bill that genuinely was variable and
+  has become fixed, which a warning at flag-time never would.

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { computeMonthVariance, lastMonthKeys, activeMonthKeys } from "../engine/progress.ts";
+import { computeMonthVariance, lastMonthKeys, activeMonthKeys, fixedSoFar } from "../engine/progress.ts";
 import { todayISO } from "../engine/model.ts";
 
 const money = (n) =>
@@ -22,7 +22,7 @@ function monthLabel(key) {
 // Dashboard is balances + contributions only; this is spending behavior.
 // "Now" is the real clock: the window is the last 6 calendar months
 // ending in the current month.
-export default function SpendingView({ state, onSetMonthlyActual, onDeleteMonthlyActual }) {
+export default function SpendingView({ state, onSetMonthlyActual, onDeleteMonthlyActual, onUntrack }) {
   const variableItems = state.recurring.filter((r) => r.variable);
   const monthKeys = lastMonthKeys(todayISO(), 6);
 
@@ -50,6 +50,7 @@ export default function SpendingView({ state, onSetMonthlyActual, onDeleteMonthl
               monthlyActuals={state.monthlyActuals}
               onSet={(monthKey, amount) => onSetMonthlyActual(item.id, monthKey, amount)}
               onDelete={(monthKey) => onDeleteMonthlyActual(item.id, monthKey)}
+              onUntrack={() => onUntrack(item)}
             />
           ))}
         </div>
@@ -58,15 +59,27 @@ export default function SpendingView({ state, onSetMonthlyActual, onDeleteMonthl
   );
 }
 
-function VariableSpendingRow({ item, monthKeys, monthlyActuals, onSet, onDelete }) {
+function VariableSpendingRow({ item, monthKeys, monthlyActuals, onSet, onDelete, onUntrack }) {
   // Cadence-aware label — a biweekly/weekly item's `amount` is per
   // occurrence, not a monthly figure, so "budgeted $X/mo" would be wrong.
   const cadenceLabel = CADENCE_LABEL[item.cadence] || item.cadence;
+  // An observation, not a warning: offered only once the data says so.
+  const fixed = fixedSoFar(item, monthlyActuals, monthKeys);
   return (
     <div className="border border-gray-200 dark:border-gray-800 rounded-lg p-3">
       <div className="font-medium mb-2">
         {item.name} <span className="text-gray-400 font-normal text-sm">— budgeted {money(item.amount)} {cadenceLabel}</span>
       </div>
+      {fixed && (
+        <div className="mb-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-gray-600 dark:text-gray-300">
+            {money(fixed.amount)} every month across {fixed.months} months. Nothing to track here.
+          </span>
+          <button onClick={onUntrack} className="font-medium underline underline-offset-2">
+            Untrack it
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="text-sm border-collapse w-full">
           <thead>
