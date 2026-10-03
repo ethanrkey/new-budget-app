@@ -16,7 +16,7 @@ const COPY = {
   },
   bills: {
     title: "Any other monthly bills?",
-    sub: "Phone, internet, subscriptions, memberships — anything that's roughly the same amount every month. We'll put them all on today's date; change any of them later by tapping the item.",
+    sub: "Phone, internet, subscriptions, memberships — anything that's roughly the same amount every month. Set the day each one is due; it defaults to today.",
   },
   groceries: {
     title: "About how much do you spend on groceries?",
@@ -41,10 +41,6 @@ const CADENCE_OPTIONS = [
 // reopening.
 // Today's date, used for every generic bill. Shown, never hidden.
 const defaultBillDay = new Date().getDate();
-const ordinal = (n) => {
-  const s = ["th", "st", "nd", "rd"], v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
-};
 
 const STEPS = ["paycheck", "rent", "bills", "groceries", "balance", "accounts", "done"];
 
@@ -78,7 +74,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
   const [rentAmount, setRentAmount] = useState("");
   const [rentDay, setRentDay] = useState("1");
 
-  const [bills, setBills] = useState([{ name: "", amount: "" }]);
+  const [bills, setBills] = useState([{ name: "", amount: "", day: String(defaultBillDay) }]);
 
   const [groceryAmount, setGroceryAmount] = useState("");
   const [groceryCadence, setGroceryCadence] = useState("weekly");
@@ -159,7 +155,8 @@ export default function Onboarding({ initialBalance, onComplete }) {
       if (b.name.trim() && !isNaN(amt) && amt > 0) {
         addRule({
           id: uid(), name: b.name.trim(), amount: amt, category: "bill",
-          cadence: "monthly", startDate: todayISO(), dayOfMonth: defaultBillDay,
+          cadence: "monthly", startDate: todayISO(),
+          dayOfMonth: Math.min(31, Math.max(1, Number(b.day) || defaultBillDay)),
         });
       }
     }
@@ -193,7 +190,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
     setBills((bs) => bs.map((b, idx) => (idx === i ? { ...b, [field]: value } : b)));
   }
   function addBillRow() {
-    setBills((bs) => [...bs, { name: "", amount: "" }]);
+    setBills((bs) => [...bs, { name: "", amount: "", day: String(defaultBillDay) }]);
   }
   function removeBillRow(i) {
     setBills((bs) => bs.filter((_, idx) => idx !== i));
@@ -274,7 +271,18 @@ export default function Onboarding({ initialBalance, onComplete }) {
                       so the guess is shown instead of asked for. Rent
                       gets its own field because the 1st is usually right
                       and the ledger's ordering actually turns on it. */}
-                  <span className="text-xs text-gray-400 whitespace-nowrap self-center">on the {ordinal(defaultBillDay)}</span>
+                  {/* Setting the day HERE rather than on a card later:
+                      someone doing all of this by hand should knock it out
+                      in the one place that is already asking, and a wrong
+                      date changes the ledger's ordering and therefore the
+                      running balance. Defaults to today, visibly. */}
+                  <input
+                    className={`${field} w-16`}
+                    type="number" min="1" max="31"
+                    aria-label="Day of month"
+                    value={b.day ?? String(defaultBillDay)}
+                    onChange={(e) => updateBill(i, "day", e.target.value)}
+                  />
                   {bills.length > 1 && (
                     <button onClick={() => removeBillRow(i)} className="text-gray-300 hover:text-expense px-1" title="Remove">✕</button>
                   )}
@@ -339,8 +347,9 @@ export default function Onboarding({ initialBalance, onComplete }) {
           <div className="space-y-3">
             <h2 className="text-lg font-semibold">What else do you track?</h2>
             <p className="text-sm text-gray-500">
-              Anything you want on your Dashboard — what it&apos;s called and what&apos;s in it today.
-              Skip any of these; you can add them whenever.
+              These accounts are what will show on your dashboard, which is the page where you see
+              your full current financial picture. These can be added and updated at any time
+              whenever needed.
             </p>
             {ACCOUNT_GROUPS.map((g) => (
               <div key={g.key}>

@@ -87,7 +87,10 @@ function prettyDate(iso) {
 
 export default function SpendingMix({ mix, isDark }) {
   const [collapsed, setCollapsed] = useStickyFlag(COLLAPSED_PREF, true);
-  const [asBar, setAsBar] = useStickyFlag(KIND_PREF, false);
+  // Bar is the DEFAULT and sits first: it reads proportions precisely,
+  // labels every row inline, and the role colours carry further in a flat
+  // bar than in a wedge. The pie is the alternative, not the baseline.
+  const [asBar, setAsBar] = useStickyFlag(KIND_PREF, true);
   // Component state, not devicePrefs: opening Other is a drill-down you do
   // to answer a question, not a layout preference worth remembering.
   const [otherOpen, setOtherOpen] = useState(false);
@@ -122,7 +125,7 @@ export default function SpendingMix({ mix, isDark }) {
         </button>
         {!collapsed && !empty && (
           <div className="flex items-center gap-1 shrink-0 -ml-0.5" role="group" aria-label="Chart type">
-            {[["Pie", false], ["Bar", true]].map(([label, val]) => (
+            {[["Bar", true], ["Pie", false]].map(([label, val]) => (
               <button
                 key={label}
                 onClick={() => setAsBar(val)}

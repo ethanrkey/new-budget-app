@@ -18,7 +18,8 @@ const prettyDate = (iso: string) =>
 export default function SpendingMix({ mix }: { mix: Mix }) {
   const { width } = useWindowDimensions();
   const [open, setOpen] = useState(false);
-  const [asBar, setAsBar] = useState(false);
+  // Bar is the default here too — same reasoning as the web.
+  const [asBar, setAsBar] = useState(true);
   const [otherOpen, setOtherOpen] = useState(false);
 
   // Pie shades, bar flat — same split as the web, same reason: in a bar
@@ -54,7 +55,7 @@ export default function SpendingMix({ mix }: { mix: Mix }) {
           ) : (
             <>
               <View style={styles.toggle}>
-                {([["Pie", false], ["Bar", true]] as const).map(([label, val]) => (
+                {([["Bar", true], ["Pie", false]] as const).map(([label, val]) => (
                   <Pressable
                     key={label}
                     onPress={() => setAsBar(val)}

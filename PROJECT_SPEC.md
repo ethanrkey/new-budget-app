@@ -1453,3 +1453,19 @@ Later:
   web and phone disagreeing about write order is a data-loss bug that
   presents as "works on my laptop". Pure, so the ordering rule is a
   harness assertion rather than a comment in two files.
+- **A tombstoned row still occupies the primary key** (2026-10-03), and
+  missing that aborted saves mid-plan. The client loads only
+  `deleted_at is null`, so it holds no version for a tombstone, so
+  `planWrite` plans an INSERT — and Postgres answers 23505. Treating that
+  as a conflict was wrong: upserts run before tombstones, so the rows
+  already inserted stayed, every row after the collision was dropped, and
+  every tombstone was skipped. The user then saw "this device was out of
+  date" on an account seconds old.
+
+  The transport now handles 23505 by trying to REVIVE —
+  `update ... where deleted_at is not null` — and only treats it as a
+  conflict when that matches nothing, i.e. a real collision with a live
+  row. Date-keyed snapshots make this near-certain to recur: wipe, log a
+  balance, and the key `accountSnapshot:<account>:<today>` is already
+  taken by this morning's tombstone. Reproduced against a fake server
+  enforcing the same guard Postgres does, before and after the fix.

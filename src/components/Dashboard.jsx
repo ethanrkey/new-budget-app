@@ -202,7 +202,7 @@ function Hero({ net }) {
               <Stat label="Debt" value={net.debt > 0 ? `−${money(net.debt)}` : money(0)} />
             </div>
             <p className="mt-3 text-xs text-gray-400">
-              Verified checking balance + last logged balance of each savings/investment − last logged balance of each loan.
+              Checking balance + last logged balance of each savings/investment − last logged balance of each loan.
               {unlogged > 0 && (
                 <> <span className="text-gray-500">{unlogged} categor{unlogged === 1 ? "y" : "ies"} not logged yet</span> — counted as $0 until you log a balance.</>
               )}

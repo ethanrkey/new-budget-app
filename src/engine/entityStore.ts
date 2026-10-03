@@ -18,8 +18,20 @@ export type VersionMap = ReadonlyMap<string, number>;
 export const keyOf = (e: { kind: string; id: string }): string => `${e.kind}:${e.id}`;
 
 export type WriteOp =
-  /** No version held: this row is new to us. A unique-violation on insert
-   *  means it appeared since we loaded — a conflict, never a force. */
+  /**
+   * No version held: this row is new to us. A unique violation on insert
+   * does NOT automatically mean a conflict — a TOMBSTONED row still
+   * occupies the primary key, and we never load tombstones, so we hold no
+   * version for one. The transport must therefore handle 23505 by trying
+   * to REVIVE (update where deleted_at is not null); only if that matches
+   * nothing is it a genuine collision with a live row.
+   *
+   * Getting this wrong is not theoretical: it aborted a save mid-plan on
+   * every wipe-then-re-enter on the same day, leaving the categories that
+   * had already inserted, dropping the snapshots after them, and skipping
+   * every tombstone — then reporting "this device was out of date" to a
+   * user whose account was seconds old.
+   */
   | { op: "insert"; entity: Entity }
   /** Conditional on `version`; zero rows matched means somebody else wrote. */
   | { op: "update"; entity: Entity; version: number }

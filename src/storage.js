@@ -124,9 +124,27 @@ async function writeState(userId, state) {
         })
         .select("version,updated_at").maybeSingle();
       if (error) {
-        if (error.code === "23505") return { ok: false, reason: "conflict" };
-        console.error("saveState insert failed", error);
-        return { ok: false, reason: "error", error };
+        if (error.code !== "23505") {
+          console.error("saveState insert failed", error);
+          return { ok: false, reason: "error", error };
+        }
+        // The key exists. A TOMBSTONE still occupies it — and we never
+        // load tombstones, so we hold no version and planned an insert.
+        // Revive it. Only a collision with a LIVE row is a real conflict.
+        const revived = await supabase
+          .from("budget_entities")
+          .update({ data: op.entity.data, schema_version: op.entity.schemaVersion, deleted_at: null })
+          .eq("user_id", userId).eq("kind", op.entity.kind).eq("entity_id", op.entity.id)
+          .not("deleted_at", "is", null)
+          .select("version,updated_at").maybeSingle();
+        if (revived.error) {
+          console.error("saveState revive failed", revived.error);
+          return { ok: false, reason: "error", error: revived.error };
+        }
+        if (!revived.data) return { ok: false, reason: "conflict" };
+        applyResult(versions, op, revived.data.version);
+        currentVersion = revived.data.updated_at;
+        continue;
       }
       applyResult(versions, op, data.version);
       currentVersion = data.updated_at;

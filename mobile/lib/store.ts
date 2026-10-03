@@ -94,8 +94,22 @@ export async function saveState(userId: string, state: BudgetState): Promise<Sav
           })
           .select("version").maybeSingle();
         if (error) {
-          if (error.code === "23505") return { ok: false, reason: "conflict" };
-          return { ok: false, reason: netish(error) ? "offline" : "error", message: error.message };
+          if (error.code !== "23505") {
+            return { ok: false, reason: netish(error) ? "offline" : "error", message: error.message };
+          }
+          // A TOMBSTONE still occupies the primary key and we never load
+          // tombstones, so we hold no version and planned an insert.
+          // Revive it; only a collision with a LIVE row is a real conflict.
+          const revived = await supabase
+            .from("budget_entities")
+            .update({ data: op.entity.data, schema_version: op.entity.schemaVersion, deleted_at: null })
+            .eq("user_id", userId).eq("kind", op.entity.kind).eq("entity_id", op.entity.id)
+            .not("deleted_at", "is", null)
+            .select("version").maybeSingle();
+          if (revived.error) return { ok: false, reason: "error", message: revived.error.message };
+          if (!revived.data) return { ok: false, reason: "conflict" };
+          applyResult(versions, op, revived.data.version);
+          continue;
         }
         applyResult(versions, op, data!.version);
       } else if (op.op === "update") {

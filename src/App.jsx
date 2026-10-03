@@ -153,7 +153,10 @@ export default function App() {
   // Tracker category (savings/debt/investment) CRUD — deleting one never
   // touches items still tagged with it (see mutate.ts's addCategory et al.).
   function addTrackerCategory(name, kind) {
-    setState((s) => addCategory(s, name, 0, kind));
+    // addCategory lost its `color` parameter in migration 13; this still
+    // passed 0 in its place, so every category added from the manager was
+    // created with kind === 0. App.jsx is JS, so tsc could not see it.
+    setState((s) => addCategory(s, name, kind));
   }
   function updateTrackerCategory(id, patch) {
     setState((s) => updateCategory(s, id, patch));
