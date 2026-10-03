@@ -180,7 +180,7 @@ const SECTIONS = [
   },
 ];
 
-export default function Tutorial({ onClose }) {
+export default function Tutorial({ onClose, onStartTour }) {
   const [active, setActive] = useState(SECTIONS[0].id);
   const section = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0];
   const index = SECTIONS.indexOf(section);
@@ -193,7 +193,20 @@ export default function Tutorial({ onClose }) {
       >
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
           <h2 className="text-lg font-semibold">How this app works</h2>
-          <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Done</button>
+          <div className="flex items-center gap-3">
+            {/* The reference page and the walkthrough are different things
+                and this is where they meet: you came here confused, and
+                sometimes the answer is to be shown the tabs again. */}
+            {onStartTour && (
+              <button
+                onClick={onStartTour}
+                className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                Take the tour
+              </button>
+            )}
+            <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Done</button>
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-1">

@@ -15,15 +15,15 @@ const COPY = {
     sub: "This becomes a recurring bill so it shows up every month without re-entering it.",
   },
   bills: {
-    title: "Any other regular bills?",
-    sub: "Phone, internet, subscriptions — anything that's roughly the same amount every month. Add as many as you want.",
+    title: "Any other monthly bills?",
+    sub: "Phone, internet, subscriptions, memberships — anything that's roughly the same amount every month. Add as many as you want.",
   },
   groceries: {
     title: "About how much do you spend on groceries?",
     sub: "A rough estimate is fine — you can always adjust it later.",
   },
   balance: {
-    title: "What's your current bank balance?",
+    title: "What's the balance of your primary checking account?",
     sub: "This is your starting point — everything else projects forward from here.",
   },
 };
@@ -116,9 +116,17 @@ export default function Onboarding({ initialBalance, onComplete }) {
     }
     goNext();
   }
+  // The verified balance is the single value the whole forecast builds
+  // from, so this step cannot be skipped or fumbled: finishing without it
+  // leaves a new user's first ledger projecting from zero, which is what
+  // happened for real. `finishNow` also re-reads the input rather than
+  // trusting that setCheckInBalance has landed, so there is no path where
+  // the number is on screen and not in the result.
+  const balanceAmount = balanceInput.trim() === "" ? null : Number(balanceInput);
+  const balanceValid = balanceAmount != null && !Number.isNaN(balanceAmount);
   function submitBalance() {
-    const amt = Number(balanceInput);
-    if (balanceInput.trim() !== "" && !isNaN(amt)) setCheckInBalance(amt);
+    if (!balanceValid) return;
+    setCheckInBalance(balanceAmount);
     goNext();
   }
 
@@ -242,7 +250,22 @@ export default function Onboarding({ initialBalance, onComplete }) {
               <label className={label}>Current balance</label>
               <input className={field} type="number" placeholder="0.00" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} autoFocus />
             </div>
-            <StepButtons onSkip={goNext} onContinue={submitBalance} continueLabel="Finish" />
+            {/* No Skip here, deliberately — every other step is optional
+                and this one cannot be. A zero is a real answer and can be
+                typed; an empty field is not. */}
+            <button
+              onClick={submitBalance}
+              disabled={!balanceValid}
+              className="w-full py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90 disabled:opacity-40"
+            >
+              Finish
+            </button>
+            {!balanceValid && (
+              <p className="text-xs text-gray-400">
+                Enter the number your bank shows right now — even if it&apos;s 0. Everything in the
+                Ledger is counted forward from it, so the forecast is wrong without it.
+              </p>
+            )}
           </div>
         )}
 

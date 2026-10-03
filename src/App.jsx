@@ -17,7 +17,7 @@ import {
   updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
   addContribution, updateContribution, deleteContribution, countTaggedItems,
 } from "./engine/mutate.ts";
-import { primaryAccount, sanitizeTabOrder, ledgerHorizonOf } from "./engine/model.ts";
+import { primaryAccount, sanitizeTabOrder, ledgerHorizonOf, todayISO } from "./engine/model.ts";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import Dashboard from "./components/Dashboard.jsx";
@@ -31,6 +31,7 @@ import UpdateBalanceModal from "./components/UpdateBalanceModal.jsx";
 import SettingsModal from "./components/SettingsModal.jsx";
 import Onboarding from "./components/Onboarding.jsx";
 import Tutorial from "./components/Tutorial.jsx";
+import GuidedTour from "./components/GuidedTour.jsx";
 import SignIn from "./components/SignIn.jsx";
 import SyncNotice from "./components/SyncNotice.jsx";
 import CategoryManager from "./components/CategoryManager.jsx";
@@ -63,6 +64,7 @@ export default function App() {
   const skipNextSave = useRef(false);
   const [syncNotice, setSyncNotice] = useState(null);
   const [deletionRequest, setDeletionRequest] = useState(null);
+  const [tourOpen, setTourOpen] = useState(false);
   // Mirrors `state` for listeners that are registered once and would
   // otherwise close over a stale value.
   const stateRef = useRef(null);
@@ -256,10 +258,26 @@ export default function App() {
   // Always marks hasSeenOnboarding, whether reached by finishing or by
   // "Skip setup" — that's what a completed OR skipped run means, and it's
   // what stops this from auto-popping again (see the effect below).
-  function completeOnboarding(result) {
-    importCSV(result, false);
+  // The wizard commits its OWN result; it used to borrow importCSV, and
+  // that coupling silently broke it. When importCSV stopped adopting a
+  // balance (2026-10-02 — a CSV carries no verification date, so stamping
+  // one was fabricating an observation), the wizard lost its balance with
+  // it, and a new user's first ledger projected from zero. The wizard is
+  // not an import: the user is sitting in front of the app typing the
+  // number, so today IS the verification date and principle 1 is satisfied
+  // — the balance and its as-of date both come from them.
+  function completeOnboarding({ recurring = [], oneoffs = [], checkInBalance }) {
+    setState((s) => {
+      let next = s;
+      for (const item of [...recurring, ...oneoffs]) next = upsertItem(next, item);
+      if (checkInBalance != null && !Number.isNaN(Number(checkInBalance))) {
+        next = updateAccountBalance(next, primaryAccount(next).id, Number(checkInBalance), todayISO());
+      }
+      return next;
+    });
     setSettings({ hasSeenOnboarding: true });
     setShowOnboarding(false);
+    setTourOpen(true);
   }
 
   // Auto-show once per account: only when hasSeenOnboarding is false, which
@@ -470,11 +488,18 @@ export default function App() {
               other read-and-leave controls, not in the action row next to
               Add transaction. */}
           <button
-            onClick={() => setTutorialOpen(true)}
-            title="Every feature, explained"
+            onClick={() => setShowOnboarding(true)}
+            title="Re-run the setup wizard"
             className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
           >
-            📖<span className="hidden sm:inline"> Tutorial</span>
+            🚀<span className="hidden sm:inline"> Setup</span>
+          </button>
+          <button
+            onClick={() => setTutorialOpen(true)}
+            title="How everything works"
+            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+          >
+            ?<span className="hidden sm:inline"> About</span>
           </button>
           <button
             onClick={() => setImportOpen(true)}
@@ -506,6 +531,9 @@ export default function App() {
       <AccountStrip account={account} onUpdateClick={() => setUpdateBalanceOpen(true)} />
 
       {/* Global add — sits just above the tab navigation */}
+      {/* The action row is what you DO with your data. Quick Setup and
+          About are not that — one you run once, the other you read when
+          confused — so both live in the header instead. */}
       <div className="px-3 sm:px-6 pt-4 flex items-center gap-2 flex-wrap">
         <button
           onClick={() => openAddModal()}
@@ -518,12 +546,6 @@ export default function App() {
           className="text-sm px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
         >
           {quickEntryOpen ? "Close quick entry" : "⚡ Quick entry"}
-        </button>
-        <button
-          onClick={() => setShowOnboarding(true)}
-          className="text-sm px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
-        >
-          🚀 Quick Setup
         </button>
       </div>
 
@@ -661,7 +683,19 @@ export default function App() {
         />
       )}
 
-      {tutorialOpen && <Tutorial onClose={() => setTutorialOpen(false)} />}
+      {tutorialOpen && (
+        <Tutorial
+          onClose={() => setTutorialOpen(false)}
+          onStartTour={() => { setTutorialOpen(false); setTourOpen(true); }}
+        />
+      )}
+
+      {/* Fires once, right after the wizard; re-triggerable from About.
+          Not persisted as "seen" separately — finishing the wizard is the
+          only thing that starts it, and that already happens once. */}
+      {tourOpen && (
+        <GuidedTour onGoToTab={setTab} onClose={() => setTourOpen(false)} />
+      )}
 
       {showOnboarding && (
         <Onboarding initialBalance={account.balance || null} onComplete={completeOnboarding} />

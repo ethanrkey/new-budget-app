@@ -1296,3 +1296,31 @@ Later:
   the field ABSENT and guesses nothing; a user stating their own answers is
   data entry, which is `scripts/set_asset_kinds.mjs`, deliberately not a
   migration (maintenance rule 5).
+- **The setup wizard commits its own result** (2026-10-03). It used to
+  hand `{ recurring, oneoffs, checkInBalance }` to `importCSV`, and that
+  coupling broke it silently: when `importCSV` stopped adopting a balance
+  on 2026-10-02 — correctly, because a CSV carries no verification date —
+  the wizard lost its balance with it, and a new account's first ledger
+  projected from zero. It survived because it only shows on a fresh
+  account. The wizard is NOT an import: the user is sitting in front of
+  the app typing the number, so today genuinely is the verification date
+  and principle 1 holds, with both the balance and its date coming from
+  them. The balance step also has no Skip and no disabled path to Finish,
+  and `finishNow` re-reads the input rather than trusting that state has
+  landed — this is the one value the entire forecast is built from.
+- **About is the reference, the guided tour is the walkthrough**
+  (2026-10-03). The old "Tutorial" was an explanation, which is valuable
+  when you are confused and useless as a first experience: reading about
+  four tabs is not being taken to them. So it is renamed About and sits in
+  the header with the other read-and-leave controls, and `GuidedTour`
+  fires once after the wizard, switching to each tab and saying what it is
+  for while you look at it. Deliberately not a true spotlight with
+  cut-outs and element measuring: that needs every target to expose a ref
+  and breaks whenever a layout moves. Quick Setup left the action row for
+  the same reason About did — the action row is what you DO with your
+  data, and neither of those is that.
+- **Chrome headless enforces a 500px minimum viewport**, whatever
+  `--window-size` says. A "390px" screenshot from the verification harness
+  is a 500px layout cropped to 390, so a card that looks clipped at phone
+  width may be fine. Shoot at >= 500 and read the real width out of the
+  page before believing a narrow-screen bug.
