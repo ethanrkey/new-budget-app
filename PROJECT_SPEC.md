@@ -1094,7 +1094,84 @@ since preferences are not money and last-write-wins is fine for them.
   dual-write phase, not before cutover.
 
 
-Later:
+### Mobile backlog (audited 2026-10-03)
+
+The phone can currently WRITE exactly two things: the verified checking
+balance and a category balance snapshot. Everything else is read-only.
+In build order; **[D]** needs a design decision, **[P]** is a port.
+
+1. **Add / edit / delete a transaction** [D]. The largest gap — there is
+   no `EventForm` equivalent, so the phone cannot change the forecast at
+   all. The decision is the occurrence-vs-rule scope control: the web
+   uses a segmented "This date / Every time" with the rule's fields
+   hidden in occurrence scope, and the same reasoning applies, but a
+   phone wants a sheet rather than a modal and "Delete" needs a native
+   destructive confirm. The per-item colour picker is gone, so the form
+   is smaller than the web's ever was.
+2. **Account deletion + a Settings screen** [P]. **Apple requires
+   in-app account deletion**, so this is a submission blocker rather
+   than a nicety. The screen also wants sign-out (currently stranded on
+   the Dashboard), the account facts, and Wipe Data.
+3. **Quick entry** [D]. Arguably worth MORE on a phone than on the web —
+   entering a cash spend while standing in a shop is the case. Decision:
+   whether it is the same keep-going-until-closed surface the web has,
+   or a single-shot sheet.
+4. **Spending tab** [P]. No fourth tab exists. Logging a monthly actual,
+   the dead-month filter and the untrack nudge all port directly.
+5. **Loan and asset setup / edit terms** [P]. Without it the loan card's
+   "Add the rate and original amount" prompt has nowhere to go, and
+   `assetKind` cannot be changed on the phone.
+6. **Log a contribution** [P]. Same modal as Log balance with copy
+   overrides, exactly as on the web.
+7. **Onboarding + guided tour** [D]. A user who signs up ON the phone
+   currently lands in an empty app. Decision: port the wizard, or state
+   that first-time setup is a web task and say so at the empty state.
+8. **The recovery copy** [D], and this one is a real safety gap rather
+   than a missing feature. The web stashes to `localStorage`
+   SYNCHRONOUSLY before anything replaces in-memory state, and that
+   synchrony is the guarantee. AsyncStorage cannot do it, and iOS can
+   suspend mid-write. Survivable today because a phone write is one
+   small action and a rejected commit rolls back; it stops being
+   survivable the moment the phone can edit in bulk, i.e. after item 1.
+9. **Export** [D]. A JSON/CSV download means the iOS share sheet, not a
+   file download. Import probably does not belong on a phone at all.
+10. **Horizon control** [D]. The phone has a device-local date chip
+    where the web has a synced slider. The chip is arguably the better
+    phone control; the decision is whether it should write
+    `settings.ledgerHorizon` like the web does, or stay local.
+
+Deliberately NOT ported: drag-to-reorder (HTML5 drag never fires from
+touch, and the web already disables it on phones), and the Budget's
+pinned-column grid, which is already reshaped to one card per month.
+
+
+Later, in rough order:
+
+0. **Regenerate the landing-page screenshots.** `public/screenshots/*`
+   were rendered 2026-10-02, before the role palette — they show the
+   retired eight-hue colours and the old "Savings columns" label, so the
+   public page currently advertises a version of the app that no longer
+   exists.
+1. **The mobile backlog above**, items 1-2 especially — the phone cannot
+   edit a transaction, and in-app account deletion is an App Store
+   submission blocker.
+2. **Verify the pg_cron purge actually ran.** `cron.job` is scheduled;
+   `cron.job_run_details` has not been read since. A deletion feature
+   nobody has watched execute is a claim, not a feature.
+3. **`storage.js` under `// @ts-check`** — measured at 25 implicit-any
+   complaints under `strict`, so a contained afternoon rather than a
+   rewrite, and it is the file that touches the typed engine most.
+   `App.jsx` stays out; the runtime enum guard covers it instead.
+4. **The nine audit findings** from 2026-09-24 remain parked, minus the
+   two that mark-paid's deletion closed (#1 and #6).
+5. **Light-mode pie shades** run close to navy at the fourth step. One
+   constant (`SHADE_SPAN`) if it reads as "selected" rather than "a bill".
+6. **Tombstone retention / purge job.** 90 days is documented but no
+   purge is scheduled; the rows accumulate. Read-only offline means the
+   window only has to outlive online devices refetching, so this is
+   housekeeping, not correctness.
+
+Further out:
 - iOS client: **`mobile/` exists as of 2026-10-02** — Expo SDK 57 /
   RN 0.86 / expo-router, reusing `src/engine` verbatim rather than
   reimplementing the money math. Three lines of `metro.config.js` do it:
