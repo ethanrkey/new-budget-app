@@ -1,11 +1,17 @@
 // ---- Auth: Google OAuth (primary) + email magic link (fallback) ----
 import { supabase } from "./supabase.js";
 
+// Where OAuth and magic links come back to. NOT window.location.origin:
+// since 2026-10-02 that is the public landing page, and a user who just
+// signed in would land on a marketing page with a Try button. The app
+// lives at /app.
+const APP_URL = `${window.location.origin}/app`;
+
 // Redirects the browser to Google, then back to this app once signed in.
 export function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: window.location.origin },
+    options: { redirectTo: APP_URL },
   });
 }
 
@@ -13,7 +19,7 @@ export function signInWithGoogle() {
 export function signInWithMagicLink(email) {
   return supabase.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: window.location.origin },
+    options: { emailRedirectTo: APP_URL },
   });
 }
 

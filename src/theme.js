@@ -32,3 +32,16 @@ export function setDeviceTheme(theme) {
     // device, but the app keeps working.
   }
 }
+
+// Apply this device's theme to <html>. App.jsx does this itself from React
+// state (it also has an account default to fold in); the landing and
+// privacy pages have no account, so they call this directly rather than
+// rendering in whatever the browser defaults to while the rest of the
+// product respects a choice the user already made.
+export function applyTheme() {
+  const theme = getDeviceTheme(null);
+  const root = document.documentElement;
+  if (theme === "dark") root.classList.add("dark");
+  else root.classList.remove("dark");
+  return theme;
+}

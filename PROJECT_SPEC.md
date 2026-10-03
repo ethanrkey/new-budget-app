@@ -92,6 +92,37 @@ declared per color-scheme so the status bar matches whichever theme that device
 is on. To regenerate the icons, render `public/favicon.svg`'s geometry at each
 size (the last pass used headless Chrome).
 
+## 1b. Public pages and routing
+
+Three URLs, one bundle, **no router dependency** — the app has exactly three
+paths and none of them nest, so `main.jsx` switches on `location.pathname`.
+react-router would be a dependency, a provider and a rendering model bought
+for one `if`. Unknown paths fall through to the app, because the only way to
+reach one is a stale link to a tab. `vercel.json` rewrites everything that
+is not a file or an asset to `index.html`, so these resolve on a hard load
+and not only on client navigation.
+
+| Path | What |
+|---|---|
+| `/` | Landing page. Fixture-data screenshots, never real finances. |
+| `/privacy` | Privacy policy, the user's copy verbatim. |
+| `/app` | The app. |
+
+**`auth.js` redirects to `/app`, not to `window.location.origin`** — that
+origin is now a marketing page, and a user who just signed in would land on
+a Try button.
+
+**The privacy page makes claims the code has to keep true.** "If you delete
+your account, your data is deleted with it" is account deletion, which
+shipped BEFORE this page did, deliberately: a privacy page claiming a
+feature that does not exist is the worst kind of wrong. "No analytics, no
+tracking, no third-party services" is a constraint on what may be added
+later, not a description of today only. The copy is verbatim and stays
+that way — paraphrasing a privacy policy is how a claim quietly stops
+being true, and "I have the capability to read users' self-entered data"
+is a deliberate admission that follows from choosing recoverability over
+end-to-end encryption.
+
 ## 2. Status
 
 Live, single-user-per-account, deployed on Vercel from `main`. Actively
@@ -258,6 +289,33 @@ balance updates). Nothing is append-only.
   document. Conflicts are never retried: this device's document IS the stale
   one. Versions are compared as opaque tokens, never ordered, so clock skew
   between devices can't be misread (`engine/syncGuard.js isStale`).
+- **Account deletion: 7-day soft delete, then a hard delete.** A request is
+  a row in `account_deletions`; the purge is `purge_due_accounts()`,
+  SECURITY DEFINER, which deletes the `auth.users` row — everything else
+  cascades from it, so there is one statement and no way to half-delete
+  someone. Two triggers for it, because either alone has a hole: pg_cron
+  daily (the only thing that purges an account whose owner never returns,
+  which is most of them), and a call at sign-in from `storage.js` (so the
+  purge still happens if cron is unavailable — but it cannot be the only
+  mechanism, for the reason just given).
+
+  **The DELETE policy went on `account_deletions`, not on
+  `budget_entities`,** and that is the warning in `schema.sql` being heeded
+  rather than ignored. The client never deletes an entity row: requesting
+  is an INSERT, cancelling is a DELETE *of the request*, and the purge
+  cannot run as the user at all, since removing an `auth.users` row needs
+  privileges no client has. Granting DELETE on `budget_entities` would
+  widen the only thing standing between a public anon key and everyone's
+  financial history, to enable nothing. There is also deliberately no
+  UPDATE policy on `account_deletions`: it would let a client push its own
+  purge date back for ever, which is a deletion that never happens wearing
+  the costume of one that does.
+
+  **No email confirmation**, because the project's SMTP is down and a
+  confirmation that silently never arrives is worse than none — it would
+  look like deletion failed while the request sat unconfirmed. In-app
+  only: type DELETE, and the copy enumerates what goes, to the same
+  standard as Wipe Data.
 - **A save that does not land says so.** `SyncNotice` has a third kind,
   `error`: a write that fails for any reason other than a conflict used to
   be `console.error` only, so the app went on looking normal while nothing

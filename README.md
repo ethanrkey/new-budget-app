@@ -113,6 +113,8 @@ separate columns, here as everywhere else.
   or restore a full JSON backup — which downloads a safety copy of your current
   data first. A CSV import brings in items only: it never moves your verified
   balance, which has one entry point and needs a date you supply.
+- **Delete your account** from Settings: a 7-day grace period you can cancel,
+  then everything goes, including the sign-in itself.
 - **Export** the Ledger or Budget as CSV, or the whole account as JSON.
 - Fully editable, fully deletable logged values. Nothing is append-only.
 - **Safe on more than one device** — a phone holding an out-of-date copy can't

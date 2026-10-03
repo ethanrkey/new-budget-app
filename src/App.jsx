@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   loadState, saveState, fetchVersion, getVersion, hasPendingSave, resetSyncState,
   stashRecoveryCopy, readRecoveryCopy,
+  fetchDeletionRequest, requestAccountDeletion, cancelAccountDeletion, purgeDueAccounts,
 } from "./storage.js";
 import { downloadFile } from "./downloadFile.js";
 import { isStale } from "./engine/syncGuard.ts";
@@ -61,6 +62,7 @@ export default function App() {
   // and writing it back would bump the version for nothing.
   const skipNextSave = useRef(false);
   const [syncNotice, setSyncNotice] = useState(null);
+  const [deletionRequest, setDeletionRequest] = useState(null);
   // Mirrors `state` for listeners that are registered once and would
   // otherwise close over a stale value.
   const stateRef = useRef(null);
@@ -287,9 +289,16 @@ export default function App() {
   // used to fall back to a blank state on error, which then got autosaved
   // straight over real cloud data on nothing more than a transient error.)
   useEffect(() => {
-    if (!session) { setState(null); setLoadError(null); resetSyncState(); return; }
+    if (!session) { setState(null); setLoadError(null); setDeletionRequest(null); resetSyncState(); return; }
     let cancelled = false;
     setLoadError(null);
+    // Is this account already scheduled for deletion? Asked on every load,
+    // because a pending deletion has to be visible from the moment you open
+    // the app, not only if you happen to go looking in Settings.
+    fetchDeletionRequest(session.user.id).then((r) => { if (!cancelled) setDeletionRequest(r); });
+    // Sweep any account whose grace period has expired. The backstop for
+    // pg_cron being unavailable; non-fatal, never blocks this load.
+    purgeDueAccounts();
     loadState(session.user.id)
       .then(({ state: s }) => {
         if (cancelled) return;
@@ -661,6 +670,18 @@ export default function App() {
           onToggleTheme={toggleTheme}
           onOpenCategories={() => { setSettingsOpen(false); setCategoryManagerFrom("settings"); }}
           onWipe={wipeData}
+          email={session?.user?.email}
+          deletionRequest={deletionRequest}
+          onRequestDeletion={async () => {
+            const res = await requestAccountDeletion(session.user.id);
+            if (res.ok) setDeletionRequest(res.request);
+            return res;
+          }}
+          onCancelDeletion={async () => {
+            const res = await cancelAccountDeletion(session.user.id);
+            if (res.ok) setDeletionRequest(null);
+            return res;
+          }}
           onSignOut={() => signOut()}
           onClose={() => setSettingsOpen(false)}
         />

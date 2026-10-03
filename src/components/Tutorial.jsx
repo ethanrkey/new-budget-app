@@ -159,6 +159,7 @@ const SECTIONS = [
         ["Appearance", "Light or dark, remembered PER DEVICE — light on the laptop and dark on the phone is a normal thing to want, so the choice doesn't sync."],
         ["Categories", "The manager described above."],
         ["Sign out", "Your data stays on the server, tied to your account."],
+        ["Delete my account", "Schedules your whole account for deletion in 7 days — the sign-in, every rule, every logged balance. You can cancel any time before then from the same place. After that it's gone and there's no backup to restore from."],
         ["Wipe data", "Resets your account to brand new — every rule, category, logged balance and contribution, and your verified balance back to $0.00 — behind a full confirmation that lists it all. You'll get the welcome wizard again afterwards. Export a backup first."],
       ]],
     ],

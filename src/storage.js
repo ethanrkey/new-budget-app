@@ -290,3 +290,46 @@ export function resetSyncState() {
   versions = new Map();
   baseline = [];
 }
+
+// ---- Account deletion ----
+// A request is a row in `account_deletions`; the purge is server-side and
+// cascades from auth.users, so nothing here can half-delete someone. See
+// supabase/account_deletion.sql for why the delete policy lives on that
+// table and NOT on budget_entities.
+export async function fetchDeletionRequest(userId) {
+  const { data, error } = await supabase
+    .from("account_deletions")
+    .select("requested_at,purge_after")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) { console.error("deletion check failed", error); return null; }
+  return data ?? null;
+}
+
+export async function requestAccountDeletion(userId) {
+  const { data, error } = await supabase
+    .from("account_deletions")
+    .insert({ user_id: userId })
+    .select("requested_at,purge_after")
+    .maybeSingle();
+  if (error) return { ok: false, error };
+  return { ok: true, request: data };
+}
+
+export async function cancelAccountDeletion(userId) {
+  const { error } = await supabase.from("account_deletions").delete().eq("user_id", userId);
+  return { ok: !error, error };
+}
+
+// Called once per sign-in. The backstop for pg_cron being unavailable: it
+// cannot be the only mechanism, because someone who asked to be deleted is
+// unlikely to sign in again — which is exactly the account that most needs
+// purging. Failure is non-fatal and never blocks a load.
+export async function purgeDueAccounts() {
+  try {
+    const { error } = await supabase.rpc("purge_due_accounts");
+    if (error) console.warn("purge sweep unavailable", error.message);
+  } catch (err) {
+    console.warn("purge sweep failed", err);
+  }
+}
