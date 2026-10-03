@@ -4,6 +4,8 @@ import {
   StyleSheet, Text, UIManager, View, useWindowDimensions,
 } from "react-native";
 import { useBudget } from "../../components/StateProvider";
+import LogBalance, { currently } from "../../components/LogBalance";
+import { updateAccountBalance, addBalanceSnapshot } from "../../../src/engine/mutate.ts";
 import { Sparkline, HBar } from "../../lib/charts";
 import { T, money } from "../../lib/theme";
 import { supabase } from "../../lib/supabase";
@@ -13,7 +15,7 @@ import {
 } from "../../../src/engine/progress.ts";
 import { computeLoanProgress } from "../../../src/engine/loans.ts";
 import { primaryAccount, todayISO } from "../../../src/engine/model.ts";
-import { roleColor, roleOfTrackerCategory } from "../../../src/engine/palette.ts";
+import { roleColor, roleOfTrackerCategory, ROLE_LABEL } from "../../../src/engine/palette.ts";
 import type { TrackerCategory } from "../../../src/engine/types.ts";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -29,7 +31,9 @@ const providerNames = (p?: string[]) =>
   (p ?? []).map((x) => PROVIDER_LABEL[x] ?? x).join(" and ") || "—";
 
 export default function DashboardScreen() {
-  const { state, refresh, refreshing } = useBudget();
+  const { state, refresh, refreshing, commit, online, saving } = useBudget();
+  // null = closed; "checking" = the account; otherwise a category id.
+  const [logging, setLogging] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => { supabase.auth.getSession().then(({ data }) => setSession(data.session)); }, []);
   const { width } = useWindowDimensions();
@@ -74,16 +78,20 @@ export default function DashboardScreen() {
         name={account.name}
         balance={account.balance}
         asOf={account.balanceAsOf}
+        online={online}
+        onLog={() => setLogging("checking")}
         history={(state!.accountSnapshots?.[account.id] ?? []).map((s) => ({ date: s.date, amount: s.amount }))}
         color={T.text}
         chartW={chartW}
       />
 
       {assets.map((cat) => (
-        <AssetCard key={cat.id} cat={cat} chartW={chartW} today={today} />
+        <AssetCard key={cat.id} cat={cat} chartW={chartW} today={today}
+          online={online} onLog={() => setLogging(cat.id)} />
       ))}
       {debts.map((cat) => (
-        <DebtCard key={cat.id} cat={cat} chartW={chartW} today={today} />
+        <DebtCard key={cat.id} cat={cat} chartW={chartW} today={today}
+          online={online} onLog={() => setLogging(cat.id)} />
       ))}
 
       {/* The same three facts the web shows in Settings. There is no
@@ -99,6 +107,26 @@ export default function DashboardScreen() {
             : "—"
         } />
       </View>
+
+      {logging && (
+        <LogBalance
+          title={logging === "checking" ? `Update ${account.name} balance` : "Log a balance"}
+          currentLabel={logging === "checking" ? currently(account.balance, account.balanceAsOf) : undefined}
+          cta={logging === "checking" ? "Confirm" : "Log balance"}
+          warn={logging === "checking"}
+          busy={saving}
+          onClose={() => setLogging(null)}
+          onSubmit={async (amount, date) => {
+            const id = logging;
+            const okSaved = await commit((s) =>
+              id === "checking"
+                ? updateAccountBalance(s, primaryAccount(s).id, amount, date)
+                : addBalanceSnapshot(s, id, amount, date)
+            );
+            if (okSaved) setLogging(null);
+          }}
+        />
+      )}
 
       <Text style={styles.signout} onPress={() => supabase.auth.signOut()}>Sign out</Text>
       <Text style={styles.ro}>Read-only on mobile. Edits still happen on the web.</Text>
@@ -148,13 +176,21 @@ function History({ entries }: { entries: { date: string; amount: number }[] }) {
   );
 }
 
-function AccountCard({ name, balance, asOf, history, color, chartW }: {
+function AccountCard({ name, balance, asOf, history, color, chartW, online, onLog }: {
   name: string; balance: number; asOf: string;
   history: { date: string; amount: number }[]; color: string; chartW: number;
+  online: boolean; onLog: () => void;
 }) {
   return (
     <View style={styles.card}>
-      <Text style={styles.cardLabel}>{name}</Text>
+      <View style={styles.cardHead}>
+        <Text style={styles.cardLabel}>{name}</Text>
+        {/* Offline is READ-ONLY by decision, so the control is disabled
+            rather than queued — there is no write queue and no replay. */}
+        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}>
+          <Text style={styles.logText}>{online ? "Update" : "Offline"}</Text>
+        </Pressable>
+      </View>
       <Text style={styles.cardNum}>{money(balance)}</Text>
       <Text style={styles.dim}>verified {asOf}</Text>
       <Sparkline points={history} color={color} width={chartW} />
@@ -163,7 +199,7 @@ function AccountCard({ name, balance, asOf, history, color, chartW }: {
   );
 }
 
-function AssetCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: number; today: string }) {
+function AssetCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory; chartW: number; today: string; online: boolean; onLog: () => void }) {
   const { state } = useBudget();
   const color = roleColor(roleOfTrackerCategory(cat), true);
   const history = computeCategoryHistory(state!, cat.id);
@@ -176,6 +212,11 @@ function AssetCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: numbe
       <View style={styles.cardHead}>
         <View style={[styles.dot, { backgroundColor: color }]} />
         <Text style={styles.cardLabel}>{cat.name}</Text>
+        <Text style={styles.roleTag}>· {ROLE_LABEL[roleOfTrackerCategory(cat)]}</Text>
+        <View style={{ flex: 1 }} />
+        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}>
+          <Text style={styles.logText}>{online ? "Log" : "Offline"}</Text>
+        </Pressable>
       </View>
       <Text style={[styles.cardNum, { color: latest ? color : T.faint }]}>
         {latest ? money(latest.amount) : "—"}
@@ -198,7 +239,7 @@ function AssetCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: numbe
   );
 }
 
-function DebtCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: number; today: string }) {
+function DebtCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory; chartW: number; today: string; online: boolean; onLog: () => void }) {
   const { state } = useBudget();
   const color = roleColor(roleOfTrackerCategory(cat), true);
   const history = computeCategoryHistory(state!, cat.id);
@@ -209,6 +250,11 @@ function DebtCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: number
       <View style={styles.cardHead}>
         <View style={[styles.dot, { backgroundColor: color }]} />
         <Text style={styles.cardLabel}>{cat.name}</Text>
+        <Text style={styles.roleTag}>· {ROLE_LABEL[roleOfTrackerCategory(cat)]}</Text>
+        <View style={{ flex: 1 }} />
+        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}>
+          <Text style={styles.logText}>{online ? "Log" : "Offline"}</Text>
+        </Pressable>
       </View>
       <Text style={[styles.cardNum, { color: p?.outstanding != null ? color : T.faint }]}>
         {p?.outstanding != null ? money(p.outstanding) : "—"}
@@ -276,6 +322,10 @@ const styles = StyleSheet.create({
   acctRow: { flexDirection: "row", gap: 10, paddingVertical: 2 },
   acctK: { color: T.faint, fontSize: 12, width: 92 },
   acctV: { color: T.dim, fontSize: 12, flex: 1 },
+  roleTag: { color: T.faint, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
+  logBtn: { borderWidth: 1, borderColor: T.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, minHeight: 32, justifyContent: "center" },
+  logOff: { opacity: 0.4 },
+  logText: { color: T.dim, fontSize: 12 },
   signout: { color: T.brass, textAlign: "center", paddingVertical: 12 },
   ro: { color: T.faint, fontSize: 11, textAlign: "center" },
 });

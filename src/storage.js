@@ -19,7 +19,8 @@
 import { supabase } from "./supabase.js";
 import { normalize } from "./engine/stateShape.ts";
 import { makeRecoveryEnvelope, isRecoveryEnvelope } from "./engine/syncGuard.ts";
-import { splitState, assembleState, diffEntities, tombstoneAlarm } from "./engine/entities.ts";
+import { splitState, assembleState } from "./engine/entities.ts";
+import { planWrite, applyResult } from "./engine/entityStore.ts";
 
 const LOCAL_KEY = "budget-app-state-v1";        // legacy localStorage key, for one-time import
 const RECOVERY_KEY = "budget-app-recovery-v1";  // last in-memory copy we had to discard
@@ -47,7 +48,6 @@ export function getVersion() {
   return currentVersion;
 }
 
-const keyOf = (e) => `${e.kind}:${e.id}`;
 
 function readLocalBackup() {
   try {
@@ -101,75 +101,58 @@ async function writeState(userId, state) {
   }
 
   const next = splitState(state);
-  const diff = diffEntities(baseline, next);
-  if (diff.upserts.length === 0 && diff.tombstones.length === 0) {
-    return { ok: true, version: currentVersion };
-  }
+  // Ordering, guards and the alarm all come from the engine: two clients
+  // write these rows now, and the web and the phone disagreeing about
+  // write order is a data-loss bug that reads as "works on my laptop".
+  const { ops, alarm } = planWrite(baseline, next, versions);
+  if (ops.length === 0) return { ok: true, version: currentVersion };
 
-  // The entity-level replacement for the old whole-document "saving an empty
-  // state over a non-empty one" alarm. That check could not be ported —
-  // there is no document to be empty — and it stands where a real data-loss
-  // incident already happened, so its equivalent has to stand somewhere.
-  // Logged, not blocked: wiping your own account is a legitimate thing to do.
-  if (tombstoneAlarm(baseline, diff)) {
+  if (alarm) {
     console.error(
-      `⚠️ This save removes ${diff.tombstones.length} of ${baseline.length} stored rows. ` +
+      `⚠️ This save removes ${ops.filter((o) => o.op === "tombstone").length} of ${baseline.length} stored rows. ` +
       "Allowed (a deliberate wipe looks exactly like this) but logged in case it isn't what you meant."
     );
   }
 
-  // Upserts BEFORE tombstones, and abort on the first refusal. These are
-  // separate statements, not one transaction, so a conflict part-way leaves
-  // the rows that already landed in place; ordering it this way means a
-  // conflict stops us before anything is removed. The caller's response to a
-  // conflict is to adopt the server's copy after stashing a recovery copy,
-  // so nothing is lost — but a single RPC doing this in one transaction is
-  // the honest fix and is on the roadmap.
-  for (const e of diff.upserts) {
-    const known = versions.get(keyOf(e));
-    const row = {
-      user_id: userId, kind: e.kind, entity_id: e.id,
-      data: e.data, schema_version: e.schemaVersion,
-    };
-
-    if (known === undefined) {
+  for (const op of ops) {
+    if (op.op === "insert") {
       const { data, error } = await supabase
-        .from("budget_entities").insert(row).select("version,updated_at").maybeSingle();
+        .from("budget_entities")
+        .insert({
+          user_id: userId, kind: op.entity.kind, entity_id: op.entity.id,
+          data: op.entity.data, schema_version: op.entity.schemaVersion,
+        })
+        .select("version,updated_at").maybeSingle();
       if (error) {
-        // A row appeared since we loaded: treat as a conflict, never force.
         if (error.code === "23505") return { ok: false, reason: "conflict" };
         console.error("saveState insert failed", error);
         return { ok: false, reason: "error", error };
       }
-      versions.set(keyOf(e), data.version);
+      applyResult(versions, op, data.version);
       currentVersion = data.updated_at;
-      continue;
+    } else if (op.op === "update") {
+      const { data, error } = await supabase
+        .from("budget_entities")
+        .update({ data: op.entity.data, schema_version: op.entity.schemaVersion, deleted_at: null })
+        .eq("user_id", userId).eq("kind", op.entity.kind).eq("entity_id", op.entity.id)
+        .eq("version", op.version)
+        .select("version,updated_at").maybeSingle();
+      if (error) { console.error("saveState update failed", error); return { ok: false, reason: "error", error }; }
+      if (!data) return { ok: false, reason: "conflict" };
+      applyResult(versions, op, data.version);
+      currentVersion = data.updated_at;
+    } else {
+      let q = supabase
+        .from("budget_entities")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("user_id", userId).eq("kind", op.ref.kind).eq("entity_id", op.ref.id);
+      if (op.version != null) q = q.eq("version", op.version);
+      const { data, error } = await q.select("version,updated_at").maybeSingle();
+      if (error) { console.error("saveState tombstone failed", error); return { ok: false, reason: "error", error }; }
+      if (!data) return { ok: false, reason: "conflict" };
+      applyResult(versions, op, null);
+      currentVersion = data.updated_at;
     }
-
-    const { data, error } = await supabase
-      .from("budget_entities")
-      .update({ data: e.data, schema_version: e.schemaVersion, deleted_at: null })
-      .eq("user_id", userId).eq("kind", e.kind).eq("entity_id", e.id)
-      .eq("version", known) // <- the guard
-      .select("version,updated_at").maybeSingle();
-    if (error) { console.error("saveState update failed", error); return { ok: false, reason: "error", error }; }
-    if (!data) return { ok: false, reason: "conflict" }; // zero rows: it moved under us
-    versions.set(keyOf(e), data.version);
-    currentVersion = data.updated_at;
-  }
-
-  for (const ref of diff.tombstones) {
-    const known = versions.get(`${ref.kind}:${ref.id}`);
-    const q = supabase
-      .from("budget_entities")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("user_id", userId).eq("kind", ref.kind).eq("entity_id", ref.id);
-    const { data, error } = await (known === undefined ? q : q.eq("version", known))
-      .select("version,updated_at").maybeSingle();
-    if (error) { console.error("saveState tombstone failed", error); return { ok: false, reason: "error", error }; }
-    if (!data) return { ok: false, reason: "conflict" };
-    versions.delete(`${ref.kind}:${ref.id}`);
-    currentVersion = data.updated_at;
   }
 
   baseline = next;

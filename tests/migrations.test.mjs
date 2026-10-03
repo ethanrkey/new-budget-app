@@ -18,6 +18,7 @@ import {
   splitState, assembleState, diffEntities, tombstoneAlarm,
   anchorMatchesNewestSnapshot, ENTITY_SCHEMA_VERSION,
 } from "../src/engine/entities.ts";
+import { planWrite, applyResult, keyOf } from "../src/engine/entityStore.ts";
 import {
   upsertItem, deleteItem, addCategory, deleteCategory, addBalanceSnapshot,
   addContribution, setMonthlyActual, setOverride, clearOverride, updateAccountBalance,
@@ -368,6 +369,54 @@ const renamed = splitState(normalize(upsertItem(convBase, { ...convBase.recurrin
 const renStore = applyDiff(new Map(convRows.map((e) => [`${e.kind}:${e.id}`, e])), diffEntities(convRows, renamed));
 ok("a rename updates in place and orphans nothing",
   [...renStore.values()].filter((e) => e.kind === "recurring").length === convBase.recurring.length);
+
+// ---- The write PLAN: shared by both clients, so tested once ------------
+console.log("\n== write plan: order, guards, and when to stop ==");
+reseed();
+const planBase = normalize(structuredClone(FIXTURES.alreadyModern.state));
+const planRows = splitState(planBase);
+const vmap = new Map(planRows.map((e, i) => [keyOf(e), i + 1]));
+
+ok("an unchanged state plans no work", planWrite(planRows, planRows, vmap).ops.length === 0);
+
+// A row we hold a version for is a guarded UPDATE; one we do not is an
+// INSERT, because the alternative — forcing — is how a stale device wins.
+const edited = splitState({ ...planBase, recurring: planBase.recurring.map((r) => ({ ...r, amount: r.amount + 1 })) });
+const p1 = planWrite(planRows, edited, vmap);
+ok("a known row is a guarded update", p1.ops.length === 1 && p1.ops[0].op === "update");
+ok("...carrying the version we loaded", p1.ops[0].version === vmap.get(keyOf(p1.ops[0].entity)));
+
+const p2 = planWrite(planRows, edited, new Map());
+ok("a row we hold no version for is an insert", p2.ops[0].op === "insert");
+
+// THE ORDERING RULE. A conflict part-way must stop before anything is
+// REMOVED: losing an edit is recoverable, a tombstone on a stale view is not.
+const churn = splitState({
+  ...planBase,
+  recurring: [],
+  oneoffs: [...planBase.oneoffs, { id: "new1", name: "New", amount: 5, category: "oneoff", date: "2026-10-09", order: 9, accountId: "checking" }],
+});
+const p3 = planWrite(planRows, churn, vmap);
+const firstTombstone = p3.ops.findIndex((o) => o.op === "tombstone");
+const lastUpsert = p3.ops.map((o) => o.op).lastIndexOf("insert") >= 0
+  ? Math.max(p3.ops.map((o) => o.op).lastIndexOf("insert"), p3.ops.map((o) => o.op).lastIndexOf("update"))
+  : p3.ops.map((o) => o.op).lastIndexOf("update");
+ok("every upsert is planned before any tombstone", firstTombstone === -1 || firstTombstone > lastUpsert,
+  p3.ops.map((o) => o.op).join(","));
+ok("tombstones carry their version too", p3.ops.filter((o) => o.op === "tombstone").every((o) => o.version !== undefined));
+
+// The alarm rides on the plan, so neither client has to re-derive it.
+ok("wiping nearly everything raises the alarm", planWrite(planRows, splitState(normalize({})), vmap).alarm === true);
+ok("an ordinary edit does not", p1.alarm === false);
+
+// Bookkeeping must stay identical across clients or every later write
+// becomes a spurious conflict.
+const vm2 = new Map(vmap);
+applyResult(vm2, p1.ops[0], 99);
+ok("a successful update records the new version", vm2.get(keyOf(p1.ops[0].entity)) === 99);
+const tomb = p3.ops.find((o) => o.op === "tombstone");
+applyResult(vm2, tomb, null);
+ok("a tombstone forgets the row", !vm2.has(keyOf(tomb.ref)));
 
 console.log("\n== entity split: diff and alarms ==");
 reseed();

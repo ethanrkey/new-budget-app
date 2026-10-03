@@ -1434,3 +1434,22 @@ Later:
   150 → green, 240 → blue, 300 → purple), and `ROLE_HUE` records the
   input while the swatch sheet is what any claim about appearance has to
   be read off.
+- **Hue specified in one colour space, described in another, is a trap**
+  (2026-10-03). OKLCH hue and HSL hue are different numbers for the same
+  wheel and they diverge hard: OKLCH 20° is HSL 346° (lipstick pink), not
+  red. The palette was specified in OKLCH, described in ordinary colour
+  words, and shipped as brown-and-navy while its own documentation said
+  gold-and-blue. `ROLE_HUE` records the OKLCH input because that is what
+  the search optimises; **every claim about what a colour LOOKS like must
+  be read off a rendered swatch**, never off the number. At L .55 the
+  mapping is 30 → red, 58 → orange, 80 → amber, 150 → green, 240 → blue,
+  300 → purple, and that table is in `palette.ts` so the next person does
+  not have to rediscover it.
+- **The write PLAN is shared; only the transport is per client**
+  (2026-10-03, `engine/entityStore.ts`). `planWrite` decides which rows a
+  save touches, which version guard each carries, and in what order —
+  upserts before tombstones, caller aborts on the first refusal. Two
+  clients write `budget_entities` now and the rules must not exist twice:
+  web and phone disagreeing about write order is a data-loss bug that
+  presents as "works on my laptop". Pure, so the ordering rule is a
+  harness assertion rather than a comment in two files.
