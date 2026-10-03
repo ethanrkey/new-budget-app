@@ -911,6 +911,17 @@ fifth tab never needs a migration.
    - **Look at the output.** For anything visual, render it and read what
      is actually there. Describing a palette from its inputs is how
      "bills gold, savings blue" shipped as brown and navy.
+   - **An in-memory replay cannot model a database.** A save was
+     "verified" against a synthetic commit and shipped broken, because
+     the one thing the replay could not reproduce was that a DATABASE
+     REMEMBERS DELETED KEYS. If the thing under test persists, test it
+     against something that persists — a fake server enforcing the same
+     constraints is enough, and it reproduced the bug in one run.
+   - **Prove the check can fail.** The first attempt at type-checking the
+     JS files reported zero errors because those files were not in
+     `include` at all. A green result from a check that never ran is
+     worse than no check: introduce a known-bad case and watch it go
+     red before believing a green.
 
 6. Data-shape changes are migration-safe: **idempotent always**,
    **deterministic for any state that carries data**, asserted before/after
@@ -1469,3 +1480,28 @@ Later:
   balance, and the key `accountSnapshot:<account>:<today>` is already
   taken by this morning's tombstone. Reproduced against a fake server
   enforcing the same guard Postgres does, before and after the fix.
+- **Closing the JS call-site gap, measured rather than guessed**
+  (2026-10-03). `App.jsx` is JS, so `tsc` cannot see its calls into the
+  typed engine — which is how `addCategory(s, name, 0, kind)` survived
+  migration 13 removing the `color` parameter and created every
+  manager-added category with `kind === 0`. Three things were measured:
+  the five non-JSX JS files cost **12 JSDoc annotations** to put under
+  `// @ts-check`, so they are in `tsconfig.include` now and a bad call
+  from them is a compile error; `storage.js` costs **25** implicit-any
+  complaints under `strict` and is deliberately still out; `App.jsx` is
+  the big one and is not worth converting for this.
+  
+  What covers the two that remain is a **runtime guard on enum-ish
+  arguments in the engine** — `addCategory` throws on a kind that is not
+  "asset" or "debt". A type is not a guard when half the callers are
+  untyped. It paid for itself on the first run by catching two more stale
+  callers in the harness.
+- **DEFERRED, deliberately: forecast accuracy as a single number.** The
+  question worth answering is not "was electric $112 or $108" but
+  "across everything I track, how far off is my forecast, and in which
+  direction" — the number that says whether to believe your own projected
+  balance, and one no other budget app can show because they have no
+  forecast to validate. **Not designed yet, on purpose: there is one
+  month of data.** Four or five are needed to see whether the aggregate
+  gap is stable and informative or just noise, and designing the
+  aggregation before knowing which it is means building on a guess.

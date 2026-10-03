@@ -179,6 +179,32 @@ export function computeNetPosition(state: BudgetState): NetPosition {
 // The last `count` months as "YYYY-MM" keys, ending at (and including)
 // `anchorISO`'s month — the window the Spending tab's variable-spending
 // table shows for each flagged bill.
+/**
+ * The months this rule was actually ACTIVE in, within the window — plus
+ * any month that already carries a logged actual, so entered data is
+ * never hidden.
+ *
+ * A month before the rule's startDate has zero occurrences and therefore
+ * an expected of $0.00, and a row of $0.00 can never say anything: half
+ * an Electric table was months that could not carry information. Worse,
+ * a logged actual against a zero expectation renders as "+$150.00",
+ * which reads as overspending when the truth is that nothing was due.
+ */
+export function activeMonthKeys(
+  item: RecurringItem,
+  monthlyActuals: BudgetState["monthlyActuals"] | undefined,
+  months: MonthKey[]
+): MonthKey[] {
+  return months.filter((mk) => {
+    const active = occurrenceDates(item, endOfMonth(mk)).some((d) => d.slice(0, 7) === mk);
+    // An actual logged for an inactive month is kept deliberately: it is
+    // data the user entered, and hiding it would be the silent drop this
+    // codebase keeps having to fix. The row says the rule was not active
+    // instead of pricing it as a variance.
+    return active || monthlyActuals?.[item.id]?.[mk] != null;
+  });
+}
+
 export function lastMonthKeys(anchorISO: ISODate, count: number): MonthKey[] {
   const [y, m] = anchorISO.slice(0, 7).split("-").map(Number);
   const out: MonthKey[] = [];

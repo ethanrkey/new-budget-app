@@ -1,3 +1,4 @@
+// @ts-check
 // ---- Auth: Google OAuth (primary) + email magic link (fallback) ----
 import { supabase } from "./supabase.js";
 
@@ -16,6 +17,7 @@ export function signInWithGoogle() {
 }
 
 // Emails a one-click sign-in link.
+/** @param {string} email */
 export function signInWithMagicLink(email) {
   return supabase.auth.signInWithOtp({
     email,
@@ -35,6 +37,7 @@ export async function getSession() {
 }
 
 // Fires on sign-in, sign-out, and token refresh. Returns an unsubscribe fn.
+/** @param {(session: import("@supabase/supabase-js").Session | null) => void} callback */
 export function onAuthChange(callback) {
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
     callback(session);

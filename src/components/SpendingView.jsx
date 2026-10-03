@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { computeMonthVariance, lastMonthKeys } from "../engine/progress.ts";
+import { computeMonthVariance, lastMonthKeys, activeMonthKeys } from "../engine/progress.ts";
 import { todayISO } from "../engine/model.ts";
 
 const money = (n) =>
@@ -78,7 +78,7 @@ function VariableSpendingRow({ item, monthKeys, monthlyActuals, onSet, onDelete 
             </tr>
           </thead>
           <tbody>
-            {monthKeys.map((mk) => (
+            {activeMonthKeys(item, monthlyActuals, monthKeys).map((mk) => (
               <MonthRow key={mk} item={item} monthKey={mk} monthlyActuals={monthlyActuals} onSet={onSet} onDelete={onDelete} />
             ))}
           </tbody>
@@ -104,7 +104,9 @@ function MonthRow({ item, monthKey, monthlyActuals, onSet, onDelete }) {
         {monthLabel(monthKey)}
         {v.occurrences > 1 && <span className="text-gray-400 text-xs"> ({v.occurrences}×)</span>}
       </td>
-      <td className="py-1.5 pr-3 text-right text-gray-500">{money(v.expected)}</td>
+      <td className="py-1.5 pr-3 text-right text-gray-500">
+        {v.occurrences === 0 ? <span className="text-gray-400">not due</span> : money(v.expected)}
+      </td>
       <td className="py-1.5 pr-3 text-right">
         <input
           type="number"
@@ -117,7 +119,10 @@ function MonthRow({ item, monthKey, monthlyActuals, onSet, onDelete }) {
         />
       </td>
       <td className={`py-1.5 text-right font-medium ${v.delta == null ? "text-gray-300 dark:text-gray-600" : v.delta > 0 ? "text-expense" : v.delta < 0 ? "text-income" : "text-gray-400"}`}>
-        {v.delta == null ? "—" : (v.delta > 0 ? "+" : "") + money(v.delta)}
+        {/* A delta against a month with nothing due is not a variance —
+            pricing it as one is what made "+$150.00" read as overspending
+            when the rule had not started. */}
+        {v.occurrences === 0 ? "—" : v.delta == null ? "—" : (v.delta > 0 ? "+" : "") + money(v.delta)}
       </td>
     </tr>
   );

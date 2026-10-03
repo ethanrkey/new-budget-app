@@ -354,7 +354,7 @@ function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, 
         <button onClick={onUpdate} className={BTN}>Update balance</button>
       </div>
       <HistoryChart data={snapshots.map((s) => ({ date: s.date, amount: s.amount }))} color={color} isDark={isDark}
-        emptyHint="Confirm a balance update whenever you check your bank — each one adds a point here." />
+        emptyHint="This is where you stand. Confirm it again next time you check your bank and this becomes a line." />
       <HistoryList entries={snapshots} onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
     </section>
   );
@@ -392,7 +392,11 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onL
           <div className="mt-1 text-2xl font-semibold tabular-nums" style={latest ? { color } : undefined}>
             {latest ? money(latest.amount) : <span className="text-gray-300 dark:text-gray-600">—</span>}
           </div>
-          <div className="text-xs text-gray-500">{latest ? `logged ${prettyDate(latest.date)}` : "no balance logged yet"}</div>
+          <div className="text-xs text-gray-500">
+            {latest
+              ? `logged ${prettyDate(latest.date)}`
+              : "Add what's in it today and the Dashboard can show you where you stand."}
+          </div>
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
           <button onClick={onLog} className={BTN}>Log balance</button>
@@ -401,7 +405,7 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onL
       </div>
 
       <HistoryChart data={data} color={color} isDark={isDark}
-        emptyHint="Log a balance whenever you check the account — two points make a trend." />
+        emptyHint="This is where you stand. Log it again next month and this becomes a line." />
 
       {/* Contributions are LOGGED, never summed from the ledger — the ledger
           is a forecast, so that figure would be what you planned to put in.
@@ -481,7 +485,9 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
             {latest ? money(latest.amount) : <span className="text-gray-300 dark:text-gray-600">—</span>}
           </div>
           <div className="text-xs text-gray-500">
-            {latest ? `outstanding · logged ${prettyDate(latest.date)}` : "no balance logged yet"}
+            {latest
+              ? `outstanding · logged ${prettyDate(latest.date)}`
+              : "Add what you owe today and the Dashboard can show you where you stand."}
           </div>
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
@@ -556,7 +562,7 @@ function SetupLoanCard({ category, isDark, onSetup }) {
         <span className="truncate">{category.name}</span>
       </div>
       <p className="text-sm text-gray-500">
-        Not set up yet — add its original amount, rate, and what you owe today to see the balance, progress, and projection.
+        Balance logged. Add the rate and original amount to see payoff progress.
       </p>
       <button onClick={onSetup} className={`${BTN} self-start`}>Set up loan</button>
     </section>

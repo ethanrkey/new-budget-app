@@ -1,3 +1,4 @@
+// @ts-check
 // ---- Per-device display preferences ----
 // Same reasoning as theme.js: how the UI is arranged on THIS screen is not
 // account data. It never leaves this browser, never syncs, and never lands in
@@ -8,6 +9,7 @@
 // choice -> account default -> system preference). These are plain booleans.
 const PREFIX = "budget-app-pref:";
 
+/** @param {string} name @param {boolean} [fallback] */
 export function getDeviceFlag(name, fallback = false) {
   try {
     const stored = localStorage.getItem(PREFIX + name);
@@ -21,6 +23,7 @@ export function getDeviceFlag(name, fallback = false) {
   return fallback;
 }
 
+/** @param {string} name @param {boolean} value */
 export function setDeviceFlag(name, value) {
   try {
     localStorage.setItem(PREFIX + name, value ? "1" : "0");

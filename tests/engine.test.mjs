@@ -484,7 +484,7 @@ eq("field explicitly true is preserved",
 console.log("\n== Scenario O: addCategory / updateCategory / deleteCategory / moveCategory ==");
 let sO = { trackerCategories: legacyTrackerCategories() }; // roth(0), saved(1), brokerage(2), loans(3)
 
-sO = addCategory(sO, "Crypto", 6);
+sO = addCategory(sO, "Crypto");
 const cryptoId = sO.trackerCategories.find((c) => c.name === "Crypto").id;
 check("addCategory appends with order = max+1", sO.trackerCategories.find((c) => c.id === cryptoId).order, 4);
 check("addCategory total count", sO.trackerCategories.length, 5);

@@ -221,7 +221,9 @@ function AssetCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory
       <Text style={[styles.cardNum, { color: latest ? color : T.faint }]}>
         {latest ? money(latest.amount) : "—"}
       </Text>
-      <Text style={styles.dim}>{latest ? `logged ${latest.date}` : "no balance logged yet"}</Text>
+      <Text style={styles.dim}>
+        {latest ? `logged ${latest.date}` : "Add what's in it today and the Dashboard can show you where you stand."}
+      </Text>
       <Sparkline points={history.map((h) => ({ date: h.date, amount: h.amount }))} color={color} width={chartW} />
 
       {/* Contributions are LOGGED, never summed from the ledger — the ledger
@@ -260,7 +262,7 @@ function DebtCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory;
         {p?.outstanding != null ? money(p.outstanding) : "—"}
       </Text>
       <Text style={styles.dim}>
-        {p?.latest ? `owed as of ${p.latest.date}` : "no balance logged yet"}
+        {p?.latest ? `owed as of ${p.latest.date}` : "Add what you owe today and the Dashboard can show you where you stand."}
       </Text>
 
       {p && p.percentPaid != null && (

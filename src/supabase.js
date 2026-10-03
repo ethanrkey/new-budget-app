@@ -1,3 +1,5 @@
+// @ts-check
+/// <reference types="vite/client" />
 // ---- Supabase client ----
 // The one place that knows how to reach the backend. storage.js and auth.js
 // both import this; nothing else should need to.

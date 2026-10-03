@@ -210,6 +210,15 @@ export function reorderList(state: BudgetState, names: string[], name: string, b
  * separate migration, deliberately not bundled with a visual change.
  */
 export function addCategory(state: BudgetState, name: string, kind: "asset" | "debt" = "asset"): BudgetState {
+  // A RUNTIME guard on the enum, because the callers that matter are JSX
+  // and tsc cannot see them. This exact signature lost a parameter in
+  // migration 13 and App.jsx went on passing `0` where `kind` now sits,
+  // so every category added from the manager was created with kind === 0
+  // — silently, for days. A type is not a guard when half the callers are
+  // untyped; this is.
+  if (kind !== "asset" && kind !== "debt") {
+    throw new Error(`addCategory: kind must be "asset" or "debt", got ${JSON.stringify(kind)}`);
+  }
   const order = state.trackerCategories.length
     ? Math.max(...state.trackerCategories.map((c) => c.order)) + 1
     : 0;

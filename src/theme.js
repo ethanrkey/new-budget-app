@@ -1,3 +1,4 @@
+// @ts-check
 // ---- Per-device theme (light/dark) ----
 // Deliberately NOT part of the synced account state (settings.theme) — a
 // display preference like "dark mode on my phone, light on my laptop" is
@@ -11,6 +12,7 @@
 // independent from then on.
 const KEY = "budget-app-theme"; // "light" | "dark"
 
+/** @param {"light"|"dark"|null|undefined} accountDefault */
 export function getDeviceTheme(accountDefault) {
   try {
     const stored = localStorage.getItem(KEY);
@@ -24,6 +26,7 @@ export function getDeviceTheme(accountDefault) {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+/** @param {"light"|"dark"} theme */
 export function setDeviceTheme(theme) {
   try {
     localStorage.setItem(KEY, theme);

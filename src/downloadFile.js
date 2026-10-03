@@ -1,7 +1,9 @@
+// @ts-check
 // ---- Trigger a browser file download from in-memory content ----
 // Shared by ExportMenu (Ledger/Budget CSVs, the full JSON backup) and
 // ImportCSV (the pre-restore safety-net backup) — one place for this so
 // both stay byte-identical.
+/** @param {string} filename @param {string} contentString @param {string} [mimeType] */
 export function downloadFile(filename, contentString, mimeType) {
   const blob = new Blob(["﻿" + contentString], { type: mimeType }); // BOM so Excel opens CSV as UTF-8
   const url = URL.createObjectURL(blob);

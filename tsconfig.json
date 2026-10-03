@@ -34,5 +34,14 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/engine/**/*"]
+  // The non-JSX JS files are in scope and carry `// @ts-check`, so a bad
+  // call into the typed engine from them is a compile error. storage.js and
+  // App.jsx are deliberately still out: measured at 25 and (untried) many
+  // implicit-any complaints under `strict`, which is noise rather than bugs.
+  // See the decision log for what covers those two instead.
+  "include": [
+    "src/engine/**/*",
+    "src/auth.js", "src/theme.js", "src/devicePrefs.js",
+    "src/downloadFile.js", "src/supabase.js"
+  ]
 }
