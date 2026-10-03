@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { todayISO } from "../engine/model.ts";
-import ColorSwatches from "./ColorSwatches.jsx";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
 // Set up (or edit the terms of) a loan — which is a debt-kind category, so
@@ -10,10 +9,9 @@ import { useSubmitOnce } from "../useSubmitOnce.js";
 // balance as the first snapshot (the anchor everything projects from);
 // editing an existing loan's terms doesn't touch balance history — that's
 // the card's own "Log balance."
-export default function LoanSetupModal({ initial, presetName, taggedCount = 0, isDark, onSave, onDelete, onClose }) {
+export default function LoanSetupModal({ initial, presetName, taggedCount = 0, onSave, onDelete, onClose }) {
   const isNew = !initial?.originalPrincipal && initial?.originalPrincipal !== 0;
   const [name, setName] = useState(initial?.name ?? presetName ?? "");
-  const [color, setColor] = useState(initial?.color ?? 3);
   const [originalPrincipal, setOriginalPrincipal] = useState(initial?.originalPrincipal ?? "");
   const [interestRate, setInterestRate] = useState(initial?.interestRate ?? "");
   const [interestStartDate, setInterestStartDate] = useState(initial?.interestStartDate ?? "");
@@ -32,7 +30,6 @@ export default function LoanSetupModal({ initial, presetName, taggedCount = 0, i
     onSave({
       categoryId: initial?.id ?? null,
       name: name.trim(),
-      color,
       originalPrincipal: Math.abs(Number(originalPrincipal)),
       interestRate: interestRate === "" ? null : Math.abs(Number(interestRate)),
       interestStartDate: interestStartDate || null,
@@ -60,10 +57,6 @@ export default function LoanSetupModal({ initial, presetName, taggedCount = 0, i
           <div>
             <label className={label}>Name</label>
             <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="Car loan, mortgage, student loan…" autoFocus={isNew} />
-          </div>
-          <div>
-            <label className={label}>Color</label>
-            <ColorSwatches value={color} onChange={setColor} isDark={isDark} />
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">

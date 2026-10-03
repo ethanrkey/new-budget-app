@@ -12,6 +12,7 @@ import { parseBudgetCSV } from "../src/engine/csvImport.ts";
 import { parseLedgerCSV } from "../src/engine/ledgerCsvImport.ts";
 import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../src/engine/backupShape.ts";
 import { isStale, makeRecoveryEnvelope, isRecoveryEnvelope } from "../src/engine/syncGuard.ts";
+import { roleSuffix } from "../src/engine/palette.ts";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const money = (n) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -525,6 +526,16 @@ const budgetOrphan = computeBudget(stateOrphan, stateOrphan.settings.budgetHoriz
 const layoutOrphan = computeBudgetLayout(budgetOrphan, stateOrphan.trackerCategories);
 eq("an orphaned category's item still renders, in the trailing null cluster",
   layoutOrphan.savingGroups[layoutOrphan.savingGroups.length - 1], ["Old Crypto Stash"]);
+// A card that reads "SAVINGS · Savings" is the DEFAULT state of a new
+// account, not an edge case: the seeded categories are named after their
+// own roles.
+check("roleSuffix drops the suffix when the name already says it",
+  [["Savings", "savings"], ["Investments", "investment"], ["Debt", "debt"], ["  fixed bill ", "bill"]]
+    .every(([n, r]) => roleSuffix(n, r) === null) ? 1 : 0, 1);
+check("roleSuffix keeps it for a name the user chose",
+  [roleSuffix("Roth IRA", "investment"), roleSuffix("Car loan", "debt"), roleSuffix("Emergency fund", "savings")]
+    .join("|") === "Investment|Debt|Savings" ? 1 : 0, 1);
+
 check("paletteColor falls back to gray for an orphaned/out-of-range index (light)",
   paletteColor(999, false) === "#6b7280" ? 1 : 0, 1);
 check("paletteColor falls back to gray for an orphaned/out-of-range index (dark)",

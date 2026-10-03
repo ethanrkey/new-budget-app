@@ -94,6 +94,20 @@ export const ROLE_LABEL: Record<Role, string> = {
   uncategorized: "Uncategorized",
 };
 
+/**
+ * The role suffix a card shows after a category's name — or null when the
+ * name already says it. "SAVINGS · Savings" is not a legend, it is a
+ * stutter, and it is the DEFAULT state of a new account: the three seeded
+ * categories are named Savings, Investments and Debt, which are the role
+ * labels verbatim. Plural and case are ignored so "Investments" matches
+ * "Investment"; anything the user actually named ("Roth IRA", "Car loan")
+ * still gets its role spelled out, which is the whole point of the suffix.
+ */
+export function roleSuffix(name: string, role: Role): string | null {
+  const fold = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "").replace(/s$/, "");
+  return fold(name) === fold(ROLE_LABEL[role]) ? null : ROLE_LABEL[role];
+}
+
 export function roleColor(role: Role, isDark: boolean): string {
   return ROLE_COLORS[role][isDark ? "dark" : "light"];
 }

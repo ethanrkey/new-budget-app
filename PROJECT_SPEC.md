@@ -923,6 +923,12 @@ fifth tab never needs a migration.
      worse than no check: introduce a known-bad case and watch it go
      red before believing a green.
 
+   `scripts/fixtureApp.mjs` exists so the first bullet costs nothing:
+   `openFixtureApp()` boots the real bundle through the real auth gate
+   and the real `loadState`, holding an invented account, and hands back
+   a page you can click. Use it rather than reaching for the author's
+   signed-in browser.
+
 6. Data-shape changes are migration-safe: **idempotent always**,
    **deterministic for any state that carries data**, asserted before/after
    on legacy-shaped fixtures, never fabricating values the user didn't enter.
@@ -1108,9 +1114,11 @@ In build order; **[D]** needs a design decision, **[P]** is a port.
    phone wants a sheet rather than a modal and "Delete" needs a native
    destructive confirm. The per-item colour picker is gone, so the form
    is smaller than the web's ever was.
-2. **Account deletion + a Settings screen** [P]. **Apple requires
-   in-app account deletion**, so this is a submission blocker rather
-   than a nicety. The screen also wants sign-out (currently stranded on
+2. **Account deletion + a Settings screen** [P] — **APP STORE
+   SUBMISSION BLOCKER.** Apple's guideline 5.1.1(v) requires an app
+   that creates an account to let the user delete it from inside the
+   app. The web has it; the phone does not, so the build cannot be
+   submitted as it stands. This is not a nicety and not a "later". The screen also wants sign-out (currently stranded on
    the Dashboard), the account facts, and Wipe Data.
 3. **Quick entry** [D]. Arguably worth MORE on a phone than on the web —
    entering a cash spend while standing in a shop is the case. Decision:
@@ -1126,13 +1134,17 @@ In build order; **[D]** needs a design decision, **[P]** is a port.
 7. **Onboarding + guided tour** [D]. A user who signs up ON the phone
    currently lands in an empty app. Decision: port the wizard, or state
    that first-time setup is a web task and say so at the empty state.
-8. **The recovery copy** [D], and this one is a real safety gap rather
-   than a missing feature. The web stashes to `localStorage`
+8. **The recovery copy** [D] — **ships WITH item 1, not after it.**
+   Listed eighth because that is its size, not its deadline. This one is
+   a real safety gap rather than a missing feature. The web stashes to `localStorage`
    SYNCHRONOUSLY before anything replaces in-memory state, and that
    synchrony is the guarantee. AsyncStorage cannot do it, and iOS can
    suspend mid-write. Survivable today because a phone write is one
    small action and a rejected commit rolls back; it stops being
-   survivable the moment the phone can edit in bulk, i.e. after item 1.
+   survivable the moment the phone can edit in bulk. Item 1 is exactly
+   that moment, so the two land together: shipping transaction editing
+   onto a client with no synchronous recovery stash is shipping the gap,
+   not approaching it.
 9. **Export** [D]. A JSON/CSV download means the iOS share sheet, not a
    file download. Import probably does not belong on a phone at all.
 10. **Horizon control** [D]. The phone has a device-local date chip
@@ -1147,11 +1159,16 @@ pinned-column grid, which is already reshaped to one card per month.
 
 Later, in rough order:
 
-0. **Regenerate the landing-page screenshots.** `public/screenshots/*`
-   were rendered 2026-10-02, before the role palette — they show the
-   retired eight-hue colours and the old "Savings columns" label, so the
-   public page currently advertises a version of the app that no longer
-   exists.
+0. **Two deferred copy items, both noticed 2026-10-03 and both left
+   alone on purpose.** (a) The guided tour's Spending stop does not
+   explain the tab — it names it. Spending is the hardest of the four to
+   describe, because the thing it does (compare a logged actual against
+   a rule's amount without ever changing the forecast) is the whole of
+   principle 1 in one sentence. (b) The empty history caption, "One
+   point so far (Oct 3). This is where you stand. Log it again next
+   month and this becomes a line.", reads as three short sentences
+   fighting each other. Neither is a bug; both want writing rather than
+   coding, which is why they are not fixed in passing.
 1. **The mobile backlog above**, items 1-2 especially — the phone cannot
    edit a transaction, and in-app account deletion is an App Store
    submission blocker.
@@ -1170,6 +1187,20 @@ Later, in rough order:
    purge is scheduled; the rows accumulate. Read-only offline means the
    window only has to outlive online devices refetching, so this is
    housekeeping, not correctness.
+7. **The Ledger still prints saving and debt amounts in red**, while the
+   Budget deliberately does not (see the decision below). Same money,
+   same app, two answers — and the Ledger contradicts itself inside one
+   row, pricing a $300 savings transfer as red-expense in the Out column
+   while its own Savings column prints the same $300 in savings blue.
+   The Budget's reasoning applies unchanged; it was simply not carried
+   across. Small, but it needs the same placement audit the Budget got.
+8. **Retired palette machinery still exported from the engine.**
+   `CATEGORY_PALETTE`, `paletteColor` and the `PaletteIndex` type survive
+   in `model.ts`/`types.ts` with no renderer left to use them —
+   `ColorSwatches` was the last one and is gone. Deleting them reaches
+   `ProjectedEvent.color` and the golden fixtures, so it is a small
+   migration rather than a delete, and it is not worth doing at the end
+   of a day. They are inert in the meantime: nothing reads them.
 
 Further out:
 - iOS client: **`mobile/` exists as of 2026-10-02** — Expo SDK 57 /
@@ -1594,6 +1625,55 @@ Further out:
   calls `fetchVersion`. **There is no service worker in this project**,
   so a stale build surviving a deploy is not a thing that can happen —
   that hypothesis was checked and ruled out rather than assumed.
+- **The landing-page screenshots are generated, not taken**
+  (2026-10-03, `scripts/screenshots.mjs` + `scripts/fixture.mjs`). The
+  first set was captured by hand on 2026-10-02 and was wrong by the next
+  afternoon: the role palette shipped, and the public page went on
+  advertising eight retired hues and a "Savings columns" label the app
+  no longer had. A screenshot is DERIVED from the UI. It rots exactly
+  like a generated file, so it has to be regenerable like one — `npm run
+  screenshots` and the three images are current again.
+
+  The account in them is invented and dated RELATIVE TO TODAY, so a
+  regeneration months from now shows a current-looking account rather
+  than one whose newest reading is stale. It is also the only version of
+  this that is safe to re-run without thinking: a public page is the
+  last place a real balance should appear, and "remember to use fixture
+  data" is not a safeguard.
+
+- **A fixture-backed browser harness, because rule 5 needs one**
+  (2026-10-03, `scripts/fixtureApp.mjs`). Verifying from the real entry
+  point used to mean driving the author's own signed-in account, which
+  is slow, destructive, and impossible to leave behind in a script. The
+  harness boots the real bundle through the real auth gate and the real
+  `loadState`, with a seeded session and the Supabase origin
+  intercepted, so a check can click an actual button and read what
+  actually rendered. Production code is untouched: there is no demo mode
+  that can be left switched on by accident, and the entire deception
+  lives in one file nothing ships. The screenshots are one caller; the
+  loan-editor check below was the second, within the hour.
+
+- **A control that discards what you type is worse than no control**
+  (2026-10-03). The role palette removed per-category colour, and
+  `LoanSetupModal` kept rendering a swatch row for several hours after
+  `setupLoan()` stopped writing the value — the function still ACCEPTED
+  a `color` argument and dropped it on the floor, which is why nothing
+  failed and nothing warned. Found while reading a screenshot, not while
+  testing. A dead parameter on a mutator is not harmless: it is the one
+  shape of dead code that can keep a live UI alive on top of it.
+
+- **A card does not say "SAVINGS · Savings"** (2026-10-03,
+  `roleSuffix`). Naming the role beside a category is what makes the
+  colour system readable instead of a private language — but the three
+  seeded categories are named Savings, Investments and Debt, which ARE
+  the role labels, so the stutter was the DEFAULT state of every new
+  account rather than an edge case. The suffix is dropped when the name
+  already carries it, matching on case and plural; anything the user
+  named themselves ("Roth IRA", "Car loan") still gets its role spelled
+  out, which is the entire point of the suffix. Note the shape of this
+  one: the general rule was right and its most common instance was the
+  exception.
+
 - **The untrack nudge is an observation, not a warning** (2026-10-03).
   A fixed $150 payment flagged "track actual vs budgeted" has no
   variance to measure, but the app does not argue at the moment of

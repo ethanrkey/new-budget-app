@@ -5,7 +5,7 @@ import { uid, primaryAccount, sanitizeTabOrder, blankState } from "./model.ts";
 import { occurrenceDates } from "./generate.ts";
 import type {
   AssetCategory, BalanceSnapshot, BudgetItem, BudgetState, Contribution, DebtCategory,
-  AssetKind, ISODate, MonthKey, PaletteIndex, RecurringItem, TabId,
+  AssetKind, ISODate, MonthKey, RecurringItem, TabId,
 } from "./types.ts";
 
 /**
@@ -435,12 +435,15 @@ export function moveTab(state: BudgetState, draggedId: TabId, beforeId: TabId | 
 export interface SetupAssetInput {
   categoryId?: string | null;
   name: string;
-  color?: PaletteIndex | null;
+  // No `color`. Colour is derived from role as of 2026-10-03, and the field
+  // outlived its picker by a few hours: LoanSetupModal still rendered a
+  // swatch row whose value setupLoan() then silently dropped on the floor.
+  // A control that discards what you type is worse than no control.
   balance?: number | null;
   asOf?: ISODate | null;
   assetKind?: AssetKind | null;
 }
-export function setupAsset(state: BudgetState, { categoryId = null, name, color = null, balance = null, asOf = null, assetKind = null }: SetupAssetInput): BudgetState {
+export function setupAsset(state: BudgetState, { categoryId = null, name, balance = null, asOf = null, assetKind = null }: SetupAssetInput): BudgetState {
   let next = state;
   let id = categoryId;
   if (!id || !next.trackerCategories.some((c) => c.id === id)) {
@@ -464,7 +467,7 @@ export interface SetupLoanInput extends SetupAssetInput {
   interestStartDate?: ISODate | null;
   outstanding?: number | null;
 }
-export function setupLoan(state: BudgetState, { categoryId = null, name, color = null, originalPrincipal, interestRate = null, interestStartDate = null, outstanding = null, asOf = null }: SetupLoanInput): BudgetState {
+export function setupLoan(state: BudgetState, { categoryId = null, name, originalPrincipal, interestRate = null, interestStartDate = null, outstanding = null, asOf = null }: SetupLoanInput): BudgetState {
   let next = state;
   let id = categoryId;
   if (!id || !next.trackerCategories.some((c) => c.id === id)) {

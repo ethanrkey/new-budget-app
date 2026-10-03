@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "node tests/engine.test.mjs && node tests/migrations.test.mjs && node scripts/validate_palette.mjs",
     "typecheck": "tsc --noEmit",
-    "palette": "node scripts/validate_palette.mjs"
+    "palette": "node scripts/validate_palette.mjs",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0",
@@ -30,6 +31,7 @@
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
     "postcss": "^8.5.28",
+    "puppeteer-core": "^24.43.1",
     "tailwindcss": "^3.4.19",
     "typescript": "^7.0.2",
     "vite": "^5.4.10"

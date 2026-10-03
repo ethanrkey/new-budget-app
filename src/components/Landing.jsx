@@ -4,21 +4,25 @@ import { applyTheme } from "../theme.js";
 // The public root. Three features, one CTA, no scroll-jacking and no
 // gradients that make a finance app look like a crypto product. Copy is
 // the user's, verbatim.
+// `w`/`h` are the shot's own CSS dimensions, and the three differ — one
+// hardcoded 1280x900 for all of them reserved the wrong box and shifted the
+// page as each image loaded. They come from SHOTS in scripts/screenshots.mjs
+// and have to be changed with it.
 const FEATURES = [
   {
     name: "Dashboard",
     blurb: "Every account in one place. Net position, balances you log yourself, and how each has moved.",
-    shot: "/screenshots/dashboard.png",
+    shot: "/screenshots/dashboard.png", w: 1100, h: 728,
   },
   {
     name: "Ledger",
     blurb: "Your forecast: every transaction you expect, dated, with a running balance. Adjust as plans change.",
-    shot: "/screenshots/ledger.png",
+    shot: "/screenshots/ledger.png", w: 1100, h: 688,
   },
   {
     name: "Budget",
     blurb: "Month by month, income against outflow, projected as far out as you want.",
-    shot: "/screenshots/budget.png",
+    shot: "/screenshots/budget.png", w: 1100, h: 1010,
   },
 ];
 
@@ -70,7 +74,7 @@ export default function Landing() {
               {/* Fixture data, never real finances — a public page is the
                   last place a real balance should appear. */}
               <figure className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 shadow-sm">
-                <img src={f.shot} alt={`The ${f.name} screen`} width="1280" height="900" className="w-full h-auto block" />
+                <img src={f.shot} alt={`The ${f.name} screen`} width={f.w} height={f.h} className="w-full h-auto block" />
               </figure>
             </div>
           ))}

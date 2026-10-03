@@ -3,7 +3,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } f
 import { computeCategoryHistory, computeLoggedContributions, computeNetPosition, computeMonthVariance } from "../engine/progress.ts";
 import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.ts";
 import { primaryAccount, todayISO } from "../engine/model.ts";
-import { roleColor, roleOfTrackerCategory, ROLE_LABEL } from "../engine/palette.ts";
+import { roleColor, roleOfTrackerCategory, roleSuffix } from "../engine/palette.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
 import LoanSetupModal from "./LoanSetupModal.jsx";
@@ -136,7 +136,6 @@ export default function Dashboard({
         <LoanSetupModal
           initial={loanModal.cat ?? null}
           taggedCount={loanModal.cat ? countTagged(loanModal.cat.id) : 0}
-          isDark={isDark}
           onSave={(payload) => { onSetupLoan(payload); setLoanModal(null); }}
           onDelete={loanModal.cat ? () => { onDeleteCategory(loanModal.cat.id); setLoanModal(null); } : undefined}
           onClose={() => setLoanModal(null)}
@@ -387,13 +386,15 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onL
           <div className={`${LABEL} flex items-center gap-1.5`}>
             <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
             <span className="truncate">{category.name}</span>
-            {/* The mapping, stated. A role system that never says what
-                its colours mean is a private language only the code
-                understands — and the person who designed the roles still
-                could not read the app. */}
-            <span className="shrink-0 text-gray-400 font-normal normal-case">
-              · {ROLE_LABEL[roleOfTrackerCategory(category)]}
-            </span>
+            {/* The mapping, stated — unless the name already states it.
+                A role system that never says what its colours mean is a
+                private language only the code understands; a card that
+                reads "SAVINGS · Savings" is noise. */}
+            {roleSuffix(category.name, roleOfTrackerCategory(category)) && (
+              <span className="shrink-0 text-gray-400 font-normal normal-case">
+                · {roleSuffix(category.name, roleOfTrackerCategory(category))}
+              </span>
+            )}
           </div>
           <div className="mt-1 text-2xl font-semibold tabular-nums" style={latest ? { color } : undefined}>
             {latest ? money(latest.amount) : <span className="text-gray-300 dark:text-gray-600">—</span>}
@@ -478,13 +479,15 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
           <div className={`${LABEL} flex items-center gap-1.5`}>
             <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
             <span className="truncate">{category.name}</span>
-            {/* The mapping, stated. A role system that never says what
-                its colours mean is a private language only the code
-                understands — and the person who designed the roles still
-                could not read the app. */}
-            <span className="shrink-0 text-gray-400 font-normal normal-case">
-              · {ROLE_LABEL[roleOfTrackerCategory(category)]}
-            </span>
+            {/* The mapping, stated — unless the name already states it.
+                A role system that never says what its colours mean is a
+                private language only the code understands; a card that
+                reads "SAVINGS · Savings" is noise. */}
+            {roleSuffix(category.name, roleOfTrackerCategory(category)) && (
+              <span className="shrink-0 text-gray-400 font-normal normal-case">
+                · {roleSuffix(category.name, roleOfTrackerCategory(category))}
+              </span>
+            )}
             <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 normal-case tracking-normal">Loan</span>
           </div>
           <div className="mt-1 text-2xl font-semibold tabular-nums">
