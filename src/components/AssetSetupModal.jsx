@@ -41,7 +41,7 @@ export default function AssetSetupModal({ initial, taggedCount = 0, isDark, onSa
       >
         <h2 className="text-lg font-semibold mb-1">{isNew ? "Add an account" : `Edit ${initial.name}`}</h2>
         <p className="text-xs text-gray-500 mb-4">
-          Savings, a Roth, a brokerage — anything you want a balance and a history for. Money you put
+          Savings, a Roth IRA, a brokerage — anything you want a balance and a history for. Money you put
           into it is an ordinary transaction that picks this account as its category.
         </p>
 

@@ -46,7 +46,7 @@ interface TrackerCategoryBase {
   order: number;
 }
 
-/** Something you own: savings, a Roth, a brokerage. */
+/** Something you own: savings, a Roth IRA, a brokerage. */
 export interface AssetCategory extends TrackerCategoryBase {
   kind: "asset";
 }

@@ -8,8 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node tests/engine.test.mjs && node tests/migrations.test.mjs",
-    "typecheck": "tsc --noEmit"
+    "test": "node tests/engine.test.mjs && node tests/migrations.test.mjs && node scripts/validate_palette.mjs",
+    "typecheck": "tsc --noEmit",
+    "palette": "node scripts/validate_palette.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0",

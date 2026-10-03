@@ -553,7 +553,7 @@ function AddAssetCard({ onAdd }) {
   return (
     <section className={`${CARD} border-dashed justify-center items-start`}>
       <div className={LABEL}>Savings &amp; investments</div>
-      <p className="text-sm text-gray-500">A savings account, a Roth, a brokerage — anything you want a balance, a history, and a contribution trend for.</p>
+      <p className="text-sm text-gray-500">A savings account, a Roth IRA, a brokerage — anything you want a balance, a history, and a contribution trend for.</p>
       <button onClick={onAdd} className={BTN}>+ Add account</button>
     </section>
   );
