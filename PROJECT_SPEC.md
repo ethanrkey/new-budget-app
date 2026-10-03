@@ -323,6 +323,17 @@ every load and is **idempotent and deterministic** (fixed seed ids, never
 9. `overrides` absent → `{}` (2026-10-02). A brand-new field; nothing is
    backfilled, because an override is a deliberate statement about one date
    and no prior state could imply one.
+11. snapshots sharing a date → **collapsed, later wins** (2026-10-02).
+    Not a new rule: `upsertSnapshotByDate` in `mutate.ts` has enforced one
+    balance per date on every write since that morning, and this applies it
+    retroactively to data written before it existed. **An invariant living
+    in a mutator can always be bypassed by data that predates the mutator.**
+    Found by the entity backfill, not by the round-trip property, and the
+    reason is worth keeping: duplicate keys survive happily in an in-memory
+    array, so `assembleState` puts both back and the identity holds. Only a
+    database primary key rejects them (Postgres 21000). This is the single
+    best argument for the date-keyed entity id — it moves the invariant
+    somewhere it cannot be bypassed at all.
 10. per-owner containers holding nothing → **dropped** (2026-10-02).
     `monthlyActuals: { itemId: {} }`, `balanceSnapshots: { catId: [] }` and
     the rest: deleting the last entry under an owner left the owner behind,
@@ -846,6 +857,24 @@ of that run.
    baseline it would compare against has already moved.
 4. `supabase/freeze_budget_states.sql` — the trigger that makes an old tab
    fail loudly instead of forking the data.
+
+*Run 2026-10-02.* 131 rows across four accounts; verification 62/62. The
+backfill found three things the round-trip property could not, all recorded
+as migrations or script fixes: same-date snapshots (migration 11); a
+backfill that upserted on the primary key and therefore was NOT idempotent
+for a seeded account, because `normalize()` mints fresh category uids every
+call — it now REPLACES a user's rows rather than merging; and two false
+alarms ruled out rather than assumed, the seeding nondeterminism in the
+verifier itself (category ids now compared by position, only where the blob
+had none, with an added assertion that nothing references a seeded id) and
+a key-order-only difference, which is meaningless here because `jsonb` does
+not preserve key order.
+
+An earlier claim that one tester's checking balance would shift at
+migration was **retracted**: the apparent anchor disagreement was the old
+"newest snapshot" reduce breaking a tie between two same-date rows by
+keeping the first. Migration 11 removes the tie. No user-visible number
+moves for anyone.
 
 Entities: each recurring item; each one-off; each tracker category; each
 balance snapshot; each contribution; each monthly actual (item+month); each

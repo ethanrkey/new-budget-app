@@ -139,6 +139,29 @@ const FIXTURES = {
     monthlyActuals: { e1: { "2026-09": 120 }, e2: {} },
     overrides: { e1: {}, nope: {} } } },
 
+  // 11. two balance readings for ONE date. Written before
+  //     upsertSnapshotByDate existed, so no mutator ever saw them. Found by
+  //     the entity backfill, not by the round-trip property: duplicate keys
+  //     survive fine in an array, and only a database primary key rejects
+  //     them.
+  duplicateDates: { data: true, state: {
+    settings: { checkInBalance: 500, checkInDate: "2026-09-01" },
+    // The anchor agrees with the newest snapshot on purpose: this fixture
+    // is about duplicate DATES, and an inconsistent anchor would make it
+    // fail the derived-anchor property too and test two things at once.
+    accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 536, balanceAsOf: "2026-10-01", order: 0 }],
+    recurring: [], oneoffs: [],
+    trackerCategories: [{ id: "k", name: "Roth", color: 5, order: 0, kind: "asset" }],
+    accountSnapshots: { checking: [
+      { id: "a1", date: "2026-09-28", amount: 444.49 },
+      { id: "a2", date: "2026-09-28", amount: 452.10 },
+      { id: "a3", date: "2026-10-01", amount: 536 },
+    ] },
+    balanceSnapshots: { k: [
+      { id: "s1", date: "2026-08-01", amount: 9100 },
+      { id: "s2", date: "2026-08-01", amount: 9150 },
+    ] } } },
+
   // the empty case: seeds a new account, migrates nothing
   empty: { data: false, state: {} },
 };
@@ -247,6 +270,26 @@ ok("every empty override owner is dropped", j(pruned.overrides) === "{}");
 ok("pruning is idempotent", j(normalize(structuredClone(pruned))) === j(pruned));
 ok("a pruned state round-trips through entities",
   j(normalize(structuredClone(assembleState(splitState(pruned))))) === j(pruned));
+
+// Migration 11 explicitly: one reading per date, the later one winning.
+console.log("\n== migration 11: same-date snapshots collapse ==");
+reseed();
+const dd = normalize(structuredClone(FIXTURES.duplicateDates.state));
+const acct = dd.accountSnapshots.checking;
+ok("three account rows become two", acct.length === 2, j(acct.map((x) => x.date)));
+ok("the LATER reading wins, as a correction", acct.find((x) => x.date === "2026-09-28")?.amount === 452.10);
+ok("a date with one reading is untouched", acct.find((x) => x.date === "2026-10-01")?.amount === 536);
+ok("category snapshots collapse the same way", dd.balanceSnapshots.k.length === 1);
+ok("...also keeping the later one", dd.balanceSnapshots.k[0].amount === 9150);
+ok("collapsing is idempotent", j(normalize(structuredClone(dd))) === j(dd));
+
+// THE POINT: this is what makes date-keyed entity ids safe. Without it,
+// splitState emits two rows with one key and the database rejects the whole
+// backfill (Postgres 21000).
+const ddRows = splitState(dd);
+ok("no two entity rows share a key", new Set(ddRows.map((e) => `${e.kind}:${e.id}`)).size === ddRows.length);
+ok("a de-duplicated state round-trips",
+  j(normalize(structuredClone(assembleState(ddRows)))) === j(dd));
 
 // ---- Convergence: the WRITE path, not just the shape ----------------------
 // The round-trip identity proves splitState/assembleState are lossless for a

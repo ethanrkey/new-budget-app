@@ -90,14 +90,22 @@ for (const row of rows) {
   const label = createHash("sha256").update(row.user_id).digest("hex").slice(0, 8);
   const pending = MIGRATIONS.filter(([, test]) => { try { return test(s); } catch { return true; } }).map(([n]) => n);
 
-  // The round-trip, in memory, nothing persisted.
-  let verdict;
+  // The round-trip, in memory, nothing persisted. Plus key uniqueness,
+  // which the round trip CANNOT catch: duplicate keys survive happily in an
+  // in-memory array, so assemble puts both back and the identity holds —
+  // only a database primary key rejects them. A real backfill failed on
+  // exactly that (Postgres 21000) after the round trip said fine.
+  let verdict, keys;
   try {
     const before = normalize(structuredClone(s));
-    const after = normalize(structuredClone(assembleState(splitState(before))));
+    const rows = splitState(before);
+    const after = normalize(structuredClone(assembleState(rows)));
     verdict = JSON.stringify(before) === JSON.stringify(after) ? "ok" : "MISMATCH";
+    const seen = new Set(rows.map((e) => `${e.kind}:${e.id}`));
+    keys = seen.size === rows.length ? "unique" : `COLLISION (${rows.length - seen.size})`;
   } catch (err) {
     verdict = `THREW (${err.constructor.name})`;
+    keys = "n/a";
   }
 
   console.log(`  ${label}`);
@@ -110,10 +118,11 @@ for (const row of rows) {
   console.log(`    applies on load: ${pending.length ? pending.join(", ") : "nothing"}`);
   console.log(`    written in era : ${era.length ? `pre-${era.map((n) => n.split(" ")[0]).join("/")}` : "current"}`);
   console.log(`    round-trip     : ${verdict}`);
+  console.log(`    entity keys    : ${keys}`);
   console.log("");
   // Worth exporting only if the property FAILS on it — an old-era blob that
   // round-trips has already told us everything an export would.
-  if (verdict !== "ok") needExport++;
+  if (verdict !== "ok" || keys !== "unique") needExport++;
 }
 
 console.log(

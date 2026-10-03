@@ -811,6 +811,68 @@
   },
   "overrides": {}
  },
+ "duplicateDates": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "budget",
+    "ledger",
+    "spending"
+   ],
+   "hasSeenOnboarding": false
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 536,
+    "balanceAsOf": "2026-10-01",
+    "order": 0
+   }
+  ],
+  "recurring": [],
+  "oneoffs": [],
+  "trackerCategories": [
+   {
+    "id": "k",
+    "name": "Roth",
+    "color": 5,
+    "order": 0,
+    "kind": "asset"
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "a2",
+     "date": "2026-09-28",
+     "amount": 452.1
+    },
+    {
+     "id": "a3",
+     "date": "2026-10-01",
+     "amount": 536
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {
+   "k": [
+    {
+     "id": "s2",
+     "date": "2026-08-01",
+     "amount": 9150
+    }
+   ]
+  },
+  "monthlyActuals": {},
+  "overrides": {}
+ },
  "empty": {
   "settings": {
    "budgetHorizon": "2027-06-25",

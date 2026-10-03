@@ -5,7 +5,7 @@
 // changes again, per the same "keep it swappable" principle storage.js
 // itself follows.
 import { blankState, defaultAccounts, sanitizeTabOrder, PRIMARY_ACCOUNT_ID } from "./model.ts";
-import type { BudgetState, RawState, TrackerCategory } from "./types.ts";
+import type { BalanceSnapshot, BudgetState, RawState, TrackerCategory } from "./types.ts";
 
 // One-time migration: very old data had a separate `tracker` field and/or a
 // preset `savings` category. Promote any set `tracker` straight to the
@@ -60,6 +60,31 @@ function inferCategoryKind(cat: any): "asset" | "debt" {
 // Merge a raw loaded/imported object onto blankState() so every field always
 // exists, running item migrations and the onboarding-seen / tracker-category
 // migrations below.
+// Migration 11 (2026-10-02): collapse snapshots that share a date, keeping
+// the LAST. This is not a new rule — it is `upsertSnapshotByDate` in
+// mutate.ts, which has enforced one balance per date on every write since
+// 2026-10-02, applied retroactively to data written before it existed. "As
+// of the 28th the account held X" is a statement about a date; two answers
+// are a contradiction, and the later one is the correction.
+//
+// Found by the entity backfill, not by the round-trip property: duplicate
+// keys survive happily in an in-memory array, so assembleState put both
+// back and the identity held. Only the database's primary key rejects them
+// (Postgres 21000, "ON CONFLICT DO UPDATE command cannot affect row a
+// second time"). An invariant that lives in a mutator can be bypassed by
+// data that predates the mutator.
+function mapValues<T>(map: Record<string, T>, fn: (v: T) => T): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [k, v] of Object.entries(map)) out[k] = fn(v);
+  return out;
+}
+
+function dedupeByDate(list: BalanceSnapshot[]): BalanceSnapshot[] {
+  const byDate = new Map<string, BalanceSnapshot>();
+  for (const s of list) byDate.set(s.date, s); // later wins, as a correction
+  return [...byDate.values()];
+}
+
 // Migration 10 (2026-10-02): drop per-owner containers that hold nothing.
 // `monthlyActuals: { itemId: {} }` and `balanceSnapshots: { catId: [] }` are
 // residue — deleting the last entry under an owner used to leave the owner
@@ -219,7 +244,7 @@ export function normalize(parsed: any): BudgetState {
     //
     // Brand-new fields, no legacy shape to fold in — an existing account
     // simply never had any actuals logged yet.
-    balanceSnapshots: pruneEmpty(balanceSnapshotsOut),
+    balanceSnapshots: pruneEmpty(mapValues(balanceSnapshotsOut, dedupeByDate)),
     monthlyActuals: pruneEmpty(parsed.monthlyActuals || {}),
     // Migration 9 (2026-10-02): per-occurrence overrides. A brand-new field,
     // so absent → {}. Nothing is backfilled: an override is a deliberate
@@ -232,6 +257,6 @@ export function normalize(parsed: any): BudgetState {
     // anyone was recording it. Deliberately NOT backfilled from ledger
     // transactions: those are a forecast.
     contributionLog: pruneEmpty(parsed.contributionLog || {}),
-    accountSnapshots: pruneEmpty(accountSnapshots),
+    accountSnapshots: pruneEmpty(mapValues(accountSnapshots, dedupeByDate)),
   };
 }

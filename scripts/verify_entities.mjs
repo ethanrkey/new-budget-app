@@ -40,8 +40,20 @@ const ok = (name, pass, detail = "") => {
   if (!pass) failures++;
   console.log(`${pass ? "PASS" : "FAIL"}  ${name}${detail ? "  " + detail : ""}`);
 };
+// Deep key sort before hashing. JSON object key order carries no meaning,
+// and `jsonb` does not preserve it anyway — Postgres stores keys in its own
+// order, so insisting on byte-identical ordering across the storage boundary
+// compares something the storage cannot represent. An old blob whose
+// top-level keys happen to be in a different order from assembleState's
+// output is not a difference in data: a path-level diff of exactly that case
+// returned zero differing paths.
+const sortK = (v) =>
+  Array.isArray(v) ? v.map(sortK)
+  : (v && typeof v === "object")
+    ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortK(v[k])]))
+    : v;
 const j = (v) => JSON.stringify(v);
-const sha = (v) => createHash("sha256").update(j(v)).digest("hex");
+const sha = (v) => createHash("sha256").update(j(sortK(v))).digest("hex");
 const sizes = (m) =>
   Object.values(m || {}).reduce((n, v) => n + (Array.isArray(v) ? v.length : Object.keys(v || {}).length), 0);
 
@@ -60,7 +72,25 @@ for (const blob of blobs) {
     mine.map((r) => ({ kind: r.kind, id: r.entity_id, data: r.data, schemaVersion: r.schema_version }))
   )));
 
-  ok(`${label}: the document is byte-identical`, sha(before) === sha(after));
+  // An account with NO stored categories gets three seeded by normalize(),
+  // with ids from uid() — fresh on every call. So the blob side and the
+  // database side cannot agree on those ids, and that is correct behaviour,
+  // not drift: seeding is not migrating (maintenance rule 5's scoping note).
+  // Canonicalise the seeded ids for that case ONLY, and say so, because
+  // quietly loosening a verification is how a real difference hides.
+  const wasSeeded = !Array.isArray(blob.state?.trackerCategories) || blob.state.trackerCategories.length === 0;
+  const canon = (st) => (wasSeeded
+    ? { ...st, trackerCategories: st.trackerCategories.map((c, i) => ({ ...c, id: `seed-${i}` })) }
+    : st);
+  if (wasSeeded) {
+    console.log(`      (no stored categories: normalize seeds fresh uids, so category ids are compared by position)`);
+    ok(`${label}: nothing REFERENCES a seeded category id`,
+      sizes(before.balanceSnapshots) === 0 && sizes(before.contributionLog) === 0 &&
+      (before.settings.visibleTrackerCategoryIds || []).length === 0 &&
+      ![...before.recurring, ...before.oneoffs].some((i) => before.trackerCategories.some((c) => c.id === i.category)));
+  }
+
+  ok(`${label}: the document is byte-identical`, sha(canon(before)) === sha(canon(after)));
 
   // Counts in both directions: a hash match cannot catch rows ADDED.
   const count = (k) => mine.filter((r) => r.kind === k).length;

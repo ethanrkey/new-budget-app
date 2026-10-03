@@ -60,11 +60,27 @@ for (const row of rows) {
 
   if (!write) continue;
 
-  // on_conflict on the primary key makes a re-run idempotent: the same
-  // backfill twice lands the same rows rather than erroring half way.
-  const res = await fetch(`${url}/rest/v1/budget_entities?on_conflict=user_id,kind,entity_id`, {
+  // REPLACE this user's rows, do not merge into them. Upserting on the
+  // primary key looked idempotent and is not: `normalize()` SEEDS a
+  // brand-new account with `defaultTrackerCategories()`, whose ids come
+  // from uid() and differ every run — so a state with no categories got
+  // three fresh category rows per run, and a second run left six. That is
+  // not a bug in normalize (seeding is not migrating; see maintenance rule
+  // 5's scoping note), it is a bug in assuming stable keys.
+  //
+  // budget_states is still authoritative and untouched, so a delete-then-
+  // insert that fails half way costs nothing but a re-run.
+  const wipe = await fetch(`${url}/rest/v1/budget_entities?user_id=eq.${row.user_id}`, {
+    method: "DELETE", headers: { ...headers, Prefer: "return=minimal" },
+  });
+  if (!wipe.ok) {
+    console.error(`\n  CLEAR FAILED for ${label}: ${wipe.status} ${await wipe.text()}`);
+    process.exit(1);
+  }
+
+  const res = await fetch(`${url}/rest/v1/budget_entities`, {
     method: "POST",
-    headers: { ...headers, Prefer: "resolution=merge-duplicates,return=minimal" },
+    headers: { ...headers, Prefer: "return=minimal" },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
