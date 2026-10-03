@@ -51,9 +51,9 @@ const STEPS = ["paycheck", "rent", "bills", "groceries", "balance", "accounts", 
 // now is enough for the category, the Dashboard card and the net position.
 // The card then asks for terms later, when there is something to point at.
 const ACCOUNT_GROUPS = [
-  { key: "savings", label: "Savings", hint: "Cash you control", placeholder: "Savings" },
-  { key: "investment", label: "Investments", hint: "Market-exposed — a Roth IRA, a 401k, a brokerage, an HSA", placeholder: "401k" },
-  { key: "debt", label: "Debt", hint: "What you owe now — add the rate later", placeholder: "Student loan" },
+  { key: "savings", label: "Savings", kindNote: "Cash you control — saved as Savings", placeholder: "e.g. Everbank" },
+  { key: "investment", label: "Investments", kindNote: "Value the market moves — saved as Investment", placeholder: "e.g. Roth IRA, 401k, HSA" },
+  { key: "debt", label: "Debt", kindNote: "What you owe now — add the rate later on the card", placeholder: "e.g. Student loan" },
 ];
 
 // A short, skippable welcome wizard. Every answer becomes a real
@@ -84,12 +84,26 @@ export default function Onboarding({ initialBalance, onComplete }) {
     setAccounts((a) => ({ ...a, [group]: a[group].map((r, idx) => (idx === i ? { ...r, [field]: value } : r)) }));
   const addAccountRow = (group) =>
     setAccounts((a) => ({ ...a, [group]: [...a[group], { name: "", amount: "" }] }));
-  const collectAccounts = () =>
+  // A row counts as "started" the moment EITHER field has something in
+  // it. The first version filtered on a non-empty name, so a row with an
+  // amount and no name was silently discarded — which is exactly what
+  // happened to a real user, because the name box had no label and they
+  // reasonably assumed the section heading named the row.
+  const startedRows = () =>
     ACCOUNT_GROUPS.flatMap((g) =>
-      accounts[g.key]
-        .map((r) => ({ group: g.key, name: r.name.trim(), amount: Number(r.amount) }))
-        .filter((r) => r.name !== "" && !Number.isNaN(r.amount) && r.amount !== 0)
+      accounts[g.key].map((r, i) => ({
+        group: g.key, i,
+        name: r.name.trim(),
+        amount: r.amount.trim() === "" ? null : Number(r.amount),
+      })).filter((r) => r.name !== "" || r.amount != null)
     );
+  // Incomplete rows block Finish and say so. The alternative — inventing a
+  // name from the section heading — would quietly create a category the
+  // user never named, which is the same class of error as dropping it.
+  const incompleteRows = () =>
+    startedRows().filter((r) => r.name === "" || r.amount == null || Number.isNaN(r.amount));
+  const collectAccounts = () =>
+    startedRows().filter((r) => r.name !== "" && r.amount != null && !Number.isNaN(r.amount));
 
   const step = STEPS[stepIndex];
   const questionSteps = STEPS.length - 1; // exclude "done" from the progress count
@@ -317,25 +331,49 @@ export default function Onboarding({ initialBalance, onComplete }) {
             {ACCOUNT_GROUPS.map((g) => (
               <div key={g.key}>
                 <label className={label}>{g.label}</label>
-                <p className="text-xs text-gray-400 mb-1">{g.hint}</p>
+                <p className="text-xs text-gray-400 mb-1">{g.kindNote}</p>
                 <div className="space-y-2">
-                  {accounts[g.key].map((row, i) => (
-                    <div key={i} className="flex gap-2">
-                      <input
-                        className={`${field} flex-1`}
-                        placeholder={g.placeholder}
-                        value={row.name}
-                        onChange={(e) => setAccountRow(g.key, i, "name", e.target.value)}
-                      />
-                      <input
-                        className={`${field} w-28`}
-                        type="number"
-                        placeholder={g.key === "debt" ? "owed" : "balance"}
-                        value={row.amount}
-                        onChange={(e) => setAccountRow(g.key, i, "amount", e.target.value)}
-                      />
-                    </div>
-                  ))}
+                  {accounts[g.key].map((row, i) => {
+                    const started = row.name.trim() !== "" || row.amount.trim() !== "";
+                    const needsName = started && row.name.trim() === "";
+                    const needsAmount = started && row.amount.trim() === "";
+                    return (
+                      <div key={i}>
+                        <div className="flex gap-2">
+                          {/* Both fields are LABELLED. Two anonymous boxes
+                              under a section heading is what made a real
+                              user type the amount and leave the name
+                              blank — a placeholder alone was not enough. */}
+                          <label className="flex-1">
+                            <span className="block text-[11px] text-gray-400 mb-0.5">Name</span>
+                            <input
+                              className={`${field} ${needsName ? "border-expense" : ""}`}
+                              placeholder={g.placeholder}
+                              value={row.name}
+                              onChange={(e) => setAccountRow(g.key, i, "name", e.target.value)}
+                            />
+                          </label>
+                          <label className="w-32">
+                            <span className="block text-[11px] text-gray-400 mb-0.5">
+                              {g.key === "debt" ? "Owed now" : "Balance"}
+                            </span>
+                            <input
+                              className={`${field} ${needsAmount ? "border-expense" : ""}`}
+                              type="number"
+                              placeholder="0.00"
+                              value={row.amount}
+                              onChange={(e) => setAccountRow(g.key, i, "amount", e.target.value)}
+                            />
+                          </label>
+                        </div>
+                        {(needsName || needsAmount) && (
+                          <p className="text-xs text-expense mt-1">
+                            {needsName ? "Give this one a name, or clear the amount." : "Add the balance, or clear the name."}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <button
                   onClick={() => addAccountRow(g.key)}
@@ -345,7 +383,13 @@ export default function Onboarding({ initialBalance, onComplete }) {
                 </button>
               </div>
             ))}
-            <StepButtons onSkip={goNext} onContinue={goNext} continueLabel="Finish" />
+            <button
+              onClick={goNext}
+              disabled={incompleteRows().length > 0}
+              className="w-full py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90 disabled:opacity-40"
+            >
+              Finish
+            </button>
           </div>
         )}
 

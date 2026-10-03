@@ -1380,3 +1380,28 @@ Later:
   colour off ledger row names. The amounts are direction only; the role
   shows as a dot beside the row label, where you are scanning across kinds
   rather than reading a number. One signal per element.
+- **The extras step: both fields labelled, no row silently dropped**
+  (2026-10-03). `collectAccounts` filtered on a non-empty NAME, so a row
+  with an amount and a blank name vanished without a word. A real user hit
+  exactly that: the name box had no label, only a placeholder, under a
+  section heading that already said "Savings", so they typed the amount
+  and reasonably assumed the row was named. Both fields now carry visible
+  labels, a half-filled row is flagged in place, and Finish is disabled
+  until every started row is complete. Inventing a name from the section
+  heading was rejected: quietly creating a category the user never named
+  is the same class of error as quietly dropping one.
+- **The wizard reuses, then prunes, the seeded defaults** (2026-10-03). A
+  new account is seeded with Savings / Investments / Debt
+  (`defaultTrackerCategories`). A wizard row called "Savings" used to make
+  a SECOND one, and the untouched remainder sat on the Dashboard looking
+  like something the wizard had created — which is how it was read. Now a
+  row reuses a same-named category that has nothing logged (never one
+  that does: that would be writing into real history on a name
+  collision), and any seeded default still empty at the end is deleted,
+  gated on no snapshots, no tagged items and no contributions.
+- **Verification has to drive the real surface AND the degenerate input.**
+  The end-to-end check for this step filled both fields on every row and
+  then ran a synthetic commit, so it proved the happy path through
+  well-formed input and nothing else. It passed while the form was
+  unusable. A harness that only ever supplies correct input is testing the
+  code's arithmetic, not the product.
