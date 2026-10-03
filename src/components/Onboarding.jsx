@@ -34,7 +34,27 @@ const CADENCE_OPTIONS = [
   { value: "monthly", label: "Every month" },
 ];
 
-const STEPS = ["paycheck", "rent", "bills", "groceries", "balance", "done"];
+// "accounts" comes AFTER the balance on purpose. Everything up to the
+// balance is what a working Ledger needs; this step only fills the
+// Dashboard. Ordering it last means someone who quits here still leaves
+// with the forecast working, which is the thing that makes the app worth
+// reopening.
+const STEPS = ["paycheck", "rent", "bills", "groceries", "balance", "accounts", "done"];
+
+// One screen, three groups — not three steps. The obvious version of this
+// takes the wizard from five questions to eight and people leave; someone
+// with nothing to add passes this in a second.
+//
+// Balance only, no terms, and that is the important call for debt: a loan
+// wants principal, APR and a start date, and asking three numbers per loan
+// during setup is exactly where someone gives up. Name and what you owe
+// now is enough for the category, the Dashboard card and the net position.
+// The card then asks for terms later, when there is something to point at.
+const ACCOUNT_GROUPS = [
+  { key: "savings", label: "Savings", hint: "Cash you control", placeholder: "Savings" },
+  { key: "investment", label: "Investments", hint: "Market-exposed — a Roth IRA, a 401k, a brokerage, an HSA", placeholder: "401k" },
+  { key: "debt", label: "Debt", hint: "What you owe now — add the rate later", placeholder: "Student loan" },
+];
 
 // A short, skippable welcome wizard. Every answer becomes a real
 // recurring rule via the same shape the CSV importers produce
@@ -57,6 +77,19 @@ export default function Onboarding({ initialBalance, onComplete }) {
   const [groceryCadence, setGroceryCadence] = useState("weekly");
 
   const [balanceInput, setBalanceInput] = useState(initialBalance != null ? String(initialBalance) : "");
+  const [accounts, setAccounts] = useState(() =>
+    Object.fromEntries(ACCOUNT_GROUPS.map((g) => [g.key, [{ name: "", amount: "" }]]))
+  );
+  const setAccountRow = (group, i, field, value) =>
+    setAccounts((a) => ({ ...a, [group]: a[group].map((r, idx) => (idx === i ? { ...r, [field]: value } : r)) }));
+  const addAccountRow = (group) =>
+    setAccounts((a) => ({ ...a, [group]: [...a[group], { name: "", amount: "" }] }));
+  const collectAccounts = () =>
+    ACCOUNT_GROUPS.flatMap((g) =>
+      accounts[g.key]
+        .map((r) => ({ group: g.key, name: r.name.trim(), amount: Number(r.amount) }))
+        .filter((r) => r.name !== "" && !Number.isNaN(r.amount) && r.amount !== 0)
+    );
 
   const step = STEPS[stepIndex];
   const questionSteps = STEPS.length - 1; // exclude "done" from the progress count
@@ -68,7 +101,12 @@ export default function Onboarding({ initialBalance, onComplete }) {
     setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
   }
   const [finishNow] = useSubmitOnce(() => {
-    onComplete({ recurring, oneoffs: [], checkInBalance });
+    // Read the FIELD, not just the committed state: the two can disagree
+    // for a render, and this is the one value the entire forecast is built
+    // from. It was silently dropped once already.
+    const typed = balanceInput.trim() === "" ? null : Number(balanceInput);
+    const balance = typed != null && !Number.isNaN(typed) ? typed : checkInBalance;
+    onComplete({ recurring, oneoffs: [], checkInBalance: balance, accounts: collectAccounts() });
   })
 
   function submitPaycheck() {
@@ -258,7 +296,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
               disabled={!balanceValid}
               className="w-full py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90 disabled:opacity-40"
             >
-              Finish
+              Continue
             </button>
             {!balanceValid && (
               <p className="text-xs text-gray-400">
@@ -266,6 +304,48 @@ export default function Onboarding({ initialBalance, onComplete }) {
                 Ledger is counted forward from it, so the forecast is wrong without it.
               </p>
             )}
+          </div>
+        )}
+
+        {step === "accounts" && (
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold">What else do you track?</h2>
+            <p className="text-sm text-gray-500">
+              Anything you want on your Dashboard — what it&apos;s called and what&apos;s in it today.
+              Skip any of these; you can add them whenever.
+            </p>
+            {ACCOUNT_GROUPS.map((g) => (
+              <div key={g.key}>
+                <label className={label}>{g.label}</label>
+                <p className="text-xs text-gray-400 mb-1">{g.hint}</p>
+                <div className="space-y-2">
+                  {accounts[g.key].map((row, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input
+                        className={`${field} flex-1`}
+                        placeholder={g.placeholder}
+                        value={row.name}
+                        onChange={(e) => setAccountRow(g.key, i, "name", e.target.value)}
+                      />
+                      <input
+                        className={`${field} w-28`}
+                        type="number"
+                        placeholder={g.key === "debt" ? "owed" : "balance"}
+                        value={row.amount}
+                        onChange={(e) => setAccountRow(g.key, i, "amount", e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => addAccountRow(g.key)}
+                  className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mt-1"
+                >
+                  + Add another
+                </button>
+              </div>
+            ))}
+            <StepButtons onSkip={goNext} onContinue={goNext} continueLabel="Finish" />
           </div>
         )}
 

@@ -5,7 +5,7 @@ import { uid, primaryAccount, sanitizeTabOrder, blankState } from "./model.ts";
 import { occurrenceDates } from "./generate.ts";
 import type {
   AssetCategory, BalanceSnapshot, BudgetItem, BudgetState, Contribution, DebtCategory,
-  ISODate, MonthKey, PaletteIndex, RecurringItem, TabId,
+  AssetKind, ISODate, MonthKey, PaletteIndex, RecurringItem, TabId,
 } from "./types.ts";
 
 /**
@@ -429,8 +429,9 @@ export interface SetupAssetInput {
   color?: PaletteIndex | null;
   balance?: number | null;
   asOf?: ISODate | null;
+  assetKind?: AssetKind | null;
 }
-export function setupAsset(state: BudgetState, { categoryId = null, name, color = null, balance = null, asOf = null }: SetupAssetInput): BudgetState {
+export function setupAsset(state: BudgetState, { categoryId = null, name, color = null, balance = null, asOf = null, assetKind = null }: SetupAssetInput): BudgetState {
   let next = state;
   let id = categoryId;
   if (!id || !next.trackerCategories.some((c) => c.id === id)) {
@@ -440,6 +441,10 @@ export function setupAsset(state: BudgetState, { categoryId = null, name, color 
   const patch: CategoryPatch = { kind: "asset" };
   if (name) patch.name = name;
   if (color != null) patch.color = color;
+  // Only written when answered. Absent stays absent, and absent renders as
+  // an investment — which withholds a projected line rather than drawing
+  // one over market-exposed value.
+  if (assetKind != null) patch.assetKind = assetKind;
   next = updateCategory(next, id, patch);
   if (balance != null && asOf) next = addBalanceSnapshot(next, id, balance, asOf);
   return next;

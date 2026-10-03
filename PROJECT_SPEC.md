@@ -1324,3 +1324,25 @@ Later:
   is a 500px layout cropped to 390, so a card that looks clipped at phone
   width may be fine. Shoot at >= 500 and read the real width out of the
   page before believing a narrow-screen bug.
+- **The wizard's last step is ONE screen, not three** (2026-10-03).
+  Savings, investments and debt as three compact groups of name + amount.
+  The obvious version takes the wizard from five questions to eight and
+  people leave; someone with nothing to add passes this in a second. It
+  sits AFTER the balance because everything before that is what a working
+  Ledger needs and this only fills the Dashboard — a quitter still leaves
+  with the forecast working, which is what makes the app worth reopening.
+
+  **Debt is created without terms, deliberately.** Name and what you owe
+  now is enough for the category, the card and the net position; asking
+  for principal, APR and a start date per loan during setup is exactly
+  where someone gives up. `isLoanConfigured` stays false and the card
+  prompts for terms later, when there is something to point at.
+  `assetKind` is NOT asked here either — one more concept at the worst
+  moment, and the unanswered default already withholds a projection
+  rather than inventing one.
+
+  Who this is for, which decided the above: people with a paycheck, some
+  bills, a couple of accounts and some debt, who want one place to see
+  the whole picture. Not someone with land and property holdings — that
+  is why manual entry works at all, because the dataset stays small
+  enough to maintain.

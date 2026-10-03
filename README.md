@@ -107,7 +107,11 @@ separate columns, here as everywhere else.
 - **Drag the tabs** into your own order (desktop); the app opens on the first one.
 - **Quick Setup** wizard for a new account, and quick-entry for adding a batch
   of items without closing a modal each time.
-- **A built-in tutorial** covering every feature, kept in sync with the code by
+- **A setup wizard** that gets you from nothing to a working forecast —
+  paycheck, rent, bills, groceries, your checking balance, and one screen
+  for the savings, investments and debt you want on the Dashboard. Then a
+  short guided tour of the four tabs.
+- **A built-in About page** covering every feature, kept in sync with the code by
   the same rule as this README.
 - **Import** a budget-grid CSV, a per-transaction CSV (it detects recurrence),
   or restore a full JSON backup — which downloads a safety copy of your current

@@ -266,12 +266,27 @@ export default function App() {
   // not an import: the user is sitting in front of the app typing the
   // number, so today IS the verification date and principle 1 is satisfied
   // — the balance and its as-of date both come from them.
-  function completeOnboarding({ recurring = [], oneoffs = [], checkInBalance }) {
+  function completeOnboarding({ recurring = [], oneoffs = [], checkInBalance, accounts = [] }) {
     setState((s) => {
       let next = s;
       for (const item of [...recurring, ...oneoffs]) next = upsertItem(next, item);
       if (checkInBalance != null && !Number.isNaN(Number(checkInBalance))) {
         next = updateAccountBalance(next, primaryAccount(next).id, Number(checkInBalance), todayISO());
+      }
+      // Savings, investments and debt from the wizard's last step. Debt is
+      // created WITHOUT terms on purpose — name and what you owe now is
+      // enough for the category, the card and the net position, and asking
+      // for principal, APR and a start date during setup is where someone
+      // gives up. The card prompts for terms later, when there is
+      // something to point at.
+      for (const a of accounts) {
+        if (a.group === "debt") {
+          next = addCategory(next, a.name, 0, "debt");
+          const id = next.trackerCategories[next.trackerCategories.length - 1].id;
+          next = addBalanceSnapshot(next, id, Math.abs(a.amount), todayISO());
+        } else {
+          next = setupAsset(next, { name: a.name, balance: a.amount, asOf: todayISO(), assetKind: a.group });
+        }
       }
       return next;
     });
