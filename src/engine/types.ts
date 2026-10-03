@@ -8,6 +8,8 @@
 // prose "debt-kind only — a debt category IS a loan" is a union in disguise:
 // reading `originalPrincipal` off an asset category should not compile.
 
+import type { Role } from "./palette.ts";
+
 // ---- Primitives ----------------------------------------------------------
 
 /** A calendar date, "YYYY-MM-DD". Never an instant — see toISODate in model. */
@@ -46,9 +48,20 @@ interface TrackerCategoryBase {
   order: number;
 }
 
+/**
+ * Is this cash you control, or value the market moves? Set by the user,
+ * NEVER inferred from the name — an HSA reads like savings and can be
+ * entirely in one stock, which makes it the most market-exposed thing
+ * someone owns rather than the least. Absent means unanswered, and
+ * unanswered renders as `investment`: see the decision log for why the
+ * error has to fall that way.
+ */
+export type AssetKind = "savings" | "investment";
+
 /** Something you own: savings, a Roth IRA, a brokerage. */
 export interface AssetCategory extends TrackerCategoryBase {
   kind: "asset";
+  assetKind?: AssetKind;
 }
 
 /**
@@ -285,6 +298,10 @@ export interface SpendingSlice {
    *  parent category; the UI resolves it via paletteColor. */
   color: PaletteIndex | null;
   bucket: SpendingBucket;
+  /** What the money is DOING — the thing colour encodes now. Assigned by
+   *  the engine, so both clients colour a slice identically without either
+   *  re-deriving the rule. */
+  role: Role;
   /** `item` slices only: which fixed bucket it came from, so the view tints
    *  off that bucket's own neutral rather than a shared one. */
   parentBucket?: "bill" | "oneoff";

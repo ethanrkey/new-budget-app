@@ -60,6 +60,20 @@ function inferCategoryKind(cat: any): "asset" | "debt" {
 // Merge a raw loaded/imported object onto blankState() so every field always
 // exists, running item migrations and the onboarding-seen / tracker-category
 // migrations below.
+// Migration 12 (2026-10-03): `assetKind` on asset categories — "savings"
+// (cash you control) or "investment" (value the market moves). Added as
+// ABSENT, never inferred. A name cannot answer it: an HSA reads like
+// savings and can be entirely in one stock, which makes it the most
+// market-exposed thing someone owns rather than the least. Guessing here
+// would hardcode that error for every user, and maintenance rule 5 forbids
+// a migration fabricating values the user did not enter.
+//
+// Absent renders as `investment` (see palette.ts assetRole), and that
+// direction is deliberate: an investment gets no projected line, so an
+// unanswered account WITHHOLDS a projection rather than drawing one over
+// market-exposed value. The reverse default reads as equally defensible
+// until you notice which way the error falls.
+
 // Migration 11 (2026-10-02): collapse snapshots that share a date, keeping
 // the LAST. This is not a new rule — it is `upsertSnapshotByDate` in
 // mutate.ts, which has enforced one balance per date on every write since

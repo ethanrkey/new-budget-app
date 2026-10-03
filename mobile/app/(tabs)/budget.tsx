@@ -4,7 +4,7 @@ import { useBudget } from "../../components/StateProvider";
 import { T, money } from "../../lib/theme";
 import { computeBudget } from "../../../src/engine/compute.ts";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../../../src/engine/budgetLayout.ts";
-import { paletteColor } from "../../../src/engine/model.ts";
+import { roleColor, roleOfCategory } from "../../../src/engine/palette.ts";
 import type { BudgetColumn } from "../../../src/engine/types.ts";
 
 // THE PINNED COLUMN, the RN way.
@@ -56,7 +56,7 @@ export default function BudgetScreen() {
         out.push({
           key: `e-${n}`, label: n,
           values: (c) => Math.abs(c.expenseItems[n]?.val ?? 0),
-          tone: cat ? paletteColor(cat.color, true) : T.expense,
+          tone: roleColor(roleOfCategory(catId, cats), true),
         });
       }
     }

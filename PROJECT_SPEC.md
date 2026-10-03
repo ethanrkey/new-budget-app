@@ -518,6 +518,49 @@ Conventions worth knowing before touching numbers:
   (`devicePrefs.js`: `hero-collapsed`, `debts-expanded`) live in
   localStorage. They never sync, never conflict between devices, and never
   count as a change worth writing to Supabase.
+- **Colour encodes what the money is DOING, not what it is called**
+  (2026-10-03, `engine/palette.ts`). Seven roles — income, bill, one-off,
+  savings, investment, debt, uncategorized — and the hue is derived. Nobody
+  picks a colour: a hue someone chose says what a category is *named*, and
+  a reader scanning a chart needs to know what the money is *doing*.
+  Customisation is gone deliberately, and bills — most of most people's
+  outflow — stop being grey, which was backwards.
+
+  **Hues carry meaning; LIGHTNESS carries separation.** This is the finding
+  worth keeping. Under deuteranopia and protanopia the colour wheel
+  collapses onto roughly one axis, so two hues from the same family — two
+  blues, two oranges — have *nothing but lightness* left to tell them
+  apart. The retired palette's Blue/Indigo pair measured ΔE **1.3** under
+  deutan and Orange/Gold **0.9** under protan: identical, not tight, and
+  worse than anything the spec previously recorded. So hues are now fixed
+  for meaning and lightness is SOLVED FOR, by search, maximising the worst
+  all-pairs ΔE subject to a 3:1 contrast floor per surface. Worst pair
+  across normal, deutan, protan and tritan: **11.6 light, 12.8 dark**.
+
+  **`scripts/validate_palette.mjs` runs in `npm test`, so CI runs it.** The
+  1.3 survived for months because the check was a script nobody re-ran
+  after the palette changed — a validated palette is a property of the
+  process, not of the colours. It earned itself immediately: the first
+  hand-picked role hues failed nine checks, including one-off/debt at
+  **0.7** under deutan. Do not hand-edit a value in `ROLE_COLORS` without
+  re-running it.
+
+  Shades within a role are capped at 4 and spanned wide, **pie only**. In a
+  bar every row sits beside its own label and its own bar length, so a
+  shade there is decoration — and ten decorative shades off one hue is
+  exactly how five of eight rows came out the same grey-blue. Shades span
+  CATEGORIES sharing a role, not just items: four investments and five
+  loans now share a hue by design, and the shade is what tells them apart.
+
+- **Where colour appears at all.** On surfaces where you scan ACROSS kinds:
+  dashboard cards, chart slices, ledger savings-column headers, calendar
+  dots, budget saving/debt clusters, loan progress bars. NOT on the hero,
+  section headers, chrome, or the tab bar, and not on ledger row names — a
+  row is read down a column of names, and the amount beside it already
+  carries direction in red/green. **Red/green on amounts is a separate
+  system: that is direction, not kind**, and the two must not be read as
+  one.
+
 - **RULE: any view that orders categories by value must not rest identity on
   colour alone.** The relief is inline labels — the category's name next to
   its mark, not only in a legend.
@@ -1237,3 +1280,19 @@ Later:
   comes from `app_metadata.providers` and deliberately does not try to
   tell a magic link from a password — they are one credential to the
   database, and claiming otherwise would be inventing a distinction.
+- **An unanswered `assetKind` renders as `investment`** (2026-10-03), and
+  the direction is the whole point. Both defaults look defensible until you
+  notice which way the error falls: an investment gets no projected line,
+  so defaulting to investment WITHHOLDS a projection on an unanswered
+  account, while defaulting to savings DRAWS one over market-exposed value.
+  Withholding is recoverable by answering; a fabricated forecast over a
+  balance the market moves is the error the no-projected-line rule exists
+  to prevent.
+
+  Never inferred from the name. An HSA reads like savings and can be
+  entirely in one stock, which makes it the most market-exposed thing
+  someone owns rather than the least — **not interacting with an account is
+  not the same as not being exposed by it**. Migration 12 therefore adds
+  the field ABSENT and guesses nothing; a user stating their own answers is
+  data entry, which is `scripts/set_asset_kinds.mjs`, deliberately not a
+  migration (maintenance rule 5).

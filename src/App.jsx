@@ -150,8 +150,8 @@ export default function App() {
   }
   // Tracker category (savings/debt/investment) CRUD — deleting one never
   // touches items still tagged with it (see mutate.ts's addCategory et al.).
-  function addTrackerCategory(name, color, kind) {
-    setState((s) => addCategory(s, name, color, kind));
+  function addTrackerCategory(name, kind) {
+    setState((s) => addCategory(s, name, 0, kind));
   }
   function updateTrackerCategory(id, patch) {
     setState((s) => updateCategory(s, id, patch));
@@ -465,6 +465,17 @@ export default function App() {
           Key Budget
         </h1>
         <div className="flex items-center gap-1.5 sm:gap-3">
+          {/* The Tutorial is not a thing you DO with your data, it is a
+              thing you read once — so it sits in the header beside the
+              other read-and-leave controls, not in the action row next to
+              Add transaction. */}
+          <button
+            onClick={() => setTutorialOpen(true)}
+            title="Every feature, explained"
+            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+          >
+            📖<span className="hidden sm:inline"> Tutorial</span>
+          </button>
           <button
             onClick={() => setImportOpen(true)}
             title="Import a CSV, or restore a full JSON backup"
@@ -513,13 +524,6 @@ export default function App() {
           className="text-sm px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
         >
           🚀 Quick Setup
-        </button>
-        <button
-          onClick={() => setTutorialOpen(true)}
-          title="Every feature, explained"
-          className="text-sm px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 font-medium hover:bg-gray-100 dark:hover:bg-gray-900 transition"
-        >
-          📖 Tutorial
         </button>
       </div>
 
@@ -636,7 +640,6 @@ export default function App() {
           initial={editing ?? undefined}
           presetCategory={addPresetCategory}
           trackerCategories={state.trackerCategories}
-          isDark={isDark}
           occurrenceDate={editingDate}
           overrideAmount={editing && editingDate ? state.overrides?.[editing.id]?.[editingDate] ?? null : null}
           onSaveOverride={saveOverride}

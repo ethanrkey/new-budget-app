@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { T, money } from "../lib/theme";
 import { groupByDay } from "../../src/engine/compute.ts";
-import { paletteColor } from "../../src/engine/model.ts";
+import { roleColor, roleOfCategory } from "../../src/engine/palette.ts";
 import type { LedgerRow, TrackerCategory } from "../../src/engine/types.ts";
 
 // The web calendar, reshaped for a phone. Two changes made on purpose:
@@ -50,12 +50,11 @@ export default function CalendarView({
   const catName = (id: string) =>
     id === "bill" ? "Fixed bill" : id === "oneoff" ? "One-off" : id === "income" ? "Income"
       : categories.find((c) => c.id === id)?.name ?? "Uncategorized";
-  const dotColor = (r: LedgerRow) =>
-    r.color != null ? paletteColor(r.color, true)
-      : r.direction === "in" ? T.income
-      : categories.find((c) => c.id === r.category)
-        ? paletteColor(categories.find((c) => c.id === r.category)!.color, true)
-        : T.faint;
+  // Role colour: bills, savings and debt no longer share a grey. Dots are
+  // colour-only identity, which the colour rule does not allow to stand
+  // alone — the day detail names the category in words, and that is the
+  // relief.
+  const dotColor = (r: LedgerRow) => roleColor(roleOfCategory(r.category, categories), true);
 
   const detail = picked ? days.get(picked) : null;
 

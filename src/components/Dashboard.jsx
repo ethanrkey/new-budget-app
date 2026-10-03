@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { computeCategoryHistory, computeLoggedContributions, computeNetPosition, computeMonthVariance } from "../engine/progress.ts";
 import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.ts";
-import { paletteColor, primaryAccount, todayISO } from "../engine/model.ts";
+import { primaryAccount, todayISO } from "../engine/model.ts";
+import { roleColor, roleOfTrackerCategory } from "../engine/palette.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
 import LoanSetupModal from "./LoanSetupModal.jsx";
@@ -125,7 +126,6 @@ export default function Dashboard({
         <AssetSetupModal
           initial={assetModal.cat ?? null}
           taggedCount={assetModal.cat ? countTagged(assetModal.cat.id) : 0}
-          isDark={isDark}
           onSave={(payload) => { onSetupAsset(payload); setAssetModal(null); }}
           onDelete={assetModal.cat ? () => { onDeleteCategory(assetModal.cat.id); setAssetModal(null); } : undefined}
           onClose={() => setAssetModal(null)}
@@ -366,7 +366,7 @@ function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, 
 // and keep theirs).
 function AssetCard({ category, isDark, history, contributions, today, onLog, onLogContribution, onEdit,
   onUpdateSnapshot, onDeleteSnapshot, onUpdateContribution, onDeleteContribution }) {
-  const color = paletteColor(category.color, isDark);
+  const color = roleColor(roleOfTrackerCategory(category), isDark);
   const latest = history.length ? history[history.length - 1] : null;
   const [allYears, setAllYears] = useState(false);
   const thisYear = today.slice(0, 4);
@@ -438,7 +438,7 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onL
 // a render change, not a re-derivation.
 // "expected remaining vs. actual remaining" appears nowhere by design.
 function LoanCard({ category, isDark, state, today, progress, history, onLog, onEdit, onUpdateSnapshot, onDeleteSnapshot }) {
-  const color = paletteColor(category.color, isDark);
+  const color = roleColor(roleOfTrackerCategory(category), isDark);
   const latest = progress.latest;
   const monthKey = today.slice(0, 7);
 
@@ -534,7 +534,7 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
 }
 
 function SetupLoanCard({ category, isDark, onSetup }) {
-  const color = paletteColor(category.color, isDark);
+  const color = roleColor(roleOfTrackerCategory(category), isDark);
   return (
     <section className={`${CARD} border-dashed`}>
       <div className={`${LABEL} flex items-center gap-1.5`}>
@@ -711,7 +711,7 @@ function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan, onEditLoan }) 
                 className="w-full flex items-baseline justify-between gap-3 text-sm text-left rounded-md px-1 -mx-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <span className="flex items-baseline gap-1.5 min-w-0">
-                  <span className="h-1.5 w-1.5 rounded-full shrink-0 self-center" style={{ backgroundColor: paletteColor(loan.color, isDark) }} />
+                  <span className="h-1.5 w-1.5 rounded-full shrink-0 self-center" style={{ backgroundColor: roleColor("debt", isDark) }} />
                   <span className="truncate text-gray-700 dark:text-gray-300">{loan.name}</span>
                 </span>
                 <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">

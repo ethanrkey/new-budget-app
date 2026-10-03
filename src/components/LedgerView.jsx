@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { groupByMonth, computeSpendingByCategory } from "../engine/compute.ts";
-import { todayISO, paletteColor, ledgerHorizonOf, LEDGER_MAX_MONTHS } from "../engine/model.ts";
+import { todayISO, ledgerHorizonOf, LEDGER_MAX_MONTHS } from "../engine/model.ts";
+import { roleColor, roleOfTrackerCategory } from "../engine/palette.ts";
 import HorizonSlider from "./HorizonSlider.jsx";
 import InfoTip from "./InfoTip.jsx";
 import SpendingMix from "./SpendingMix.jsx";
@@ -173,7 +174,7 @@ export default function LedgerView({
                         onChange={() => toggleColumnVisible(c.id)}
                         className="h-4 w-4"
                       />
-                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: paletteColor(c.color, isDark) }} />
+                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: roleColor(roleOfTrackerCategory(c), isDark) }} />
                       <span className="truncate">{c.name}</span>
                     </label>
                   ))
@@ -208,7 +209,7 @@ export default function LedgerView({
                 <th
                   key={c.id}
                   className={`py-2 font-medium text-right slide-col ${visibleIds.has(c.id) ? "open" : ""}`}
-                  style={{ color: paletteColor(c.color, isDark), ...colVars(c.name) }}
+                  style={{ color: roleColor(roleOfTrackerCategory(c), isDark), ...colVars(c.name) }}
                 >
                   {c.name}
                 </th>
@@ -272,7 +273,12 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
         const itemId = baseId(r.id);
         // an optional per-item color override (recurring items/bills too, not
         // just tracker categories) beats the default bill-purple/plain text
-        const nameStyle = r.color != null ? { color: paletteColor(r.color, isDark) } : undefined;
+        // Row names are NOT coloured. A ledger row is read down a column
+        // of names, not scanned across kinds, and the amount beside it
+        // already carries direction in red/green — a third colour system
+        // on the same line is noise. Colour in this view lives on the
+        // savings column headers, where you ARE scanning across kinds.
+        const nameStyle = undefined;
         return (
           <tr
             key={r.id}
@@ -320,7 +326,7 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               <td
                 key={c.id}
                 className={`py-2 sm:py-1.5 text-right slide-col ${visibleIds.has(c.id) ? "open" : ""}`}
-                style={{ color: paletteColor(c.color, isDark), ...colVars(c.name) }}
+                style={{ color: roleColor(roleOfTrackerCategory(c), isDark), ...colVars(c.name) }}
               >
                 {stepCell(r, c.id)}
               </td>

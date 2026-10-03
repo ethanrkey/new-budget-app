@@ -12,7 +12,8 @@ import {
   computeNetPosition, computeCategoryHistory, computeLoggedContributions,
 } from "../../../src/engine/progress.ts";
 import { computeLoanProgress } from "../../../src/engine/loans.ts";
-import { primaryAccount, paletteColor, todayISO } from "../../../src/engine/model.ts";
+import { primaryAccount, todayISO } from "../../../src/engine/model.ts";
+import { roleColor, roleOfTrackerCategory } from "../../../src/engine/palette.ts";
 import type { TrackerCategory } from "../../../src/engine/types.ts";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -164,7 +165,7 @@ function AccountCard({ name, balance, asOf, history, color, chartW }: {
 
 function AssetCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: number; today: string }) {
   const { state } = useBudget();
-  const color = paletteColor(cat.color, true);
+  const color = roleColor(roleOfTrackerCategory(cat), true);
   const history = computeCategoryHistory(state!, cat.id);
   const latest = history.length ? history[history.length - 1] : null;
   const contrib = computeLoggedContributions(state!, cat.id, today);
@@ -199,7 +200,7 @@ function AssetCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: numbe
 
 function DebtCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: number; today: string }) {
   const { state } = useBudget();
-  const color = paletteColor(cat.color, true);
+  const color = roleColor(roleOfTrackerCategory(cat), true);
   const history = computeCategoryHistory(state!, cat.id);
   const p = computeLoanProgress(state!, cat, today);
 

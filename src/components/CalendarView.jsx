@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { groupByDay } from "../engine/compute.ts";
-import { paletteColor, todayISO, toISODate } from "../engine/model.ts";
+import { todayISO, toISODate } from "../engine/model.ts";
+import { roleColor, roleOfCategory } from "../engine/palette.ts";
 
 // ---- The Ledger's month-grid rendering ----
 // Same rows as the list, arranged by date. The running balance is
@@ -54,12 +55,11 @@ export default function CalendarView({ ledger, trackerCategories = [], isDark, o
   const [monthKey, setMonthKey] = useState(() => monthKeyOf(dated[0] ?? today));
   const [selected, setSelected] = useState(null);
 
-  const catColor = (categoryId) => {
-    const cat = trackerCategories.find((c) => c.id === categoryId);
-    if (cat) return paletteColor(cat.color, isDark);
-    if (categoryId === "income") return isDark ? "#4ade80" : "#16a34a";
-    return isDark ? "#94a3b8" : "#64748b"; // bills, one-offs, orphans: neutral
-  };
+  // Dots are colour-only identity, which the spec's colour rule does not
+  // allow to stand alone — the day detail names the category in words, and
+  // that is the relief. Role colour makes the dots mean something at a
+  // glance even so: bills, savings and debt no longer share a grey.
+  const catColor = (categoryId) => roleColor(roleOfCategory(categoryId, trackerCategories), isDark);
   const catName = (categoryId) =>
     trackerCategories.find((c) => c.id === categoryId)?.name ??
     ({ income: "Income", bill: "Fixed bill", oneoff: "One-off" }[categoryId] ?? "Uncategorized");

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
-import ColorSwatches from "./ColorSwatches.jsx";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
 const money = (n) =>
@@ -9,7 +8,7 @@ const prettyDate = (iso) =>
   new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export default function EventForm({
-  onSave, onCancel, onDelete, initial, trackerCategories = [], isDark, presetCategory,
+  onSave, onCancel, onDelete, initial, trackerCategories = [], presetCategory,
   // Per-occurrence editing. `occurrenceDate` is the ledger row that was
   // clicked; the rest are only meaningful alongside it.
   occurrenceDate = null, overrideAmount = null, onSaveOverride, onClearOverride, onCheckOrphans,
@@ -22,7 +21,6 @@ export default function EventForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [amount, setAmount] = useState(initial?.amount ?? "");
   const [category, setCategory] = useState(initial?.category ?? presetCategory ?? "bill");
-  const [color, setColor] = useState(initial?.color ?? null);
   const [date, setDate] = useState(initial?.date ?? todayISO());
   const [cadence, setCadence] = useState(initial?.cadence ?? "monthly");
   const [startDate, setStartDate] = useState(initial?.startDate ?? todayISO());
@@ -79,7 +77,6 @@ export default function EventForm({
       name: name.trim(),
       amount: Math.abs(Number(amount)),
       category,
-      color,
       order: initial?.order,
     };
     if (mode === "recurring") {
@@ -234,10 +231,6 @@ export default function EventForm({
             </div>
           </div>
 
-          <div>
-            <label className={label}>Color (optional)</label>
-            <ColorSwatches value={color} onChange={setColor} isDark={isDark} allowNone noneLabel="Use the category's color" />
-          </div>
 
           {mode === "oneoff" ? (
             <div>

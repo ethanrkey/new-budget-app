@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { spendingSliceColor } from "../engine/model.ts";
+import { roleColor, roleShade } from "../engine/palette.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 
 // ---- Where the PLANNED outflow goes, over the Ledger's own window ----
@@ -33,10 +33,18 @@ const KIND_PREF = "ledger-mix-bar";
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-// The slice palette lives in the engine (model.ts spendingSliceColor): two
-// clients render this chart now, and a tint ramp reimplemented per client
-// is a drift waiting to happen.
-const sliceColor = spendingSliceColor;
+// Colour comes from the slice's ROLE, assigned by the engine so both
+// clients paint identically. Two different calls on purpose:
+//
+//   PIE  roleShade — the shade is what links a wedge to its legend entry,
+//        and four investments or five loans share a hue by design, so
+//        without it the pie says "mostly investments" and stops.
+//   BAR  roleColor — flat. Every row sits beside its own label and its own
+//        bar length, so a shade there is decoration, and ten decorative
+//        shades off one hue is exactly how five of eight rows came out the
+//        same grey-blue.
+const pieColor = (d, isDark) => roleShade(d.role, d.shade ?? 0, d.shadeCount ?? 1, isDark);
+const barColor = (d, isDark) => roleColor(d.role, isDark);
 
 // The row every list shares: swatch, label, amount, percent.
 function Amount({ d }) {
@@ -84,10 +92,11 @@ export default function SpendingMix({ mix, isDark }) {
   // to answer a question, not a layout preference worth remembering.
   const [otherOpen, setOtherOpen] = useState(false);
 
+  const paint = asBar ? barColor : pieColor;
   const withFill = (s) => ({
     ...s,
-    fill: sliceColor(s, isDark),
-    children: s.children?.map((c) => ({ ...c, fill: sliceColor(c, isDark) })),
+    fill: paint(s, isDark),
+    children: s.children?.map((c) => ({ ...c, fill: paint(c, isDark) })),
   });
   const data = mix.slices.map(withFill);
   const empty = data.length === 0;

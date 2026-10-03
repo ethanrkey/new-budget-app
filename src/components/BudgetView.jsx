@@ -1,7 +1,8 @@
 import { useState } from "react";
 import HorizonSlider from "./HorizonSlider.jsx";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../engine/budgetLayout.ts";
-import { paletteColor, todayISO } from "../engine/model.ts";
+import { todayISO } from "../engine/model.ts";
+import { roleColor, roleOfCategory } from "../engine/palette.ts";
 
 // Every cell of the pinned first column wears this. Three things matter and
 // each was separately broken: it must be OPAQUE (a tinted row used
@@ -70,14 +71,11 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
   }
 
   const { otherIncomeNames, sectionItems, savingGroups, nameCat } = computeBudgetLayout(budget, trackerCategories);
-  // Dynamic per-category color, resolved to a hex (Tailwind's JIT scanner
-  // only picks up literal class-name strings, never a runtime-built
-  // `text-${id}`) — an orphaned/deleted category id falls back to gray via
-  // paletteColor's own fallback rather than crashing.
-  const colorForCat = (catId) => {
-    const cat = trackerCategories.find((c) => c.id === catId);
-    return paletteColor(cat?.color, isDark);
-  };
+  // Dynamic per-ROLE color, resolved to a hex (Tailwind's JIT scanner only
+  // picks up literal class-name strings, never a runtime-built
+  // `text-${id}`). An orphaned/deleted category id resolves to the
+  // uncategorized grey rather than crashing.
+  const colorForCat = (catId) => roleColor(roleOfCategory(catId, trackerCategories), isDark);
 
   const th = "py-2 px-3 text-right font-semibold whitespace-nowrap";
   const editRow = (name) => onEditName && (() => onEditName(name));

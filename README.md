@@ -80,7 +80,7 @@ by it tells you nothing — while the categories you made stay whole. Past
 eight slices the tail folds into "Other", which opens on click — in the legend
 for the pie (whose wedge never changes shape), in place for the bar — and the
 summary row is replaced by its parts rather than sitting above them. Optional cumulative columns per savings category,
-per-item colors, multi-select delete, a different amount for one date
+multi-select delete, a different amount for one date
 (Electric is $112 but $180 in July) without breaking the rule,
 and a horizon slider of its own, capped at a year — the Ledger is a near-term
 guide, and the Budget is the tab for a long projection.

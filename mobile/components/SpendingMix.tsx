@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Donut, HBar } from "../lib/charts";
 import { T, money } from "../lib/theme";
-import { spendingSliceColor } from "../../src/engine/model.ts";
+import { roleColor, roleShade } from "../../src/engine/palette.ts";
 import type { SpendingMix as Mix, SpendingSlice } from "../../src/engine/types.ts";
 
 // The web panel, same data and same rules, different primitives.
@@ -21,7 +21,10 @@ export default function SpendingMix({ mix }: { mix: Mix }) {
   const [asBar, setAsBar] = useState(false);
   const [otherOpen, setOtherOpen] = useState(false);
 
-  const fill = (s: SpendingSlice) => spendingSliceColor(s as never, true);
+  // Pie shades, bar flat — same split as the web, same reason: in a bar
+  // every row sits beside its own label, so a shade there is decoration.
+  const fill = (s: SpendingSlice) =>
+    asBar ? roleColor(s.role, true) : roleShade(s.role, s.shade ?? 0, s.shadeCount ?? 1, true);
   const slices = mix.slices;
   const empty = slices.length === 0;
   const barWidth = Math.min(width - 64, 420);

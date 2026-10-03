@@ -1,6 +1,7 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.ts";
 import { CATEGORIES, endOfMonthISO, primaryAccount, toISODate } from "./model.ts";
+import { roleOfCategory, assignShades } from "./palette.ts";
 import type {
   BudgetColumn, BudgetState, DayGroup, ISODate, Ledger, LedgerRow, MonthKey, SpendingMix, SpendingSlice,
 } from "./types.ts";
@@ -230,12 +231,15 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
     totals.set(e.category, round((totals.get(e.category) ?? 0) + e.amount));
   }
 
-  const describe = (categoryId: string): Pick<SpendingSlice, "label" | "color" | "bucket"> => {
-    if (categoryId === "bill") return { label: "Fixed bills", color: null, bucket: "bill" };
-    if (categoryId === "oneoff") return { label: "One-off", color: null, bucket: "oneoff" };
+  // `color` is retained on the slice only because the shape is public; it
+  // is no longer what anything paints with. Colour comes from `role`.
+  const describe = (categoryId: string): Pick<SpendingSlice, "label" | "color" | "bucket" | "role"> => {
+    const role = roleOfCategory(categoryId, cats);
+    if (categoryId === "bill") return { label: "Fixed bills", color: null, bucket: "bill", role };
+    if (categoryId === "oneoff") return { label: "One-off", color: null, bucket: "oneoff", role };
     const cat = cats.find((c) => c.id === categoryId);
-    if (!cat) return { label: "Uncategorized", color: null, bucket: "uncategorized" };
-    return { label: cat.name, color: cat.color, bucket: "category" };
+    if (!cat) return { label: "Uncategorized", color: null, bucket: "uncategorized", role };
+    return { label: cat.name, color: cat.color, bucket: "category", role };
   };
 
   // The transactions inside one bucket, biggest first, same-named ones
@@ -253,24 +257,22 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
   let slices: SpendingSlice[] = [];
   for (const [key, amount] of totals) {
     const d = describe(key);
-    // Items inherit the parent's colour, tinted per sibling by the UI,
-    // rather than taking fresh categorical hues — a 9th hue would collide
-    // with a real category sitting in this same chart, and would lend one
-    // transaction a category's identity.
+    // Items take their bucket's ROLE, shaded per sibling by the view.
+    // Shades are assigned once at the end, across everything sharing a
+    // role, so they do not have to be guessed here.
     const fixed = d.bucket === "bill" || d.bucket === "oneoff" ? d.bucket : null;
     const items = fixed ? itemsOf(key) : [];
     if (fixed && items.length > 0) {
-      items.forEach(([name, amt], i) => slices.push({
+      items.forEach(([name, amt]) => slices.push({
         key: `${key}::${name}`,
         label: name,
         amount: amt,
         percent: 0,
         color: d.color,
         bucket: "item",
+        role: d.role,
         parentBucket: fixed,
         parentLabel: d.label,
-        shade: i,
-        shadeCount: items.length,
       }));
       continue;
     }
@@ -283,7 +285,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
   if (orphans.length > 1) {
     const merged = round(orphans.reduce((s, o) => s + o.amount, 0));
     slices = slices.filter((s) => s.bucket !== "uncategorized");
-    slices.push({ key: "__uncategorized__", label: "Uncategorized", amount: merged, percent: 0, color: null, bucket: "uncategorized" });
+    slices.push({ key: "__uncategorized__", label: "Uncategorized", amount: merged, percent: 0, color: null, bucket: "uncategorized", role: "uncategorized" });
     slices.sort((a, b) => b.amount - a.amount);
   }
 
@@ -297,6 +299,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
       percent: 0,
       color: null,
       bucket: "other",
+      role: "uncategorized",
       // The fold KEEPS its members rather than discarding them. "Other" is
       // otherwise the one slice you can learn nothing from — the same
       // complaint as a single "Fixed bills" wedge, a layer down — so the
@@ -306,6 +309,11 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
     });
     slices = keep;
   }
+
+  // Shades span everything sharing a role in THIS chart — four investments
+  // or five loans share a hue by design, and the shade is what tells them
+  // apart in a pie.
+  assignShades(slices);
 
   for (const s of slices) {
     s.percent = total > 0 ? round((s.amount / total) * 100) : 0;

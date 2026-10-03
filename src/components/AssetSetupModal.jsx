@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { todayISO } from "../engine/model.ts";
-import ColorSwatches from "./ColorSwatches.jsx";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
 // Add a savings/investment account — which, like a loan, is just a tracker
@@ -8,10 +7,10 @@ import { useSubmitOnce } from "../useSubmitOnce.js";
 // never creates a contribution. A new one also logs what's in it today as its
 // first snapshot, the anchor its card projects from. The Settings → Categories
 // path still exists and does the same thing minus the opening balance.
-export default function AssetSetupModal({ initial, taggedCount = 0, isDark, onSave, onDelete, onClose }) {
+export default function AssetSetupModal({ initial, taggedCount = 0, onSave, onDelete, onClose }) {
   const isNew = !initial;
   const [name, setName] = useState(initial?.name ?? "");
-  const [color, setColor] = useState(initial?.color ?? 0);
+  const [assetKind, setAssetKind] = useState(initial?.assetKind ?? null);
   const [balance, setBalance] = useState("");
   const [asOf, setAsOf] = useState(todayISO());
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -24,7 +23,7 @@ export default function AssetSetupModal({ initial, taggedCount = 0, isDark, onSa
     onSave({
       categoryId: initial?.id ?? null,
       name: name.trim(),
-      color,
+      assetKind,
       balance: isNew && hasBalance ? Number(balance) : null,
       asOf: isNew && hasBalance ? asOf : null,
     });
@@ -52,7 +51,37 @@ export default function AssetSetupModal({ initial, taggedCount = 0, isDark, onSa
           </div>
           <div>
             <label className={label}>Color</label>
-            <ColorSwatches value={color} onChange={setColor} isDark={isDark} />
+            {/* The one question only the user can answer. NOT inferred from
+                the name: an HSA reads like savings and can be entirely in
+                one stock, which makes it the most market-exposed thing
+                someone owns rather than the least. Unanswered renders as
+                an investment, which withholds a projected line rather than
+                drawing one over market-exposed value. */}
+            <div>
+              <label className={label}>Is this cash you control, or market-exposed?</label>
+              <div className="flex gap-2 mt-1">
+                {[["savings", "Cash I control"], ["investment", "Market-exposed"]].map(([val, text]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setAssetKind(val)}
+                    aria-pressed={assetKind === val}
+                    className={`flex-1 py-2 rounded-lg text-sm transition ${
+                      assetKind === val
+                        ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-medium"
+                        : "border border-gray-300 dark:border-gray-700"
+                    }`}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                A savings account is cash. A Roth IRA, 401k, brokerage or HSA is market-exposed, even
+                one you never touch — the market still moves it. Market-exposed balances get no
+                projected line, because projecting a market is guessing.
+              </p>
+            </div>
           </div>
           {isNew && (
           <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">

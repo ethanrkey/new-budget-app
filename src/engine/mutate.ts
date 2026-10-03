@@ -202,7 +202,14 @@ export function reorderList(state: BudgetState, names: string[], name: string, b
 // budgetLayout.ts / CATEGORY_PALETTE's fallback color) rather than blocking
 // the delete or silently reassigning someone's data.
 
-export function addCategory(state: BudgetState, name: string, color: PaletteIndex, kind: "asset" | "debt" = "asset"): BudgetState {
+/**
+ * `color` is no longer chosen or read — colour is derived from what the
+ * money does (engine/palette.ts). The parameter stays so existing callers
+ * and stored data keep their shape, and a value is still written so a blob
+ * round-trips unchanged; nothing paints with it. Removing the field is a
+ * separate migration, deliberately not bundled with a visual change.
+ */
+export function addCategory(state: BudgetState, name: string, color: PaletteIndex = 0, kind: "asset" | "debt" = "asset"): BudgetState {
   const order = state.trackerCategories.length
     ? Math.max(...state.trackerCategories.map((c) => c.order)) + 1
     : 0;

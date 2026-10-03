@@ -48,7 +48,7 @@ const SECTIONS = [
         ["Income", "Money in."],
         ["Bill", "Money out, spent."],
         ["One-off", "Money out, one time."],
-        ["One of your own categories", "Money out, but into something you own or owe — savings, a Roth IRA, a loan. These get tracked on the Dashboard."],
+        ["One of your own categories", "Money out, but into something you own or owe — savings, a Roth IRA, a loan. These get tracked on the Dashboard. When you add one you'll be asked whether it's cash you control or market-exposed; that's what decides whether it gets a projected line, and only you can answer it."],
       ]],
       ["p", "You can give any item its own color, which is how it's shown in the Ledger. ⚡ Quick entry is the same thing without the modal closing between items — the fast way to type in a dozen bills at once."],
     ],

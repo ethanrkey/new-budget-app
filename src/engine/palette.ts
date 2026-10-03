@@ -19,8 +19,6 @@
 // The six hues are Okabe-Ito, the published CVD-safe qualitative set, with
 // per-mode steps so each clears 3:1 against its own surface. Adopted rather
 // than hand-tuned: hand-tuning is what produced the 1.3.
-import type { ISODate } from "./types.ts";
-
 export type Role =
   | "income"
   | "bill"
@@ -111,5 +109,46 @@ function mixHex(hex: string, target: string, t: number): string {
   return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
 }
 
-// Re-exported so callers do not reach into types.ts for one alias.
-export type { ISODate };
+// ---- Resolving a role ----------------------------------------------------
+
+/**
+ * What is this money doing? The one place the question is answered, so the
+ * web and the phone cannot drift apart on it.
+ */
+export function roleOfCategory(
+  categoryId: string,
+  categories: ReadonlyArray<{ id: string; kind: "asset" | "debt"; assetKind?: AssetKind }>
+): Role {
+  if (categoryId === "income") return "income";
+  if (categoryId === "bill") return "bill";
+  if (categoryId === "oneoff") return "oneoff";
+  const cat = categories.find((c) => c.id === categoryId);
+  // An orphan — a category that was deleted out from under a transaction —
+  // is genuinely uncategorised, which is why that bucket keeps grey.
+  if (!cat) return "uncategorized";
+  return cat.kind === "debt" ? "debt" : assetRole(cat.assetKind);
+}
+
+/** The role of a tracker category you already hold — no list lookup. */
+export function roleOfTrackerCategory(cat: { kind: "asset" | "debt"; assetKind?: AssetKind }): Role {
+  return cat.kind === "debt" ? "debt" : assetRole(cat.assetKind);
+}
+
+/**
+ * Shade index within a role, assigned across everything sharing that role
+ * in one chart. This has to span CATEGORIES, not just items: four
+ * investments, or five student loans, now share a hue by design, and
+ * telling them apart in a pie is exactly what the shades are for.
+ */
+export function assignShades<T extends { role: Role; shade?: number; shadeCount?: number }>(slices: T[]): T[] {
+  const counts = new Map<Role, number>();
+  for (const s of slices) counts.set(s.role, (counts.get(s.role) ?? 0) + 1);
+  const seen = new Map<Role, number>();
+  for (const s of slices) {
+    const n = seen.get(s.role) ?? 0;
+    seen.set(s.role, n + 1);
+    s.shade = n;
+    s.shadeCount = counts.get(s.role) ?? 1;
+  }
+  return slices;
+}

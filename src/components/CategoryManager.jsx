@@ -1,6 +1,5 @@
 import { useState } from "react";
-import ColorSwatches from "./ColorSwatches.jsx";
-import { paletteColor } from "../engine/model.ts";
+import { roleColor, roleOfTrackerCategory } from "../engine/palette.ts";
 
 // Create / rename / recolor / reorder / delete a user's own savings/debt/
 // investment categories. These replace the old hardcoded Roth/Saved/
@@ -9,10 +8,8 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
   const sorted = [...categories].sort((a, b) => a.order - b.order);
   const [editingId, setEditingId] = useState(null);
   const [draftName, setDraftName] = useState("");
-  const [colorEditId, setColorEditId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(0);
   const [newKind, setNewKind] = useState("asset");
 
   function startEdit(cat) {
@@ -27,9 +24,8 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
   function addNew() {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    onAdd(trimmed, newColor, newKind);
+    onAdd(trimmed, newKind);
     setNewName("");
-    setNewColor((c) => (c + 1) % 8);
   }
 
   return (
@@ -78,11 +74,14 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
                   </button>
                 </span>
 
-                <button
-                  onClick={() => setColorEditId((id) => (id === cat.id ? null : cat.id))}
-                  title="Change color"
-                  style={{ backgroundColor: paletteColor(cat.color, isDark) }}
-                  className="h-5 w-5 rounded-full shrink-0 ring-offset-2 dark:ring-offset-gray-900 hover:ring-2 hover:ring-gray-400 transition"
+                {/* A read-only dot, not a picker. Colour is derived from
+                    what the money does, so there is nothing to choose —
+                    the dot is here to match the colour you see on the
+                    Dashboard card and in the charts. */}
+                <span
+                  title={cat.kind === "debt" ? "Debt" : cat.assetKind === "savings" ? "Savings" : "Investment"}
+                  style={{ backgroundColor: roleColor(roleOfTrackerCategory(cat), isDark) }}
+                  className="h-5 w-5 rounded-full shrink-0"
                 />
 
                 <KindPill kind={cat.kind} onClick={() => onUpdate(cat.id, { kind: cat.kind === "debt" ? "asset" : "debt" })} />
@@ -127,11 +126,6 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
                   </button>
                 )}
               </div>
-              {colorEditId === cat.id && (
-                <div className="pl-8 pt-2">
-                  <ColorSwatches value={cat.color} onChange={(idx) => onUpdate(cat.id, { color: idx })} isDark={isDark} />
-                </div>
-              )}
             </div>
           ))}
           {sorted.length === 0 && (
@@ -158,7 +152,6 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
               Add
             </button>
           </div>
-          <ColorSwatches value={newColor} onChange={setNewColor} isDark={isDark} />
         </div>
       </div>
     </div>
