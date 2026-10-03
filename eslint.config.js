@@ -8,7 +8,13 @@ export default [
   // 'dist' is build output; the other two are the throwaway browser-
   // verification harness (see .gitignore) — linting a scratch file adds
   // noise to a run that is supposed to be clean.
-  { ignores: ['dist', 'mobile-preview.html', 'src/mobile-preview-entry.jsx', '.tmp-*.mjs'] },
+  // 'dist' is build output; the two mobile-preview entries and .tmp-* are
+  // the throwaway browser-verification harness (see .gitignore) — linting a
+  // scratch file adds noise to a run that is supposed to be clean. 'mobile'
+  // is the Expo client: its own project, its own toolchain, its own
+  // tsconfig, and a Metro config that is legitimately CommonJS. Linting it
+  // from here only reports that React Native is not a browser.
+  { ignores: ['dist', 'mobile', 'mobile-preview.html', 'src/mobile-preview-entry.jsx', '.tmp-*.mjs'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {

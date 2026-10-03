@@ -25,6 +25,13 @@ dist-ssr
 # Same rule as *.csv: four people's complete financial history, never in the repo.
 .blobs/
 
+# Expo client build/cache output. `node_modules` above already covers
+# mobile/node_modules; these are the rest.
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

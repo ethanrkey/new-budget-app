@@ -951,8 +951,29 @@ since preferences are not money and last-write-wins is fine for them.
 
 
 Later:
-- iOS client: Expo / React Native, reusing `src/engine` verbatim rather than
-  reimplementing the money math. **Metro resolves the explicit `.ts`
+- iOS client: **`mobile/` exists as of 2026-10-02** — Expo SDK 57 /
+  RN 0.86 / expo-router, reusing `src/engine` verbatim rather than
+  reimplementing the money math. Three lines of `metro.config.js` do it:
+  `watchFolders` (Metro only watches its own project root, so a file above
+  it is invisible), `nodeModulesPaths` + `disableHierarchicalLookup`
+  (resolve every package from `mobile/node_modules` and never the web
+  app's — two copies of React in one bundle is the classic failure), and
+  the explicit `.ts` specifiers the engine already uses. Verified by
+  bundling: 1181 modules, and engine string literals ("Fixed bills",
+  "Uncategorized") are present in the output, so the engine is genuinely
+  linked rather than silently dropped. The engine's purity is what makes
+  this config rather than a build step.
+
+  **Read-only, deliberately.** The per-entity write path with its version
+  guards is real work, and shipping it the same night production data
+  moved would risk the phone writing bad rows to answer a question —
+  "does this feel like an app" — that writing does not help answer.
+  Email+password auth only: Google OAuth needs a redirect that survives
+  the Expo Go sandbox, and the magic-link fallback is down behind the
+  broken confirmation email. `mobile/tsconfig.json` sets
+  `allowImportingTsExtensions` and includes `../src/engine`; the root
+  ESLint ignores `mobile` because it is a separate project whose Metro
+  config is legitimately CommonJS. **Metro resolves the explicit `.ts`
   specifiers** this codebase uses — verified 2026-09-25 by bundling a
   `.js → .jsx → .ts → .ts` chain through Metro 0.87 (it executed correctly)
   and by resolving those specifiers through `@expo/metro-config` 57's own
