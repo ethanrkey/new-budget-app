@@ -5,8 +5,18 @@ import DeleteAccount from "./DeleteAccount.jsx";
 // check-in bar, in one place: appearance, category management, sign-out,
 // and — deliberately last, visually separated — the one destructive action.
 // The header itself is now just Import / Export / Settings.
+// Which identity provider actually signed you in. Supabase keeps the list
+// on app_metadata.providers; "email" covers both magic link and password,
+// which are the same credential from the database's point of view, so this
+// does not try to tell them apart and claim something it cannot know.
+const PROVIDER_LABEL = { google: "Google", email: "Email", apple: "Apple", github: "GitHub" };
+function providerNames(providers) {
+  const list = (providers ?? []).map((p) => PROVIDER_LABEL[p] ?? p);
+  return list.length ? list.join(" and ") : "—";
+}
+
 export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories, onWipe, onSignOut, onClose,
-  email, deletionRequest, onRequestDeletion, onCancelDeletion }) {
+  email, providers, createdAt, deletionRequest, onRequestDeletion, onCancelDeletion }) {
   const row = "flex items-center justify-between gap-3 py-3";
   const btn = "text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition";
 
@@ -43,7 +53,32 @@ export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories,
           </div>
 
           <div className={row}>
-            <div className="text-sm font-medium">Account</div>
+            <div className="min-w-0">
+              <div className="text-sm font-medium">Account</div>
+              {/* Inline, not a subscreen. The Savings/debt pattern earns its
+                  navigation because that screen EDITS things; three
+                  read-only facts behind a tap would be navigation for
+                  nothing, and the thing people come here to check is the
+                  address they are signed in as. */}
+              <dl className="mt-1 text-xs text-gray-500 space-y-0.5">
+                <div className="flex gap-2">
+                  <dt className="w-20 shrink-0">Signed in</dt>
+                  <dd className="truncate text-gray-700 dark:text-gray-300">{email ?? "—"}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-20 shrink-0">Via</dt>
+                  <dd className="text-gray-700 dark:text-gray-300">{providerNames(providers)}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-20 shrink-0">Member since</dt>
+                  <dd className="text-gray-700 dark:text-gray-300">
+                    {createdAt
+                      ? new Date(createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+                      : "—"}
+                  </dd>
+                </div>
+              </dl>
+            </div>
             <button onClick={onSignOut} className={btn}>Sign out</button>
           </div>
 

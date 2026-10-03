@@ -78,7 +78,19 @@ The app is **Key Budget**, and the header says so, in the icon's own brass.
 of one hue, exactly like the category palette. `index.html` carries the title, description, the
 favicon set and the iOS home-screen icons; `public/manifest.webmanifest` makes
 it installable (`display: standalone`, so a home-screen launch has no browser
-chrome). Icons are generated, not hand-drawn — a horizontal brass key (🔑-shaped: bow
+chrome).
+
+**`start_url` and `scope` are `/app`, and `id` stays `/`.** Once the root
+became a marketing page, a home-screen launch opened it instead of the app.
+`id` must NOT be changed to match: it is the install identity, and changing
+it makes this a different app to the browser, orphaning every existing
+install. The manifest alone is also not enough — **iOS only honours
+`start_url` from 16.4, and before that Add to Home Screen bookmarks whatever
+page you were on**, so an install made from the landing page launches there
+for ever, as does any install created before this shipped. `main.jsx`
+therefore also redirects `/` to `/app` when
+`matchMedia("(display-mode: standalone)")` matches, which costs one media
+query and fixes the stale installs the manifest cannot reach. Icons are generated, not hand-drawn — a horizontal brass key (🔑-shaped: bow
 left, shaft right, teeth under the tip) on gray-900 (`#111827`), sized to about
 68% of the tile so it has real padding. Full-bleed for iOS (which masks the
 corners itself and fills any transparency with black), rounded for the browser
@@ -1205,3 +1217,23 @@ Later:
   a stored anchor disagrees with the newest snapshot, assemble will
   deliberately move it, and that is reported before a migration rather than
   discovered after one.
+- **The Update balance copy warns before it explains** (2026-10-03). It used
+  to describe the mechanism — "everything dated before that is already
+  inside this number; the forecast builds forward from it" — which is true
+  and says nothing about what it costs you. Setting an as-of date makes
+  every earlier transaction drop out of the ledger, so a user with an
+  unpaid bill dated before the cutoff watches it vanish from the forecast
+  while still owing it. The warning is the point and the mechanics are
+  secondary, so the warning goes first. Two things the copy has to keep
+  exactly right: the cutoff is `balanceAsOf`, NOT today — a date set in the
+  past drops everything before THAT — and `buildEvents` filters
+  `e.date >= balanceAsOf`, so same-day transactions are kept and "before
+  that date" is exact rather than approximate.
+- **Settings → Account is inline, not a subscreen** (2026-10-03). Email,
+  provider and creation date. The Savings/debt manager earns its
+  navigation because that screen EDITS things; three read-only facts
+  behind a tap would be navigation for nothing, and the thing people open
+  this for is checking which address they are signed in as. `providers`
+  comes from `app_metadata.providers` and deliberately does not try to
+  tell a magic link from a password — they are one credential to the
+  database, and claiming otherwise would be inventing a distinction.

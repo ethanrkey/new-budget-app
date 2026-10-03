@@ -5,6 +5,19 @@ import { useSubmitOnce } from "../useSubmitOnce.js";
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
+// THE COPY HERE WARNS BEFORE IT EXPLAINS (rewritten 2026-10-03). The old
+// text described the mechanism — "everything dated before that is already
+// inside this number; the forecast builds forward from it" — without
+// saying what that costs you. Setting an as-of date makes every earlier
+// transaction drop out of the ledger (generate.ts buildEvents filters
+// `e.date >= balanceAsOf`), so a user with an unpaid bill dated before the
+// cutoff watches it vanish from the forecast while still owing it. The
+// warning is the point; the mechanics are secondary.
+//
+// The cutoff is balanceAsOf, NOT today: a date you set in the past drops
+// everything before THAT. Same-day transactions are kept — the filter is
+// `>=` — so "before that date" is exact rather than approximate.
+//
 // The one place the account's verified balance changes. Drafts live here;
 // nothing touches state until Confirm — which then commits balance + as-of
 // date + a history snapshot atomically (mutate.ts updateAccountBalance).
@@ -38,8 +51,9 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
         <p className="text-xs text-gray-500 mb-4">
           {blurb ?? (
             <>
-              Enter what the bank actually shows and when you checked it. Everything dated before that
-              is treated as already inside this number; the forecast builds forward from it.
+              Enter the current balance of your primary checking account and the date you checked it.
+              Transactions dated before that date will drop out of the ledger, since the balance
+              already accounts for them — make sure none of them are bills you still owe.
               Currently {money(account.balance)}, verified {account.balanceAsOf}.
             </>
           )}

@@ -671,6 +671,8 @@ export default function App() {
           onOpenCategories={() => { setSettingsOpen(false); setCategoryManagerFrom("settings"); }}
           onWipe={wipeData}
           email={session?.user?.email}
+          providers={session?.user?.app_metadata?.providers}
+          createdAt={session?.user?.created_at}
           deletionRequest={deletionRequest}
           onRequestDeletion={async () => {
             const res = await requestAccountDeletion(session.user.id);

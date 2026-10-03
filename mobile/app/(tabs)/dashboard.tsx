@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LayoutAnimation, Platform, Pressable, RefreshControl, ScrollView,
   StyleSheet, Text, UIManager, View, useWindowDimensions,
@@ -7,6 +7,7 @@ import { useBudget } from "../../components/StateProvider";
 import { Sparkline, HBar } from "../../lib/charts";
 import { T, money } from "../../lib/theme";
 import { supabase } from "../../lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 import {
   computeNetPosition, computeCategoryHistory, computeLoggedContributions,
 } from "../../../src/engine/progress.ts";
@@ -22,8 +23,14 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
 // exactly this and costs nothing.
 const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
+const PROVIDER_LABEL: Record<string, string> = { google: "Google", email: "Email", apple: "Apple", github: "GitHub" };
+const providerNames = (p?: string[]) =>
+  (p ?? []).map((x) => PROVIDER_LABEL[x] ?? x).join(" and ") || "—";
+
 export default function DashboardScreen() {
   const { state, refresh, refreshing } = useBudget();
+  const [session, setSession] = useState<Session | null>(null);
+  useEffect(() => { supabase.auth.getSession().then(({ data }) => setSession(data.session)); }, []);
   const { width } = useWindowDimensions();
   const [heroOpen, setHeroOpen] = useState(true);
   const today = todayISO();
@@ -78,9 +85,32 @@ export default function DashboardScreen() {
         <DebtCard key={cat.id} cat={cat} chartW={chartW} today={today} />
       ))}
 
+      {/* The same three facts the web shows in Settings. There is no
+          Settings screen here yet, so they sit with Sign out, which is the
+          only other account-level control on the phone. */}
+      <View style={styles.card}>
+        <Text style={styles.cardLabel}>Account</Text>
+        <Row k="Signed in" v={session?.user?.email ?? "—"} />
+        <Row k="Via" v={providerNames(session?.user?.app_metadata?.providers as string[] | undefined)} />
+        <Row k="Member since" v={
+          session?.user?.created_at
+            ? new Date(session.user.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+            : "—"
+        } />
+      </View>
+
       <Text style={styles.signout} onPress={() => supabase.auth.signOut()}>Sign out</Text>
       <Text style={styles.ro}>Read-only on mobile. Edits still happen on the web.</Text>
     </ScrollView>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <View style={styles.acctRow}>
+      <Text style={styles.acctK}>{k}</Text>
+      <Text style={styles.acctV} numberOfLines={1}>{v}</Text>
+    </View>
   );
 }
 
@@ -242,6 +272,9 @@ const styles = StyleSheet.create({
   histRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
   histDate: { color: T.faint, fontSize: 12, fontVariant: ["tabular-nums"] },
   histAmt: { color: T.dim, fontSize: 12, fontVariant: ["tabular-nums"] },
+  acctRow: { flexDirection: "row", gap: 10, paddingVertical: 2 },
+  acctK: { color: T.faint, fontSize: 12, width: 92 },
+  acctV: { color: T.dim, fontSize: 12, flex: 1 },
   signout: { color: T.brass, textAlign: "center", paddingVertical: 12 },
   ro: { color: T.faint, fontSize: 11, textAlign: "center" },
 });
