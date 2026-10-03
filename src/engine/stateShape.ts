@@ -33,10 +33,13 @@ function migrateItem(item: any): any {
 // feature replaces.
 export function legacyTrackerCategories(): TrackerCategory[] {
   return [
-    { id: "roth", name: "Roth", color: 5, order: 0, kind: "asset" },           // Indigo
-    { id: "saved", name: "Saved", color: 2, order: 1, kind: "asset" },         // Teal
-    { id: "brokerage", name: "Brokerage", color: 0, order: 2, kind: "asset" }, // Blue
-    { id: "loans", name: "Loans", color: 3, order: 3, kind: "debt" },          // Gold
+    // No colour and no assetKind: these are the ids a legacy state's items
+    // already point at, so the names must not change — but nothing here can
+    // answer "market-exposed or not", and a migration must not guess it.
+    { id: "roth", name: "Roth", order: 0, kind: "asset" },
+    { id: "saved", name: "Saved", order: 1, kind: "asset" },
+    { id: "brokerage", name: "Brokerage", order: 2, kind: "asset" },
+    { id: "loans", name: "Loans", order: 3, kind: "debt" },
   ];
 }
 
@@ -60,6 +63,14 @@ function inferCategoryKind(cat: any): "asset" | "debt" {
 // Merge a raw loaded/imported object onto blankState() so every field always
 // exists, running item migrations and the onboarding-seen / tracker-category
 // migrations below.
+// Migration 13 (2026-10-03): `color` is DROPPED from tracker categories.
+// Colour is derived from role now (engine/palette.ts) and nothing reads
+// the stored index; left in place it would ride along in every save
+// forever, and the next person to see it would reasonably assume it meant
+// something. Stripped the same way `paidOverrides` was — explicitly,
+// because normalize() spreads the parsed blob and an unread field is
+// otherwise immortal.
+
 // Migration 12 (2026-10-03): `assetKind` on asset categories — "savings"
 // (cash you control) or "investment" (value the market moves). Added as
 // ABSENT, never inferred. A name cannot answer it: an HSA reads like
@@ -91,6 +102,15 @@ function mapValues<T>(map: Record<string, T>, fn: (v: T) => T): Record<string, T
   const out: Record<string, T> = {};
   for (const [k, v] of Object.entries(map)) out[k] = fn(v);
   return out;
+}
+
+// Migration 13: strip the retired palette index. A typed helper rather
+// than an inline cast, because this runs over every category of every
+// load and a silent `any` here is how a field comes back.
+function stripRetiredColor(cat: TrackerCategory): TrackerCategory {
+  const next: Record<string, unknown> = { ...cat };
+  delete next.color;
+  return next as unknown as TrackerCategory;
 }
 
 function dedupeByDate(list: BalanceSnapshot[]): BalanceSnapshot[] {
@@ -222,7 +242,7 @@ export function normalize(parsed: any): BudgetState {
     let cat = catById.get(rest.category);
     const terms = { originalPrincipal, interestRate: interestRate ?? null, interestStartDate: interestStartDate ?? null };
     if (!cat || cat.kind !== "debt" || cat.originalPrincipal != null) {
-      const spawned = { id: `loan-${rest.id}`, name: rest.name, color: cat?.color ?? 3, order: nextCatOrder(), kind: "debt", ...terms };
+      const spawned = { id: `loan-${rest.id}`, name: rest.name, order: nextCatOrder(), kind: "debt", ...terms };
       cats.push(spawned);
       catById.set(spawned.id, spawned);
       cat = spawned;
@@ -249,7 +269,9 @@ export function normalize(parsed: any): BudgetState {
     accounts,
     recurring: recurring.map(stamp).map(migrateLoanItem),
     oneoffs: oneoffs.map(stamp).map(migrateLoanItem),
-    trackerCategories: cats,
+    // Migration 13: the retired `color` index is stripped here rather than
+    // merely ignored, for the same reason paidOverrides was.
+    trackerCategories: cats.map(stripRetiredColor),
     // Migration 8 (2026-10-02): the old `paidOverrides` field is DROPPED,
     // not carried forward. Mark-a-bill-paid is gone — a paid bill is already
     // inside the verified balance, and buildEvents drops everything before

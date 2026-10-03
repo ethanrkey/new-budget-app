@@ -31,35 +31,60 @@ export type Role =
 /** Fixed order, so a chart's colours never depend on what else is in it. */
 export const ROLE_ORDER: Role[] = ["income", "bill", "oneoff", "savings", "investment", "debt", "uncategorized"];
 
-// Hues are chosen for meaning and spread round the wheel; LIGHTNESS was
-// then solved for, not guessed. That split matters: under deuteranopia and
-// protanopia the wheel collapses onto roughly one axis, so two hues from
-// the same family (two blues, two oranges) can only be told apart by
-// lightness — which is exactly how the old Blue/Indigo pair reached 1.3. A
-// search over lightness maximising the worst all-pairs ΔE, subject to a 3:1
-// contrast floor on each surface, produced these. Worst pair across normal,
-// deutan, protan AND tritan: 11.6 light, 12.8 dark, against a target of 8.
+// SEMANTIC FAMILIES CONSTRAIN HUE; the gate then optimises LIGHTNESS
+// inside that constraint. Order of operations, and it was wrong once:
+// hues were first picked without a semantic rule and the search was left
+// to separate them, which put bills at 255° and savings at 215° — the same
+// blue family for two things that are opposites (an obligation leaving vs
+// money you keep). Separable by measurement, wrong by meaning.
 //
-// Do not hand-edit a value here without re-running the gate. Hand-tuning is
-// what produced the 1.3.
+//   OUT   bill, one-off, debt      warm — money leaving
+//   KEEP  savings, investment      cool — money you hold
+//   IN    income                   green
+//   —     uncategorized            grey
+//
+// Same-family pairs are now semantic SIBLINGS, so splitting them by
+// lightness reinforces the meaning instead of fighting it: two warms are
+// two kinds of money going out, two cools are two kinds you keep.
+export const SEMANTIC_FAMILY: Record<Role, "out" | "keep" | "in" | "none"> = {
+  bill: "out", oneoff: "out", debt: "out",
+  savings: "keep", investment: "keep",
+  income: "in", uncategorized: "none",
+};
+
+/** Hue in degrees, per role — the part that carries MEANING. */
+export const ROLE_HUE: Record<Role, number | null> = {
+  bill: 88, oneoff: 40, debt: 20, savings: 240, investment: 300, income: 148,
+  uncategorized: null, // grey has no hue, and that is the point
+};
+
+// Lightness was then solved for by search, maximising the worst all-pairs
+// ΔE across normal/deutan/protan/tritan subject to a 3:1 contrast floor and
+// a per-role band that keeps each colour recognisably itself. Worst pair:
+// 11.2 light, 11.9 dark. Do not hand-edit — re-run the gate.
 export const ROLE_COLORS: Record<Role, { light: string; dark: string }> = {
-  // Income is green, which agrees with the direction colours on ledger
-  // amounts — fine, because income IS money in, so the two systems cannot
-  // contradict each other. Direction stays a separate system.
-  income:        { light: "#004a07", dark: "#17924a" },
-  // Bills get a hue that holds up: they are the majority of most people's
-  // outflow and had the least separable treatment of anything.
-  bill:          { light: "#387bcd", dark: "#2f77cc" },
-  oneoff:        { light: "#744800", dark: "#a86a00" },
-  savings:       { light: "#005871", dark: "#00ccfb" },
-  investment:    { light: "#c773c0", dark: "#f19de9" },
-  debt:          { light: "#c75e44", dark: "#ff6a44" },
-  // Grey on purpose, and deliberately not promoted with the others: grey is
-  // the honest colour for "no category", and it is immune to colour-vision
-  // deficiency, which is the right property for the bucket that means
-  // nothing. It is still in the all-pairs check — it has to differ from the
-  // six, not just from the surface.
+  income:        { light: "#005b00", dark: "#009839" },
+  bill:          { light: "#a26a00", dark: "#fac420" },
+  oneoff:        { light: "#79351c", dark: "#a2573d" },
+  debt:          { light: "#e30c3d", dark: "#e20a3c" },
+  savings:       { light: "#004a75", dark: "#00a6ff" },
+  investment:    { light: "#966ad9", dark: "#eaa7ff" },
+  // Grey on purpose and never promoted: it is the honest colour for "no
+  // category", immune to colour-vision deficiency, and still in the
+  // all-pairs check — it has to differ from the six, not just the surface.
   uncategorized: { light: "#6b7280", dark: "#9ca3af" },
+};
+
+/** Human-readable role names. A role system needs its mapping VISIBLE —
+ *  otherwise it is a private language only the code understands. */
+export const ROLE_LABEL: Record<Role, string> = {
+  income: "Income",
+  bill: "Fixed bill",
+  oneoff: "One-off",
+  savings: "Savings",
+  investment: "Investment",
+  debt: "Debt",
+  uncategorized: "Uncategorized",
 };
 
 export function roleColor(role: Role, isDark: boolean): string {

@@ -233,6 +233,13 @@ function DataRow({
     >
       <td className={`py-2 sm:py-1.5 pr-3 bg-white dark:bg-gray-900 whitespace-nowrap ${STICKY_COL}`}>
         <span className="inline-flex items-center gap-1">
+          {colorHex && (
+            <span
+              className="h-2 w-2 rounded-full shrink-0"
+              style={{ backgroundColor: colorHex }}
+              aria-hidden="true"
+            />
+          )}
           {reorderable && (
             <span className="inline-flex flex-col opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition -my-1">
               <button onClick={onMoveUp} disabled={!onMoveUp} title="Move up"
@@ -253,9 +260,14 @@ function DataRow({
       {cols.map((c) => {
         const v = pick(c);
         const show = hideZero ? v !== 0 : true;
-        const colorClass = colorHex ? "" : muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "";
+        // Direction OWNS the amounts here. Role colour used to override it
+        // on every saving/debt cell, which put two colour systems in the
+        // same text — the same mistake that took colour off ledger row
+        // names. Role moves to a dot beside the label, where you are
+        // scanning across kinds rather than reading a number.
+        const colorClass = muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "";
         return (
-          <td key={c.key} className={`py-2 sm:py-1.5 px-3 text-right ${colorClass}`} style={colorHex ? { color: colorHex } : undefined}>
+          <td key={c.key} className={`py-2 sm:py-1.5 px-3 text-right ${colorClass}`}>
             {show && v !== 0 ? money(v) : muted && v === 0 ? "$0.00" : ""}
           </td>
         );

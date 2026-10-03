@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { ROLE_COLORS, ROLE_LABEL, ROLE_ORDER } from "../engine/palette.ts";
+import { getDeviceTheme } from "../theme.js";
 
 // The full feature walkthrough — everything the app can do, in the order you'd
 // actually meet it. Quick Setup gets you a working budget in two minutes; this
@@ -165,6 +167,16 @@ const SECTIONS = [
     ],
   },
   {
+    id: "colours",
+    title: "What the colours mean",
+    body: [
+      ["p", "Colour is never chosen — it's derived from what the money is doing, and the same colour means the same thing on every screen: a card, a chart slice, a ledger column, a calendar dot."],
+      ["legend"],
+      ["p", "Two shades of one colour mean two things of the same kind — two investments, two loans — so a chart can tell them apart without inventing a new colour for each. Warm means money going out; cool means money you keep."],
+      ["note", "Red and green on amounts are a separate thing entirely: that's direction — money in or money out — not what kind of money it is."],
+    ],
+  },
+  {
     id: "backup",
     title: "Import, export, backup",
     body: [
@@ -283,9 +295,35 @@ export default function Tutorial({ onClose, onStartTour }) {
   );
 }
 
+const LEGEND_HINT = {
+  income: "money coming in",
+  bill: "a bill you pay every month",
+  oneoff: "a one-time cost",
+  savings: "cash you control",
+  investment: "value the market moves",
+  debt: "what you owe",
+  uncategorized: "no category — usually a deleted one",
+};
+
 function Block({ block }) {
   const [kind, value] = block;
   if (kind === "p") return <p>{value}</p>;
+  // The mapping, stated once, where someone confused will look for it. A
+  // role system whose colours are never named is a private language.
+  if (kind === "legend") {
+    const dark = getDeviceTheme(null) === "dark";
+    return (
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+        {ROLE_ORDER.map((role) => (
+          <div key={role} className="flex items-baseline gap-2.5">
+            <span className="h-3 w-3 rounded-sm shrink-0 self-center" style={{ backgroundColor: ROLE_COLORS[role][dark ? "dark" : "light"] }} />
+            <dt className="font-medium shrink-0">{ROLE_LABEL[role]}</dt>
+            <dd className="text-gray-500">{LEGEND_HINT[role]}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
   if (kind === "note") {
     return (
       <p className="text-xs bg-gray-50 dark:bg-gray-800/60 border-l-2 border-gray-300 dark:border-gray-700 rounded-r-lg px-3 py-2 text-gray-600 dark:text-gray-400">

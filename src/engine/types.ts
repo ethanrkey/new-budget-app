@@ -44,7 +44,6 @@ export interface FixedCategoryMeta {
 interface TrackerCategoryBase {
   id: string;
   name: string;
-  color: PaletteIndex;
   order: number;
 }
 

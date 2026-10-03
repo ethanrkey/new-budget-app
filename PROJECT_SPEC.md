@@ -892,7 +892,14 @@ fifth tab never needs a migration.
 4. **The in-app Tutorial matches shipped features** (`src/components/Tutorial.jsx`);
    update it in the same commit as any feature change. A stale tutorial is
    worse than none.
-5. Data-shape changes are migration-safe: **idempotent always**,
+5. **Every string replacement is asserted.** A scripted edit that silently
+   matches nothing ships looking applied and is not — twice in one week:
+   a `finishNow` change that was supposed to re-read the wizard's balance,
+   and before it a repoint whose `sed` pattern never matched. Assert on
+   EVERY replacement, not most of them, and when the edit is behavioural,
+   verify the behaviour too — `grep` proves the text changed, not that the
+   code does what the text says.
+6. Data-shape changes are migration-safe: **idempotent always**,
    **deterministic for any state that carries data**, asserted before/after
    on legacy-shaped fixtures, never fabricating values the user didn't enter.
    `tests/migrations.test.mjs` is the standing guard — every migration path
@@ -1295,7 +1302,7 @@ Later:
   not the same as not being exposed by it**. Migration 12 therefore adds
   the field ABSENT and guesses nothing; a user stating their own answers is
   data entry, which is `scripts/set_asset_kinds.mjs`, deliberately not a
-  migration (maintenance rule 5).
+  migration (maintenance rule 6).
 - **The setup wizard commits its own result** (2026-10-03). It used to
   hand `{ recurring, oneoffs, checkInBalance }` to `importCSV`, and that
   coupling broke it silently: when `importCSV` stopped adopting a balance
@@ -1346,3 +1353,30 @@ Later:
   the whole picture. Not someone with land and property holdings — that
   is why manual entry works at all, because the dataset stays small
   enough to maintain.
+- **Semantic families constrain hue BEFORE the gate optimises lightness**
+  (2026-10-03). The order of operations was wrong and produced a system
+  its own designer could not read. Hues were picked without a semantic
+  rule and the search was left to separate them, which put bills at 255°
+  and savings at 215° — the same blue family for two opposites, an
+  obligation leaving versus money you keep. Separable by measurement,
+  wrong by meaning.
+
+  Families now: **out** (bill, one-off, debt) warm, **keep** (savings,
+  investment) cool, **in** (income) green, and grey for no category. Every
+  same-family pair is a semantic SIBLING, so splitting them by lightness
+  reinforces the meaning rather than fighting it. The gate enforces this
+  first: cross-family roles must be >= 60° apart in hue, checked before any
+  ΔE maths, so a future edit cannot quietly recreate two blues.
+
+- **The mapping is stated, in three places.** A role system that never
+  says what its colours mean is a private language only the code
+  understands. Dashboard cards name the role beside the category
+  ("Roth IRA · Investment"), About carries a legend of all seven, and the
+  spending chart already labels every slice inline.
+
+- **Budget: direction owns the amounts, role owns a dot** (2026-10-03).
+  Role colour used to override the red/green on every saving/debt cell,
+  putting two colour systems in the same text — the same mistake that took
+  colour off ledger row names. The amounts are direction only; the role
+  shows as a dot beside the row label, where you are scanning across kinds
+  rather than reading a number. One signal per element.

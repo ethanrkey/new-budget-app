@@ -19,7 +19,7 @@
 // ΔE is OKLab ×100. The thresholds are the spec's: 8 is the target, 6-8 is
 // a floor legal only with secondary encoding (every slice carries an inline
 // label, so the floor is defensible), under 6 is a failure.
-import { ROLE_COLORS, ROLE_ORDER } from "../src/engine/palette.ts";
+import { ROLE_COLORS, ROLE_ORDER, ROLE_HUE, SEMANTIC_FAMILY } from "../src/engine/palette.ts";
 
 const TARGET = 8;
 const FLOOR = 6;
@@ -65,9 +65,32 @@ const contrast = (a, b) => {
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 };
 
+// SEMANTIC DISTANCE, checked BEFORE the colour maths — this is the
+// constraint that was missing. Two roles in different families must be in
+// different hue families too, or you get bills and savings as two blues:
+// separable by measurement and wrong by meaning. Within a family no hue
+// rule applies, because siblings SHOULD look related.
+const MIN_CROSS_FAMILY_HUE = 60;
+
 let failures = 0, warnings = 0;
 const fail = (msg) => { failures++; console.log(`FAIL  ${msg}`); };
 const warn = (msg) => { warnings++; console.log(`WARN  ${msg}`); };
+
+console.log("== semantic families ==");
+for (let i = 0; i < ROLE_ORDER.length; i++) {
+  for (let j = i + 1; j < ROLE_ORDER.length; j++) {
+    const a = ROLE_ORDER[i], b = ROLE_ORDER[j];
+    if (SEMANTIC_FAMILY[a] === SEMANTIC_FAMILY[b]) continue;
+    const ha = ROLE_HUE[a], hb = ROLE_HUE[b];
+    if (ha == null || hb == null) continue; // grey has no hue by design
+    const d = Math.min(Math.abs(ha - hb), 360 - Math.abs(ha - hb));
+    if (d < MIN_CROSS_FAMILY_HUE) {
+      failures++;
+      console.log(`FAIL  ${a} (${SEMANTIC_FAMILY[a]}) and ${b} (${SEMANTIC_FAMILY[b]}) are ${d}° apart — different meanings must not share a hue family`);
+    }
+  }
+}
+if (failures === 0) console.log("PASS  every cross-family pair is >= " + MIN_CROSS_FAMILY_HUE + "° apart in hue");
 
 for (const mode of ["light", "dark"]) {
   console.log(`\n== ${mode} ==`);

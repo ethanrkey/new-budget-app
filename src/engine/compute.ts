@@ -239,7 +239,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
     if (categoryId === "oneoff") return { label: "One-off", color: null, bucket: "oneoff", role };
     const cat = cats.find((c) => c.id === categoryId);
     if (!cat) return { label: "Uncategorized", color: null, bucket: "uncategorized", role };
-    return { label: cat.name, color: cat.color, bucket: "category", role };
+    return { label: cat.name, color: null, bucket: "category", role };
   };
 
   // The transactions inside one bucket, biggest first, same-named ones

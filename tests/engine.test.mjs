@@ -553,8 +553,8 @@ const explicitCustom = normalize({
   recurring: [], oneoffs: [], settings: {},
   trackerCategories: [{ id: "z1", name: "My Fund", color: 4, order: 0 }],
 });
-eq("an existing custom trackerCategories list passes through untouched except for the kind backfill",
-  explicitCustom.trackerCategories, [{ id: "z1", name: "My Fund", color: 4, order: 0, kind: "asset" }]);
+eq("an existing custom trackerCategories list passes through, minus the retired color (migration 13)",
+  explicitCustom.trackerCategories, [{ id: "z1", name: "My Fund", order: 0, kind: "asset" }]);
 
 // ---------- Scenario P2: `kind` (asset/debt) backfill migration ----------
 console.log("\n== Scenario P2: category `kind` backfill (loan-amortization feature) ==");
@@ -921,9 +921,11 @@ eq("history seeded with exactly the verified balance, once",
 // account above from exactly those fields) keeps working forever.
 eq("Phase 2: legacy checkInBalance/checkInDate are stripped from settings (accounts[0] is the only source of truth)",
   [migratedAA.settings.checkInBalance, migratedAA.settings.checkInDate], [undefined, undefined]);
-eq("nothing unrelated was touched (categories, category snapshots, paidOverrides, settings extras)",
+eq("nothing unrelated was touched (categories bar the retired color, snapshots, settings extras)",
   [migratedAA.trackerCategories, migratedAA.balanceSnapshots, migratedAA.paidOverrides, migratedAA.settings.theme, migratedAA.settings.visibleTrackerCategoryIds],
-  [legacyAA.trackerCategories, legacyAA.balanceSnapshots, legacyAA.paidOverrides, "dark", ["roth"]]);
+  // Migration 13 strips `color`, so the expectation strips it too rather
+  // than comparing against the raw legacy objects.
+  [legacyAA.trackerCategories.map((c) => { const n = { ...c }; delete n.color; return n; }), legacyAA.balanceSnapshots, legacyAA.paidOverrides, "dark", ["roth"]]);
 
 // Idempotent: normalize runs on EVERY load. A second pass must change nothing
 // — no second seed, no re-stamping, byte-identical.
@@ -1097,9 +1099,9 @@ eq("...but keeps everything else: category, amount, variable flag", [slPay.categ
 eq("the user's own logged snapshot on 'loans' is kept untouched — NOT replaced by a seed",
   migAC.balanceSnapshots.loans, [{ id: "u1", date: "2026-08-01", amount: 16240 }]);
 const ccCat = migAC.trackerCategories.find((c) => c.id === "loan-cc-pay");
-eq("a SECOND configured loan-item in the same category spawns its own debt category (deterministic id, same color)",
-  [ccCat?.name, ccCat?.kind, ccCat?.color, ccCat?.originalPrincipal, ccCat?.interestRate, ccCat?.interestStartDate, ccCat?.order],
-  ["Credit Card", "debt", 3, 2400, 22, null, 2]);
+eq("a SECOND configured loan-item in the same category spawns its own debt category (deterministic id)",
+  [ccCat?.name, ccCat?.kind, ccCat?.originalPrincipal, ccCat?.interestRate, ccCat?.interestStartDate, ccCat?.order],
+  ["Credit Card", "debt", 2400, 22, null, 2]);
 const ccPay = migAC.recurring.find((r) => r.id === "cc-pay");
 eq("...and its payment is retagged to the new category, stripped of loan fields", [ccPay.category, "originalPrincipal" in ccPay], ["loan-cc-pay", false]);
 eq("...with a seeded anchor: originalPrincipal as of the payment's start (a real fact, not a fabricated 'today')",
@@ -1133,7 +1135,7 @@ const withBalAD = setupAsset(baseAD, { name: "Brokerage", color: 2, balance: 889
 const newCatAD = withBalAD.trackerCategories.find((c) => c.name === "Brokerage");
 check("adds exactly one category", withBalAD.trackerCategories.length, catCountAD + 1);
 eq("it's an asset, not a debt", newCatAD.kind, "asset");
-eq("color kept", newCatAD.color, 2);
+eq("the retired color index is gone (migration 13)", newCatAD.color, undefined);
 check("opening balance logged as the first snapshot", withBalAD.balanceSnapshots[newCatAD.id][0].amount, 8890);
 eq("snapshot dated as-of", withBalAD.balanceSnapshots[newCatAD.id][0].date, "2026-09-01");
 check("creates NO transaction (setup is not a contribution)", withBalAD.recurring.length + withBalAD.oneoffs.length, 0);
@@ -1354,7 +1356,7 @@ check("counts every loan, configured or not", sumAJ.count, 3);
 check("total is the sum of LAST logged outstandings", sumAJ.total, 28360);
 check("an unlogged loan contributes nothing to the total", sumAJ.unlogged, 1);
 eq("an unlogged loan's balance is null, never 0", sumAJ.loans.find((l) => l.id === "new").outstanding, null);
-eq("rows carry what the card renders", sumAJ.loans[0], { id: "aa", name: "Student Loan AA", color: 0, outstanding: 16120, loggedOn: "2026-09-01", configured: true });
+eq("rows carry what the card renders", sumAJ.loans[0], { id: "aa", name: "Student Loan AA", outstanding: 16120, loggedOn: "2026-09-01", configured: true });
 eq("a loan with no terms is flagged unconfigured", sumAJ.loans.find((l) => l.id === "new").configured, false);
 
 // The collapsed card's total and the hero's Debt figure must never disagree —
@@ -1439,7 +1441,8 @@ eq("a logged monthly actual changes nothing — this is the forecast",
 
 // Labels and colour routing.
 const rothSlice = mixAL.slices.find((s) => s.key === "rothcat");
-eq("a tracker category carries its palette index and name", [rothSlice.label, rothSlice.color, rothSlice.bucket], ["Roth", 5, "category"]);
+eq("a tracker category carries its name and its ROLE, not a palette index",
+  [rothSlice.label, rothSlice.color, rothSlice.bucket, rothSlice.role], ["Roth", null, "category", "investment"]);
 const items = mixAL.slices.filter((s) => s.bucket === "item");
 eq("item slices carry no palette index (they get neutral steps)", items.map((s) => s.color), [null, null, null]);
 eq("each names the bucket it came from, so it can't pass as a category",
@@ -1537,7 +1540,7 @@ const loanHeavy = computeSpendingByCategory(normalize({
 }), "2026-09-30");
 eq("a tracker category at 93% is still one slice",
   loanHeavy.slices.map((s) => [s.label, s.bucket]), [["Student Loan AA", "category"], ["Rent", "item"]]);
-check("...keeping its palette index", loanHeavy.slices[0].color, 0);
+eq("...and carrying its ROLE, which is what colours it now", loanHeavy.slices[0].role, "debt");
 
 // The 8-slice fold still applies after breaking out, and still loses nothing.
 const manyItems = computeSpendingByCategory(normalize({

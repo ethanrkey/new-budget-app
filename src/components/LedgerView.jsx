@@ -157,7 +157,7 @@ export default function LedgerView({
             onClick={() => setColumnsOpen((v) => !v)}
             className="px-3 py-2 sm:py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
           >
-            Savings columns{anyOpen ? ` (${[...visibleIds].length})` : ""} ▾
+            Cumulative columns{anyOpen ? ` (${[...visibleIds].length})` : ""} ▾
           </button>
           {columnsOpen && (
             <>

@@ -50,28 +50,24 @@
    {
     "id": "roth",
     "name": "Roth",
-    "color": 5,
     "order": 0,
     "kind": "asset"
    },
    {
     "id": "saved",
     "name": "Saved",
-    "color": 2,
     "order": 1,
     "kind": "asset"
    },
    {
     "id": "brokerage",
     "name": "Brokerage",
-    "color": 0,
     "order": 2,
     "kind": "asset"
    },
    {
     "id": "loans",
     "name": "Loans",
-    "color": 3,
     "order": 3,
     "kind": "debt"
    }
@@ -131,28 +127,24 @@
    {
     "id": "roth",
     "name": "Roth",
-    "color": 5,
     "order": 0,
     "kind": "asset"
    },
    {
     "id": "saved",
     "name": "Saved",
-    "color": 2,
     "order": 1,
     "kind": "asset"
    },
    {
     "id": "brokerage",
     "name": "Brokerage",
-    "color": 0,
     "order": 2,
     "kind": "asset"
    },
    {
     "id": "loans",
     "name": "Loans",
-    "color": 3,
     "order": 3,
     "kind": "debt"
    }
@@ -212,28 +204,24 @@
    {
     "id": "roth",
     "name": "Roth",
-    "color": 5,
     "order": 0,
     "kind": "asset"
    },
    {
     "id": "saved",
     "name": "Saved",
-    "color": 2,
     "order": 1,
     "kind": "asset"
    },
    {
     "id": "brokerage",
     "name": "Brokerage",
-    "color": 0,
     "order": 2,
     "kind": "asset"
    },
    {
     "id": "loans",
     "name": "Loans",
-    "color": 3,
     "order": 3,
     "kind": "debt"
    }
@@ -293,21 +281,18 @@
    {
     "id": "c1",
     "name": "Car Debt",
-    "color": 1,
     "order": 0,
     "kind": "debt"
    },
    {
     "id": "c2",
     "name": "Vacation",
-    "color": 2,
     "order": 1,
     "kind": "asset"
    },
    {
     "id": "loans",
     "name": "Loans",
-    "color": 3,
     "order": 2,
     "kind": "debt"
    }
@@ -377,28 +362,24 @@
    {
     "id": "roth",
     "name": "Roth",
-    "color": 5,
     "order": 0,
     "kind": "asset"
    },
    {
     "id": "saved",
     "name": "Saved",
-    "color": 2,
     "order": 1,
     "kind": "asset"
    },
    {
     "id": "brokerage",
     "name": "Brokerage",
-    "color": 0,
     "order": 2,
     "kind": "asset"
    },
    {
     "id": "loans",
     "name": "Loans",
-    "color": 3,
     "order": 3,
     "kind": "debt"
    }
@@ -459,7 +440,6 @@
    {
     "id": "loans",
     "name": "Student Loans",
-    "color": 3,
     "order": 0,
     "kind": "debt",
     "originalPrincipal": 18000,
@@ -542,7 +522,6 @@
    {
     "id": "loans",
     "name": "Loans",
-    "color": 3,
     "order": 0,
     "kind": "debt",
     "originalPrincipal": 18000,
@@ -552,7 +531,6 @@
    {
     "id": "loan-L2",
     "name": "Loan B",
-    "color": 3,
     "order": 1,
     "kind": "debt",
     "originalPrincipal": 2000,
@@ -619,21 +597,20 @@
    {
     "id": "3vvy452c",
     "name": "Savings",
-    "color": 2,
     "order": 0,
-    "kind": "asset"
+    "kind": "asset",
+    "assetKind": "savings"
    },
    {
     "id": "lvx1h03m",
     "name": "Investments",
-    "color": 5,
     "order": 1,
-    "kind": "asset"
+    "kind": "asset",
+    "assetKind": "investment"
    },
    {
     "id": "reachgfx",
     "name": "Debt",
-    "color": 1,
     "order": 2,
     "kind": "debt"
    }
@@ -695,7 +672,6 @@
    {
     "id": "k",
     "name": "Roth",
-    "color": 5,
     "order": 0,
     "kind": "asset"
    }
@@ -780,7 +756,6 @@
    {
     "id": "k",
     "name": "Roth",
-    "color": 5,
     "order": 0,
     "kind": "asset"
    }
@@ -841,7 +816,6 @@
    {
     "id": "k",
     "name": "Roth",
-    "color": 5,
     "order": 0,
     "kind": "asset"
    }
@@ -903,21 +877,20 @@
    {
     "id": "3vvy452c",
     "name": "Savings",
-    "color": 2,
     "order": 0,
-    "kind": "asset"
+    "kind": "asset",
+    "assetKind": "savings"
    },
    {
     "id": "lvx1h03m",
     "name": "Investments",
-    "color": 5,
     "order": 1,
-    "kind": "asset"
+    "kind": "asset",
+    "assetKind": "investment"
    },
    {
     "id": "reachgfx",
     "name": "Debt",
-    "color": 1,
     "order": 2,
     "kind": "debt"
    }

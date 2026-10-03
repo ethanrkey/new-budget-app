@@ -38,7 +38,6 @@ export interface LoanHistoryEntry extends BalanceSnapshot {
 export interface DebtSummaryRow {
   id: string;
   name: string;
-  color: PaletteIndex;
   /** null when nothing has been logged — never 0, which would understate. */
   outstanding: number | null;
   loggedOn: ISODate | null;
@@ -160,7 +159,6 @@ export function computeDebtSummary(state: BudgetState): DebtSummary {
     return {
       id: cat.id,
       name: cat.name,
-      color: cat.color,
       outstanding: latest ? latest.amount : null,
       loggedOn: latest ? latest.date : null,
       configured: isLoanConfigured(cat),

@@ -209,11 +209,11 @@ export function reorderList(state: BudgetState, names: string[], name: string, b
  * round-trips unchanged; nothing paints with it. Removing the field is a
  * separate migration, deliberately not bundled with a visual change.
  */
-export function addCategory(state: BudgetState, name: string, color: PaletteIndex = 0, kind: "asset" | "debt" = "asset"): BudgetState {
+export function addCategory(state: BudgetState, name: string, kind: "asset" | "debt" = "asset"): BudgetState {
   const order = state.trackerCategories.length
     ? Math.max(...state.trackerCategories.map((c) => c.order)) + 1
     : 0;
-  return { ...state, trackerCategories: [...state.trackerCategories, { id: uid(), name, color, order, kind }] };
+  return { ...state, trackerCategories: [...state.trackerCategories, { id: uid(), name, order, kind }] };
 }
 
 export function updateCategory(state: BudgetState, id: string, patch: CategoryPatch): BudgetState {
@@ -435,12 +435,11 @@ export function setupAsset(state: BudgetState, { categoryId = null, name, color 
   let next = state;
   let id = categoryId;
   if (!id || !next.trackerCategories.some((c) => c.id === id)) {
-    next = addCategory(next, name, color ?? 0, "asset");
+    next = addCategory(next, name, "asset");
     id = next.trackerCategories[next.trackerCategories.length - 1]!.id;
   }
   const patch: CategoryPatch = { kind: "asset" };
   if (name) patch.name = name;
-  if (color != null) patch.color = color;
   // Only written when answered. Absent stays absent, and absent renders as
   // an investment — which withholds a projected line rather than drawing
   // one over market-exposed value.
@@ -460,12 +459,11 @@ export function setupLoan(state: BudgetState, { categoryId = null, name, color =
   let next = state;
   let id = categoryId;
   if (!id || !next.trackerCategories.some((c) => c.id === id)) {
-    next = addCategory(next, name, color ?? 3, "debt");
+    next = addCategory(next, name, "debt");
     id = next.trackerCategories[next.trackerCategories.length - 1]!.id;
   }
   const patch: CategoryPatch = { kind: "debt", originalPrincipal, interestRate, interestStartDate };
   if (name) patch.name = name;
-  if (color != null) patch.color = color;
   next = updateCategory(next, id, patch);
   if (outstanding != null && asOf) next = addBalanceSnapshot(next, id, outstanding, asOf);
   return next;
