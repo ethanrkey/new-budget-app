@@ -892,13 +892,26 @@ fifth tab never needs a migration.
 4. **The in-app Tutorial matches shipped features** (`src/components/Tutorial.jsx`);
    update it in the same commit as any feature change. A stale tutorial is
    worse than none.
-5. **Every string replacement is asserted.** A scripted edit that silently
-   matches nothing ships looking applied and is not — twice in one week:
-   a `finishNow` change that was supposed to re-read the wizard's balance,
-   and before it a repoint whose `sed` pattern never matched. Assert on
-   EVERY replacement, not most of them, and when the edit is behavioural,
-   verify the behaviour too — `grep` proves the text changed, not that the
-   code does what the text says.
+5. **Verify the thing the USER touches, not the thing you built.** Three
+   failures in one week were the same failure wearing different clothes:
+   a form verified standalone while its routing was never clicked, so the
+   feature was broken and the component perfect; a scripted edit asserted
+   as text but never as behaviour, so it shipped looking applied; and an
+   end-to-end check that only ever supplied well-formed input, so it
+   proved the arithmetic while the form was unusable. The rule that covers
+   all three:
+   - **Start from the real entry point.** A click on the actual surface,
+     not the component in isolation.
+   - **Assert every replacement**, and when the edit is behavioural assert
+     the behaviour — `grep` proves the text changed, never that the code
+     does what the text says.
+   - **Feed it the wrong input too.** Blank fields, half-filled rows,
+     values in the wrong box. A harness that only supplies correct input
+     is testing arithmetic, not the product.
+   - **Look at the output.** For anything visual, render it and read what
+     is actually there. Describing a palette from its inputs is how
+     "bills gold, savings blue" shipped as brown and navy.
+
 6. Data-shape changes are migration-safe: **idempotent always**,
    **deterministic for any state that carries data**, asserted before/after
    on legacy-shaped fixtures, never fabricating values the user didn't enter.
@@ -1405,3 +1418,19 @@ Later:
   well-formed input and nothing else. It passed while the form was
   unusable. A harness that only ever supplies correct input is testing the
   code's arithmetic, not the product.
+- **Saving and debt amounts in the Budget are NOT red** (2026-10-03).
+  They render in the default text colour while bills and one-offs stay
+  red, and that asymmetry is deliberate rather than an oversight: money
+  moved into savings or investments, or put against a loan, is not money
+  you lost. It left checking, which the running balance already shows.
+  Painting it the same red as a bill would say you are worse off for
+  having saved. Do not "fix" this for consistency with other outflows.
+- **A palette is described from its RENDERED output, never its inputs**
+  (2026-10-03). OKLCH hue is not HSL hue and the two diverge badly: the
+  palette documented as "bills gold, savings blue" rendered brown and
+  navy, and debt specified at OKLCH 20° came out HSL 346° — lipstick,
+  not red. The hues are now chosen by checking what each OKLCH value
+  actually produces (at L .55: 30 → red, 58 → orange, 80 → amber,
+  150 → green, 240 → blue, 300 → purple), and `ROLE_HUE` records the
+  input while the swatch sheet is what any claim about appearance has to
+  be read off.

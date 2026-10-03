@@ -143,16 +143,29 @@ const SECTIONS = [
   },
   {
     id: "categories",
-    title: "Categories and colors",
+    title: "Your categories",
     body: [
-      ["p", "Your categories are your own buckets: Emergency fund, Roth, Brokerage, Car loan, anything. Settings → Categories to rename, recolor, reorder, or delete them, or add one without an opening balance."],
+      ["p", "Your categories are your own buckets: Emergency fund, Roth IRA, Brokerage, Car loan, anything. Settings → Categories to rename, reorder, or delete them, or add one without an opening balance."],
+      ["p", "Each one is one of three kinds, and the kind decides both what its card shows and what colour it gets everywhere in the app. You don't pick a colour — see “What the colours mean”."],
       ["dl", [
-        ["Asset", "Something you own. Its card shows a balance and contributions."],
-        ["Debt", "Something you owe — a loan. Its card shows what's left and progress against the original."],
+        ["Savings", "Cash you control. Its card shows the balance you log and what you've contributed."],
+        ["Investment", "Value the market moves — a Roth IRA, a 401k, a brokerage, an HSA. Same card, but no projected line: projecting a market is guessing. An account you never touch is still market-exposed."],
+        ["Debt", "Something you owe. Its card shows what's left and progress against what you borrowed."],
       ]],
-      ["p", "Deleting a category doesn't touch existing transactions; they keep their history and show as uncategorized."],
+      ["p", "Savings or investment is the one thing the app can't work out for you, so it asks. Deleting a category doesn't touch existing transactions; they keep their history and show as uncategorized."],
     ],
   },
+  {
+    id: "colours",
+    title: "What the colours mean",
+    body: [
+      ["p", "Colour is never chosen — it's derived from what the money is doing, and the same colour means the same thing on every screen: a card, a chart slice, a ledger column, a calendar dot."],
+      ["legend"],
+      ["p", "Two shades of one colour mean two things of the same kind — two investments, two loans — so a chart can tell them apart without inventing a new colour for each. Warm means money going out; cool means money you keep."],
+      ["note", "Red and green on amounts are a separate thing entirely: that's direction — money in or money out — not what kind of money it is."],
+    ],
+  },
+
   {
     id: "settings",
     title: "Settings",
@@ -164,16 +177,6 @@ const SECTIONS = [
         ["Delete my account", "Schedules your whole account for deletion in 7 days — the sign-in, every rule, every logged balance. You can cancel any time before then from the same place. After that it's gone and there's no backup to restore from."],
         ["Wipe data", "Resets your account to brand new — every rule, category, logged balance and contribution, and your verified balance back to $0.00 — behind a full confirmation that lists it all. You'll get the welcome wizard again afterwards. Export a backup first."],
       ]],
-    ],
-  },
-  {
-    id: "colours",
-    title: "What the colours mean",
-    body: [
-      ["p", "Colour is never chosen — it's derived from what the money is doing, and the same colour means the same thing on every screen: a card, a chart slice, a ledger column, a calendar dot."],
-      ["legend"],
-      ["p", "Two shades of one colour mean two things of the same kind — two investments, two loans — so a chart can tell them apart without inventing a new colour for each. Warm means money going out; cool means money you keep."],
-      ["note", "Red and green on amounts are a separate thing entirely: that's direction — money in or money out — not what kind of money it is."],
     ],
   },
   {

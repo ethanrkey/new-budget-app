@@ -381,9 +381,6 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onL
           <div className={`${LABEL} flex items-center gap-1.5`}>
             <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
             <span className="truncate">{category.name}</span>
-        <span className="shrink-0 text-gray-400 font-normal normal-case">
-          · {ROLE_LABEL[roleOfTrackerCategory(category)]}
-        </span>
             {/* The mapping, stated. A role system that never says what
                 its colours mean is a private language only the code
                 understands — and the person who designed the roles still
@@ -471,9 +468,6 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
           <div className={`${LABEL} flex items-center gap-1.5`}>
             <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
             <span className="truncate">{category.name}</span>
-        <span className="shrink-0 text-gray-400 font-normal normal-case">
-          · {ROLE_LABEL[roleOfTrackerCategory(category)]}
-        </span>
             {/* The mapping, stated. A role system that never says what
                 its colours mean is a private language only the code
                 understands — and the person who designed the roles still
@@ -560,9 +554,6 @@ function SetupLoanCard({ category, isDark, onSetup }) {
       <div className={`${LABEL} flex items-center gap-1.5`}>
         <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
         <span className="truncate">{category.name}</span>
-        <span className="shrink-0 text-gray-400 font-normal normal-case">
-          · {ROLE_LABEL[roleOfTrackerCategory(category)]}
-        </span>
       </div>
       <p className="text-sm text-gray-500">
         Not set up yet — add its original amount, rate, and what you owe today to see the balance, progress, and projection.

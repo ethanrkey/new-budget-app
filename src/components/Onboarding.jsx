@@ -16,7 +16,7 @@ const COPY = {
   },
   bills: {
     title: "Any other monthly bills?",
-    sub: "Phone, internet, subscriptions, memberships — anything that's roughly the same amount every month. Add as many as you want.",
+    sub: "Phone, internet, subscriptions, memberships — anything that's roughly the same amount every month. We'll put them all on today's date; change any of them later by tapping the item.",
   },
   groceries: {
     title: "About how much do you spend on groceries?",
@@ -39,6 +39,13 @@ const CADENCE_OPTIONS = [
 // Dashboard. Ordering it last means someone who quits here still leaves
 // with the forecast working, which is the thing that makes the app worth
 // reopening.
+// Today's date, used for every generic bill. Shown, never hidden.
+const defaultBillDay = new Date().getDate();
+const ordinal = (n) => {
+  const s = ["th", "st", "nd", "rd"], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
+
 const STEPS = ["paycheck", "rent", "bills", "groceries", "balance", "accounts", "done"];
 
 // One screen, three groups — not three steps. The obvious version of this
@@ -152,7 +159,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
       if (b.name.trim() && !isNaN(amt) && amt > 0) {
         addRule({
           id: uid(), name: b.name.trim(), amount: amt, category: "bill",
-          cadence: "monthly", startDate: todayISO(), dayOfMonth: new Date().getDate(),
+          cadence: "monthly", startDate: todayISO(), dayOfMonth: defaultBillDay,
         });
       }
     }
@@ -261,6 +268,13 @@ export default function Onboarding({ initialBalance, onComplete }) {
                 <div key={i} className="flex gap-2 items-center">
                   <input className={field} placeholder="Name (e.g. Spotify)" value={b.name} onChange={(e) => updateBill(i, "name", e.target.value)} />
                   <input className={`${field} w-24`} type="number" placeholder="0.00" value={b.amount} onChange={(e) => updateBill(i, "amount", e.target.value)} />
+                  {/* The day is a GUESS — today's date — and it used to be
+                      made silently. A date box per row doubles this
+                      screen's width on a phone and is where people stop,
+                      so the guess is shown instead of asked for. Rent
+                      gets its own field because the 1st is usually right
+                      and the ledger's ordering actually turns on it. */}
+                  <span className="text-xs text-gray-400 whitespace-nowrap self-center">on the {ordinal(defaultBillDay)}</span>
                   {bills.length > 1 && (
                     <button onClick={() => removeBillRow(i)} className="text-gray-300 hover:text-expense px-1" title="Remove">✕</button>
                   )}

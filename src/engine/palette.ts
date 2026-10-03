@@ -54,24 +54,31 @@ export const SEMANTIC_FAMILY: Record<Role, "out" | "keep" | "in" | "none"> = {
 
 /** Hue in degrees, per role — the part that carries MEANING. */
 export const ROLE_HUE: Record<Role, number | null> = {
-  bill: 88, oneoff: 40, debt: 20, savings: 240, investment: 300, income: 148,
+  bill: 80, oneoff: 58, debt: 30, savings: 240, investment: 300, income: 150,
   uncategorized: null, // grey has no hue, and that is the point
 };
 
+// HUES ARE PICKED FROM THE RENDERED RESULT, not from the OKLCH number.
+// They are not the same thing and assuming they were produced a palette
+// described as "bills gold, savings blue" that actually rendered brown and
+// navy, with debt at OKLCH 20° coming out HSL 346° — lipstick, not red.
+// The mapping at L .55: ok 30 -> red, 58 -> orange, 80 -> amber,
+// 150 -> green, 240 -> blue, 300 -> purple. Check the output, not the input.
+//
 // Lightness was then solved for by search, maximising the worst all-pairs
 // ΔE across normal/deutan/protan/tritan subject to a 3:1 contrast floor and
 // a per-role band that keeps each colour recognisably itself. Worst pair:
 // 11.2 light, 11.9 dark. Do not hand-edit — re-run the gate.
 export const ROLE_COLORS: Record<Role, { light: string; dark: string }> = {
-  income:        { light: "#005b00", dark: "#009839" },
-  bill:          { light: "#a26a00", dark: "#fac420" },
-  oneoff:        { light: "#79351c", dark: "#a2573d" },
-  debt:          { light: "#e30c3d", dark: "#e20a3c" },
-  savings:       { light: "#004a75", dark: "#00a6ff" },
-  investment:    { light: "#966ad9", dark: "#eaa7ff" },
-  // Grey on purpose and never promoted: it is the honest colour for "no
+  income:        { light: "#006c2e", dark: "#48b467" },
+  bill:          { light: "#d87700", dark: "#ffc555" },
+  oneoff:        { light: "#7a3b00", dark: "#b85f00" },
+  debt:          { light: "#b62316", dark: "#e74b39" },
+  savings:       { light: "#005fc8", dark: "#009fff" },
+  investment:    { light: "#a661ff", dark: "#a659ff" },
+  // Grey on purpose and never promoted: the honest colour for "no
   // category", immune to colour-vision deficiency, and still in the
-  // all-pairs check — it has to differ from the six, not just the surface.
+  // all-pairs check — it must differ from the six, not just the surface.
   uncategorized: { light: "#6b7280", dark: "#9ca3af" },
 };
 
