@@ -1,18 +1,38 @@
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  LayoutAnimation, Platform, Pressable, RefreshControl, ScrollView,
+  StyleSheet, Text, UIManager, View, useWindowDimensions,
+} from "react-native";
 import { useBudget } from "../../components/StateProvider";
+import { Sparkline, HBar } from "../../lib/charts";
 import { T, money } from "../../lib/theme";
-import { computeNetPosition, computeCategoryHistory } from "../../../src/engine/progress.ts";
-import { primaryAccount, paletteColor } from "../../../src/engine/model.ts";
 import { supabase } from "../../lib/supabase";
+import {
+  computeNetPosition, computeCategoryHistory, computeLoggedContributions,
+} from "../../../src/engine/progress.ts";
+import { computeLoanProgress } from "../../../src/engine/loans.ts";
+import { primaryAccount, paletteColor, todayISO } from "../../../src/engine/model.ts";
+import type { TrackerCategory } from "../../../src/engine/types.ts";
 
-// The reality layer, same as the web app: verified balance and the
-// balances you logged. No projection here — that is the Ledger's job, and
-// the separation is principle 1, not a layout choice.
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+// The web animates the hero collapse with a grid-rows transition. RN has no
+// CSS transitions; LayoutAnimation is the platform's own one-liner for
+// exactly this and costs nothing.
+const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
 export default function DashboardScreen() {
   const { state, refresh, refreshing } = useBudget();
+  const { width } = useWindowDimensions();
+  const [heroOpen, setHeroOpen] = useState(true);
+  const today = todayISO();
   const net = computeNetPosition(state!);
   const account = primaryAccount(state!);
   const cats = [...state!.trackerCategories].sort((a, b) => a.order - b.order);
+  const assets = cats.filter((c) => c.kind !== "debt");
+  const debts = cats.filter((c) => c.kind === "debt");
+  const chartW = width - 64;
 
   return (
     <ScrollView
@@ -20,62 +40,208 @@ export default function DashboardScreen() {
       contentContainerStyle={styles.pad}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
     >
-      <View style={styles.hero}>
-        <Text style={styles.label}>Net position</Text>
+      <Pressable style={styles.hero} onPress={() => { animate(); setHeroOpen((v) => !v); }}>
+        <View style={styles.heroHead}>
+          <Text style={styles.label}>Net position</Text>
+          <Text style={styles.chev}>{heroOpen ? "⌃" : "⌄"}</Text>
+        </View>
         <Text style={[styles.heroNum, net.net < 0 && { color: T.expense }]}>{money(net.net)}</Text>
-        <Text style={styles.dim}>
-          {money(net.cash)} cash · {money(net.assets)} assets · {money(net.debt)} owed
-        </Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>{account.name}</Text>
-        <Text style={styles.cardNum}>{money(account.balance)}</Text>
-        <Text style={styles.dim}>verified {account.balanceAsOf}</Text>
-      </View>
-
-      {cats.map((cat) => {
-        const history = computeCategoryHistory(state!, cat.id);
-        const latest = history.length ? history[history.length - 1] : null;
-        const color = paletteColor(cat.color, true);
-        return (
-          <View key={cat.id} style={styles.card}>
-            <View style={styles.cardHead}>
-              <View style={[styles.dot, { backgroundColor: color }]} />
-              <Text style={styles.cardLabel}>{cat.name}</Text>
-            </View>
-            <Text style={[styles.cardNum, latest ? { color } : { color: T.faint }]}>
-              {latest ? money(latest.amount) : "—"}
-            </Text>
-            <Text style={styles.dim}>
-              {latest ? `logged ${latest.date}` : "no balance logged yet"}
-            </Text>
+        {heroOpen && (
+          <View style={styles.heroRows}>
+            <Line k="Checking (verified)" v={money(net.cash)} />
+            <Line k="Logged assets" v={money(net.assets)} />
+            <Line k="Logged debt" v={`−${money(net.debt).replace("-", "")}`} tone={T.expense} />
+            {(net.unloggedAssets > 0 || net.unloggedDebts > 0) && (
+              <Text style={styles.caveat}>
+                {net.unloggedAssets + net.unloggedDebts} categor
+                {net.unloggedAssets + net.unloggedDebts === 1 ? "y has" : "ies have"} no logged balance and
+                {" "}count as nothing here, rather than as zero.
+              </Text>
+            )}
           </View>
-        );
-      })}
+        )}
+      </Pressable>
+
+      <AccountCard
+        name={account.name}
+        balance={account.balance}
+        asOf={account.balanceAsOf}
+        history={(state!.accountSnapshots?.[account.id] ?? []).map((s) => ({ date: s.date, amount: s.amount }))}
+        color={T.text}
+        chartW={chartW}
+      />
+
+      {assets.map((cat) => (
+        <AssetCard key={cat.id} cat={cat} chartW={chartW} today={today} />
+      ))}
+      {debts.map((cat) => (
+        <DebtCard key={cat.id} cat={cat} chartW={chartW} today={today} />
+      ))}
 
       <Text style={styles.signout} onPress={() => supabase.auth.signOut()}>Sign out</Text>
+      <Text style={styles.ro}>Read-only on mobile. Edits still happen on the web.</Text>
     </ScrollView>
+  );
+}
+
+function Line({ k, v, tone }: { k: string; v: string; tone?: string }) {
+  return (
+    <View style={styles.line}>
+      <Text style={styles.lineK}>{k}</Text>
+      <Text style={[styles.lineV, tone ? { color: tone } : null]}>{v}</Text>
+    </View>
+  );
+}
+
+function History({ entries }: { entries: { date: string; amount: number }[] }) {
+  const [open, setOpen] = useState(false);
+  if (entries.length === 0) return null;
+  return (
+    <View>
+      <Pressable onPress={() => { animate(); setOpen((v) => !v); }} style={styles.showBtn}>
+        <Text style={styles.showText}>
+          {open ? "Hide history" : `Show history (${entries.length})`}
+        </Text>
+      </Pressable>
+      {open && (
+        <View style={styles.histWrap}>
+          {[...entries].reverse().map((e, i) => (
+            <View key={`${e.date}-${i}`} style={styles.histRow}>
+              <Text style={styles.histDate}>{e.date}</Text>
+              <Text style={styles.histAmt}>{money(e.amount)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function AccountCard({ name, balance, asOf, history, color, chartW }: {
+  name: string; balance: number; asOf: string;
+  history: { date: string; amount: number }[]; color: string; chartW: number;
+}) {
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardLabel}>{name}</Text>
+      <Text style={styles.cardNum}>{money(balance)}</Text>
+      <Text style={styles.dim}>verified {asOf}</Text>
+      <Sparkline points={history} color={color} width={chartW} />
+      <History entries={history} />
+    </View>
+  );
+}
+
+function AssetCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: number; today: string }) {
+  const { state } = useBudget();
+  const color = paletteColor(cat.color, true);
+  const history = computeCategoryHistory(state!, cat.id);
+  const latest = history.length ? history[history.length - 1] : null;
+  const contrib = computeLoggedContributions(state!, cat.id, today);
+  const year = today.slice(0, 4);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHead}>
+        <View style={[styles.dot, { backgroundColor: color }]} />
+        <Text style={styles.cardLabel}>{cat.name}</Text>
+      </View>
+      <Text style={[styles.cardNum, { color: latest ? color : T.faint }]}>
+        {latest ? money(latest.amount) : "—"}
+      </Text>
+      <Text style={styles.dim}>{latest ? `logged ${latest.date}` : "no balance logged yet"}</Text>
+      <Sparkline points={history.map((h) => ({ date: h.date, amount: h.amount }))} color={color} width={chartW} />
+
+      {/* Contributions are LOGGED, never summed from the ledger — the ledger
+          is a forecast, so that figure would be what you planned to put in. */}
+      <View style={styles.contrib}>
+        <Text style={styles.dim}>Contributed {year}</Text>
+        {contrib.logged ? (
+          <Text style={styles.contribNum}>{money(contrib.byYear[year] ?? 0)}</Text>
+        ) : (
+          <Text style={styles.contribNone}>Nothing logged yet.</Text>
+        )}
+      </View>
+      <History entries={history.map((h) => ({ date: h.date, amount: h.amount }))} />
+    </View>
+  );
+}
+
+function DebtCard({ cat, chartW, today }: { cat: TrackerCategory; chartW: number; today: string }) {
+  const { state } = useBudget();
+  const color = paletteColor(cat.color, true);
+  const history = computeCategoryHistory(state!, cat.id);
+  const p = computeLoanProgress(state!, cat, today);
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHead}>
+        <View style={[styles.dot, { backgroundColor: color }]} />
+        <Text style={styles.cardLabel}>{cat.name}</Text>
+      </View>
+      <Text style={[styles.cardNum, { color: p?.outstanding != null ? color : T.faint }]}>
+        {p?.outstanding != null ? money(p.outstanding) : "—"}
+      </Text>
+      <Text style={styles.dim}>
+        {p?.latest ? `owed as of ${p.latest.date}` : "no balance logged yet"}
+      </Text>
+
+      {p && p.percentPaid != null && (
+        <View style={styles.progress}>
+          <HBar pct={p.percentPaid / 100} color={color} width={chartW} />
+          <Text style={styles.dim}>
+            {p.percentPaid}% paid off of {money(p.basis)}
+            {p.everAboveOriginal ? " (peak owed)" : ""}
+          </Text>
+        </View>
+      )}
+      {p && p.aboveOriginal != null && (
+        <Text style={[styles.dim, { color: T.expense }]}>
+          {money(p.aboveOriginal)} above what was borrowed — interest has outpaced payments.
+        </Text>
+      )}
+      {p && p.expectedNow != null && p.outstanding != null && (
+        <Text style={styles.dim}>
+          Projected about {money(p.expectedNow)} by now — you are{" "}
+          {p.outstanding <= p.expectedNow ? "ahead" : "behind"}.
+        </Text>
+      )}
+
+      <Sparkline points={history.map((h) => ({ date: h.date, amount: h.amount }))} color={color} width={chartW} />
+      <History entries={history.map((h) => ({ date: h.date, amount: h.amount }))} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: T.bg },
-  pad: { padding: 16, gap: 12, paddingBottom: 32 },
-  hero: {
-    backgroundColor: T.surface, borderRadius: 16, padding: 18,
-    borderWidth: 1, borderColor: T.border, gap: 4,
-  },
+  pad: { padding: 16, gap: 12, paddingBottom: 36 },
+  hero: { backgroundColor: T.surface, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: T.border, gap: 4 },
+  heroHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  chev: { color: T.faint, fontSize: 15 },
   heroNum: { color: T.text, fontSize: 34, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  card: {
-    backgroundColor: T.surface, borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: T.border, gap: 3,
-  },
+  heroRows: { marginTop: 10, gap: 2 },
+  line: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 },
+  lineK: { color: T.dim, fontSize: 13 },
+  lineV: { color: T.text, fontSize: 13, fontVariant: ["tabular-nums"] },
+  caveat: { color: T.faint, fontSize: 11, lineHeight: 15, marginTop: 6 },
+  card: { backgroundColor: T.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: T.border, gap: 4 },
   cardHead: { flexDirection: "row", alignItems: "center", gap: 7 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   cardLabel: { color: T.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   cardNum: { color: T.text, fontSize: 24, fontWeight: "700", fontVariant: ["tabular-nums"] },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
-  dim: { color: T.faint, fontSize: 12 },
-  signout: { color: T.brass, textAlign: "center", paddingVertical: 14 },
+  dim: { color: T.faint, fontSize: 12, lineHeight: 16 },
+  contrib: { marginTop: 4 },
+  contribNum: { color: T.text, fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  contribNone: { color: T.faint, fontSize: 12 },
+  progress: { gap: 4, marginTop: 4 },
+  showBtn: { paddingVertical: 8 },
+  showText: { color: T.brass, fontSize: 12 },
+  histWrap: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: T.border, paddingTop: 6 },
+  histRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
+  histDate: { color: T.faint, fontSize: 12, fontVariant: ["tabular-nums"] },
+  histAmt: { color: T.dim, fontSize: 12, fontVariant: ["tabular-nums"] },
+  signout: { color: T.brass, textAlign: "center", paddingVertical: 12 },
+  ro: { color: T.faint, fontSize: 11, textAlign: "center" },
 });

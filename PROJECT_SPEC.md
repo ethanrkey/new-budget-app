@@ -964,6 +964,42 @@ Later:
   linked rather than silently dropped. The engine's purity is what makes
   this config rather than a build step.
 
+  **Feature parity pass, 2026-10-02.** Ledger with the List/Calendar
+  toggle and the Planned spending panel (pie/bar, Other expansion);
+  Dashboard with a collapsible hero, per-card history charts, Show
+  history, logged balances, contribution totals and loan progress; Budget
+  as the real monthly grid with a pinned category column. Four things were
+  reshaped on purpose, and none of them is a cut feature:
+
+  - **The pinned column is PARALLEL COLUMNS, not a sticky cell.** RN has no
+    `position: sticky`. An outer vertical scroller holds the fixed label
+    column beside a horizontal scroller of months: only the right side
+    moves sideways, so there is no scroll syncing and no jitter. The cost
+    is that both halves must agree on row height, so `ROW_H` is a constant
+    and lives in exactly one place — table layout gave the web that for
+    free, and getting it wrong drifts labels out of line with their
+    numbers.
+  - **Charts are hand-rolled on `react-native-svg`**, not a chart library.
+    The shapes are a donut, a sparkline and a horizontal bar;
+    victory-native XL wants Skia and a lot of surface area, gifted-charts
+    has layout opinions that fight a dense dark design, and three svg
+    primitives is less code than configuring either. Works in Expo Go with
+    no native build.
+  - **The calendar pages ONE MONTH at a time** with ‹ › rather than
+    scrolling continuously, and the day detail is a panel under the grid
+    rather than a popover. A phone is narrow and tall; popovers on touch
+    need dismiss affordances and cover what you tapped.
+  - **`spendingSliceColor` moved into `engine/model.ts`.** Two clients
+    render that chart now, and a tint ramp reimplemented per client is a
+    drift waiting to happen — the web and the phone would slowly disagree
+    about what colour a slice is. The web imports it from there now.
+
+  Kept verbatim because they are rules, not layout: every slice carries its
+  label inline, item slices carry their parent's name, the pie never
+  re-shapes (Other expands in the legend only) while the bar expands rows
+  in place, calendar dots are capped rather than wrapped, the day detail
+  names the category in words, and the running balance stays list-only.
+
   **Read-only, deliberately.** The per-entity write path with its version
   guards is real work, and shipping it the same night production data
   moved would risk the phone writing bad rows to answer a question —

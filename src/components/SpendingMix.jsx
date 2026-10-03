@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { paletteColor } from "../engine/model.ts";
+import { spendingSliceColor } from "../engine/model.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 
 // ---- Where the PLANNED outflow goes, over the Ledger's own window ----
@@ -33,58 +33,10 @@ const KIND_PREF = "ledger-mix-bar";
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-// The two fixed buckets and the two fold-ups are deliberately NEUTRAL. The
-// 8-colour palette belongs to categories the user actually chose a colour
-// for; a 9th and 10th hue would break the categorical colour rules (and the
-// palette's all-pairs separation is already tight). Greys are also immune to
-// colour-vision deficiency, which is the right property for "no category".
-const NEUTRAL = {
-  // Bills are cool grey, one-offs warm. Both fixed buckets now break out at
-  // once, so their tint ramps share the chart; two ramps off the same slate
-  // would overlap, and a warm/cool split separates them without spending a
-  // categorical hue.
-  bill:          { light: "#64748b", dark: "#94a3b8" },
-  oneoff:        { light: "#78716c", dark: "#a8a29e" },
-  uncategorized: { light: "#94a3b8", dark: "#64748b" },
-  other:         { light: "#94a3b8", dark: "#64748b" },
-};
-
-// Items broken out of a dominant bucket are TINTS OF THEIR PARENT, not fresh
-// palette hues. A 9th hue would collide with a real category sitting in the
-// same chart, and would claim a category's identity for something that is
-// only one transaction. Steps run AWAY from the surface — darker on light,
-// lighter on dark — so the quietest step still holds its contrast.
-const mix2 = (hex, target, t) => {
-  const p = (h, i) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
-  const c = [0, 1, 2].map((i) => Math.round(p(hex, i) + (p(target, i) - p(hex, i)) * t));
-  return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
-};
-const TINT_TARGET = { light: "#0f172a", dark: "#f8fafc" };
-const TINT_RANGE = 0.55;
-
-const sliceColor = (slice, isDark) => {
-  if (slice.bucket === "category") return paletteColor(slice.color, isDark);
-  if (slice.bucket !== "item") return NEUTRAL[slice.bucket][isDark ? "dark" : "light"];
-  const base =
-    slice.color == null
-      ? NEUTRAL[slice.parentBucket ?? "bill"][isDark ? "dark" : "light"]
-      : paletteColor(slice.color, isDark);
-  const steps = slice.shadeCount ?? 1;
-  const t = steps > 1 ? ((slice.shade ?? 0) / (steps - 1)) * TINT_RANGE : 0;
-  return mix2(base, TINT_TARGET[isDark ? "dark" : "light"], t);
-};
-
-// The palette rule: identity never rests on colour alone. An item slice is a
-// tint of its parent, so the parent's name rides along inline — otherwise
-// "Rent" and "Roth" are two blues with nothing to tell them apart.
-function SliceLabel({ d }) {
-  return (
-    <span className="truncate text-gray-700 dark:text-gray-300">
-      {d.label}
-      {d.parentLabel && <span className="text-gray-400"> · {d.parentLabel}</span>}
-    </span>
-  );
-}
+// The slice palette lives in the engine (model.ts spendingSliceColor): two
+// clients render this chart now, and a tint ramp reimplemented per client
+// is a drift waiting to happen.
+const sliceColor = spendingSliceColor;
 
 // The row every list shares: swatch, label, amount, percent.
 function Amount({ d }) {
@@ -106,6 +58,18 @@ function Chevron({ open }) {
       className={`h-3 w-3 shrink-0 text-gray-400 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}>
       <path d="M6 9l6 6 6-6" />
     </svg>
+  );
+}
+
+// The palette rule: identity never rests on colour alone. An item slice is a
+// tint of its parent, so the parent's name rides along inline — otherwise
+// "Rent" and "Roth" are two blues with nothing to tell them apart.
+function SliceLabel({ d }) {
+  return (
+    <span className="truncate text-gray-700 dark:text-gray-300">
+      {d.label}
+      {d.parentLabel && <span className="text-gray-400"> · {d.parentLabel}</span>}
+    </span>
   );
 }
 

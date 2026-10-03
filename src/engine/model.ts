@@ -65,6 +65,52 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
   // The 3 starting categories for a brand-new account (no prior data) — see
   // stateShape.ts for the migration that instead seeds an EXISTING user's
   // legacy roth/saved/brokerage/loans as their own editable categories.
+  // ---- Spending-slice colours ----
+  // Lives in the engine because there are now TWO clients rendering this
+  // chart, and a tint ramp reimplemented per client is a drift waiting to
+  // happen: the web and the phone would slowly disagree about what colour
+  // a slice is. Pure, no React, same rule as everything else here.
+  //
+  // The two fixed buckets and the two fold-ups are deliberately NEUTRAL —
+  // the 8-colour palette belongs to categories the user chose a colour for,
+  // and a 9th hue would break the categorical colour rules. Bills are cool
+  // grey, one-offs warm: both fixed buckets break out at once, so their tint
+  // ramps share a chart and two ramps off the same slate would overlap.
+  const NEUTRAL: Record<string, { light: string; dark: string }> = {
+    bill:          { light: "#64748b", dark: "#94a3b8" },
+    oneoff:        { light: "#78716c", dark: "#a8a29e" },
+    uncategorized: { light: "#94a3b8", dark: "#64748b" },
+    other:         { light: "#94a3b8", dark: "#64748b" },
+  };
+
+  // Items broken out of a fixed bucket are TINTS OF THEIR PARENT, never
+  // fresh palette hues: a 9th hue would collide with a real category in the
+  // same chart and lend one transaction a category's identity. Steps run
+  // AWAY from the surface — darker on light, lighter on dark — so the
+  // quietest step still holds its contrast (every step >= 4.7:1, measured).
+  function mixHex(hex: string, target: string, t: number): string {
+    const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+    const c = [0, 1, 2].map((i) => Math.round(p(hex, i) + (p(target, i) - p(hex, i)) * t));
+    return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+  }
+  const TINT_TARGET = { light: "#0f172a", dark: "#f8fafc" };
+  const TINT_RANGE = 0.55;
+
+  export function spendingSliceColor(
+    slice: { bucket: string; color?: PaletteIndex | null; parentBucket?: string; shade?: number; shadeCount?: number },
+    isDark: boolean
+  ): string {
+    const mode = isDark ? "dark" : "light";
+    if (slice.bucket === "category") return paletteColor(slice.color, isDark);
+    if (slice.bucket !== "item") return NEUTRAL[slice.bucket]![mode];
+    const base = slice.color == null
+      ? NEUTRAL[slice.parentBucket ?? "bill"]![mode]
+      : paletteColor(slice.color, isDark);
+    const steps = slice.shadeCount ?? 1;
+    const t = steps > 1 ? ((slice.shade ?? 0) / (steps - 1)) * TINT_RANGE : 0;
+    return mixHex(base, TINT_TARGET[mode], t);
+  }
+
   export function defaultTrackerCategories(): TrackerCategory[] {
     return [
       { id: uid(), name: "Savings",     color: 2, order: 0, kind: "asset" }, // Teal
