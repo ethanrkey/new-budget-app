@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { groupByMonth, computeSpendingByCategory } from "../engine/compute.ts";
 import { todayISO, ledgerHorizonOf, LEDGER_MAX_MONTHS } from "../engine/model.ts";
-import { roleColor, roleOfTrackerCategory } from "../engine/palette.ts";
+import { roleColor, roleOfCategory, roleOfTrackerCategory } from "../engine/palette.ts";
 import HorizonSlider from "./HorizonSlider.jsx";
 import InfoTip from "./InfoTip.jsx";
 import SpendingMix from "./SpendingMix.jsx";
@@ -32,6 +32,17 @@ export default function LedgerView({
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
   const visibleIds = new Set(state.settings.visibleTrackerCategoryIds || []);
   const groups = groupByMonth(ledger.rows);
+
+  // A COLUMN FOR A CATEGORY WITH NOTHING SCHEDULED IS AN EMPTY COLUMN. The
+  // picker used to list every category you own, which on an account with
+  // fourteen of them is thirteen ways to widen the table and learn nothing.
+  // Offer only the ones this window actually steps — plus any already
+  // switched on, so a category whose last transaction just fell out of the
+  // horizon cannot vanish from the list while its column is still open and
+  // leave no way to turn it off.
+  const steppedIds = new Set(ledger.rows.map((r) => r.stepped?.key).filter(Boolean));
+  const offerableCats = sortedCats.filter((c) => steppedIds.has(c.id) || visibleIds.has(c.id));
+  const hiddenCount = sortedCats.length - offerableCats.length;
 
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
@@ -163,10 +174,14 @@ export default function LedgerView({
             <>
               <div className="fixed inset-0 z-10" onClick={() => setColumnsOpen(false)} />
               <div className="absolute left-0 mt-1 w-56 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg z-20 p-2">
-                {sortedCats.length === 0 ? (
-                  <p className="text-xs text-gray-400 px-2 py-1.5">No categories yet.</p>
+                {offerableCats.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-2 py-1.5">
+                    {sortedCats.length === 0
+                      ? "No categories yet."
+                      : "Nothing in this window is tagged to one of your categories, so every column would be empty."}
+                  </p>
                 ) : (
-                  sortedCats.map((c) => (
+                  offerableCats.map((c) => (
                     <label key={c.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-sm">
                       <input
                         type="checkbox"
@@ -178,6 +193,12 @@ export default function LedgerView({
                       <span className="truncate">{c.name}</span>
                     </label>
                   ))
+                )}
+                {hiddenCount > 0 && (
+                  <p className="text-[11px] text-gray-400 px-2 pt-1.5 border-t border-gray-100 dark:border-gray-800 mt-1">
+                    {hiddenCount} more {hiddenCount === 1 ? "category has" : "categories have"} nothing
+                    scheduled in this window.
+                  </p>
                 )}
                 {onOpenCategoryManager && (
                   <button
@@ -271,14 +292,14 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
       </tr>
       {group.rows.map((r) => {
         const itemId = baseId(r.id);
-        // an optional per-item color override (recurring items/bills too, not
-        // just tracker categories) beats the default bill-purple/plain text
-        // Row names are NOT coloured. A ledger row is read down a column
-        // of names, not scanned across kinds, and the amount beside it
-        // already carries direction in red/green — a third colour system
-        // on the same line is noise. Colour in this view lives on the
-        // savings column headers, where you ARE scanning across kinds.
-        const nameStyle = undefined;
+        // A ROLE DOT, not a coloured name. The Ledger was the one surface
+        // the colour system never reached, which made it the one surface
+        // where you had to read every row to find the rent — and the
+        // earlier reasoning for leaving it out ("a third colour system on
+        // the same line is noise") was an argument against colouring the
+        // TEXT, which is a different thing. The Budget settled the shape
+        // already: a 2px dot before the label, same treatment here.
+        const dotColor = roleColor(roleOfCategory(r.category, sortedCats), isDark);
         return (
           <tr
             key={r.id}
@@ -298,11 +319,15 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               {dayOf(r.date)}
             </td>
             <td className="py-2 sm:py-1.5 pr-3">
+              <span
+                className="inline-block h-2 w-2 rounded-full shrink-0 mr-1.5 align-middle"
+                style={{ backgroundColor: dotColor }}
+                aria-hidden="true"
+              />
               <button
                 onClick={() => onEdit(r.id)}
-                className="text-left hover:underline decoration-dotted underline-offset-2"
+                className="text-left hover:underline decoration-dotted underline-offset-2 align-middle"
                 title="Edit"
-                style={nameStyle}
               >
                 {r.name}
               </button>

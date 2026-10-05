@@ -699,7 +699,10 @@ fifth tab never needs a migration.
   the rule back restores them. Remapping into the new day was rejected — it
   guesses at intent and has no meaning at all for weekly or biweekly rules.
 
-  The **Cumulative columns** picker sits directly above the table rather than in
+  Every row carries a **role dot** before its name, the Budget's treatment
+  exactly (2px, before the label). The **Cumulative columns** picker offers
+  only categories this window actually steps, plus any already switched on
+  — see the decision log. It sits directly above the table rather than in
   the toolbar: it is list-only and does nothing to the Planned spending panel,
   so placing it over that panel implied a relationship that isn't there. The
   horizon slider stays in the toolbar because it genuinely drives both.
@@ -915,6 +918,17 @@ fifth tab never needs a migration.
 
 1. **This spec matches the code.** A change that makes it wrong updates it in
    the same commit.
+
+   **DELETING a feature is the half that gets missed, so it gets its own
+   step: grep for its name across the docs and the copy BEFORE you commit,
+   not after.** Adding a feature makes you write about it, so the doc
+   update rides along for free. Removing one makes you delete code, and the
+   sentences describing it live in four other files that go on reading as
+   though they were maintained. Grep the removed noun and the removed verb
+   (`recolor`, `color picker`, `Savings columns`, `mark paid`) across
+   `PROJECT_SPEC.md`, `README.md`, `src/components`, `src/engine` comments
+   and `mobile/`. Every stale line the 2026-10-05 sweep found was a
+   removal or a rename; not one was an addition.
 2. **README.md stays current** for a public audience. Its screenshots are
    the SAME generated set the landing page uses (`public/screenshots/`,
    `npm run screenshots`) — there is no second hand-made set to forget. The
@@ -1225,11 +1239,11 @@ Later, in rough order:
    housekeeping, not correctness.
 7. **The Ledger still prints saving and debt amounts in red**, while the
    Budget deliberately does not (see the decision below). Same money,
-   same app, two answers — and the Ledger contradicts itself inside one
-   row, pricing a $300 savings transfer as red-expense in the Out column
-   while its own Savings column prints the same $300 in savings blue.
-   The Budget's reasoning applies unchanged; it was simply not carried
-   across. Small, but it needs the same placement audit the Budget got.
+   same app, two answers. Weaker than it was now that every row carries a
+   role dot — the dot says what the money IS and the red says which way it
+   MOVES, which is a defensible division of labour rather than a
+   contradiction — so this is now a judgement call to look at with fresh
+   eyes rather than a defect to fix. Read the Ledger for a week first.
 8. **Retired palette machinery still exported from the engine.**
    `CATEGORY_PALETTE`, `paletteColor` and the `PaletteIndex` type survive
    in `model.ts`/`types.ts` with no renderer left to use them —
@@ -1722,6 +1736,33 @@ Further out:
   out, which is the entire point of the suffix. Note the shape of this
   one: the general rule was right and its most common instance was the
   exception.
+
+- **The Ledger gets role dots, and the old reasoning was answering a
+  different question** (2026-10-05). The Ledger was the only surface the
+  colour system never reached, which made it the one surface where finding
+  the rent meant reading every row. The note that used to sit in that file
+  argued that "row names are NOT coloured... a third colour system on the
+  same line is noise" — and that is right, about colouring the TEXT, which
+  is not what was being asked for. A 2px dot before the label is a fourth
+  thing on the line only in the sense that a bullet is: it is scanned, not
+  read. The Budget had already settled the shape, so this is the Budget's
+  treatment ported, not a new idea.
+
+- **The Cumulative columns picker offers only what this window steps**
+  (2026-10-05). It listed every category you own, which on an account with
+  fourteen of them is thirteen ways to widen the table and learn nothing,
+  because a category with no scheduled transactions produces an EMPTY
+  column. The filter is `stepped.key` over the rows actually in the
+  window, which is the same signal the column itself renders from, so the
+  picker and the table can never disagree about whether a column would
+  have content.
+
+  The one subtlety: the list is `stepped OR already visible`. Filtering on
+  stepped alone would make a category whose last transaction just fell out
+  of the horizon disappear from the picker WHILE ITS COLUMN WAS STILL
+  OPEN, leaving an empty column and no control to close it. A filter that
+  can hide the only way to undo its own effect is a trap, not a tidy-up.
+  The count of what was left out is stated rather than silently dropped.
 
 - **Removing a feature is a documentation change, and that is the half
   that gets missed** (2026-10-05, from a full sweep of the spec, the
