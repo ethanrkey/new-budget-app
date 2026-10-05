@@ -1244,7 +1244,42 @@ Later, in rough order:
    MOVES, which is a defensible division of labour rather than a
    contradiction — so this is now a judgement call to look at with fresh
    eyes rather than a defect to fix. Read the Ledger for a week first.
-8. **Retired palette machinery still exported from the engine.**
+8. **Colour customisation: considered 2026-10-05, deliberately not
+   built, with a test for when to revisit.** The question was whether
+   per-category recolour should return, or whether the user should pick
+   which HUE each role gets while the roles stay fixed.
+
+   **Per-category recolour does not come back.** It is the thing that
+   broke: eight arbitrary hues assigned per category is how five of
+   eight rows ended up near-identical grey-blue, and it destroys the one
+   property that makes the system learnable — the same kind of money is
+   the same colour everywhere. The real need underneath it ("I cannot
+   tell my three investments apart") is within-role separation, which
+   shades already solve in the pie, and which labelled, spatially
+   separate Dashboard cards do not have.
+
+   **Role hue schemes are the right shape if anything ever ships.**
+   A few pre-validated schemes, never a free picker, each a complete
+   7-role light/dark mapping, each run through `validate_palette.mjs` in
+   CI — extend the existing loop over schemes and the gate covers them
+   all. Account-level (`settings`), not per-device: this is about how
+   the person reads money, not about the screen they are on. Known
+   costs: every hardcoded hex outside `palette.ts` (the brass wordmark,
+   `text-income`/`text-expense`) must be audited or deliberately
+   exempted, and the fixture pins the default so the screenshots stay
+   stable.
+
+   **The test for whether to build it.** The recurring complaint is not
+   really "wrong hue", it is "I cannot read the Ledger" — and until
+   2026-10-05 the Ledger was the one surface the colour system never
+   reached at all. The dots landed that day. If the itch survives a week
+   of them, it is genuinely about hue and the schemes are worth it. If
+   it goes quiet, a scheme picker would have been a settings screen
+   solving a problem that had already been solved. Before schemes, try
+   the one-line version first: re-pick the investment violet alone,
+   which has now been flagged twice.
+
+9. **Retired palette machinery still exported from the engine.**
    `CATEGORY_PALETTE`, `paletteColor` and the `PaletteIndex` type survive
    in `model.ts`/`types.ts` with no renderer left to use them —
    `ColorSwatches` was the last one and is gone. Deleting them reaches
