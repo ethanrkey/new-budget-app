@@ -12,7 +12,9 @@ tells you where you're headed; the logged numbers tell you where you are. The
 app never quietly blends the two.
 
 Built for myself, in the open. **Work in progress** — the web app is live and in
-daily use; a companion iOS app sharing the same calculation engine is the goal.
+daily use, and an Expo/React Native iOS client in `mobile/` shares the same
+calculation engine verbatim — it reads everything and can log a balance, with
+the rest of the write path still to come.
 
 ---
 
@@ -20,7 +22,7 @@ daily use; a companion iOS app sharing the same calculation engine is the goal.
 
 ### Dashboard — the reality layer
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Dashboard](public/screenshots/dashboard.png)
 
 Net position at the top: verified checking, plus the last balance you logged for
 each savings/investment account, minus the last balance you logged for each loan
@@ -50,13 +52,16 @@ a percentage against a number the balance has already passed.
 
 Accounts and loans are created here too — "+ Add account" and "+ Add loan"
 open their own short setup form. A savings account or a loan is its own
-category with its own color (and, for a loan, APR and interest start date);
-money moving in or out is an ordinary transaction tagged to it, so setting one
-up never invents a transaction.
+category (and, for a loan, APR and interest start date); money moving in or
+out is an ordinary transaction tagged to it, so setting one up never invents a
+transaction. You don't pick colours anywhere: colour encodes what the money is
+DOING — income, a bill, a one-off, savings, an investment, debt — so the same
+kind of money is the same colour in every view, and two savings accounts look
+related instead of arbitrary.
 
 ### Budget — month by month
 
-![Budget](docs/screenshots/budget.png)
+![Budget](public/screenshots/budget.png)
 
 Every month as a column: income (with take-home computed from actual paycheck
 dates, so a three-paycheck month shows three), fixed and recurring costs,
@@ -65,7 +70,7 @@ net carried forward. Rows are reorderable, the horizon is a slider.
 
 ### Ledger — every transaction, in order
 
-![Ledger](docs/screenshots/ledger.png)
+![Ledger](public/screenshots/ledger.png)
 
 The projection expanded into individual dated transactions with a running
 balance, grouped by month — or the same data as a **month calendar**, with
@@ -90,7 +95,7 @@ double-counted — that money is already *in* the number.
 
 ### Spending — actual vs. budgeted
 
-![Spending](docs/screenshots/spending.png)
+![Spending](public/screenshots/spending.png)
 
 Flag a variable bill (groceries, electric) as tracked and log the real total for
 the month whenever you find out — no need to match it to a date. It's a
@@ -105,12 +110,11 @@ separate columns, here as everywhere else.
 - **Google sign-in or a magic link**; your data is per-account and private.
 - **Per-device theme** — light on the laptop, dark on the phone, from one account.
 - **Drag the tabs** into your own order (desktop); the app opens on the first one.
-- **Quick Setup** wizard for a new account, and quick-entry for adding a batch
-  of items without closing a modal each time.
 - **A setup wizard** that gets you from nothing to a working forecast —
   paycheck, rent, bills, groceries, your checking balance, and one screen
   for the savings, investments and debt you want on the Dashboard. Then a
-  short guided tour of the four tabs.
+  short guided tour of the four tabs. Quick entry is the other half of it:
+  add a batch of items without the modal closing between each one.
 - **A built-in About page** covering every feature, kept in sync with the code by
   the same rule as this README.
 - **Import** a budget-grid CSV, a per-transaction CSV (it detects recurrence),
@@ -141,34 +145,42 @@ src/
   components/   React views; they render and call mutators, nothing else
   storage.js    the ONLY place that talks to the backend
   App.jsx       owns the single state object; loads it once, autosaves changes
+mobile/         the Expo client; imports src/engine directly, never a copy
 tests/          the engine test suite (plain Node, no framework)
-supabase/       schema.sql — one table, RLS policies (audited live 2026-10-02; see PROJECT_SPEC §5)
+scripts/        migration, verification, the palette gate, the screenshots
+supabase/       entities.sql — one table, RLS policies (audited live 2026-10-02; see PROJECT_SPEC §5)
 ```
 
 **Everything with a number in it lives in `src/engine`** as a pure function of
 the state. That's the whole design decision the rest follows from:
 
-- It's testable without a browser. `npm test` runs ~250 assertions over
+- It's testable without a browser. `npm test` runs ~620 assertions over
   amortization, budget math, every data migration, and CSV round-trips in about
   a second, with no test framework at all.
 - The Ledger and the Budget can't disagree, because both are derived from one
   generated event list rather than computed separately.
-- An iOS client can reuse the engine verbatim instead of reimplementing (and
-  subtly mis-implementing) the money math — the plan is Expo / React Native,
-  which is why the engine is the part being typed: its exports are a contract
-  between two codebases, not an internal detail.
+- The iOS client reuses the engine verbatim instead of reimplementing (and
+  subtly mis-implementing) the money math. That is why the engine is the part
+  that got typed: its exports are a contract between two codebases, not an
+  internal detail. `mobile/metro.config.js` is three lines of resolver config
+  and no build step — which is what the purity rule buys.
 - Swapping the backend means rewriting one file, `storage.js`.
 
-All user data is a single JSON document per user, stored as `jsonb`. Row-level
-security (`auth.uid() = user_id`) is the access boundary; the anon key in the
-browser bundle is public by design. Every shape change goes through one
-`normalize()` function that runs on every load and is idempotent and
+User data is **one row per entity** in `budget_entities`, keyed
+`(user_id, kind, entity_id)` — a rule, a one-off, a category, one logged
+balance. Each row carries its own version counter, so two devices editing
+different things never conflict, and a delete is a tombstone rather than a
+missing row (an absent row cannot outrank a stale device's copy of it). It was
+a single `jsonb` document per user until 2026-10-03; that table is now frozen.
+Row-level security (`auth.uid() = user_id`) is the access boundary; the anon
+key in the browser bundle is public by design. Every shape change goes through
+one `normalize()` function that runs on every load and is idempotent and
 deterministic, with before/after assertions in the test suite — because losing
 real financial history once is enough.
 
 ## Run it locally
 
-Requires Node 20+.
+Requires Node 24+.
 
 ```bash
 git clone https://github.com/ethanrkey/new-budget-app
@@ -176,8 +188,10 @@ cd new-budget-app
 npm install
 ```
 
-Create a Supabase project, run `supabase/schema.sql` in its SQL editor, and
-enable the Google provider (or just use magic links). Then:
+Create a Supabase project, run `supabase/entities.sql` in its SQL editor
+(`schema.sql` is the retired single-document table, kept only so the migration
+history reads), and enable the Google provider (or just use magic links).
+Then:
 
 ```bash
 cp .env.example .env.local     # fill in both values from Supabase → API
@@ -189,15 +203,20 @@ VITE_SUPABASE_URL=https://<project>.supabase.co
 VITE_SUPABASE_ANON_KEY=<the publishable/anon key>
 ```
 
-Other scripts: `npm test` (engine suite), `npm run lint`, `npm run build`.
-CI runs all three on every push.
+Other scripts: `npm test` (engine suite + migrations + the palette gate),
+`npm run lint`, `npm run typecheck`, `npm run build`. CI runs all of them on
+every push. `npm run screenshots` regenerates the four images above from
+fixture data — they are generated, not taken, so they cannot quietly drift
+from the UI.
 
 ## Status and what's next
 
-In daily use and actively built on. Near-term: goal-based savings targets. Later: multiple accounts and payment methods,
-credit cards, bank linking, and the iOS client.
+In daily use and actively built on. Near-term: finishing the iOS client's
+write path and shipping it, then goal-based savings targets. Later: multiple
+accounts and payment methods, credit cards, and bank linking.
 
 Design decisions, the full data model, and the roadmap live in
 [PROJECT_SPEC.md](PROJECT_SPEC.md), which is kept in sync with the code by rule.
 
-> Screenshots are generated from fixture data. None of the numbers are mine.
+> Screenshots are generated from fixture data (`npm run screenshots`). None of
+> the numbers are mine.

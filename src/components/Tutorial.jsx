@@ -52,7 +52,7 @@ const SECTIONS = [
         ["One-off", "Money out, one time."],
         ["One of your own categories", "Money out, but into something you own or owe — savings, a Roth IRA, a loan. These get tracked on the Dashboard. When you add one you'll be asked whether it's cash you control or market-exposed; that's what decides whether it gets a projected line, and only you can answer it."],
       ]],
-      ["p", "You can give any item its own color, which is how it's shown in the Ledger. ⚡ Quick entry is the same thing without the modal closing between items — the fast way to type in a dozen bills at once."],
+      ["p", "⚡ Quick entry is the same form without the modal closing between items — the fast way to type in a dozen bills at once."],
     ],
   },
   {
@@ -62,7 +62,7 @@ const SECTIONS = [
       ["p", "Every projected transaction, in date order, with a running balance. Grouped by month."],
       ["dl", [
         ["Project through", "How far out to run the projection, up to a year. The Ledger is a near-term guide; the Budget tab is where a longer projection lives, and it has its own slider that runs further."],
-        ["Savings columns", "Pick which of your categories get a cumulative column, so you can watch a fund build up alongside your checking balance."],
+        ["Cumulative columns", "Pick which of your categories get a running column, so you can watch a fund build up — or a loan come down — alongside your checking balance."],
         ["Select", "Multi-select rows and delete them in one go."],
         ["Click any item name", "Edit it. For a recurring item you choose what you're changing: just that date, or every time. It starts on \"This date\", so a one-month fix can't quietly rewrite all twelve."],
       ]],
@@ -106,7 +106,7 @@ const SECTIONS = [
     id: "accounts",
     title: "Savings and investment accounts",
     body: [
-      ["p", "“+ Add account” on the Dashboard sets one up: a name, a color, and what's in it today. That opening balance becomes the first point in its history — the anchor every projection measures from."],
+      ["p", "“+ Add account” on the Dashboard sets one up: a name, whether it's savings or an investment, and what's in it today. That opening balance becomes the first point in its history — the anchor every projection measures from."],
       ["steps", [
         "Add the account.",
         "Add a transaction for the money going into it, and pick the account as its category.",
@@ -173,7 +173,7 @@ const SECTIONS = [
       ["dl", [
         ["Appearance", "Light or dark, remembered PER DEVICE — light on the laptop and dark on the phone is a normal thing to want, so the choice doesn't sync."],
         ["Categories", "The manager described above."],
-        ["Sign out", "Your data stays on the server, tied to your account."],
+        ["Account", "Who you're signed in as, how you signed in, and when you joined — plus Sign out. Signing out leaves your data on the server, tied to your account."],
         ["Delete my account", "Schedules your whole account for deletion in 7 days — the sign-in, every rule, every logged balance. You can cancel any time before then from the same place. After that it's gone and there's no backup to restore from."],
         ["Wipe data", "Resets your account to brand new — every rule, category, logged balance and contribution, and your verified balance back to $0.00 — behind a full confirmation that lists it all. You'll get the welcome wizard again afterwards. Export a backup first."],
       ]],

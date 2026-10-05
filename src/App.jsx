@@ -29,6 +29,7 @@ import ImportCSV from "./components/ImportCSV.jsx";
 import AccountStrip from "./components/AccountStrip.jsx";
 import UpdateBalanceModal from "./components/UpdateBalanceModal.jsx";
 import SettingsModal from "./components/SettingsModal.jsx";
+import AccountScreen from "./components/AccountScreen.jsx";
 import Onboarding from "./components/Onboarding.jsx";
 import Tutorial from "./components/Tutorial.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
@@ -53,6 +54,10 @@ export default function App() {
   // null when closed; otherwise where it was opened FROM, so it can offer a
   // way back there ("settings" gets a "Back to Settings" link).
   const [categoryManagerFrom, setCategoryManagerFrom] = useState(null);
+  // Settings subscreens are siblings of Settings, not children: each one
+  // closes Settings and reopens it on Back, so there is only ever one modal
+  // on screen and no stacked scrims.
+  const [accountOpen, setAccountOpen] = useState(false);
   const [addPresetCategory, setAddPresetCategory] = useState(null); // e.g. Dashboard's "+ Add a loan" shortcut
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateBalanceOpen, setUpdateBalanceOpen] = useState(false);
@@ -756,10 +761,9 @@ export default function App() {
           isDark={isDark}
           onToggleTheme={toggleTheme}
           onOpenCategories={() => { setSettingsOpen(false); setCategoryManagerFrom("settings"); }}
+          onOpenAccount={() => { setSettingsOpen(false); setAccountOpen(true); }}
           onWipe={wipeData}
           email={session?.user?.email}
-          providers={session?.user?.app_metadata?.providers}
-          createdAt={session?.user?.created_at}
           deletionRequest={deletionRequest}
           onRequestDeletion={async () => {
             const res = await requestAccountDeletion(session.user.id);
@@ -771,8 +775,18 @@ export default function App() {
             if (res.ok) setDeletionRequest(null);
             return res;
           }}
-          onSignOut={() => signOut()}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {accountOpen && (
+        <AccountScreen
+          email={session?.user?.email}
+          providers={session?.user?.app_metadata?.providers}
+          createdAt={session?.user?.created_at}
+          onSignOut={() => signOut()}
+          onBack={() => { setAccountOpen(false); setSettingsOpen(true); }}
+          onClose={() => setAccountOpen(false)}
         />
       )}
 

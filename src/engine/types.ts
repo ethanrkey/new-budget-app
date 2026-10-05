@@ -186,7 +186,7 @@ export interface BudgetState {
   accounts: Account[];
   recurring: RecurringItem[];
   oneoffs: OneOffItem[];
-  /** Bills ticked off as already paid, by month. */
+  /** The user's own buckets: savings, investments, loans. */
   trackerCategories: TrackerCategory[];
   balanceSnapshots: Record<string, BalanceSnapshot[]>;
   contributionLog: Record<string, Contribution[]>;
@@ -293,8 +293,9 @@ export interface SpendingSlice {
   amount: number;
   /** 0-100, of the window's total planned outflow. */
   percent: number;
-  /** Set for `category` slices, and for `item` slices inherited from their
-   *  parent category; the UI resolves it via paletteColor. */
+  /** RETIRED (2026-10-03) and always null on new data: colour comes from
+   *  `role` below, not from a stored index. Kept only so a slice built from
+   *  an older cached shape still type-checks. */
   color: PaletteIndex | null;
   bucket: SpendingBucket;
   /** What the money is DOING — the thing colour encodes now. Assigned by
@@ -312,7 +313,8 @@ export interface SpendingSlice {
   shade?: number;
   shadeCount?: number;
   /** `other` slices only: the slices folded into it, in the same order they
-   *  would have had, each with its own colour and its percent OF THE WINDOW.
+   *  would have had, each with its own role colour or shade of one, and its
+   *  percent OF THE WINDOW.
    *  The view can list them without re-deriving anything. */
   children?: SpendingSlice[];
 }

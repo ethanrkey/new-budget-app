@@ -199,7 +199,7 @@ export function reorderList(state: BudgetState, names: string[], name: string, b
 // ---- Tracker category (savings/debt/investment) CRUD ----
 // Deleting a category never touches items that reference it — an orphaned
 // category id just renders as a neutral "Uncategorized" (see
-// budgetLayout.ts / CATEGORY_PALETTE's fallback color) rather than blocking
+// budgetLayout.ts, and the `uncategorized` role's grey) rather than blocking
 // the delete or silently reassigning someone's data.
 
 /**
@@ -416,7 +416,7 @@ export function deleteAccountSnapshot(state: BudgetState, accountId: string, sna
 // brand-new loan — log its current outstanding balance as the first
 // snapshot. Never creates a transaction; payments are added separately and
 // just tag this category. Editing terms later passes no `outstanding`.
-// Create (or rename/recolor) a savings/investment category and, for a new
+// Create (or rename) a savings/investment category and, for a new
 // one, log the balance it has today in the same step — the anchor every
 // projection on its Dashboard card measures from. The asset mirror of
 // setupLoan(): one atomic mutation, no transaction created. Contributions are

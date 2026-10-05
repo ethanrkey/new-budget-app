@@ -100,8 +100,11 @@ export function fixtureState() {
         cadence: "biweekly", startDate: shiftDays(lastFriday(), -14 * 6),
         accountId: PRIMARY_ACCOUNT_ID },
       bill("r-rent", "Rent", 1450, 1, 1),
+      // Weekly, and running as long as the monthly rules: a logged actual
+      // for a month the rule had not started yet renders as "not due" with
+      // a delta against nothing, which is incoherent rather than realistic.
       { id: "r-groc", name: "Groceries", amount: 95, category: "bill", order: 2,
-        cadence: "weekly", startDate: shiftDays(TODAY, -42), variable: true,
+        cadence: "weekly", startDate: shiftDays(lastFriday(), -7 * 26), variable: true,
         accountId: PRIMARY_ACCOUNT_ID },
       bill("r-elec", "Electric", 112, 12, 3, true),
       bill("r-ins",  "Car insurance", 138, 20, 4),

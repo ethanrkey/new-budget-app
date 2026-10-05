@@ -25,6 +25,7 @@ const SHOTS = [
   { tab: "dashboard", height: 728 },
   { tab: "ledger", height: 688 },
   { tab: "budget", height: 1010 },
+  { tab: "spending", height: 700 },
 ];
 
 async function main() {

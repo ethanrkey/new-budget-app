@@ -154,7 +154,9 @@ src/
   downloadFile.js  browser download trigger shared by export + restore
   App.jsx          state owner: loads once per user, autosaves on change, wires handlers
 tests/engine.test.mjs   the engine harness (see §8)
-supabase/schema.sql     the one table + RLS policies
+scripts/                migration, verification, the palette gate, the screenshots
+mobile/                 the Expo client; imports src/engine directly, never a copy
+supabase/entities.sql   the one table + RLS policies (schema.sql is the retired one)
 ```
 
 **JavaScript / TypeScript boundary.** `src/engine` is **fully TypeScript**
@@ -240,17 +242,24 @@ balance updates). Nothing is append-only.
 
 ## 5. Storage, auth, security
 
-- **Supabase Postgres**, one table `budget_states (user_id uuid PK → auth.users, state jsonb, updated_at)`.
-  RLS enabled; select/insert/update policies are `auth.uid() = user_id`.
-  `schema.sql` also scopes them `to authenticated`; the live project still
-  has them on PUBLIC (`polroles = {-}`, as of 2026-10-02) because that
-  scoping has not been applied yet. Harmless either way — `auth.uid()` is
-  null for anon, so the predicate denies — but the file and the database
-  differ until `schema.sql` is re-run. There is deliberately NO delete policy — the app
-  never deletes a row, so delete is denied fail-closed. `supabase/schema.sql`
-  carries the reasoning and the verification queries.
+- **Supabase Postgres**, one table
+  `budget_entities (user_id uuid → auth.users, kind text, entity_id text,
+  data jsonb, version int, schema_version int, deleted_at timestamptz,
+  updated_at timestamptz)`, primary key `(user_id, kind, entity_id)`. One
+  row per rule, one-off, category, logged balance or contribution — see §10
+  for why, and for the migration off the single-document table.
+  `budget_states` (one `jsonb` document per user) was the model until
+  2026-10-03 and is **frozen**, not dropped: `supabase/schema.sql` still
+  describes it so the migration history reads, and nothing writes to it.
+  RLS enabled on `budget_entities`; select/insert/update policies are
+  `auth.uid() = user_id`. There is deliberately NO delete policy — the
+  client never removes a row, it writes a tombstone (`deleted_at`), so
+  delete is denied fail-closed. `supabase/entities.sql` carries the
+  reasoning and the verification queries.
 
-  **Adversarial audit, 2026-10-02.** The repo is public and the anon key
+  **Adversarial audit, 2026-10-02 against `budget_states`, re-run against
+  `budget_entities` on 2026-10-03** (three policies, exactly as specified —
+  select, insert, update, no extras). The repo is public and the anon key
   ships in the client, so RLS is the entire security model and a policy gap
   is a full breach. Run against the live project, not the file:
 
@@ -291,16 +300,32 @@ balance updates). Nothing is append-only.
   login — documented here as the fallback when Google OAuth is unavailable —
   is also down. It is an availability risk, not a security one.
 - **Auth:** Google OAuth and magic link, `persistSession` + `autoRefreshToken`.
-  `redirectTo` is `window.location.origin` (works on localhost and prod).
-- **Every write is conditional on the version we loaded.** `loadState`
-  returns the row's `updated_at` alongside the state, and `writeState` does an
-  `update ... .eq("updated_at", <that version>)` — never an upsert, because an
-  upsert can't say "only if unchanged". A device holding a stale copy (a phone
-  open since before you changed something on a laptop) matches zero rows and
-  is told `conflict` instead of overwriting newer data with its whole stale
-  document. Conflicts are never retried: this device's document IS the stale
-  one. Versions are compared as opaque tokens, never ordered, so clock skew
-  between devices can't be misread (`engine/syncGuard.js isStale`).
+  `redirectTo` is `${window.location.origin}/app`, NOT the origin: since
+  2026-10-02 the origin is the public landing page, and someone who had just
+  signed in would land on a marketing page with a Try button.
+- **Every write is conditional on the version we loaded, PER ROW.** Each
+  entity carries its own `version` counter, and an update is
+  `.eq("version", <the one we hold>)` — never an upsert, because an upsert
+  cannot say "only if unchanged". A device holding a stale copy of that one
+  entity matches zero rows and is told `conflict`; a device editing a
+  DIFFERENT entity does not conflict at all, which is the whole reason the
+  storage model changed. Conflicts are never retried: this device's copy IS
+  the stale one.
+
+  The plan — which rows, which guard, in which order, when to stop — is
+  computed by `engine/entityStore.ts planWrite()`, pure and shared, because
+  the web and the phone drifting apart on write ordering would be a
+  data-loss bug that only reproduced on one device. **Upserts go before
+  tombstones** and the caller aborts on the first refusal, so a conflict
+  part-way stops before anything is REMOVED. An insert that hits 23505 must
+  try to REVIVE before calling it a conflict: a tombstoned row still
+  occupies the primary key (see the decision log).
+
+  The whole-account sync token is still a single opaque `updated_at`, the
+  max over ALL rows including tombstones, and both places that compute it
+  call the same function. Versions are compared as opaque tokens, never
+  ordered, so clock skew between devices cannot be misread
+  (`engine/syncGuard.ts isStale`).
 - **Account deletion: 7-day soft delete, then a hard delete.** A request is
   a row in `account_deletions`; the purge is `purge_due_accounts()`,
   SECURITY DEFINER, which deletes the `auth.users` row — everything else
@@ -352,8 +377,9 @@ balance updates). Nothing is append-only.
 - **Load-then-save discipline (a real incident drove this):** `loadState`
   THROWS on any query error and never fabricates state; `App.jsx` shows a
   dead-end error screen and the autosave effect cannot run until a load
-  succeeds. "No row yet" (`maybeSingle` → null) is the only case that yields
-  a blank state. `saveState` is debounced 500 ms and keyed on the user id, not
+  succeeds. "No rows at all" — confirmed by a successful query returning an
+  empty set, never inferred from an error — is the only case that yields a
+  blank state. `saveState` is debounced 500 ms and keyed on the user id, not
   the session object (token refreshes must not reload/clobber).
 - The anon (publishable) key is in the deployed bundle by design; RLS is the
   boundary. No secrets are in git (history swept 2026-09-13).
@@ -592,12 +618,12 @@ Conventions worth knowing before touching numbers:
   "something happened here".
 
   **The two fixed buckets are NEUTRAL on purpose.** Slices for the user's own
-  categories use `paletteColor`; Fixed bills, One-off, Uncategorized and Other
-  use grey steps. A 9th and 10th hue would break the categorical colour rules
+  categories take their role's colour (`roleColor`/`roleShade`); Fixed bills,
+  One-off, Uncategorized and Other use grey steps. A 9th and 10th hue would break the categorical colour rules
   outright, and grey is immune to colour-vision deficiency, which is the right
   property for "you never named this" — it also lets the user's own colours
   dominate.
-- **Colors are inline styles** (`paletteColor(index, isDark)`), never
+- **Colors are inline styles** (`roleColor(role, isDark)`), never
   runtime-built Tailwind class names — the JIT scanner can't see those.
 - **A logged actual never changes a forecast number.** It is kept for the
   Spending tab's comparison and nothing else. (This bullet used to contrast
@@ -673,7 +699,7 @@ fifth tab never needs a migration.
   the rule back restores them. Remapping into the new day was rejected — it
   guesses at intent and has no meaning at all for weekly or biweekly rules.
 
-  The **Savings columns** picker sits directly above the table rather than in
+  The **Cumulative columns** picker sits directly above the table rather than in
   the toolbar: it is list-only and does nothing to the Planned spending panel,
   so placing it over that panel implied a relationship that isn't there. The
   horizon slider stays in the toolbar because it genuinely drives both.
@@ -683,7 +709,7 @@ fifth tab never needs a migration.
   day for its transactions. **The running balance is list-only** — a
   7-column grid has nowhere to put it, and it is the list's whole reason to
   exist; a faked or omitted-but-implied balance would have two views
-  disagreeing about the app's most important number. Savings columns and
+  disagreeing about the app's most important number. Cumulative columns and
   multi-select hide in calendar mode, being list-only concepts.
   Per-day aggregation is `groupByDay` in the engine, so a day's net and the
   running balance can never tell different stories.
@@ -826,12 +852,16 @@ fifth tab never needs a migration.
 - **Spending** — actual vs. budgeted per month for items flagged
   "Track actual vs. budgeted" (any cadence; loans too).
 - **Global:** + Add transaction (modal), Quick entry (inline, keeps going),
-  Quick Setup wizard (once per account, reopenable), Tutorial (a 12-section
-  walkthrough of every feature — `components/Tutorial.jsx`, sidebar on
-  desktop, chip row + full screen on mobile), account strip
+  Quick Setup wizard (once per account, reopenable), **About** (a 12-section
+  walkthrough of every feature — still `components/Tutorial.jsx` on disk,
+  sidebar on desktop, chip row + full screen on mobile) with the guided
+  tour launched from it, account strip
   (read-only balance + Confirm-gated update that also snapshots), Settings
-  (per-device theme, category manager with asset/debt kinds and colors, sign
-  out, wipe with full confirmation), Import (Budget-grid CSV, per-transaction
+  (a short list of SECTIONS, each with a Manage button opening its own
+  screen with "← Back to Settings": per-device theme inline, the category
+  manager, Account — address, provider, member-since, sign out — and last,
+  visually separated, the danger zone: wipe and delete, both with full
+  confirmation), Import (Budget-grid CSV, per-transaction
   CSV with tolerant recurrence detection, or a full JSON backup restore that
   downloads a safety copy first), Export (Ledger/Budget CSV, full JSON backup).
 
@@ -885,13 +915,19 @@ fifth tab never needs a migration.
 
 1. **This spec matches the code.** A change that makes it wrong updates it in
    the same commit.
-2. **README.md stays current** for a public audience; screenshots in
-   `docs/screenshots/` are regenerated from fixture data when a view changes.
+2. **README.md stays current** for a public audience. Its screenshots are
+   the SAME generated set the landing page uses (`public/screenshots/`,
+   `npm run screenshots`) — there is no second hand-made set to forget. The
+   old `docs/screenshots/` was exactly that second set, and it sat eight
+   months stale behind a README that looked maintained.
 3. **Engine behavior gets harness coverage** in the same commit; the harness
    lives in `tests/` and runs in CI.
-4. **The in-app Tutorial matches shipped features** (`src/components/Tutorial.jsx`);
-   update it in the same commit as any feature change. A stale tutorial is
-   worse than none.
+4. **The in-app About page matches shipped features**
+   (`src/components/Tutorial.jsx` — the file kept its old name, the UI did
+   not); update it in the same commit as any feature change. A stale
+   explanation is worse than none. This rule covers in-app copy generally,
+   not just that file: a feature that is REMOVED has to be swept out of the
+   sentences describing it, which is the half that keeps being missed.
 5. **Verify the thing the USER touches, not the thing you built.** Three
    failures in one week were the same failure wearing different clothes:
    a form verified standalone while its routing was never clicked, so the
@@ -1411,14 +1447,27 @@ Further out:
   past drops everything before THAT — and `buildEvents` filters
   `e.date >= balanceAsOf`, so same-day transactions are kept and "before
   that date" is exact rather than approximate.
-- **Settings → Account is inline, not a subscreen** (2026-10-03). Email,
-  provider and creation date. The Savings/debt manager earns its
-  navigation because that screen EDITS things; three read-only facts
-  behind a tap would be navigation for nothing, and the thing people open
-  this for is checking which address they are signed in as. `providers`
-  comes from `app_metadata.providers` and deliberately does not try to
-  tell a magic link from a password — they are one credential to the
-  database, and claiming otherwise would be inventing a distinction.
+- **Settings is a list of SECTIONS, each behind Manage** (2026-10-05).
+  This REVERSES the 2026-10-03 call that Account should be inline, and the
+  reversal is worth keeping because the original reasoning was not wrong,
+  it was aimed at the wrong thing. It argued about the CONTENT — three
+  read-only facts behind a tap is navigation for nothing — and that is
+  still true of those three facts in isolation. What it missed is the
+  CONTAINER: Settings reads either as a short scannable list of sections or
+  as one long scroll, and every section that prints itself inline makes the
+  ones below it harder to find. Account is also the section that grows —
+  changing an email, changing a password, sessions — so inline was a shape
+  that only fit on the day it was measured.
+
+  The pattern is the category manager's, exactly: its own modal, "← Back to
+  Settings" top-left, "Done" top-right, and subscreens are SIBLINGS of
+  Settings rather than children, so there is never a second scrim stacked
+  over the first. The email stays on the Settings row itself, because that
+  one fact IS what people open Settings to check — the subscreen is for the
+  rest, and for what lands there next. `providers` comes from
+  `app_metadata.providers` and deliberately does not try to tell a magic
+  link from a password — they are one credential to the database, and
+  claiming otherwise would be inventing a distinction.
 - **An unanswered `assetKind` renders as `investment`** (2026-10-03), and
   the direction is the whole point. Both defaults look defensible until you
   notice which way the error falls: an investment gets no projected line,
@@ -1673,6 +1722,31 @@ Further out:
   out, which is the entire point of the suffix. Note the shape of this
   one: the general rule was right and its most common instance was the
   exception.
+
+- **Removing a feature is a documentation change, and that is the half
+  that gets missed** (2026-10-05, from a full sweep of the spec, the
+  README, the About page and in-app copy). Rule 1 held for everything
+  ADDED; every stale sentence found was about something taken away or
+  renamed. Adding a feature makes you write about it, so the doc update
+  rides along; removing one makes you delete code, and the sentences
+  describing it sit somewhere else entirely and go on reading as though
+  they were maintained.
+
+  The sweep's worst find was not copy at all. `README.md` told a new
+  contributor to run `supabase/schema.sql`, which creates `budget_states`
+  — the single-document table frozen two days earlier. Following the
+  README exactly would have produced a database the app cannot use, with
+  no error pointing at the cause. Next to that: the README still described
+  storage as "a single JSON document per user, stored as jsonb", and §5
+  still documented the whole-document `updated_at` guard as the write
+  model, four days after per-entity versions replaced it.
+
+  The structural fix is the one already applied to the screenshots:
+  **delete the second copy rather than promise to keep it in sync.**
+  `docs/screenshots/` was a hand-made set the README displayed; it was
+  eight months stale behind a README that looked maintained. There is now
+  one generated set, in `public/screenshots/`, used by both the README and
+  the landing page. A second copy of anything is a copy that will rot.
 
 - **The untrack nudge is an observation, not a warning** (2026-10-03).
   A fixed $150 payment flagged "track actual vs budgeted" has no

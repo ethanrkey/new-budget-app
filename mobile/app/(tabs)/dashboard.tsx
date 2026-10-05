@@ -15,7 +15,7 @@ import {
 } from "../../../src/engine/progress.ts";
 import { computeLoanProgress } from "../../../src/engine/loans.ts";
 import { primaryAccount, todayISO } from "../../../src/engine/model.ts";
-import { roleColor, roleOfTrackerCategory, ROLE_LABEL } from "../../../src/engine/palette.ts";
+import { roleColor, roleOfTrackerCategory, roleSuffix } from "../../../src/engine/palette.ts";
 import type { TrackerCategory } from "../../../src/engine/types.ts";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -214,7 +214,9 @@ function AssetCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory
       <View style={styles.cardHead}>
         <View style={[styles.dot, { backgroundColor: color }]} />
         <Text style={styles.cardLabel}>{cat.name}</Text>
-        <Text style={styles.roleTag}>· {ROLE_LABEL[roleOfTrackerCategory(cat)]}</Text>
+        {roleSuffix(cat.name, roleOfTrackerCategory(cat)) && (
+          <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
+        )}
         <View style={{ flex: 1 }} />
         <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}>
           <Text style={styles.logText}>{online ? "Log" : "Offline"}</Text>
@@ -254,7 +256,9 @@ function DebtCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory;
       <View style={styles.cardHead}>
         <View style={[styles.dot, { backgroundColor: color }]} />
         <Text style={styles.cardLabel}>{cat.name}</Text>
-        <Text style={styles.roleTag}>· {ROLE_LABEL[roleOfTrackerCategory(cat)]}</Text>
+        {roleSuffix(cat.name, roleOfTrackerCategory(cat)) && (
+          <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
+        )}
         <View style={{ flex: 1 }} />
         <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}>
           <Text style={styles.logText}>{online ? "Log" : "Offline"}</Text>

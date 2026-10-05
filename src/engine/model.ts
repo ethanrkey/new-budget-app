@@ -50,8 +50,9 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
   }
 
   // A tracker category shape (for reference):
-  // { id, name, color, order, kind, originalPrincipal?, interestRate?, interestStartDate? }
-  // `color` is an index into CATEGORY_PALETTE. `id` is what an item's
+  // { id, name, order, kind, assetKind?, originalPrincipal?, interestRate?, interestStartDate? }
+  // There is no `color`: migration 13 stripped it and colour is derived from
+  // role (see engine/palette.ts). `id` is what an item's
   // `category` field holds for a savings/debt/investment item. `kind` is
   // "asset" (default — Savings, Investments: balance accumulates from
   // contributions) or "debt". A debt-kind category IS a loan: it carries the

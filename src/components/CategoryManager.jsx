@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { roleColor, roleOfTrackerCategory } from "../engine/palette.ts";
 
-// Create / rename / recolor / reorder / delete a user's own savings/debt/
+// Create / rename / reorder / delete a user's own savings/debt/
 // investment categories. These replace the old hardcoded Roth/Saved/
 // Brokerage/Loans — every user gets their own set, editable here.
 export default function CategoryManager({ categories, isDark, onAdd, onUpdate, onDelete, onMove, onClose, onBack }) {
@@ -47,7 +47,8 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
         </div>
         <p className="text-xs text-gray-500 mb-4">
           These are your own buckets — Savings, Investments, Debt, or anything else you track. Rename,
-          recolor, reorder, or delete them any time. Deleting one doesn&apos;t touch existing
+          reorder, or delete them any time. Colour is not yours to set: it comes from what the
+          bucket IS. Deleting one doesn&apos;t touch existing
           transactions — they keep their history, just shown as uncategorized.
         </p>
 

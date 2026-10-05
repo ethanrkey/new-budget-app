@@ -178,8 +178,9 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
           {renderSection(BUDGET_SECTIONS[0])}
           {renderSection(BUDGET_SECTIONS[2])}
 
-          {/* SAVING / DEBT: one header, rows clustered by category (own color each),
-              reorder — arrows or drag — never crosses a category cluster */}
+          {/* SAVING / DEBT: one header, rows clustered by category (a role
+              dot each — savings, investment or debt), reorder — arrows or
+              drag — never crosses a category cluster */}
           {sectionItems.saving.length ? (
             <>
               <SectionHeader label="SAVING / DEBT" span={budget.length + 1} />

@@ -2,21 +2,18 @@ import WipeData from "./WipeData.jsx";
 import DeleteAccount from "./DeleteAccount.jsx";
 
 // Everything that used to be scattered across the header and the old
-// check-in bar, in one place: appearance, category management, sign-out,
-// and — deliberately last, visually separated — the one destructive action.
+// check-in bar, in one place: appearance, category management, the account,
+// and — deliberately last, visually separated — the destructive actions.
 // The header itself is now just Import / Export / Settings.
-// Which identity provider actually signed you in. Supabase keeps the list
-// on app_metadata.providers; "email" covers both magic link and password,
-// which are the same credential from the database's point of view, so this
-// does not try to tell them apart and claim something it cannot know.
-const PROVIDER_LABEL = { google: "Google", email: "Email", apple: "Apple", github: "GitHub" };
-function providerNames(providers) {
-  const list = (providers ?? []).map((p) => PROVIDER_LABEL[p] ?? p);
-  return list.length ? list.join(" and ") : "—";
-}
-
-export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories, onWipe, onSignOut, onClose,
-  email, providers, createdAt, deletionRequest, onRequestDeletion, onCancelDeletion }) {
+//
+// A SHORT LIST OF SECTIONS, not a long scroll. Each row is one line of what
+// it is, one line of what you can do there, and a Manage button; the detail
+// lives behind it. That is why Account is a subscreen (AccountScreen.jsx)
+// rather than three facts printed here — not because the facts are long
+// today, but because every section that prints itself inline makes the one
+// below it harder to find.
+export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories, onOpenAccount, onWipe, onClose,
+  email, deletionRequest, onRequestDeletion, onCancelDeletion }) {
   const row = "flex items-center justify-between gap-3 py-3";
   const btn = "text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition";
 
@@ -47,7 +44,7 @@ export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories,
           <div className={row}>
             <div>
               <div className="text-sm font-medium">Savings / debt categories</div>
-              <div className="text-xs text-gray-500">Rename, recolor, reorder, mark as asset or debt.</div>
+              <div className="text-xs text-gray-500">Rename, reorder, mark as asset or debt.</div>
             </div>
             <button onClick={onOpenCategories} className={btn}>Manage</button>
           </div>
@@ -55,31 +52,13 @@ export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories,
           <div className={row}>
             <div className="min-w-0">
               <div className="text-sm font-medium">Account</div>
-              {/* Inline, not a subscreen. The Savings/debt pattern earns its
-                  navigation because that screen EDITS things; three
-                  read-only facts behind a tap would be navigation for
-                  nothing, and the thing people come here to check is the
-                  address they are signed in as. */}
-              <dl className="mt-1 text-xs text-gray-500 space-y-0.5">
-                <div className="flex gap-2">
-                  <dt className="w-20 shrink-0">Signed in</dt>
-                  <dd className="truncate text-gray-700 dark:text-gray-300">{email ?? "—"}</dd>
-                </div>
-                <div className="flex gap-2">
-                  <dt className="w-20 shrink-0">Via</dt>
-                  <dd className="text-gray-700 dark:text-gray-300">{providerNames(providers)}</dd>
-                </div>
-                <div className="flex gap-2">
-                  <dt className="w-20 shrink-0">Member since</dt>
-                  <dd className="text-gray-700 dark:text-gray-300">
-                    {createdAt
-                      ? new Date(createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
-                      : "—"}
-                  </dd>
-                </div>
-              </dl>
+              {/* The address is the one fact people open Settings to check,
+                  so it stays on the row rather than going behind the tap —
+                  the subscreen is for the rest, and for what lands there
+                  next. */}
+              <div className="text-xs text-gray-500 truncate">{email ?? "Sign-in details and sign out."}</div>
             </div>
-            <button onClick={onSignOut} className={btn}>Sign out</button>
+            <button onClick={onOpenAccount} className={btn}>Manage</button>
           </div>
 
           <div className={`${row} mt-2`}>
