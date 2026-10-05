@@ -50,7 +50,6 @@ export default function AssetSetupModal({ initial, taggedCount = 0, onSave, onDe
             <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="Emergency fund, Roth IRA, brokerage…" autoFocus />
           </div>
           <div>
-            <label className={label}>Color</label>
             {/* The one question only the user can answer. NOT inferred from
                 the name: an HSA reads like savings and can be entirely in
                 one stock, which makes it the most market-exposed thing
