@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { T, money } from "../lib/theme";
 import { groupByDay } from "../../src/engine/compute.ts";
-import { roleColor, roleOfCategory } from "../../src/engine/palette.ts";
 import type { LedgerRow, TrackerCategory } from "../../src/engine/types.ts";
 
 // The web calendar, reshaped for a phone. Two changes made on purpose:
@@ -50,11 +49,9 @@ export default function CalendarView({
   const catName = (id: string) =>
     id === "bill" ? "Fixed bill" : id === "oneoff" ? "One-off" : id === "income" ? "Income"
       : categories.find((c) => c.id === id)?.name ?? "Uncategorized";
-  // Role colour: bills, savings and debt no longer share a grey. Dots are
-  // colour-only identity, which the colour rule does not allow to stand
-  // alone — the day detail names the category in words, and that is the
-  // relief.
-  const dotColor = (r: LedgerRow) => roleColor(roleOfCategory(r.category, categories), true);
+  // The dots mean "something happened here" and nothing else — secondary
+  // grey since 2026-10-06, matching the web. A month grid is read for
+  // density, and hues scattered through it competed with exactly that.
 
   const detail = picked ? days.get(picked) : null;
 
@@ -92,7 +89,7 @@ export default function CalendarView({
               {date && <Text style={styles.dayNum}>{Number(date.slice(8))}</Text>}
               <View style={styles.dots}>
                 {day?.rows.slice(0, DOT_CAP).map((r) => (
-                  <View key={r.id} style={[styles.dot, { backgroundColor: dotColor(r) }]} />
+                  <View key={r.id} style={[styles.dot, { backgroundColor: T.faint }]} />
                 ))}
                 {extra > 0 && <Text style={styles.more}>+{extra}</Text>}
               </View>
@@ -113,7 +110,7 @@ export default function CalendarView({
           </Text>
           {detail.rows.map((r) => (
             <Pressable key={r.id} style={styles.detailRow} onPress={() => onPick?.(r.id)}>
-              <View style={[styles.dot, { backgroundColor: dotColor(r) }]} />
+              <View style={[styles.dot, { backgroundColor: T.faint }]} />
               <Text style={styles.detailName} numberOfLines={1}>{r.name}</Text>
               {/* Identity never rests on colour: the category in words. */}
               <Text style={styles.detailCat}>{catName(r.category)}</Text>

@@ -4,7 +4,7 @@ import { useBudget } from "../../components/StateProvider";
 import { T, money } from "../../lib/theme";
 import { computeBudget } from "../../../src/engine/compute.ts";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../../../src/engine/budgetLayout.ts";
-import { roleColor, roleOfCategory } from "../../../src/engine/palette.ts";
+import { roleOfCategory, isRetainedOutflow } from "../../../src/engine/palette.ts";
 import type { BudgetColumn } from "../../../src/engine/types.ts";
 
 // THE PINNED COLUMN, the RN way.
@@ -52,11 +52,15 @@ export default function BudgetScreen() {
       out.push({ section: sec.label });
       for (const n of names) {
         const catId = layout.nameCat[n];
-        const cat = cats.find((c) => c.id === catId);
+        // Red is money GONE. A transfer to savings, a contribution or a
+        // loan payment leaves the account without being spent, so it
+        // prints plain — the same rule the web uses, from the same engine
+        // function so the two cannot drift.
+        const retained = isRetainedOutflow(roleOfCategory(catId, cats));
         out.push({
           key: `e-${n}`, label: n,
           values: (c) => Math.abs(c.expenseItems[n]?.val ?? 0),
-          tone: roleColor(roleOfCategory(catId, cats), true),
+          ...(retained ? {} : { tone: T.expense }),
         });
       }
     }

@@ -3,7 +3,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } f
 import { computeCategoryHistory, computeLoggedContributions, computeNetPosition, computeMonthVariance } from "../engine/progress.ts";
 import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.ts";
 import { primaryAccount, todayISO } from "../engine/model.ts";
-import { roleColor, roleOfTrackerCategory, roleSuffix } from "../engine/palette.ts";
+import { cardColor, roleOfTrackerCategory, roleSuffix, NEUTRAL_LINE, LOAN_LINE } from "../engine/palette.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
 import LoanSetupModal from "./LoanSetupModal.jsx";
@@ -67,11 +67,15 @@ export default function Dashboard({
           onDeleteSnapshot={(id) => onDeleteAccountSnapshot(account.id, id)}
         />
 
-        {assetCats.map((cat) => (
+        {/* COLOUR BY POSITION, cycling — decoration, not meaning. It is
+            here so five cards on one screen are five distinguishable
+            objects; it says nothing about the account, and the Checking
+            card takes none of it (cash has no hue, and never had). */}
+        {assetCats.map((cat, i) => (
           <AssetCard
             key={cat.id}
             category={cat}
-            isDark={isDark}
+            color={cardColor(i, isDark)}
             history={computeCategoryHistory(state, cat.id)}
             contributions={computeLoggedContributions(state, cat.id, today)}
             today={today}
@@ -91,7 +95,6 @@ export default function Dashboard({
           summary={computeDebtSummary(state)}
           debtCats={debtCats}
           onEditLoanById={(id) => setLoanModal({ cat: debtCats.find((c) => c.id === id) })}
-          isDark={isDark}
           state={state}
           today={today}
           onAddLoan={() => setLoanModal({})}
@@ -347,7 +350,9 @@ function HistoryRow({ entry, showProjected, onUpdate, onDelete }) {
 
 // ---- Checking ----
 function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, onDeleteSnapshot }) {
-  const color = isDark ? "#e5e7eb" : "#111827"; // neutral — cash has no category color
+  // Neutral, and verified as neutral before the 2026-10-06 rework rather
+  // than assumed: cash has no hue and never had one.
+  const color = NEUTRAL_LINE[isDark ? "dark" : "light"];
   return (
     <section className={CARD}>
       <div className="flex items-start justify-between gap-3">
@@ -369,9 +374,8 @@ function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, 
 // One line: the balances you logged. No projection — see
 // computeCategoryHistory in engine/progress.ts for why (loans are different
 // and keep theirs).
-function AssetCard({ category, isDark, history, contributions, today, onLog, onLogContribution, onEdit,
+function AssetCard({ category, color, isDark, history, contributions, today, onLog, onLogContribution, onEdit,
   onUpdateSnapshot, onDeleteSnapshot, onUpdateContribution, onDeleteContribution }) {
-  const color = roleColor(roleOfTrackerCategory(category), isDark);
   const latest = history.length ? history[history.length - 1] : null;
   const [allYears, setAllYears] = useState(false);
   const thisYear = today.slice(0, 4);
@@ -386,17 +390,21 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onL
           <div className={`${LABEL} flex items-center gap-1.5`}>
             <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
             <span className="truncate">{category.name}</span>
-            {/* The mapping, stated — unless the name already states it.
-                A role system that never says what its colours mean is a
-                private language only the code understands; a card that
-                reads "SAVINGS · Savings" is noise. */}
+            {/* The role in words, which is now the ONLY place the role
+                appears on this card — the dot beside it is the card's
+                position colour and means nothing. Dropped when the name
+                already says it: "SAVINGS · Savings" is a stutter, and it
+                is the default state of a new account. */}
             {roleSuffix(category.name, roleOfTrackerCategory(category)) && (
               <span className="shrink-0 text-gray-400 font-normal normal-case">
                 · {roleSuffix(category.name, roleOfTrackerCategory(category))}
               </span>
             )}
           </div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums" style={latest ? { color } : undefined}>
+          {/* The BALANCE is plain text. It was in the card's colour while
+              that colour meant something; a decorative hue on the one
+              number you came to read is noise. */}
+          <div className="mt-1 text-2xl font-semibold tabular-nums">
             {latest ? money(latest.amount) : <span className="text-gray-300 dark:text-gray-600">—</span>}
           </div>
           <div className="text-xs text-gray-500">
@@ -455,8 +463,13 @@ function AssetCard({ category, isDark, history, contributions, today, onLog, onL
 // computes it (computeLoanHistory / expected), so putting the chart back is
 // a render change, not a re-derivation.
 // "expected remaining vs. actual remaining" appears nowhere by design.
-function LoanCard({ category, isDark, state, today, progress, history, onLog, onEdit, onUpdateSnapshot, onDeleteSnapshot }) {
-  const color = roleColor(roleOfTrackerCategory(category), isDark);
+function LoanCard({ category, state, today, progress, history, onLog, onEdit, onUpdateSnapshot, onDeleteSnapshot }) {
+  // NO CARD COLOUR FOR LOANS. Five loan cards therefore look alike, which
+  // is the right trade: the Debt section collapses to one card by default,
+  // so you only ever see them all at once after choosing to, and each is
+  // labelled. Spending five hues on a list you opened on purpose buys
+  // nothing and makes the Dashboard louder.
+  const color = LOAN_LINE;
   const latest = progress.latest;
   const monthKey = today.slice(0, 7);
 
@@ -562,12 +575,10 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
   );
 }
 
-function SetupLoanCard({ category, isDark, onSetup }) {
-  const color = roleColor(roleOfTrackerCategory(category), isDark);
+function SetupLoanCard({ category, onSetup }) {
   return (
     <section className={`${CARD} border-dashed`}>
-      <div className={`${LABEL} flex items-center gap-1.5`}>
-        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+      <div className={LABEL}>
         <span className="truncate">{category.name}</span>
       </div>
       <p className="text-sm text-gray-500">
@@ -616,7 +627,7 @@ const DEBTS_PREF = "debts-expanded";
 const FAN_MS = 260;      // must match the duration classes below
 const STAGGER_MS = 45;   // per-card delay, so they fan rather than pop together
 
-function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog, onEditTerms, onEditLoanById, onUpdateSnapshot, onDeleteSnapshot }) {
+function DebtSection({ summary, debtCats, state, today, onAddLoan, onLog, onEditTerms, onEditLoanById, onUpdateSnapshot, onDeleteSnapshot }) {
   const [expanded, setExpanded] = useState(() => getDeviceFlag(DEBTS_PREF, false));
   // A grid item can't collapse to nothing without leaving a hole in the grid,
   // so the loan cards genuinely mount and unmount. `closing` keeps them
@@ -663,7 +674,7 @@ function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog
   return (
     <>
       {hasDebts && !visible ? (
-        <DebtOverviewCard summary={summary} isDark={isDark} onExpand={open} onAddLoan={addLoan} onEditLoan={onEditLoanById} />
+        <DebtOverviewCard summary={summary} onExpand={open} onAddLoan={addLoan} onEditLoan={onEditLoanById} />
       ) : (
         <AddLoanCard onAdd={onAddLoan} onCollapse={hasDebts ? close : undefined} />
       )}
@@ -674,7 +685,6 @@ function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog
             {isLoanConfigured(cat) ? (
               <LoanCard
                 category={cat}
-                isDark={isDark}
                 state={state}
                 today={today}
                 progress={computeLoanProgress(state, cat, today)}
@@ -685,7 +695,7 @@ function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog
                 onDeleteSnapshot={(id) => onDeleteSnapshot(cat.id, id)}
               />
             ) : (
-              <SetupLoanCard category={cat} isDark={isDark} onSetup={() => onEditTerms(cat)} />
+              <SetupLoanCard category={cat} onSetup={() => onEditTerms(cat)} />
             )}
           </FanIn>
         ))}
@@ -713,7 +723,7 @@ function FanIn({ shown, index, count, children }) {
 // The collapsed state: total owed, then every loan in a compact scrolling
 // list. The list scrolls rather than capping the count — "just show the first
 // five" would hide exactly the loan someone is looking for.
-function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan, onEditLoan }) {
+function DebtOverviewCard({ summary, onExpand, onAddLoan, onEditLoan }) {
   return (
     <section className={CARD}>
       <div className="flex items-start justify-between gap-3">
@@ -740,7 +750,6 @@ function DebtOverviewCard({ summary, isDark, onExpand, onAddLoan, onEditLoan }) 
                 className="w-full flex items-baseline justify-between gap-3 text-sm text-left rounded-md px-1 -mx-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <span className="flex items-baseline gap-1.5 min-w-0">
-                  <span className="h-1.5 w-1.5 rounded-full shrink-0 self-center" style={{ backgroundColor: roleColor("debt", isDark) }} />
                   <span className="truncate text-gray-700 dark:text-gray-300">{loan.name}</span>
                 </span>
                 <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">

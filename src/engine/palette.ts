@@ -1,24 +1,33 @@
-// ---- Colour by ROLE: what the money is doing ----
+// ---- Colour: brass for charts, cool hues for cards, red/green for direction
 //
-// Colour used to be a per-category choice from an 8-hue palette. Two things
-// were wrong with that, and the second is the serious one.
+// ROLE STILL EXISTS AND STILL MATTERS — it decides whether an amount is red
+// or plain, which categories can carry a cumulative column, how the Budget
+// groups its sections. What it no longer does is pick a HUE. Nothing in the
+// UI derives a colour from a role as of 2026-10-06.
 //
-// It wasn't eight hues. Measured all-pairs, Blue/Indigo separated by ΔE 1.3
-// under deuteranopia and Orange/Gold by 0.9 under protanopia — identical,
-// not tight. The palette was four hue families wearing eight names, and the
-// numbers only surfaced because nothing re-ran the check after it was set.
-// scripts/validate_palette.mjs is a CI gate now for exactly that reason.
+// Why the role palette came out. Seven hues across two modes is seven
+// things to learn before the app means anything, and a user who had lived
+// with it for three days still could not read the Ledger. The failure was
+// not the hues — they passed every all-pairs CVD check — it was asking
+// colour to carry a taxonomy at all. A chart that is one hue says "these
+// are shares of one total", which is the only thing a spending chart has to
+// say; the label beside each slice already says which share.
 //
-// And colour-as-choice answers the wrong question. A hue someone picked
-// says what a category is CALLED. What a reader scanning a chart needs is
-// what the money is DOING — is this a bill, a contribution, a loan payment.
-// So the hue is derived from the role and nobody picks it. Two consequences
-// worth stating: customisation goes away deliberately, and bills — most of
-// most people's outflow — stop being grey, which was backwards.
+// What colour does now, in three jobs that do not overlap:
 //
-// The six hues are Okabe-Ito, the published CVD-safe qualitative set, with
-// per-mode steps so each clears 3:1 against its own surface. Adopted rather
-// than hand-tuned: hand-tuning is what produced the 1.3.
+//   BRASS      charts and brand. One hue, ranked by size. The brand's own
+//              gold, so the chart reads as part of the app rather than as a
+//              visitor from a palette generator.
+//   COOL HUES  Dashboard account cards. DECORATION that helps scanning —
+//              five cards you can tell apart at a glance — and deliberately
+//              not meaning: the hue is assigned by card ORDER and says
+//              nothing about the account.
+//   RED/GREEN  direction, and nothing else. Green in, red out, plain for
+//              money that left the account without being spent.
+//
+// Every value here was measured on the real surfaces and is re-measured by
+// scripts/validate_palette.mjs in CI, which is a gate, not a script someone
+// remembers to run. Do not hand-edit a hex without re-running it.
 export type Role =
   | "income"
   | "bill"
@@ -28,59 +37,108 @@ export type Role =
   | "debt"
   | "uncategorized";
 
-/** Fixed order, so a chart's colours never depend on what else is in it. */
+/** Fixed order. Nothing paints from it any more; it is the order the
+ *  About page lists the roles in, and the order a role check iterates. */
 export const ROLE_ORDER: Role[] = ["income", "bill", "oneoff", "savings", "investment", "debt", "uncategorized"];
 
-// SEMANTIC FAMILIES CONSTRAIN HUE; the gate then optimises LIGHTNESS
-// inside that constraint. Order of operations, and it was wrong once:
-// hues were first picked without a semantic rule and the search was left
-// to separate them, which put bills at 255° and savings at 215° — the same
-// blue family for two things that are opposites (an obligation leaving vs
-// money you keep). Separable by measurement, wrong by meaning.
+// ---- Direction: the only place colour still carries meaning -------------
 //
-//   OUT   bill, one-off, debt      warm — money leaving
-//   KEEP  savings, investment      cool — money you hold
-//   IN    income                   green
-//   —     uncategorized            grey
+// Red is money GONE. A transfer to savings, a contribution to a brokerage
+// and a loan payment all leave the checking account, and none of them is
+// money gone — pricing them as expenses is the app telling you off for
+// saving. The Budget has worked this way since 2026-10-03; the Ledger was
+// still reddening them until 2026-10-06, so the two tabs disagreed about
+// the same $300 on the same day.
+export const RETAINED_ROLES: ReadonlyArray<Role> = ["savings", "investment", "debt"];
+
+/** True when an outflow is money KEPT — savings, an investment, a payment
+ *  against a loan. Such an amount is plain text, never red. */
+export function isRetainedOutflow(role: Role): boolean {
+  return RETAINED_ROLES.includes(role);
+}
+
+// ---- Charts: brass, one hue ---------------------------------------------
 //
-// Same-family pairs are now semantic SIBLINGS, so splitting them by
-// lightness reinforces the meaning instead of fighting it: two warms are
-// two kinds of money going out, two cools are two kinds you keep.
-export const SEMANTIC_FAMILY: Record<Role, "out" | "keep" | "in" | "none"> = {
-  bill: "out", oneoff: "out", debt: "out",
-  savings: "keep", investment: "keep",
-  income: "in", uncategorized: "none",
+// BY RANK, not by what the slice is. Biggest share gets the first step.
+//
+// The two modes run in OPPOSITE directions, and that is not a mistake: a
+// ramp has to travel AWAY from its surface or its first step disappears
+// into the background. On the dark card the lightest step is the most
+// visible, so dark runs light -> dark; on white it is the reverse.
+export const BRASS_RAMP: Record<"light" | "dark", readonly string[]> = {
+  dark:  ["#ffe294", "#edb345", "#cb882e", "#a7611b"],
+  light: ["#643500", "#804d00", "#9d6800", "#b78500"],
 };
 
-/** Hue in degrees, per role — the part that carries MEANING. */
-export const ROLE_HUE: Record<Role, number | null> = {
-  bill: 80, oneoff: 58, debt: 30, savings: 240, investment: 300, income: 150,
-  uncategorized: null, // grey has no hue, and that is the point
+/**
+ * FOUR STEPS IS THE WHOLE RAMP, and the PIE's slice count follows from it
+ * rather than the other way round. Measured ΔE2000 on the worst adjacent
+ * pair: seven steps of brass came out 4.1-4.5 — two neighbours a reader
+ * cannot separate — while four steps come out 8.1 light and 10.9 dark. So
+ * the pie is top four plus Other, trading slices for legibility.
+ *
+ * THIS IS THE PIE'S LIMIT ONLY. The engine folds at its own, larger cap
+ * (`compute.ts`), which is what the BAR renders — the bar is the full view,
+ * every row sits beside its own label and its own length, and one flat
+ * brass means it has no ramp to run out of. Cutting the bar to four rows
+ * as well would have removed the view you go to when the pie is too
+ * coarse, which is the only reason the coarse pie is acceptable.
+ */
+export const PIE_SLICES = 5; // 4 named + Other
+
+/** The bar is the FULL view and keeps every row, so it cannot use a ramp —
+ *  rank would be a lie past the fourth row. One brass, every named row. */
+export const BAR_COLOR: Record<"light" | "dark", string> = {
+  dark: "#edb345",
+  light: "#804d00",
 };
 
-// HUES ARE PICKED FROM THE RENDERED RESULT, not from the OKLCH number.
-// They are not the same thing and assuming they were produced a palette
-// described as "bills gold, savings blue" that actually rendered brown and
-// navy, with debt at OKLCH 20° coming out HSL 346° — lipstick, not red.
-// The mapping at L .55: ok 30 -> red, 58 -> orange, 80 -> amber,
-// 150 -> green, 240 -> blue, 300 -> purple. Check the output, not the input.
+/** Other, and anything else that is deliberately not identified: the same
+ *  grey in both modes (3.67:1 on the dark card, 4.83:1 on white). */
+export const NEUTRAL_CHART = "#6b7280";
+
+/** Pie fill for the slice at `rank` (0 = biggest). Other is grey wherever
+ *  it lands, including the rows it holds when it is expanded — they came
+ *  out of the tail and the tail is not ranked. */
+export function pieFill(rank: number, isOther: boolean, isDark: boolean): string {
+  if (isOther) return NEUTRAL_CHART;
+  const ramp = BRASS_RAMP[isDark ? "dark" : "light"];
+  return ramp[Math.min(Math.max(rank, 0), ramp.length - 1)]!;
+}
+
+/** Bar fill. Every named row is one brass; only Other differs. */
+export function barFill(isOther: boolean, isDark: boolean): string {
+  return isOther ? NEUTRAL_CHART : BAR_COLOR[isDark ? "dark" : "light"];
+}
+
+// ---- Dashboard cards: decoration, not meaning ---------------------------
 //
-// Lightness was then solved for by search, maximising the worst all-pairs
-// ΔE across normal/deutan/protan/tritan subject to a 3:1 contrast floor and
-// a per-role band that keeps each colour recognisably itself. Worst pair:
-// 11.2 light, 11.9 dark. Do not hand-edit — re-run the gate.
-export const ROLE_COLORS: Record<Role, { light: string; dark: string }> = {
-  income:        { light: "#006c2e", dark: "#48b467" },
-  bill:          { light: "#d87700", dark: "#ffc555" },
-  oneoff:        { light: "#7a3b00", dark: "#b85f00" },
-  debt:          { light: "#b62316", dark: "#e74b39" },
-  savings:       { light: "#005fc8", dark: "#009fff" },
-  investment:    { light: "#a661ff", dark: "#a659ff" },
-  // Grey on purpose and never promoted: the honest colour for "no
-  // category", immune to colour-vision deficiency, and still in the
-  // all-pairs check — it must differ from the six, not just the surface.
-  uncategorized: { light: "#6b7280", dark: "#9ca3af" },
+// Assigned by card ORDER, cycling. It tells you nothing about the account —
+// it is there so five cards on one screen are five distinguishable objects
+// and your eye can return to the one it was reading. The list alternates
+// light and dark steps so two neighbours never sit close.
+//
+// LOANS TAKE NO CARD COLOUR: grey line, no dot. Five loan cards therefore
+// look alike, which is acceptable because the Debt section collapses to a
+// single card by default and every card inside it is labelled — the colour
+// would be decorating a list you have to open on purpose.
+export const CARD_COLORS: Record<"light" | "dark", readonly string[]> = {
+  dark:  ["#8bd4ff", "#8f68cc", "#a1b3c7", "#009393", "#86a6ff"],
+  light: ["#0085b9", "#512685", "#58697b", "#004d4d", "#3e5ab7"],
 };
+
+export function cardColor(index: number, isDark: boolean): string {
+  const set = CARD_COLORS[isDark ? "dark" : "light"];
+  return set[((index % set.length) + set.length) % set.length]!;
+}
+
+/** The checking account and every loan: no hue. Checking has been neutral
+ *  since the card was built (cash has no category), and loans join it. */
+export const NEUTRAL_LINE: Record<"light" | "dark", string> = {
+  light: "#111827",
+  dark: "#e5e7eb",
+};
+export const LOAN_LINE = NEUTRAL_CHART;
 
 /** Human-readable role names. A role system needs its mapping VISIBLE —
  *  otherwise it is a private language only the code understands. */
@@ -108,10 +166,6 @@ export function roleSuffix(name: string, role: Role): string | null {
   return fold(name) === fold(ROLE_LABEL[role]) ? null : ROLE_LABEL[role];
 }
 
-export function roleColor(role: Role, isDark: boolean): string {
-  return ROLE_COLORS[role][isDark ? "dark" : "light"];
-}
-
 /**
  * An asset category is cash you control or value the market moves, and only
  * the user knows which. NEVER inferred from the name: an HSA reads like
@@ -126,33 +180,6 @@ export function roleColor(role: Role, isDark: boolean): string {
 export type AssetKind = "savings" | "investment";
 export function assetRole(assetKind: AssetKind | null | undefined): Role {
   return assetKind === "savings" ? "savings" : "investment";
-}
-
-// ---- Shades within a role ----
-// Pie only. In a bar chart every row sits beside its own label and its own
-// bar length, so a shade there is decoration; in a pie the shade is what
-// links a wedge to its legend entry.
-//
-// CAPPED AND FLOORED, which the old ramp was not: TINT_RANGE 0.55 split
-// across ten siblings produced steps far below any usable separation, and
-// five of eight rows came out as the same grey-blue. Four steps is what a
-// single hue can carry at ΔE >= 8; past that the tail folds.
-export const MAX_SHADES = 4;
-const SHADE_SPAN = 0.62;
-const SHADE_TARGET = { light: "#0b1220", dark: "#f8fafc" };
-
-export function roleShade(role: Role, index: number, count: number, isDark: boolean): string {
-  const base = roleColor(role, isDark);
-  if (count <= 1 || index <= 0) return base;
-  const steps = Math.min(count, MAX_SHADES);
-  const t = (Math.min(index, steps - 1) / (steps - 1)) * SHADE_SPAN;
-  return mixHex(base, SHADE_TARGET[isDark ? "dark" : "light"], t);
-}
-
-function mixHex(hex: string, target: string, t: number): string {
-  const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
-  const c = [0, 1, 2].map((i) => Math.round(p(hex, i) + (p(target, i) - p(hex, i)) * t));
-  return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
 }
 
 // ---- Resolving a role ----------------------------------------------------
@@ -178,23 +205,4 @@ export function roleOfCategory(
 /** The role of a tracker category you already hold — no list lookup. */
 export function roleOfTrackerCategory(cat: { kind: "asset" | "debt"; assetKind?: AssetKind }): Role {
   return cat.kind === "debt" ? "debt" : assetRole(cat.assetKind);
-}
-
-/**
- * Shade index within a role, assigned across everything sharing that role
- * in one chart. This has to span CATEGORIES, not just items: four
- * investments, or five student loans, now share a hue by design, and
- * telling them apart in a pie is exactly what the shades are for.
- */
-export function assignShades<T extends { role: Role; shade?: number; shadeCount?: number }>(slices: T[]): T[] {
-  const counts = new Map<Role, number>();
-  for (const s of slices) counts.set(s.role, (counts.get(s.role) ?? 0) + 1);
-  const seen = new Map<Role, number>();
-  for (const s of slices) {
-    const n = seen.get(s.role) ?? 0;
-    seen.set(s.role, n + 1);
-    s.shade = n;
-    s.shadeCount = counts.get(s.role) ?? 1;
-  }
-  return slices;
 }

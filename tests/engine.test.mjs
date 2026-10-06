@@ -1,5 +1,5 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
-import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay } from "../src/engine/compute.ts";
+import { computeLedger, computeBudget, computeSpendingByCategory, foldForPie, groupByDay } from "../src/engine/compute.ts";
 import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys, activeMonthKeys, fixedSoFar } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
@@ -1452,18 +1452,20 @@ eq("a logged monthly actual changes nothing — this is the forecast",
 
 // Labels and colour routing.
 const rothSlice = mixAL.slices.find((s) => s.key === "rothcat");
-eq("a tracker category carries its name and its ROLE, not a palette index",
-  [rothSlice.label, rothSlice.color, rothSlice.bucket, rothSlice.role], ["Roth", null, "category", "investment"]);
+eq("a tracker category carries its name and its ROLE",
+  [rothSlice.label, rothSlice.bucket, rothSlice.role], ["Roth", "category", "investment"]);
 const items = mixAL.slices.filter((s) => s.bucket === "item");
-eq("item slices carry no palette index (they get neutral steps)", items.map((s) => s.color), [null, null, null]);
+// Role is no longer a colour (2026-10-06) — it is what decides whether the
+// amount beside the slice prints red. The slice carries no colour at all;
+// the view paints brass by RANK, which is the slice's index.
+eq("a slice carries no colour of its own",
+  [...items, rothSlice].every((s) => !("color" in s) && !("shade" in s)), true);
 eq("each names the bucket it came from, so it can't pass as a category",
   items.map((s) => s.parentLabel).sort(), ["Fixed bills", "Fixed bills", "One-off"]);
 eq("and names that bucket's kind, so the two ramps can differ",
   [...new Set(items.map((s) => s.parentBucket))].sort(), ["bill", "oneoff"]);
-eq("shade steps are counted PER parent, not across the whole chart",
-  items.filter((s) => s.parentBucket === "bill").map((s) => [s.shade, s.shadeCount]), [[0, 2], [1, 2]]);
-eq("a lone one-off is its own one-step ramp",
-  items.filter((s) => s.parentBucket === "oneoff").map((s) => [s.shade, s.shadeCount]), [[0, 1]]);
+check("slices come back biggest-first, so index IS rank",
+  mixAL.slices.every((s, i) => i === 0 || mixAL.slices[i - 1].amount >= s.amount) ? 1 : 0, 1);
 eq("a tracker category is never broken out, whatever its share",
   mixAL.slices.filter((s) => s.key === "rothcat").map((s) => s.bucket), ["category"]);
 
@@ -1480,7 +1482,8 @@ eq("Uncategorized stays whole — it is not a default bucket, it is a backlog",
   orphanMix.slices.filter((s) => s.parentBucket === undefined && s.bucket === "uncategorized").length, 1);
 check("the total is unchanged by the delete", orphanMix.total, mixAL.total);
 
-// Beyond 8 slices the tail folds rather than inventing a 9th hue.
+// The ENGINE folds at 8 — that is the bar's row count. The PIE folds
+// again, to four plus Other, because four is the brass ramp's reach.
 const manyAL = normalize({
   settings: { checkInBalance: 9000, checkInDate: "2026-09-01", budgetHorizon: "2026-10-01", ledgerHorizon: "2026-09-30" },
   recurring: Array.from({ length: 11 }, (_, i) => ({
@@ -1491,9 +1494,17 @@ const manyAL = normalize({
   trackerCategories: Array.from({ length: 11 }, (_, i) => ({ id: `cat${i}`, name: `Cat ${i}`, color: i % 8, order: i, kind: "asset" })),
 });
 const manyMix = computeSpendingByCategory(manyAL, "2026-09-30");
-check("never more than 8 slices", manyMix.slices.length, 8);
+check("never more than 8 slices from the engine", manyMix.slices.length, 8);
 eq("the last one is the folded Other", manyMix.slices[7].bucket, "other");
 eq("Other names how many it folded", manyMix.slices[7].label, "Other (4)");
+const manyPie = foldForPie(manyMix.slices);
+check("the pie folds again, to 4 named plus Other", manyPie.length, 5);
+eq("...and its Other is FLAT — the engine's Other is unpacked, not nested",
+  [manyPie[4].label, manyPie[4].children.every((c) => c.bucket !== "other")], ["Other (7)", true]);
+check("...losing no money on the way", round2(manyPie.reduce((t, s) => t + s.amount, 0)), manyMix.total);
+check("...and no percent either", round2(manyPie.reduce((t, s) => t + s.percent, 0)), 100);
+eq("a chart small enough to need no second fold is returned untouched",
+  foldForPie(mixAL.slices).length, mixAL.slices.length);
 check("folding loses no money", manyMix.slices.reduce((t, s) => t + s.amount, 0), manyMix.total);
 
 // Empty case.
@@ -1551,9 +1562,9 @@ const loanHeavy = computeSpendingByCategory(normalize({
 }), "2026-09-30");
 eq("a tracker category at 93% is still one slice",
   loanHeavy.slices.map((s) => [s.label, s.bucket]), [["Student Loan AA", "category"], ["Rent", "item"]]);
-eq("...and carrying its ROLE, which is what colours it now", loanHeavy.slices[0].role, "debt");
+eq("...and carrying its ROLE, which is what keeps its amount out of red", loanHeavy.slices[0].role, "debt");
 
-// The 8-slice fold still applies after breaking out, and still loses nothing.
+// The fold still applies after breaking out, and still loses nothing.
 const manyItems = computeSpendingByCategory(normalize({
   settings: { checkInBalance: 9000, checkInDate: "2026-09-01", budgetHorizon: "2026-10-01", ledgerHorizon: "2026-09-30" },
   recurring: Array.from({ length: 12 }, (_, i) => ({
@@ -1573,8 +1584,8 @@ const other = manyItems.slices[7];
 check("Other carries the slices it folded", other.children.length, 5);
 check("...which sum to exactly what it shows",
   round2(other.children.reduce((t, c) => t + c.amount, 0)), other.amount);
-eq("...keeping the colours they already had — nothing new is allocated",
-  other.children.every((c) => c.color === null && c.bucket === "item"), true);
+eq("...which stay item slices, carrying no colour of their own",
+  other.children.every((c) => c.bucket === "item" && !("color" in c)), true);
 eq("...and their own labels, so an opened row still says what it is",
   other.children.map((c) => c.label), ["Bill 7", "Bill 8", "Bill 9", "Bill 10", "Bill 11"]);
 eq("children are sorted with the rest, biggest first",

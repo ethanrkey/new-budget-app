@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { groupByMonth, computeSpendingByCategory } from "../engine/compute.ts";
 import { todayISO, ledgerHorizonOf, LEDGER_MAX_MONTHS } from "../engine/model.ts";
-import { roleColor, roleOfCategory, roleOfTrackerCategory } from "../engine/palette.ts";
+import { roleOfCategory, isRetainedOutflow } from "../engine/palette.ts";
 import HorizonSlider from "./HorizonSlider.jsx";
 import InfoTip from "./InfoTip.jsx";
 import SpendingMix from "./SpendingMix.jsx";
@@ -151,7 +151,6 @@ export default function LedgerView({
         <CalendarView
           ledger={ledger}
           trackerCategories={trackerCategories}
-          isDark={isDark}
           onEditItem={onEditItem}
         />
       ) : (
@@ -189,7 +188,6 @@ export default function LedgerView({
                         onChange={() => toggleColumnVisible(c.id)}
                         className="h-4 w-4"
                       />
-                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: roleColor(roleOfTrackerCategory(c), isDark) }} />
                       <span className="truncate">{c.name}</span>
                     </label>
                   ))
@@ -230,7 +228,7 @@ export default function LedgerView({
                 <th
                   key={c.id}
                   className={`py-2 font-medium text-right slide-col ${visibleIds.has(c.id) ? "open" : ""}`}
-                  style={{ color: roleColor(roleOfTrackerCategory(c), isDark), ...colVars(c.name) }}
+                  style={colVars(c.name)}
                 >
                   {c.name}
                 </th>
@@ -245,7 +243,6 @@ export default function LedgerView({
                 group={g}
                 sortedCats={sortedCats}
                 visibleIds={visibleIds}
-                isDark={isDark}
                 colCount={colCount}
                 selectMode={selectMode}
                 selected={selected}
@@ -282,7 +279,7 @@ export default function LedgerView({
   );
 }
 
-function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, selectMode, selected, onToggleSelected, onEdit, onDelete }) {
+function FragmentGroup({ group, sortedCats, visibleIds, colCount, selectMode, selected, onToggleSelected, onEdit, onDelete }) {
   return (
     <>
       <tr className="bg-gray-50 dark:bg-gray-850">
@@ -292,14 +289,12 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
       </tr>
       {group.rows.map((r) => {
         const itemId = baseId(r.id);
-        // A ROLE DOT, not a coloured name. The Ledger was the one surface
-        // the colour system never reached, which made it the one surface
-        // where you had to read every row to find the rent — and the
-        // earlier reasoning for leaving it out ("a third colour system on
-        // the same line is noise") was an argument against colouring the
-        // TEXT, which is a different thing. The Budget settled the shape
-        // already: a 2px dot before the label, same treatment here.
-        const dotColor = roleColor(roleOfCategory(r.category, sortedCats), isDark);
+        // Role no longer picks a colour — it picks whether the amount is
+        // red. A transfer to savings, a contribution and a loan payment all
+        // leave the account and none of them is money gone, so they print
+        // plain. The Budget has done this since 2026-10-03 and the Ledger
+        // reddened the same $300 until 2026-10-06; one rule, one place.
+        const retained = r.direction === "out" && isRetainedOutflow(roleOfCategory(r.category, sortedCats));
         return (
           <tr
             key={r.id}
@@ -319,14 +314,9 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               {dayOf(r.date)}
             </td>
             <td className="py-2 sm:py-1.5 pr-3">
-              <span
-                className="inline-block h-2 w-2 rounded-full shrink-0 mr-1.5 align-middle"
-                style={{ backgroundColor: dotColor }}
-                aria-hidden="true"
-              />
               <button
                 onClick={() => onEdit(r.id)}
-                className="text-left hover:underline decoration-dotted underline-offset-2 align-middle"
+                className="text-left hover:underline decoration-dotted underline-offset-2"
                 title="Edit"
               >
                 {r.name}
@@ -341,7 +331,7 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
             <td className="py-2 sm:py-1.5 pr-3 text-right text-income">
               {r.direction === "in" ? money(r.amount) : ""}
             </td>
-            <td className="py-2 sm:py-1.5 pr-3 text-right text-expense">
+            <td className={`py-2 sm:py-1.5 pr-3 text-right ${retained ? "" : "text-expense"}`}>
               {r.direction === "out" ? money(r.amount) : ""}
             </td>
             <td className={`py-2 sm:py-1.5 pr-3 text-right font-medium ${r.negative ? "text-expense" : ""}`}>
@@ -351,7 +341,7 @@ function FragmentGroup({ group, sortedCats, visibleIds, isDark, colCount, select
               <td
                 key={c.id}
                 className={`py-2 sm:py-1.5 text-right slide-col ${visibleIds.has(c.id) ? "open" : ""}`}
-                style={{ color: roleColor(roleOfTrackerCategory(c), isDark), ...colVars(c.name) }}
+                style={colVars(c.name)}
               >
                 {stepCell(r, c.id)}
               </td>

@@ -544,86 +544,104 @@ Conventions worth knowing before touching numbers:
   (`devicePrefs.js`: `hero-collapsed`, `debts-expanded`) live in
   localStorage. They never sync, never conflict between devices, and never
   count as a change worth writing to Supabase.
-- **Colour encodes what the money is DOING, not what it is called**
-  (2026-10-03, `engine/palette.ts`). Seven roles — income, bill, one-off,
-  savings, investment, debt, uncategorized — and the hue is derived. Nobody
-  picks a colour: a hue someone chose says what a category is *named*, and
-  a reader scanning a chart needs to know what the money is *doing*.
-  Customisation is gone deliberately, and bills — most of most people's
-  outflow — stop being grey, which was backwards.
+- **Colour does three jobs and they do not overlap** (2026-10-06,
+  `engine/palette.ts`). This REPLACES the role palette of 2026-10-03, which
+  derived a hue from what the money was doing. Roles still exist and still
+  decide things — red versus plain, which categories can carry a cumulative
+  column, how the Budget sections — but **nothing derives a hue from a role
+  any more.**
 
-  **Hues carry meaning; LIGHTNESS carries separation.** This is the finding
-  worth keeping. Under deuteranopia and protanopia the colour wheel
-  collapses onto roughly one axis, so two hues from the same family — two
-  blues, two oranges — have *nothing but lightness* left to tell them
-  apart. The retired palette's Blue/Indigo pair measured ΔE **1.3** under
-  deutan and Orange/Gold **0.9** under protan: identical, not tight, and
-  worse than anything the spec previously recorded. So hues are now fixed
-  for meaning and lightness is SOLVED FOR, by search, maximising the worst
-  all-pairs ΔE subject to a 3:1 contrast floor per surface. Worst pair
-  across normal, deutan, protan and tritan: **11.6 light, 12.8 dark**.
+  | Job | Colour | Means something? |
+  |---|---|---|
+  | Charts and brand | brass, one hue | no — rank, in the pie only |
+  | Dashboard account cards | five cool hues by card POSITION | **no** — decoration that helps scanning |
+  | Direction | green in, red out, plain for money kept | **yes**, and it is the only one |
 
-  **`scripts/validate_palette.mjs` runs in `npm test`, so CI runs it.** The
-  1.3 survived for months because the check was a script nobody re-ran
-  after the palette changed — a validated palette is a property of the
-  process, not of the colours. It earned itself immediately: the first
-  hand-picked role hues failed nine checks, including one-off/debt at
-  **0.7** under deutan. Do not hand-edit a value in `ROLE_COLORS` without
-  re-running it.
+  **Why the role palette came out, when it passed every check it was given.**
+  It did pass: seven hues, all-pairs ΔE across four vision types, a CI gate.
+  The failure was upstream of the numbers — asking colour to carry a
+  TAXONOMY at all. Seven hues is seven things to learn before the app means
+  anything, and three days in, the person who commissioned it still could
+  not read the Ledger. A chart in one hue says "these are shares of one
+  total", which is the only claim a spending chart has to make; the label
+  beside each slice already says which share. Note the shape of this one for
+  later: a system can be internally correct and still be the wrong system,
+  and no amount of validating the hues would ever have surfaced it.
 
-  Shades within a role are capped at 4 and spanned wide, **pie only**. In a
-  bar every row sits beside its own label and its own bar length, so a
-  shade there is decoration — and ten decorative shades off one hue is
-  exactly how five of eight rows came out the same grey-blue. Shades span
-  CATEGORIES sharing a role, not just items: four investments and five
-  loans now share a hue by design, and the shade is what tells them apart.
+  **THE PIE IS TOP FOUR PLUS OTHER, and that is a trade made on purpose.**
+  Brass holds four distinguishable steps: measured ΔE2000 on the worst
+  adjacent pair, seven steps came out 4.1–4.5 and four steps 8.1–10.9. On
+  the author's own data that folds Groceries, Gas and Discover Bill into
+  Other — a real loss of detail in the pie, accepted because four wedges
+  you can tell apart beat seven you cannot. Bills and one-offs still break
+  out by item, and Other still opens in the legend.
 
-- **Where colour appears at all.** On surfaces where you scan ACROSS kinds:
-  dashboard cards, chart slices, ledger savings-column headers, calendar
-  dots, budget saving/debt clusters, loan progress bars. NOT on the hero,
-  section headers, chrome, or the tab bar, and not on ledger row names — a
-  row is read down a column of names, and the amount beside it already
-  carries direction in red/green. **Red/green on amounts is a separate
-  system: that is direction, not kind**, and the two must not be read as
-  one.
+  **TWO FOLDS, NOT ONE, and getting this wrong was caught by looking at
+  the rendered bar rather than the diff.** The engine folds at 8, which is
+  the BAR's row count and is unchanged — the bar is the full view, every
+  row sits beside its own label and its own length, and one flat brass has
+  no ramp to run out of. The pie folds AGAIN, in the view (`foldForPie`),
+  to four plus Other. Moving the single cap to 5 would have cut the bar to
+  four rows as well, removing the view you turn to when the pie is too
+  coarse — which is the only reason a coarse pie is acceptable. A chart
+  toggle must change how much is DRAWN, never the data. `foldForPie`
+  flattens any Other it is handed rather than nesting, so `children` is
+  always one level deep and "Other (n)" counts real slices.
+
+  **Card colour is decoration, stated as such.** Assigned by card order,
+  cycling, alternating light and dark steps so neighbours never sit close.
+  It says nothing about the account. Loans take NO card colour — grey line,
+  no dot — so five loan cards look alike; acceptable because the Debt
+  section collapses to one card by default and each card inside is
+  labelled. Checking has never had a hue and still does not.
+
+  **Red is money GONE.** A transfer to savings, a contribution and a loan
+  payment all leave the checking account and none of them is money gone, so
+  they print plain. `isRetainedOutflow` is the one place that rule lives.
+
+  **The gate decides which colours carry a CVD floor, and it is not all of
+  them.** The old gate held everything to one because everything meant
+  something. Now: the brass ramp is one hue separated by LIGHTNESS, the one
+  channel no dichromacy touches, so it is gated on normal-vision ΔE2000
+  plus strictly monotonic L* — simulating a dichromat compresses chroma and
+  drags ΔE down (the light ramp reads 9.1 normal, 6.7 tritan) while the
+  steps stay perfectly ordered. Card colour is decoration, so two cards a
+  deuteranope reads alike lose a scanning aid and mislead nobody; gated on
+  normal-vision separation and contrast, with the CVD numbers printed but
+  not enforced. Direction is the only meaning-bearing colour left, and it
+  survives red/green blindness because it never stands alone — the sign,
+  the column and the label all repeat it. Every number is in ΔE2000, not
+  OKLab ×100, so it is the figure everyone else quotes.
+
+  Measured 2026-10-06, normal vision: brass ramp worst adjacent 12.6 dark /
+  9.1 light; card set worst of ALL pairs 10.7 dark / 10.8 light; lowest
+  contrast 3.16:1. Under CVD the worst card pair is 2.3 (light sky/indigo,
+  deutan) — recorded here so that if card colour ever starts meaning
+  something, it is already known that this set could not carry it.
+
+- **Where colour appears at all.** Chart marks, the Dashboard's account
+  lines and their label dot, and amounts (red/green). NOT on the hero,
+  section headers, chrome, the tab bar, ledger row names, ledger column
+  headers, calendar dots, the category manager, or the Budget's rows —
+  every one of those carried a role hue until 2026-10-06 and none of them
+  needed one.
 
 - **RULE: any view that orders categories by value must not rest identity on
   colour alone.** The relief is inline labels — the category's name next to
-  its mark, not only in a legend.
-
-  Why this is a rule and not a note about one chart: the 8-colour palette
-  passes the validator on ADJACENT pairs (how it was originally checked —
-  worst ΔE 8.7 deutan) but FAILS on all pairs (Cyan↔Teal 6.9 normal-vision,
-  Pink↔Teal 3.8 deutan, measured 2026-09-28). Everywhere the app renders
-  categories in a FIXED order — the Ledger's columns, the Budget's clusters,
-  Settings → Categories, the Dashboard's cards — only neighbours are ever
-  compared, so adjacent-pair validation is the right standard and the palette
-  meets it. The moment a view sorts by amount, rank, or anything data-driven,
-  any two categories can land side by side and the all-pairs numbers are what
-  apply. That covers the spending pie and bar, and equally a ranked list, a
-  sorted table, a treemap, or a heat map — anything built later that orders by
-  value.
-
-  Re-stepping the palette is NOT the fix: the colours are stored as indices on
-  the user's own categories, so changing them repaints categories people have
-  already chosen and named. Carry the relief in the view instead.
+  its mark, not only in a legend. With one hue in the charts this is no
+  longer a near miss to be managed but the load-bearing mechanism: the pie's
+  ramp says rank and nothing else, so the label IS the identity.
 
   A related case, same rule: a mark too small to hold a label (a dot, a
   sparkline point) must not be the only place a fact is stated. Such a mark
   may indicate presence or density, but the identity behind it has to be
   reachable as text — a tooltip, a detail panel, an adjacent list. The
-  calendar's day dots are the worked example: each carries a title/aria-label
-  naming its category, item and amount, and the day detail lists every
-  transaction with its category spelled out in words. The dot claims only
-  "something happened here".
+  calendar's day dots are the worked example, and since 2026-10-06 they are
+  honest about it: they are secondary-text grey and claim only "something
+  happened here", with each carrying a title naming its category, item and
+  amount, and the day detail listing every transaction in words.
 
-  **The two fixed buckets are NEUTRAL on purpose.** Slices for the user's own
-  categories take their role's colour (`roleColor`/`roleShade`); Fixed bills,
-  One-off, Uncategorized and Other use grey steps. A 9th and 10th hue would break the categorical colour rules
-  outright, and grey is immune to colour-vision deficiency, which is the right
-  property for "you never named this" — it also lets the user's own colours
-  dominate.
-- **Colors are inline styles** (`roleColor(role, isDark)`), never
+- **Colors are inline styles** (`pieFill`, `barFill`, `cardColor`), never
   runtime-built Tailwind class names — the JIT scanner can't see those.
 - **A logged actual never changes a forecast number.** It is kept for the
   Spending tab's comparison and nothing else. (This bullet used to contrast
@@ -699,8 +717,10 @@ fifth tab never needs a migration.
   the rule back restores them. Remapping into the new day was rejected — it
   guesses at intent and has no meaning at all for weekly or biweekly rules.
 
-  Every row carries a **role dot** before its name, the Budget's treatment
-  exactly (2px, before the label). The **Cumulative columns** picker offers
+  Rows carry no mark of their own: the role dot added 2026-10-05 came out
+  again on 2026-10-06 with the rest of the role palette, and the column
+  headers lost their hue at the same time. What role still decides on this
+  tab is whether the Out amount is red. The **Cumulative columns** picker offers
   only categories this window actually steps, plus any already switched on
   — see the decision log. It sits directly above the table rather than in
   the toolbar: it is list-only and does nothing to the Planned spending panel,
@@ -779,16 +799,16 @@ fifth tab never needs a migration.
   problem), as was a tooltip listing the contents (tooltips do not exist on
   touch, and this app is used on a phone daily).
 
-  Two consequences for the view. Item slices are rendered as tints of their
-  parent's colour, not fresh palette hues — a 9th hue would collide with a
-  real category sitting in the same chart, and would lend a single
-  transaction a category's identity. Steps run AWAY from the surface (darker
-  on light, lighter on dark) so the quietest step still holds ≥4.7:1, and
-  bills tint off a cool grey while one-offs tint off a warm one, because
-  both fixed buckets are always present at once and two ramps struck off the
-  same slate overlapped. Because the tints are steps of one hue, the colour
-  rule above applies at its strictest: every item slice carries its parent's
-  name inline ("Rent · Fixed bills") in the legend, the bars and the tooltip.
+  Colour in this panel is brass and nothing else (2026-10-06). The PIE
+  ramps by RANK over four wedges plus a grey Other; the BAR gives every
+  named row the same brass, because the bar keeps every row and a ramp
+  would start lying at the fifth. The ramp runs AWAY from the surface in
+  each mode — light steps on the dark card, dark steps on the white one —
+  which is why the two arrays run in opposite directions. Item slices are
+  no longer tints of anything, so the colour rule applies at its strictest:
+  every item slice carries its parent's name inline ("Rent · Fixed bills")
+  in the legend, the bars and the tooltip, because that label is now the
+  only thing distinguishing it.
 
   A cumulative column opens to fit its own category name (`colVars` in
   LedgerView drives `--col-w`): the column is `nowrap` + `overflow:hidden` so
@@ -1231,53 +1251,29 @@ Later, in rough order:
    `App.jsx` stays out; the runtime enum guard covers it instead.
 4. **The nine audit findings** from 2026-09-24 remain parked, minus the
    two that mark-paid's deletion closed (#1 and #6).
-5. **Light-mode pie shades** run close to navy at the fourth step. One
-   constant (`SHADE_SPAN`) if it reads as "selected" rather than "a bill".
+5. ~~**Light-mode pie shades** run close to navy at the fourth step.~~
+   **CLOSED 2026-10-06, superseded.** There are no role shades: the pie is
+   a four-step brass ramp, gated on adjacent ΔE2000 and on monotonic
+   lightness. Nothing in it can run near navy.
 6. **Tombstone retention / purge job.** 90 days is documented but no
    purge is scheduled; the rows accumulate. Read-only offline means the
    window only has to outlive online devices refetching, so this is
    housekeeping, not correctness.
-7. **The Ledger still prints saving and debt amounts in red**, while the
-   Budget deliberately does not (see the decision below). Same money,
-   same app, two answers. Weaker than it was now that every row carries a
-   role dot — the dot says what the money IS and the red says which way it
-   MOVES, which is a defensible division of labour rather than a
-   contradiction — so this is now a judgement call to look at with fresh
-   eyes rather than a defect to fix. Read the Ledger for a week first.
-8. **Colour customisation: considered 2026-10-05, deliberately not
-   built, with a test for when to revisit.** The question was whether
-   per-category recolour should return, or whether the user should pick
-   which HUE each role gets while the roles stay fixed.
-
-   **Per-category recolour does not come back.** It is the thing that
-   broke: eight arbitrary hues assigned per category is how five of
-   eight rows ended up near-identical grey-blue, and it destroys the one
-   property that makes the system learnable — the same kind of money is
-   the same colour everywhere. The real need underneath it ("I cannot
-   tell my three investments apart") is within-role separation, which
-   shades already solve in the pie, and which labelled, spatially
-   separate Dashboard cards do not have.
-
-   **Role hue schemes are the right shape if anything ever ships.**
-   A few pre-validated schemes, never a free picker, each a complete
-   7-role light/dark mapping, each run through `validate_palette.mjs` in
-   CI — extend the existing loop over schemes and the gate covers them
-   all. Account-level (`settings`), not per-device: this is about how
-   the person reads money, not about the screen they are on. Known
-   costs: every hardcoded hex outside `palette.ts` (the brass wordmark,
-   `text-income`/`text-expense`) must be audited or deliberately
-   exempted, and the fixture pins the default so the screenshots stay
-   stable.
-
-   **The test for whether to build it.** The recurring complaint is not
-   really "wrong hue", it is "I cannot read the Ledger" — and until
-   2026-10-05 the Ledger was the one surface the colour system never
-   reached at all. The dots landed that day. If the itch survives a week
-   of them, it is genuinely about hue and the schemes are worth it. If
-   it goes quiet, a scheme picker would have been a settings screen
-   solving a problem that had already been solved. Before schemes, try
-   the one-line version first: re-pick the investment violet alone,
-   which has now been flagged twice.
+7. ~~**The Ledger still prints saving and debt amounts in red**, while the
+   Budget deliberately does not.~~ **CLOSED 2026-10-06.** Both tabs now ask
+   `isRetainedOutflow` — one function, one rule, and the phone calls it
+   too. Red means money gone; a transfer to savings, a contribution and a
+   loan payment print plain.
+8. ~~**Colour customisation / role hue schemes.**~~ **RETIRED 2026-10-06,
+   moot.** The question was whether per-category recolour should return or
+   whether the user should pick each ROLE's hue. Neither survives the
+   rework: roles no longer have hues to pick. What is left to customise is
+   one brass ramp and five decorative card colours, and a scheme picker for
+   decoration is a settings screen that buys nothing. Worth keeping from
+   that entry, because it turned out to be the right instinct pointing at
+   the wrong fix: the complaint read as "wrong hue" and was actually "this
+   tab is unreadable", and the answer was fewer colours rather than
+   different ones.
 
 9. **Retired palette machinery still exported from the engine.**
    `CATEGORY_PALETTE`, `paletteColor` and the `PaletteIndex` type survive
@@ -1606,10 +1602,10 @@ Further out:
 
 - **Budget: direction owns the amounts, role owns a dot** (2026-10-03).
   Role colour used to override the red/green on every saving/debt cell,
-  putting two colour systems in the same text — the same mistake that took
-  colour off ledger row names. The amounts are direction only; the role
-  shows as a dot beside the row label, where you are scanning across kinds
-  rather than reading a number. One signal per element.
+  putting two colour systems in the same text. The amounts are direction
+  only. (The dot this entry originally moved the role onto is gone too —
+  2026-10-06 — and the rule survives it: one signal per element, and on
+  these cells the signal is direction.)
 - **The extras step: both fields labelled, no row silently dropped**
   (2026-10-03). `collectAccounts` filtered on a non-empty NAME, so a row
   with an amount and a blank name vanished without a word. A real user hit
@@ -1772,16 +1768,16 @@ Further out:
   one: the general rule was right and its most common instance was the
   exception.
 
-- **The Ledger gets role dots, and the old reasoning was answering a
-  different question** (2026-10-05). The Ledger was the only surface the
-  colour system never reached, which made it the one surface where finding
-  the rent meant reading every row. The note that used to sit in that file
-  argued that "row names are NOT coloured... a third colour system on the
-  same line is noise" — and that is right, about colouring the TEXT, which
-  is not what was being asked for. A 2px dot before the label is a fourth
-  thing on the line only in the sense that a bullet is: it is scanned, not
-  read. The Budget had already settled the shape, so this is the Budget's
-  treatment ported, not a new idea.
+- ~~**The Ledger gets role dots.**~~ **REVERSED after one day**
+  (added 2026-10-05, removed 2026-10-06), and the reversal is the useful
+  part. The dots were the right answer to the question asked — the Ledger
+  was the one surface the colour system never reached — and the question
+  was wrong. The tab was not unreadable for want of colour; it was
+  unreadable because seven hues meant seven things to learn, and adding an
+  eighth surface to learn them on made the system bigger, not clearer. A
+  day of living with it is what showed that, which is the argument for
+  shipping a small change and waiting rather than reasoning about it
+  longer.
 
 - **The Cumulative columns picker offers only what this window steps**
   (2026-10-05). It listed every category you own, which on an account with
@@ -1798,6 +1794,56 @@ Further out:
   OPEN, leaving an empty column and no control to close it. A filter that
   can hide the only way to undo its own effect is a trap, not a tidy-up.
   The count of what was left out is stated rather than silently dropped.
+
+- **A system can be internally correct and still be the wrong system**
+  (2026-10-06, the colour rework). The role palette passed everything it
+  was ever asked: seven hues, all-pairs ΔE across four vision types, a
+  3:1 contrast floor per surface, a CI gate that had already caught nine
+  bad candidates. Every measurement said it was good. Three days in, the
+  person it was built for still could not read the Ledger.
+
+  The error was a level above the numbers. Colour was being asked to
+  carry a TAXONOMY — seven categories of money, each a hue — and a
+  taxonomy in colour is a key you have to memorise before the app means
+  anything. No amount of validating the hues could have surfaced that,
+  because the hues were not the problem; the job they had been given was.
+  Worth remembering the next time a check suite is green and the thing
+  still does not work: ask what the check cannot see.
+
+  What replaced it is smaller in every direction. One hue for charts, so
+  a chart says "shares of one total" and the labels say which. Five
+  decorative hues on the Dashboard, explicitly meaning nothing. Red and
+  green for direction, which is the one place colour was always pulling
+  its weight. The validator shrank with it, and that is a feature: the
+  old gate's all-pairs CVD rule existed because hue meant something, and
+  keeping it on decoration would have been importing a constraint from a
+  system that no longer exists.
+
+- **Deciding which colours a CVD floor applies to** (2026-10-06). Not all
+  of them, which took some care to justify rather than assume.
+
+  A LIGHTNESS RAMP does not need one. Simulating a dichromat compresses
+  chroma, which drags ΔE2000 down even when the steps stay in order — the
+  light brass ramp measures 9.1 under normal vision and 6.7 under tritan
+  while reading as four clean steps to anyone. L* is untouched by every
+  dichromacy, so the property to gate is strictly monotonic lightness,
+  and the simulated ΔE is information rather than a verdict.
+
+  DECORATION does not need one either. Two Dashboard cards a deuteranope
+  reads as the same blue lose a scanning aid; nothing is misread, because
+  the card is labelled and the number is on it. The floor that matters
+  there is contrast, which everyone needs.
+
+  MEANING does, and after the rework the only meaning-bearing colour left
+  is red/green — the classic pair a protanope cannot separate. It is
+  acceptable only because it never stands alone: the sign, the column and
+  the label all repeat it. That is the rule, stated generally: a colour
+  may carry meaning only when something else on the same element carries
+  it too.
+
+  Recorded against the day it might be needed: the light card set's sky
+  and indigo are ΔE2000 2.3 apart under deuteranopia. If card colour ever
+  starts meaning something, that set cannot carry it.
 
 - **Removing a feature is a documentation change, and that is the half
   that gets missed** (2026-10-05, from a full sweep of the spec, the

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Donut, HBar } from "../lib/charts";
 import { T, money } from "../lib/theme";
-import { roleColor, roleShade } from "../../src/engine/palette.ts";
+import { pieFill, barFill } from "../../src/engine/palette.ts";
+import { foldForPie } from "../../src/engine/compute.ts";
 import type { SpendingMix as Mix, SpendingSlice } from "../../src/engine/types.ts";
 
 // The web panel, same data and same rules, different primitives.
@@ -22,11 +23,14 @@ export default function SpendingMix({ mix }: { mix: Mix }) {
   const [asBar, setAsBar] = useState(true);
   const [otherOpen, setOtherOpen] = useState(false);
 
-  // Pie shades, bar flat — same split as the web, same reason: in a bar
-  // every row sits beside its own label, so a shade there is decoration.
-  const fill = (s: SpendingSlice) =>
-    asBar ? roleColor(s.role, true) : roleShade(s.role, s.shade ?? 0, s.shadeCount ?? 1, true);
-  const slices = mix.slices;
+  // Brass, same as the web: the pie ramps by RANK over four wedges plus a
+  // grey Other, the bar is one brass for every named row. The phone is
+  // hardcoded dark, so the dark ramp always.
+  const fill = (s: SpendingSlice, rank: number) =>
+    asBar ? barFill(s.bucket === "other", true) : pieFill(rank, s.bucket === "other", true);
+  // Same split as the web: the bar is the engine's list, the pie folds
+  // again to four plus Other because that is the ramp's reach.
+  const slices = asBar ? mix.slices : foldForPie(mix.slices);
   const empty = slices.length === 0;
   const barWidth = Math.min(width - 64, 420);
 
@@ -68,17 +72,22 @@ export default function SpendingMix({ mix }: { mix: Mix }) {
 
               {!asBar && (
                 <View style={styles.donutWrap}>
-                  <Donut data={slices.map((s) => ({ key: s.key, amount: s.amount, fill: fill(s) }))} size={148} />
+                  <Donut data={slices.map((s, i) => ({ key: s.key, amount: s.amount, fill: fill(s, i) }))} size={148} />
                 </View>
               )}
 
-              {(asBar ? shown : slices).map((s) => {
+              {/* `rank` is the slice's own index in mix.slices, which the
+                  engine returns biggest-first — so it is the rank, and the
+                  expanded-bar list (which splices children in) must not be
+                  the thing it is read from. */}
+              {(asBar ? shown : slices).map((s, i) => {
+                const rank = slices.indexOf(s);
                 // In PIE mode the Other row opens the legend beneath it and
                 // the wedge is untouched; in BAR mode the row is replaced.
                 if (!asBar && s.children && otherOpen) {
                   return (
                     <View key={s.key}>
-                      {s.children.map((c) => <Row key={c.key} s={c} fill={fill(c)} />)}
+                      {s.children.map((c) => <Row key={c.key} s={c} fill={pieFill(0, true, true)} />)}
                       <Pressable onPress={() => setOtherOpen(false)} style={styles.fold}>
                         <Text style={styles.foldText}>⌃ Fold {s.children.length} back into Other</Text>
                       </Pressable>
@@ -88,11 +97,11 @@ export default function SpendingMix({ mix }: { mix: Mix }) {
                 if (s.children) {
                   return (
                     <Pressable key={s.key} onPress={() => setOtherOpen(true)}>
-                      <Row s={s} fill={fill(s)} chevron bar={asBar ? barWidth : 0} total={mix.total} />
+                      <Row s={s} fill={fill(s, rank)} chevron bar={asBar ? barWidth : 0} total={mix.total} />
                     </Pressable>
                   );
                 }
-                return <Row key={s.key} s={s} fill={fill(s)} bar={asBar ? barWidth : 0} total={mix.total} />;
+                return <Row key={s.key} s={s} fill={fill(s, rank < 0 ? 0 : rank)} bar={asBar ? barWidth : 0} total={mix.total} />;
               })}
 
               {asBar && otherOpen && (

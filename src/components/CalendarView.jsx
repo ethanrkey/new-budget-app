@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { groupByDay } from "../engine/compute.ts";
 import { todayISO, toISODate } from "../engine/model.ts";
-import { roleColor, roleOfCategory } from "../engine/palette.ts";
 
 // ---- The Ledger's month-grid rendering ----
 // Same rows as the list, arranged by date. The running balance is
@@ -46,7 +45,7 @@ function monthCells(key) {
   return cells;
 }
 
-export default function CalendarView({ ledger, trackerCategories = [], isDark, onEditItem }) {
+export default function CalendarView({ ledger, trackerCategories = [], onEditItem }) {
   const days = groupByDay(ledger.rows);
   const dated = [...days.keys()].sort();
   const today = todayISO();
@@ -55,11 +54,12 @@ export default function CalendarView({ ledger, trackerCategories = [], isDark, o
   const [monthKey, setMonthKey] = useState(() => monthKeyOf(dated[0] ?? today));
   const [selected, setSelected] = useState(null);
 
-  // Dots are colour-only identity, which the spec's colour rule does not
-  // allow to stand alone — the day detail names the category in words, and
-  // that is the relief. Role colour makes the dots mean something at a
-  // glance even so: bills, savings and debt no longer share a grey.
-  const catColor = (categoryId) => roleColor(roleOfCategory(categoryId, trackerCategories), isDark);
+  // THE DOTS MEAN "something happened here" AND NOTHING ELSE. They were
+  // role-coloured until 2026-10-06; now they are secondary-text grey, like
+  // every other mark that is a count rather than a claim. A month grid is
+  // read for density — busy weeks against quiet ones — and seven hues
+  // scattered through it competed with exactly that. The day detail names
+  // the category in words, which is where identity lives.
   const catName = (categoryId) =>
     trackerCategories.find((c) => c.id === categoryId)?.name ??
     ({ income: "Income", bill: "Fixed bill", oneoff: "One-off" }[categoryId] ?? "Uncategorized");
@@ -121,7 +121,7 @@ export default function CalendarView({ ledger, trackerCategories = [], isDark, o
               </div>
               {day && (
                 <>
-                  <Dots day={day} catColor={catColor} catName={catName} />
+                  <Dots day={day} catName={catName} />
                   {/* Net is text, never colour — and it is dropped below sm,
                       where "-$1,650.00" simply does not fit a ~52px cell. */}
                   <div className={`hidden sm:block mt-1 text-[11px] tabular-nums leading-none ${
@@ -138,7 +138,6 @@ export default function CalendarView({ ledger, trackerCategories = [], isDark, o
       {selectedDay && (
         <DayDetail
           day={selectedDay}
-          catColor={catColor}
           catName={catName}
           onEditItem={onEditItem}
           onClose={() => setSelected(null)}
@@ -153,7 +152,7 @@ export default function CalendarView({ ledger, trackerCategories = [], isDark, o
   );
 }
 
-function Dots({ day, catColor, catName }) {
+function Dots({ day, catName }) {
   const n = day.rows.length;
   // Rendered ONCE. The extra dots are hidden by CSS below sm rather than
   // rendered twice — two breakpoint copies would make a screen reader
@@ -164,10 +163,9 @@ function Dots({ day, catColor, catName }) {
         <span
           key={r.id}
           title={`${catName(r.category)} · ${r.name} · ${money(r.amount)}`}
-          className={`h-1.5 w-1.5 rounded-full ${
+          className={`h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 ${
             i >= DOT_CAP.narrow ? "hidden sm:inline-block" : "inline-block"
           }`}
-          style={{ backgroundColor: catColor(r.category) }}
         />
       ))}
       {n > DOT_CAP.narrow && (
@@ -180,7 +178,7 @@ function Dots({ day, catColor, catName }) {
   );
 }
 
-function DayDetail({ day, catColor, catName, onEditItem, onClose }) {
+function DayDetail({ day, catName, onEditItem, onClose }) {
   const pretty = new Date(day.date + "T00:00:00").toLocaleString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
   });
@@ -203,7 +201,7 @@ function DayDetail({ day, catColor, catName, onEditItem, onClose }) {
               className="w-full flex items-baseline justify-between gap-3 text-sm text-left rounded-md px-1 -mx-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <span className="flex items-baseline gap-2 min-w-0">
-                <span className="h-2 w-2 rounded-full shrink-0 self-center" style={{ backgroundColor: catColor(r.category) }} />
+                <span className="h-2 w-2 rounded-full shrink-0 self-center bg-gray-400 dark:bg-gray-500" />
                 <span className="truncate text-gray-700 dark:text-gray-300">{r.name}</span>
                 {r.overridden && <span className="text-xs text-gray-400 shrink-0">· edited</span>}
                 {/* The dot's meaning, in words — the relief the colour rule asks for. */}

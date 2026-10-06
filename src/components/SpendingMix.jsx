@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { roleColor, roleShade } from "../engine/palette.ts";
+import { pieFill, barFill } from "../engine/palette.ts";
+import { foldForPie } from "../engine/compute.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 
 // ---- Where the PLANNED outflow goes, over the Ledger's own window ----
@@ -20,8 +21,7 @@ import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 // categories arrive whole. That is the engine's call; this file only has to
 // colour and label the two kinds so they can't be mistaken for each other.
 //
-// "Other" folds the tail past 8 slices, and at 11% of a window it was the
-// one slice you could learn nothing from. It opens on click — differently
+// "Other" folds the tail past the fourth slice. It opens on click — differently
 // per view, on purpose. The PIE never re-shapes: its wedge stays whole and
 // grey (seventeen wedges would be unreadable, and 1-2% slivers unhittable),
 // and the expansion happens in the legend beside it. The BAR expands its
@@ -33,18 +33,17 @@ const KIND_PREF = "ledger-mix-bar";
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-// Colour comes from the slice's ROLE, assigned by the engine so both
-// clients paint identically. Two different calls on purpose:
+// ONE HUE, and the two views spend it differently because they are
+// different claims:
 //
-//   PIE  roleShade — the shade is what links a wedge to its legend entry,
-//        and four investments or five loans share a hue by design, so
-//        without it the pie says "mostly investments" and stops.
-//   BAR  roleColor — flat. Every row sits beside its own label and its own
-//        bar length, so a shade there is decoration, and ten decorative
-//        shades off one hue is exactly how five of eight rows came out the
-//        same grey-blue.
-const pieColor = (d, isDark) => roleShade(d.role, d.shade ?? 0, d.shadeCount ?? 1, isDark);
-const barColor = (d, isDark) => roleColor(d.role, isDark);
+//   PIE  a ramp by RANK. The pie draws four wedges and a grey Other, so
+//        rank is a true statement about every wedge in it.
+//   BAR  flat brass. The bar is the full view and keeps every row, so a
+//        ramp would run out and start lying at the fifth.
+//
+// Rank is the slice's position in `mix.slices`, which the engine returns
+// biggest-first with Other last — so the index IS the rank, and the view
+// never re-sorts.
 
 // The row every list shares: swatch, label, amount, percent.
 function Amount({ d }) {
@@ -69,9 +68,10 @@ function Chevron({ open }) {
   );
 }
 
-// The palette rule: identity never rests on colour alone. An item slice is a
-// tint of its parent, so the parent's name rides along inline — otherwise
-// "Rent" and "Roth" are two blues with nothing to tell them apart.
+// Identity never rests on colour alone, and with one hue it cannot: the
+// label carries it. An item slice names the bucket it came out of inline,
+// so "Rent" reads as "Rent · Fixed bills" rather than passing as a
+// category of its own.
 function SliceLabel({ d }) {
   return (
     <span className="truncate text-gray-700 dark:text-gray-300">
@@ -95,13 +95,24 @@ export default function SpendingMix({ mix, isDark }) {
   // to answer a question, not a layout preference worth remembering.
   const [otherOpen, setOtherOpen] = useState(false);
 
-  const paint = asBar ? barColor : pieColor;
-  const withFill = (s) => ({
-    ...s,
-    fill: paint(s, isDark),
-    children: s.children?.map((c) => ({ ...c, fill: paint(c, isDark) })),
+  // ONE DATASET, two depths. The bar renders what the engine returned; the
+  // pie folds further to four plus Other, because four is all the ramp can
+  // keep apart. The toggle changes how much is DRAWN, never the data.
+  //
+  // A child of Other is never ranked: in the pie it stays grey like the
+  // wedge it came out of, and in the bar it is a named row like any other.
+  const source = asBar ? mix.slices : foldForPie(mix.slices);
+  const data = source.map((s, rank) => {
+    const other = s.bucket === "other";
+    return {
+      ...s,
+      fill: asBar ? barFill(other, isDark) : pieFill(rank, other, isDark),
+      children: s.children?.map((c) => ({
+        ...c,
+        fill: asBar ? barFill(false, isDark) : pieFill(0, true, isDark),
+      })),
+    };
   });
-  const data = mix.slices.map(withFill);
   const empty = data.length === 0;
 
   return (

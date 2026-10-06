@@ -2,7 +2,6 @@ import { useState } from "react";
 import HorizonSlider from "./HorizonSlider.jsx";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../engine/budgetLayout.ts";
 import { todayISO } from "../engine/model.ts";
-import { roleColor, roleOfCategory } from "../engine/palette.ts";
 
 // Every cell of the pinned first column wears this. Three things matter and
 // each was separately broken: it must be OPAQUE (a tinted row used
@@ -26,7 +25,7 @@ const money = (n) =>
   (n < 0 ? "-" : "") +
   Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-export default function BudgetView({ budget, settings, setSettings, trackerCategories = [], isDark, accountName = "Checking", onEditName, onReorder, onReorderDrop, onOpenOnboarding }) {
+export default function BudgetView({ budget, settings, setSettings, trackerCategories = [], accountName = "Checking", onEditName, onReorder, onReorderDrop, onOpenOnboarding }) {
   const [dragName, setDragName] = useState(null);
   const [overName, setOverName] = useState(null);
 
@@ -70,13 +69,10 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
     );
   }
 
-  const { otherIncomeNames, sectionItems, savingGroups, nameCat } = computeBudgetLayout(budget, trackerCategories);
-  // Dynamic per-ROLE color, resolved to a hex (Tailwind's JIT scanner only
-  // picks up literal class-name strings, never a runtime-built
-  // `text-${id}`). An orphaned/deleted category id resolves to the
-  // uncategorized grey rather than crashing.
-  const colorForCat = (catId) => roleColor(roleOfCategory(catId, trackerCategories), isDark);
-
+  // `nameCat` (row -> category id) is deliberately not destructured: the
+  // only thing that used it was the per-row role colour, retired
+  // 2026-10-06. The layout still groups by category — that is `savingGroups`.
+  const { otherIncomeNames, sectionItems, savingGroups } = computeBudgetLayout(budget, trackerCategories);
   const th = "py-2 px-3 text-right font-semibold whitespace-nowrap";
   const editRow = (name) => onEditName && (() => onEditName(name));
 
@@ -178,16 +174,17 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
           {renderSection(BUDGET_SECTIONS[0])}
           {renderSection(BUDGET_SECTIONS[2])}
 
-          {/* SAVING / DEBT: one header, rows clustered by category (a role
-              dot each — savings, investment or debt), reorder — arrows or
-              drag — never crosses a category cluster */}
+          {/* SAVING / DEBT: one header, rows clustered by category, reorder
+              — arrows or drag — never crosses a category cluster. No dot:
+              colour stopped encoding role on 2026-10-06, and the section
+              header already says what these rows are. */}
           {sectionItems.saving.length ? (
             <>
               <SectionHeader label="SAVING / DEBT" span={budget.length + 1} />
               {savingGroups.map((names) =>
                 rowMeta(names).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
                   <DataRow key={name} label={name} cols={budget}
-                    pick={(c) => c.expenseItems[name]?.val || 0} colorHex={colorForCat(nameCat[name])} hideZero
+                    pick={(c) => c.expenseItems[name]?.val || 0} hideZero
                     onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
                     dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
                 ))
@@ -221,7 +218,7 @@ function SectionHeader({ label, span, tone }) {
 
 function DataRow({
   label, cols, pick, tone, muted, hideZero, onLabelClick, onMoveUp, onMoveDown,
-  colorHex, dragProps, isDragging, isDragOver,
+  dragProps, isDragging, isDragOver,
 }) {
   const reorderable = onMoveUp !== undefined;
   const draggable = !!dragProps?.draggable;
@@ -234,13 +231,6 @@ function DataRow({
     >
       <td className={`py-2 sm:py-1.5 pr-3 bg-white dark:bg-gray-900 whitespace-nowrap ${STICKY_COL}`}>
         <span className="inline-flex items-center gap-1">
-          {colorHex && (
-            <span
-              className="h-2 w-2 rounded-full shrink-0"
-              style={{ backgroundColor: colorHex }}
-              aria-hidden="true"
-            />
-          )}
           {reorderable && (
             <span className="inline-flex flex-col opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition -my-1">
               <button onClick={onMoveUp} disabled={!onMoveUp} title="Move up"
@@ -261,11 +251,10 @@ function DataRow({
       {cols.map((c) => {
         const v = pick(c);
         const show = hideZero ? v !== 0 : true;
-        // Direction OWNS the amounts here. Role colour used to override it
-        // on every saving/debt cell, which put two colour systems in the
-        // same text — the same mistake that took colour off ledger row
-        // names. Role moves to a dot beside the label, where you are
-        // scanning across kinds rather than reading a number.
+        // Direction OWNS the amounts, and since 2026-10-06 it is the only
+        // thing colour says here: green in, red out, plain for an outflow
+        // that was saved rather than spent. Saving/debt rows pass no tone,
+        // which is how they stay plain.
         const colorClass = muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "";
         return (
           <td key={c.key} className={`py-2 sm:py-1.5 px-3 text-right ${colorClass}`}>

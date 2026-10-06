@@ -15,7 +15,7 @@ import {
 } from "../../../src/engine/progress.ts";
 import { computeLoanProgress } from "../../../src/engine/loans.ts";
 import { primaryAccount, todayISO } from "../../../src/engine/model.ts";
-import { roleColor, roleOfTrackerCategory, roleSuffix } from "../../../src/engine/palette.ts";
+import { cardColor, roleOfTrackerCategory, roleSuffix, LOAN_LINE } from "../../../src/engine/palette.ts";
 import type { TrackerCategory } from "../../../src/engine/types.ts";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -87,8 +87,11 @@ export default function DashboardScreen() {
         chartW={chartW}
       />
 
-      {assets.map((cat) => (
-        <AssetCard key={cat.id} cat={cat} chartW={chartW} today={today}
+      {/* Colour by card POSITION, cycling — decoration, so five accounts
+          are five distinguishable objects. Same function the web calls, so
+          the phone and the laptop give an account the same colour. */}
+      {assets.map((cat, i) => (
+        <AssetCard key={cat.id} cat={cat} color={cardColor(i, true)} chartW={chartW} today={today}
           online={online} onLog={() => setLogging(cat.id)} />
       ))}
       {debts.map((cat) => (
@@ -201,9 +204,8 @@ function AccountCard({ name, balance, asOf, history, color, chartW, online, onLo
   );
 }
 
-function AssetCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory; chartW: number; today: string; online: boolean; onLog: () => void }) {
+function AssetCard({ cat, color, chartW, today, online, onLog }: { cat: TrackerCategory; color: string; chartW: number; today: string; online: boolean; onLog: () => void }) {
   const { state } = useBudget();
-  const color = roleColor(roleOfTrackerCategory(cat), true);
   const history = computeCategoryHistory(state!, cat.id);
   const latest = history.length ? history[history.length - 1] : null;
   const contrib = computeLoggedContributions(state!, cat.id, today);
@@ -222,7 +224,7 @@ function AssetCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory
           <Text style={styles.logText}>{online ? "Log" : "Offline"}</Text>
         </Pressable>
       </View>
-      <Text style={[styles.cardNum, { color: latest ? color : T.faint }]}>
+      <Text style={[styles.cardNum, !latest && { color: T.faint }]}>
         {latest ? money(latest.amount) : "—"}
       </Text>
       <Text style={styles.dim}>
@@ -247,14 +249,15 @@ function AssetCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory
 
 function DebtCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory; chartW: number; today: string; online: boolean; onLog: () => void }) {
   const { state } = useBudget();
-  const color = roleColor(roleOfTrackerCategory(cat), true);
+  // No card colour for loans, same as the web: the list is long, the cards
+  // are labelled, and five hues on it is decoration you have to decode.
+  const color = LOAN_LINE;
   const history = computeCategoryHistory(state!, cat.id);
   const p = computeLoanProgress(state!, cat, today);
 
   return (
     <View style={styles.card}>
       <View style={styles.cardHead}>
-        <View style={[styles.dot, { backgroundColor: color }]} />
         <Text style={styles.cardLabel}>{cat.name}</Text>
         {roleSuffix(cat.name, roleOfTrackerCategory(cat)) && (
           <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
@@ -264,7 +267,7 @@ function DebtCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory;
           <Text style={styles.logText}>{online ? "Log" : "Offline"}</Text>
         </Pressable>
       </View>
-      <Text style={[styles.cardNum, { color: p?.outstanding != null ? color : T.faint }]}>
+      <Text style={[styles.cardNum, p?.outstanding == null && { color: T.faint }]}>
         {p?.outstanding != null ? money(p.outstanding) : "—"}
       </Text>
       <Text style={styles.dim}>

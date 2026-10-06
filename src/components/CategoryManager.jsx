@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { roleColor, roleOfTrackerCategory } from "../engine/palette.ts";
 
 // Create / rename / reorder / delete a user's own savings/debt/
 // investment categories. These replace the old hardcoded Roth/Saved/
 // Brokerage/Loans — every user gets their own set, editable here.
-export default function CategoryManager({ categories, isDark, onAdd, onUpdate, onDelete, onMove, onClose, onBack }) {
+export default function CategoryManager({ categories, onAdd, onUpdate, onDelete, onMove, onClose, onBack }) {
   const sorted = [...categories].sort((a, b) => a.order - b.order);
   const [editingId, setEditingId] = useState(null);
   const [draftName, setDraftName] = useState("");
@@ -47,8 +46,8 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
         </div>
         <p className="text-xs text-gray-500 mb-4">
           These are your own buckets — Savings, Investments, Debt, or anything else you track. Rename,
-          reorder, or delete them any time. Colour is not yours to set: it comes from what the
-          bucket IS. Deleting one doesn&apos;t touch existing
+          reorder, or delete them any time. There is nothing to colour: the only colours in
+          the app are the chart&apos;s and red/green for direction. Deleting one doesn&apos;t touch existing
           transactions — they keep their history, just shown as uncategorized.
         </p>
 
@@ -74,16 +73,6 @@ export default function CategoryManager({ categories, isDark, onAdd, onUpdate, o
                     ▼
                   </button>
                 </span>
-
-                {/* A read-only dot, not a picker. Colour is derived from
-                    what the money does, so there is nothing to choose —
-                    the dot is here to match the colour you see on the
-                    Dashboard card and in the charts. */}
-                <span
-                  title={cat.kind === "debt" ? "Debt" : cat.assetKind === "savings" ? "Savings" : "Investment"}
-                  style={{ backgroundColor: roleColor(roleOfTrackerCategory(cat), isDark) }}
-                  className="h-5 w-5 rounded-full shrink-0"
-                />
 
                 <KindPill kind={cat.kind} onClick={() => onUpdate(cat.id, { kind: cat.kind === "debt" ? "asset" : "debt" })} />
 

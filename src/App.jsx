@@ -797,7 +797,6 @@ export default function App() {
       {categoryManagerFrom && (
         <CategoryManager
           categories={state.trackerCategories}
-          isDark={isDark}
           onAdd={addTrackerCategory}
           onUpdate={updateTrackerCategory}
           onDelete={deleteTrackerCategory}

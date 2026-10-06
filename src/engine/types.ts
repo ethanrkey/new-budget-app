@@ -293,14 +293,10 @@ export interface SpendingSlice {
   amount: number;
   /** 0-100, of the window's total planned outflow. */
   percent: number;
-  /** RETIRED (2026-10-03) and always null on new data: colour comes from
-   *  `role` below, not from a stored index. Kept only so a slice built from
-   *  an older cached shape still type-checks. */
-  color: PaletteIndex | null;
   bucket: SpendingBucket;
-  /** What the money is DOING — the thing colour encodes now. Assigned by
-   *  the engine, so both clients colour a slice identically without either
-   *  re-deriving the rule. */
+  /** What the money is DOING. No longer a colour — colour is brass by rank
+   *  (see palette.ts) — but still what decides whether an amount is red,
+   *  and still assigned by the engine so both clients agree. */
   role: Role;
   /** `item` slices only: which fixed bucket it came from, so the view tints
    *  off that bucket's own neutral rather than a shared one. */
@@ -308,13 +304,8 @@ export interface SpendingSlice {
   /** `item` slices only: the bucket they were broken out of, named so the
    *  slice can say "Rent · Fixed bills" rather than passing as a category. */
   parentLabel?: string;
-  /** `item` slices only: position among siblings, so the UI can tint a step
-   *  of the parent's colour instead of spending a fresh categorical hue. */
-  shade?: number;
-  shadeCount?: number;
-  /** `other` slices only: the slices folded into it, in the same order they
-   *  would have had, each with its own role colour or shade of one, and its
-   *  percent OF THE WINDOW.
+  /** `other` slices only: the slices folded into it, in the order they
+   *  would have had, each with its percent OF THE WINDOW.
    *  The view can list them without re-deriving anything. */
   children?: SpendingSlice[];
 }

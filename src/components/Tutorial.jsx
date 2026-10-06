@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ROLE_COLORS, ROLE_LABEL, ROLE_ORDER } from "../engine/palette.ts";
+import { BRASS_RAMP, BAR_COLOR, CARD_COLORS, NEUTRAL_CHART } from "../engine/palette.ts";
 import { getDeviceTheme } from "../theme.js";
 
 // The full feature walkthrough — everything the app can do, in the order you'd
@@ -159,10 +159,11 @@ const SECTIONS = [
     id: "colours",
     title: "What the colours mean",
     body: [
-      ["p", "Colour is never chosen — it's derived from what the money is doing, and the same colour means the same thing on every screen: a card, a chart slice, a ledger column, a calendar dot."],
+      ["p", "Colour does three jobs here and they don't overlap. Nothing is chosen by you, and nothing is a code you have to learn — the words on screen always say what a thing is."],
       ["legend"],
-      ["p", "Two shades of one colour mean two things of the same kind — two investments, two loans — so a chart can tell them apart without inventing a new colour for each. Warm means money going out; cool means money you keep."],
-      ["note", "Red and green on amounts are a separate thing entirely: that's direction — money in or money out — not what kind of money it is."],
+      ["p", "The spending chart is one colour because it is answering one question: how does this window divide up? In the pie the four biggest shares run darkest to lightest and everything else is one grey “Other” — four steps is as many as one colour can keep clearly apart, so the chart shows four rather than pretending to show nine. The bar is the full list and keeps every row."],
+      ["p", "On the Dashboard, each savings or investment card gets its own colour so you can find the one you were reading. That's all it means — it's assigned by the card's position, not by what the account is. Loans share a plain grey, and your checking account has no colour at all."],
+      ["note", "Red and green are the only colours that mean something: green is money coming in, red is money going out. Money you moved to savings, put into an investment, or paid against a loan stays plain — it left your checking account, but it isn't gone."],
     ],
   },
 
@@ -298,30 +299,35 @@ export default function Tutorial({ onClose, onStartTour }) {
   );
 }
 
-const LEGEND_HINT = {
-  income: "money coming in",
-  bill: "a bill you pay every month",
-  oneoff: "a one-time cost",
-  savings: "cash you control",
-  investment: "value the market moves",
-  debt: "what you owe",
-  uncategorized: "no category — usually a deleted one",
-};
+// What each colour is FOR. The job, not a taxonomy of money — that was
+// the old legend, and seven hues to memorise is what made the app hard to
+// read. These four entries are the whole system.
+const LEGEND = [
+  { key: "brass", name: "Brass", hint: "the spending chart, and the app's own gold", swatches: (dark) => BRASS_RAMP[dark ? "dark" : "light"] },
+  { key: "bar",   name: "One brass", hint: "every row of the bar chart — the full list, so no ranking", swatches: (dark) => [BAR_COLOR[dark ? "dark" : "light"]] },
+  { key: "cards", name: "Card colours", hint: "telling your Dashboard accounts apart. Decoration, not meaning", swatches: (dark) => CARD_COLORS[dark ? "dark" : "light"] },
+  { key: "grey",  name: "Grey", hint: "“Other”, loans, and anything deliberately not identified", swatches: () => [NEUTRAL_CHART] },
+];
 
 function Block({ block }) {
   const [kind, value] = block;
   if (kind === "p") return <p>{value}</p>;
-  // The mapping, stated once, where someone confused will look for it. A
-  // role system whose colours are never named is a private language.
+  // The mapping, stated once, where someone confused will look for it —
+  // and drawn from the engine's own constants, so a legend that disagrees
+  // with the app is not a thing that can happen.
   if (kind === "legend") {
     const dark = getDeviceTheme(null) === "dark";
     return (
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-        {ROLE_ORDER.map((role) => (
-          <div key={role} className="flex items-baseline gap-2.5">
-            <span className="h-3 w-3 rounded-sm shrink-0 self-center" style={{ backgroundColor: ROLE_COLORS[role][dark ? "dark" : "light"] }} />
-            <dt className="font-medium shrink-0">{ROLE_LABEL[role]}</dt>
-            <dd className="text-gray-500">{LEGEND_HINT[role]}</dd>
+      <dl className="space-y-2">
+        {LEGEND.map((row) => (
+          <div key={row.key} className="flex items-baseline gap-2.5">
+            <span className="flex gap-0.5 shrink-0 self-center">
+              {row.swatches(dark).map((hex) => (
+                <span key={hex} className="h-3 w-3 rounded-sm" style={{ backgroundColor: hex }} />
+              ))}
+            </span>
+            <dt className="font-medium shrink-0">{row.name}</dt>
+            <dd className="text-gray-500">{row.hint}</dd>
           </div>
         ))}
       </dl>

@@ -1,7 +1,7 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.ts";
 import { CATEGORIES, endOfMonthISO, primaryAccount, toISODate } from "./model.ts";
-import { roleOfCategory, assignShades } from "./palette.ts";
+import { roleOfCategory, PIE_SLICES } from "./palette.ts";
 import type {
   BudgetColumn, BudgetState, DayGroup, ISODate, Ledger, LedgerRow, MonthKey, SpendingMix, SpendingSlice,
 } from "./types.ts";
@@ -202,9 +202,12 @@ function monthsBetween(startISO: ISODate, endISO: ISODate): Array<{ key: MonthKe
 //  - nothing else. Orphaned categories keep their amount under one
 //    "Uncategorized" slice rather than vanishing.
 //
-// Beyond MAX_SLICES the tail folds into "Other". The 8-colour palette is the
-// reason: a 9th category can't get a generated hue without breaking the
-// categorical colour rules, so it folds instead.
+// Beyond MAX_SLICES the tail folds into "Other". This is the BAR's limit —
+// the bar is the full view, and eight rows beside their own labels is what
+// it has always shown. The PIE folds further, to four plus Other, because
+// four is all the brass ramp can keep apart; that second fold is
+// `foldForPie` below and happens in the view, not here, so the two
+// renderings of one dataset stay one dataset.
 const MAX_SLICES = 8;
 
 // The two FIXED buckets are not categories in the sense the others are. A
@@ -231,15 +234,13 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
     totals.set(e.category, round((totals.get(e.category) ?? 0) + e.amount));
   }
 
-  // `color` is retained on the slice only because the shape is public; it
-  // is no longer what anything paints with. Colour comes from `role`.
-  const describe = (categoryId: string): Pick<SpendingSlice, "label" | "color" | "bucket" | "role"> => {
+  const describe = (categoryId: string): Pick<SpendingSlice, "label" | "bucket" | "role"> => {
     const role = roleOfCategory(categoryId, cats);
-    if (categoryId === "bill") return { label: "Fixed bills", color: null, bucket: "bill", role };
-    if (categoryId === "oneoff") return { label: "One-off", color: null, bucket: "oneoff", role };
+    if (categoryId === "bill") return { label: "Fixed bills", bucket: "bill", role };
+    if (categoryId === "oneoff") return { label: "One-off", bucket: "oneoff", role };
     const cat = cats.find((c) => c.id === categoryId);
-    if (!cat) return { label: "Uncategorized", color: null, bucket: "uncategorized", role };
-    return { label: cat.name, color: null, bucket: "category", role };
+    if (!cat) return { label: "Uncategorized", bucket: "uncategorized", role };
+    return { label: cat.name, bucket: "category", role };
   };
 
   // The transactions inside one bucket, biggest first, same-named ones
@@ -257,9 +258,8 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
   let slices: SpendingSlice[] = [];
   for (const [key, amount] of totals) {
     const d = describe(key);
-    // Items take their bucket's ROLE, shaded per sibling by the view.
-    // Shades are assigned once at the end, across everything sharing a
-    // role, so they do not have to be guessed here.
+    // Items take their bucket's ROLE, which is what decides whether the
+    // amount beside them is red. Not a colour any more.
     const fixed = d.bucket === "bill" || d.bucket === "oneoff" ? d.bucket : null;
     const items = fixed ? itemsOf(key) : [];
     if (fixed && items.length > 0) {
@@ -268,7 +268,6 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
         label: name,
         amount: amt,
         percent: 0,
-        color: d.color,
         bucket: "item",
         role: d.role,
         parentBucket: fixed,
@@ -285,7 +284,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
   if (orphans.length > 1) {
     const merged = round(orphans.reduce((s, o) => s + o.amount, 0));
     slices = slices.filter((s) => s.bucket !== "uncategorized");
-    slices.push({ key: "__uncategorized__", label: "Uncategorized", amount: merged, percent: 0, color: null, bucket: "uncategorized", role: "uncategorized" });
+    slices.push({ key: "__uncategorized__", label: "Uncategorized", amount: merged, percent: 0, bucket: "uncategorized", role: "uncategorized" });
     slices.sort((a, b) => b.amount - a.amount);
   }
 
@@ -297,23 +296,18 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
       label: `Other (${rest.length})`,
       amount: round(rest.reduce((s, r) => s + r.amount, 0)),
       percent: 0,
-      color: null,
       bucket: "other",
       role: "uncategorized",
       // The fold KEEPS its members rather than discarding them. "Other" is
       // otherwise the one slice you can learn nothing from — the same
       // complaint as a single "Fixed bills" wedge, a layer down — so the
-      // view can open it on demand. They keep the colours they already had;
-      // nothing new is allocated from the palette.
+      // view can open it on demand. Expanded, they are grey like the row
+      // they came out of: the ramp is a ranking, and the tail is the part
+      // that is deliberately not ranked.
       children: rest,
     });
     slices = keep;
   }
-
-  // Shades span everything sharing a role in THIS chart — four investments
-  // or five loans share a hue by design, and the shade is what tells them
-  // apart in a pie.
-  assignShades(slices);
 
   for (const s of slices) {
     s.percent = total > 0 ? round((s.amount / total) * 100) : 0;
@@ -323,4 +317,35 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
   }
 
   return { slices, total, from, to: horizonISO };
+}
+
+/**
+ * The pie's extra fold: top (PIE_SLICES - 1) by amount, everything else as
+ * one "Other". Separate from the engine's own fold because the BAR shows
+ * more rows than the pie can colour, and a chart toggle must not change
+ * the data — only how much of it is drawn.
+ *
+ * Any Other already present is FLATTENED into the new one rather than
+ * nested, so `children` is always one level deep and "Other (n)" counts
+ * real slices, never a bucket.
+ */
+export function foldForPie(slices: SpendingSlice[]): SpendingSlice[] {
+  const flat: SpendingSlice[] = [];
+  for (const s of slices) {
+    if (s.bucket === "other") flat.push(...(s.children ?? []));
+    else flat.push(s);
+  }
+  if (flat.length <= PIE_SLICES) return flat;
+  const keep = flat.slice(0, PIE_SLICES - 1);
+  const rest = flat.slice(PIE_SLICES - 1);
+  keep.push({
+    key: "__other__",
+    label: `Other (${rest.length})`,
+    amount: round(rest.reduce((t, r) => t + r.amount, 0)),
+    percent: round(rest.reduce((t, r) => t + r.percent, 0)),
+    bucket: "other",
+    role: "uncategorized",
+    children: rest,
+  });
+  return keep;
 }
