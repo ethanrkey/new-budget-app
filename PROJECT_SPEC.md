@@ -599,25 +599,25 @@ Conventions worth knowing before touching numbers:
   payment all leave the checking account and none of them is money gone, so
   they print plain. `isRetainedOutflow` is the one place that rule lives.
 
-  **The gate decides which colours carry a CVD floor, and it is not all of
-  them.** The old gate held everything to one because everything meant
-  something. Now: the brass ramp is one hue separated by LIGHTNESS, the one
-  channel no dichromacy touches, so it is gated on normal-vision ΔE2000
-  plus strictly monotonic L* — simulating a dichromat compresses chroma and
-  drags ΔE down (the light ramp reads 9.1 normal, 6.7 tritan) while the
-  steps stay perfectly ordered. Card colour is decoration, so two cards a
-  deuteranope reads alike lose a scanning aid and mislead nobody; gated on
-  normal-vision separation and contrast, with the CVD numbers printed but
-  not enforced. Direction is the only meaning-bearing colour left, and it
-  survives red/green blindness because it never stands alone — the sign,
-  the column and the label all repeat it. Every number is in ΔE2000, not
-  OKLab ×100, so it is the figure everyone else quotes.
+  **The gate enforces the thresholds under every vision type, with no
+  exemptions.** Adjacent steps of the brass ramp >= 8.0, every pair of card
+  colours >= 9.0, measured in ΔE2000 under normal, protan, deutan and
+  tritan; every chart, card and direction colour >= 3:1 on both surfaces it
+  can land on. Monotonic L* on the ramp is asserted ON TOP of the ΔE floor,
+  not instead of it: lightness is the one channel no dichromacy touches, so
+  it is what guarantees the ORDER survives, which a ΔE number does not say.
 
-  Measured 2026-10-06, normal vision: brass ramp worst adjacent 12.6 dark /
-  9.1 light; card set worst of ALL pairs 10.7 dark / 10.8 light; lowest
-  contrast 3.16:1. Under CVD the worst card pair is 2.3 (light sky/indigo,
-  deutan) — recorded here so that if card colour ever starts meaning
-  something, it is already known that this set could not carry it.
+  Measured 2026-10-06: brass ramp worst adjacent pair 10.9 dark / 8.1
+  light; card set worst of ALL pairs 9.2 dark / 10.7 light; lowest contrast
+  3.16:1. Direction measures 5.5 under deuteranopia, which is the classic
+  red/green collapse and is legal only because colour never carries it
+  alone — the sign, the column and the label all repeat it.
+
+  **The gate's instrument is itself under test.** `tests/cvd-reference.test.mjs`
+  checks every pair the gate measures against coloraide 8.13 — three
+  simulation models, and exact agreement with Viénot — and runs in
+  `npm test`. It exists because the simulation was silently wrong for a
+  day; see the decision log.
 
 - **Where colour appears at all.** Chart marks, the Dashboard's account
   lines and their label dot, and amounts (red/green). NOT on the hero,
@@ -992,6 +992,15 @@ fifth tab never needs a migration.
      `include` at all. A green result from a check that never ran is
      worse than no check: introduce a known-bad case and watch it go
      red before believing a green.
+   - **Then check that the number is the RIGHT number.** A check that can
+     fail and a check that is correct are two different claims, and the
+     second one is the one that got skipped: the palette gate's dichromat
+     simulation was driven red on purpose, passed that, and had been
+     reporting values three to four times too severe the whole time. Any
+     check that MEASURES rather than merely asserts needs a known answer
+     from somewhere else — an independent implementation, a published
+     value, a hand calculation — and that comparison belongs in the test
+     suite, not in the afternoon it was written.
 
    `scripts/fixtureApp.mjs` exists so the first bullet costs nothing:
    `openFixtureApp()` boots the real bundle through the real auth gate
@@ -1819,31 +1828,44 @@ Further out:
   keeping it on decoration would have been importing a constraint from a
   system that no longer exists.
 
-- **Deciding which colours a CVD floor applies to** (2026-10-06). Not all
-  of them, which took some care to justify rather than assume.
+- **A measuring instrument nobody measured** (2026-10-06). The palette
+  gate reported that two Dashboard colours were ΔE2000 **2.3** apart under
+  deuteranopia — indistinguishable. The real answer is about **10.4**. Its
+  dichromat simulation was applying a set of RGB→RGB coefficients that are
+  specified for GAMMA-ENCODED sRGB to linearised values, which exaggerated
+  every collapse by three to four times.
 
-  A LIGHTNESS RAMP does not need one. Simulating a dichromat compresses
-  chroma, which drags ΔE2000 down even when the steps stay in order — the
-  light brass ramp measures 9.1 under normal vision and 6.7 under tritan
-  while reading as four clean steps to anyone. L* is untouched by every
-  dichromacy, so the property to gate is strictly monotonic lightness,
-  and the simulated ΔE is information rather than a verdict.
+  The damage was not the wrong number, it was what got built on it. Within
+  the hour the gate had been *relaxed* — the ramp and the card set exempted
+  from their CVD floors — on an argument constructed to accommodate the
+  bug, and the spec had gained a finding ("this card set cannot carry
+  meaning under CVD") that was simply false. The reasoning was coherent.
+  It was reasoning about a fiction.
 
-  DECORATION does not need one either. Two Dashboard cards a deuteranope
-  reads as the same blue lose a scanning aid; nothing is misread, because
-  the card is labelled and the number is on it. The floor that matters
-  there is contrast, which everyone needs.
+  This is the same failure as every other one in this log, wearing its
+  most dangerous costume: **the thing that was never verified was the
+  verifier.** Rule 5 says prove a check can fail before believing it
+  passed, and that was done — each arm of the gate was driven red on
+  purpose. What was never done is check that a passing number was the
+  RIGHT number. A test that can fail and a test that is correct are two
+  different claims.
 
-  MEANING does, and after the rework the only meaning-bearing colour left
-  is red/green — the classic pair a protanope cannot separate. It is
-  acceptable only because it never stands alone: the sign, the column and
-  the label all repeat it. That is the rule, stated generally: a colour
-  may carry meaning only when something else on the same element carries
-  it too.
+  The fix is structural, not a patched function. The colour maths moved to
+  `scripts/colorMath.mjs` so it can be imported without running the gate;
+  `tests/cvd-reference.test.mjs` compares every pair the gate measures
+  against coloraide 8.13 under three published models, and runs in CI.
+  Agreement with Viénot is exact to 0.00 across 141 comparisons — the last
+  residual was the instrument rounding simulated colours to 8-bit hex
+  before measuring them, which is right for a pixel and wrong for a
+  measurement. The reference file records how it was generated. With the
+  simulation fixed, the palette passes the originally specified thresholds
+  unchanged; the relaxation and the false finding are both gone.
 
-  Recorded against the day it might be needed: the light card set's sky
-  and indigo are ΔE2000 2.3 apart under deuteranopia. If card colour ever
-  starts meaning something, that set cannot carry it.
+  Two cheap habits that would have caught it, now in the test: compare
+  against an independent implementation, and keep one spot value with a
+  known answer (a protanope and a deuteranope both see pure red as a dark
+  yellow with R and G equal — the broken version got that visibly wrong
+  and nobody looked).
 
 - **Removing a feature is a documentation change, and that is the half
   that gets missed** (2026-10-05, from a full sweep of the spec, the

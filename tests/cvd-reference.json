@@ -1,0 +1,946 @@
+{
+ "generated": "2026-10-06",
+ "source": "coloraide 8.13, Color.filter(kind, method=...).delta_e(method='2000')",
+ "pairs": [
+  {
+   "a": "#004d4d",
+   "b": "#0085b9",
+   "normal": 26.977,
+   "protan": {
+    "brettel": 26.694,
+    "vienot": 28.141,
+    "machado": 27.909
+   },
+   "deutan": {
+    "brettel": 25.112,
+    "vienot": 25.225,
+    "machado": 24.298
+   },
+   "tritan": {
+    "brettel": 21.799,
+    "vienot": 22.09,
+    "machado": 22.442
+   }
+  },
+  {
+   "a": "#004d4d",
+   "b": "#3e5ab7",
+   "normal": 29.239,
+   "protan": {
+    "brettel": 23.568,
+    "vienot": 24.517,
+    "machado": 23.813
+   },
+   "deutan": {
+    "brettel": 21.463,
+    "vienot": 21.958,
+    "machado": 20.82
+   },
+   "tritan": {
+    "brettel": 10.616,
+    "vienot": 10.738,
+    "machado": 13.307
+   }
+  },
+  {
+   "a": "#004d4d",
+   "b": "#512685",
+   "normal": 30.128,
+   "protan": {
+    "brettel": 23.408,
+    "vienot": 23.224,
+    "machado": 20.864
+   },
+   "deutan": {
+    "brettel": 15.949,
+    "vienot": 17.327,
+    "machado": 16.36
+   },
+   "tritan": {
+    "brettel": 16.751,
+    "vienot": 19.088,
+    "machado": 31.764
+   }
+  },
+  {
+   "a": "#004d4d",
+   "b": "#58697b",
+   "normal": 20.467,
+   "protan": {
+    "brettel": 13.013,
+    "vienot": 13.51,
+    "machado": 13.322
+   },
+   "deutan": {
+    "brettel": 13.281,
+    "vienot": 13.3,
+    "machado": 13.149
+   },
+   "tritan": {
+    "brettel": 14.198,
+    "vienot": 15.037,
+    "machado": 16.609
+   }
+  },
+  {
+   "a": "#0085b9",
+   "b": "#3e5ab7",
+   "normal": 19.331,
+   "protan": {
+    "brettel": 15.564,
+    "vienot": 14.728,
+    "machado": 13.361
+   },
+   "deutan": {
+    "brettel": 10.396,
+    "vienot": 10.957,
+    "machado": 10.897
+   },
+   "tritan": {
+    "brettel": 11.358,
+    "vienot": 11.548,
+    "machado": 13.811
+   }
+  },
+  {
+   "a": "#0085b9",
+   "b": "#512685",
+   "normal": 37.387,
+   "protan": {
+    "brettel": 28.252,
+    "vienot": 27.694,
+    "machado": 26.304
+   },
+   "deutan": {
+    "brettel": 20.259,
+    "vienot": 20.38,
+    "machado": 20.21
+   },
+   "tritan": {
+    "brettel": 32.802,
+    "vienot": 33.125,
+    "machado": 42.675
+   }
+  },
+  {
+   "a": "#0085b9",
+   "b": "#58697b",
+   "normal": 15.609,
+   "protan": {
+    "brettel": 14.352,
+    "vienot": 15.18,
+    "machado": 15.026
+   },
+   "deutan": {
+    "brettel": 13.858,
+    "vienot": 14.198,
+    "machado": 13.489
+   },
+   "tritan": {
+    "brettel": 15.869,
+    "vienot": 17.49,
+    "machado": 18.671
+   }
+  },
+  {
+   "a": "#009393",
+   "b": "#86a6ff",
+   "normal": 31.046,
+   "protan": {
+    "brettel": 22.015,
+    "vienot": 22.775,
+    "machado": 22.19
+   },
+   "deutan": {
+    "brettel": 20.228,
+    "vienot": 20.373,
+    "machado": 19.702
+   },
+   "tritan": {
+    "brettel": 12.797,
+    "vienot": 12.982,
+    "machado": 16.474
+   }
+  },
+  {
+   "a": "#009393",
+   "b": "#8bd4ff",
+   "normal": 26.71,
+   "protan": {
+    "brettel": 23.19,
+    "vienot": 23.916,
+    "machado": 23.647
+   },
+   "deutan": {
+    "brettel": 23.75,
+    "vienot": 23.858,
+    "machado": 23.573
+   },
+   "tritan": {
+    "brettel": 21.215,
+    "vienot": 21.225,
+    "machado": 21.753
+   }
+  },
+  {
+   "a": "#009393",
+   "b": "#8f68cc",
+   "normal": 35.902,
+   "protan": {
+    "brettel": 23.314,
+    "vienot": 22.59,
+    "machado": 20.44
+   },
+   "deutan": {
+    "brettel": 13.651,
+    "vienot": 14.428,
+    "machado": 13.858
+   },
+   "tritan": {
+    "brettel": 22.321,
+    "vienot": 23.404,
+    "machado": 34.284
+   }
+  },
+  {
+   "a": "#009393",
+   "b": "#a1b3c7",
+   "normal": 24.413,
+   "protan": {
+    "brettel": 13.09,
+    "vienot": 13.388,
+    "machado": 13.365
+   },
+   "deutan": {
+    "brettel": 15.717,
+    "vienot": 15.758,
+    "machado": 15.849
+   },
+   "tritan": {
+    "brettel": 18.892,
+    "vienot": 20.055,
+    "machado": 21.717
+   }
+  },
+  {
+   "a": "#0B7A0B",
+   "b": "#111827",
+   "normal": 45.599,
+   "protan": {
+    "brettel": 46.2,
+    "vienot": 47.507,
+    "machado": 45.641
+   },
+   "deutan": {
+    "brettel": 40.975,
+    "vienot": 44.518,
+    "machado": 41.93
+   },
+   "tritan": {
+    "brettel": 28.159,
+    "vienot": 28.805,
+    "machado": 31.171
+   }
+  },
+  {
+   "a": "#0B7A0B",
+   "b": "#6b7280",
+   "normal": 35.066,
+   "protan": {
+    "brettel": 32.749,
+    "vienot": 34.651,
+    "machado": 33.963
+   },
+   "deutan": {
+    "brettel": 30.928,
+    "vienot": 33.98,
+    "machado": 31.056
+   },
+   "tritan": {
+    "brettel": 11.783,
+    "vienot": 13.595,
+    "machado": 18.517
+   }
+  },
+  {
+   "a": "#0B7A0B",
+   "b": "#804d00",
+   "normal": 38.148,
+   "protan": {
+    "brettel": 11.649,
+    "vienot": 11.399,
+    "machado": 10.51
+   },
+   "deutan": {
+    "brettel": 3.728,
+    "vienot": 3.753,
+    "machado": 3.494
+   },
+   "tritan": {
+    "brettel": 42.04,
+    "vienot": 41.346,
+    "machado": 50.058
+   }
+  },
+  {
+   "a": "#0B7A0B",
+   "b": "#C0392B",
+   "normal": 63.75,
+   "protan": {
+    "brettel": 14.234,
+    "vienot": 13.952,
+    "machado": 12.934
+   },
+   "deutan": {
+    "brettel": 5.486,
+    "vienot": 5.55,
+    "machado": 5.793
+   },
+   "tritan": {
+    "brettel": 48.858,
+    "vienot": 47.642,
+    "machado": 62.94
+   }
+  },
+  {
+   "a": "#0B7A0B",
+   "b": "#e5e7eb",
+   "normal": 47.543,
+   "protan": {
+    "brettel": 43.098,
+    "vienot": 44.154,
+    "machado": 45.244
+   },
+   "deutan": {
+    "brettel": 46.495,
+    "vienot": 46.943,
+    "machado": 45.83
+   },
+   "tritan": {
+    "brettel": 40.528,
+    "vienot": 41.353,
+    "machado": 43.715
+   }
+  },
+  {
+   "a": "#0B7A0B",
+   "b": "#edb345",
+   "normal": 43.684,
+   "protan": {
+    "brettel": 23.325,
+    "vienot": 23.454,
+    "machado": 24.103
+   },
+   "deutan": {
+    "brettel": 31.491,
+    "vienot": 31.486,
+    "machado": 31.545
+   },
+   "tritan": {
+    "brettel": 50.697,
+    "vienot": 50.35,
+    "machado": 57.902
+   }
+  },
+  {
+   "a": "#111827",
+   "b": "#6b7280",
+   "normal": 30.074,
+   "protan": {
+    "brettel": 30.11,
+    "vienot": 30.138,
+    "machado": 30.094
+   },
+   "deutan": {
+    "brettel": 29.982,
+    "vienot": 30.029,
+    "machado": 29.994
+   },
+   "tritan": {
+    "brettel": 29.989,
+    "vienot": 30.009,
+    "machado": 30.011
+   }
+  },
+  {
+   "a": "#111827",
+   "b": "#804d00",
+   "normal": 38.644,
+   "protan": {
+    "brettel": 38.014,
+    "vienot": 39.751,
+    "machado": 38.627
+   },
+   "deutan": {
+    "brettel": 40.467,
+    "vienot": 44.042,
+    "machado": 41.259
+   },
+   "tritan": {
+    "brettel": 34.65,
+    "vienot": 37.055,
+    "machado": 37.086
+   }
+  },
+  {
+   "a": "#111827",
+   "b": "#C0392B",
+   "normal": 42.291,
+   "protan": {
+    "brettel": 33.548,
+    "vienot": 35.526,
+    "machado": 34.429
+   },
+   "deutan": {
+    "brettel": 44.768,
+    "vienot": 48.21,
+    "machado": 45.947
+   },
+   "tritan": {
+    "brettel": 41.727,
+    "vienot": 43.812,
+    "machado": 44.281
+   }
+  },
+  {
+   "a": "#111827",
+   "b": "#e5e7eb",
+   "normal": 83.621,
+   "protan": {
+    "brettel": 83.713,
+    "vienot": 83.412,
+    "machado": 83.082
+   },
+   "deutan": {
+    "brettel": 83.545,
+    "vienot": 83.853,
+    "machado": 83.914
+   },
+   "tritan": {
+    "brettel": 83.397,
+    "vienot": 83.44,
+    "machado": 83.415
+   }
+  },
+  {
+   "a": "#111827",
+   "b": "#edb345",
+   "normal": 71.773,
+   "protan": {
+    "brettel": 70.161,
+    "vienot": 70.332,
+    "machado": 68.515
+   },
+   "deutan": {
+    "brettel": 73.249,
+    "vienot": 76.357,
+    "machado": 75.138
+   },
+   "tritan": {
+    "brettel": 67.737,
+    "vienot": 69.297,
+    "machado": 68.826
+   }
+  },
+  {
+   "a": "#3e5ab7",
+   "b": "#512685",
+   "normal": 18.236,
+   "protan": {
+    "brettel": 14.038,
+    "vienot": 14.234,
+    "machado": 14.09
+   },
+   "deutan": {
+    "brettel": 11.301,
+    "vienot": 11.031,
+    "machado": 10.739
+   },
+   "tritan": {
+    "brettel": 23.3,
+    "vienot": 24.905,
+    "machado": 34.682
+   }
+  },
+  {
+   "a": "#3e5ab7",
+   "b": "#58697b",
+   "normal": 10.754,
+   "protan": {
+    "brettel": 17.401,
+    "vienot": 17.064,
+    "machado": 15.776
+   },
+   "deutan": {
+    "brettel": 15.55,
+    "vienot": 16.637,
+    "machado": 16.035
+   },
+   "tritan": {
+    "brettel": 10.407,
+    "vienot": 12.167,
+    "machado": 11.567
+   }
+  },
+  {
+   "a": "#512685",
+   "b": "#58697b",
+   "normal": 19.989,
+   "protan": {
+    "brettel": 24.462,
+    "vienot": 23.393,
+    "machado": 21.07
+   },
+   "deutan": {
+    "brettel": 18.04,
+    "vienot": 19.284,
+    "machado": 18.993
+   },
+   "tritan": {
+    "brettel": 16.973,
+    "vienot": 17.813,
+    "machado": 26.21
+   }
+  },
+  {
+   "a": "#643500",
+   "b": "#804d00",
+   "normal": 9.103,
+   "protan": {
+    "brettel": 8.722,
+    "vienot": 8.571,
+    "machado": 8.79
+   },
+   "deutan": {
+    "brettel": 8.748,
+    "vienot": 8.845,
+    "machado": 8.858
+   },
+   "tritan": {
+    "brettel": 8.147,
+    "vienot": 8.148,
+    "machado": 8.113
+   }
+  },
+  {
+   "a": "#6b7280",
+   "b": "#804d00",
+   "normal": 32.086,
+   "protan": {
+    "brettel": 32.505,
+    "vienot": 34.552,
+    "machado": 34.274
+   },
+   "deutan": {
+    "brettel": 33.064,
+    "vienot": 35.864,
+    "machado": 32.87
+   },
+   "tritan": {
+    "brettel": 27.648,
+    "vienot": 30.136,
+    "machado": 29.407
+   }
+  },
+  {
+   "a": "#6b7280",
+   "b": "#C0392B",
+   "normal": 32.184,
+   "protan": {
+    "brettel": 26.629,
+    "vienot": 29.015,
+    "machado": 27.969
+   },
+   "deutan": {
+    "brettel": 31.103,
+    "vienot": 34.302,
+    "machado": 31.415
+   },
+   "tritan": {
+    "brettel": 30.446,
+    "vienot": 32.89,
+    "machado": 31.766
+   }
+  },
+  {
+   "a": "#6b7280",
+   "b": "#e5e7eb",
+   "normal": 34.295,
+   "protan": {
+    "brettel": 34.277,
+    "vienot": 34.116,
+    "machado": 33.912
+   },
+   "deutan": {
+    "brettel": 34.306,
+    "vienot": 34.551,
+    "machado": 34.557
+   },
+   "tritan": {
+    "brettel": 34.067,
+    "vienot": 34.118,
+    "machado": 34.167
+   }
+  },
+  {
+   "a": "#6b7280",
+   "b": "#edb345",
+   "normal": 41.682,
+   "protan": {
+    "brettel": 41.287,
+    "vienot": 42.476,
+    "machado": 41.184
+   },
+   "deutan": {
+    "brettel": 42.936,
+    "vienot": 46.025,
+    "machado": 43.838
+   },
+   "tritan": {
+    "brettel": 35.621,
+    "vienot": 38.055,
+    "machado": 36.9
+   }
+  },
+  {
+   "a": "#804d00",
+   "b": "#9d6800",
+   "normal": 10.572,
+   "protan": {
+    "brettel": 10.178,
+    "vienot": 9.959,
+    "machado": 9.851
+   },
+   "deutan": {
+    "brettel": 10.207,
+    "vienot": 10.341,
+    "machado": 10.451
+   },
+   "tritan": {
+    "brettel": 9.78,
+    "vienot": 9.784,
+    "machado": 9.73
+   }
+  },
+  {
+   "a": "#804d00",
+   "b": "#C0392B",
+   "normal": 22.95,
+   "protan": {
+    "brettel": 7.025,
+    "vienot": 7.072,
+    "machado": 7.65
+   },
+   "deutan": {
+    "brettel": 8.651,
+    "vienot": 8.739,
+    "machado": 8.83
+   },
+   "tritan": {
+    "brettel": 12.683,
+    "vienot": 13.629,
+    "machado": 13.429
+   }
+  },
+  {
+   "a": "#804d00",
+   "b": "#e5e7eb",
+   "normal": 51.445,
+   "protan": {
+    "brettel": 53.083,
+    "vienot": 54.127,
+    "machado": 54.661
+   },
+   "deutan": {
+    "brettel": 50.522,
+    "vienot": 50.826,
+    "machado": 49.581
+   },
+   "tritan": {
+    "brettel": 49.53,
+    "vienot": 50.221,
+    "machado": 49.46
+   }
+  },
+  {
+   "a": "#804d00",
+   "b": "#edb345",
+   "normal": 36.37,
+   "protan": {
+    "brettel": 37.599,
+    "vienot": 37.746,
+    "machado": 37.529
+   },
+   "deutan": {
+    "brettel": 35.165,
+    "vienot": 35.129,
+    "machado": 35.045
+   },
+   "tritan": {
+    "brettel": 35.663,
+    "vienot": 35.654,
+    "machado": 35.685
+   }
+  },
+  {
+   "a": "#86a6ff",
+   "b": "#8bd4ff",
+   "normal": 15.048,
+   "protan": {
+    "brettel": 13.654,
+    "vienot": 12.871,
+    "machado": 11.946
+   },
+   "deutan": {
+    "brettel": 10.398,
+    "vienot": 10.868,
+    "machado": 10.989
+   },
+   "tritan": {
+    "brettel": 9.202,
+    "vienot": 9.234,
+    "machado": 10.597
+   }
+  },
+  {
+   "a": "#86a6ff",
+   "b": "#8f68cc",
+   "normal": 21.605,
+   "protan": {
+    "brettel": 18.473,
+    "vienot": 17.583,
+    "machado": 16.672
+   },
+   "deutan": {
+    "brettel": 13.631,
+    "vienot": 13.789,
+    "machado": 13.86
+   },
+   "tritan": {
+    "brettel": 23.8,
+    "vienot": 25.174,
+    "machado": 34.355
+   }
+  },
+  {
+   "a": "#86a6ff",
+   "b": "#a1b3c7",
+   "normal": 10.711,
+   "protan": {
+    "brettel": 15.825,
+    "vienot": 15.61,
+    "machado": 14.81
+   },
+   "deutan": {
+    "brettel": 14.607,
+    "vienot": 15.352,
+    "machado": 14.999
+   },
+   "tritan": {
+    "brettel": 9.311,
+    "vienot": 10.607,
+    "machado": 10.545
+   }
+  },
+  {
+   "a": "#8bd4ff",
+   "b": "#8f68cc",
+   "normal": 34.265,
+   "protan": {
+    "brettel": 30.289,
+    "vienot": 28.608,
+    "machado": 26.82
+   },
+   "deutan": {
+    "brettel": 22.301,
+    "vienot": 22.888,
+    "machado": 23.186
+   },
+   "tritan": {
+    "brettel": 31.422,
+    "vienot": 32.296,
+    "machado": 40.422
+   }
+  },
+  {
+   "a": "#8bd4ff",
+   "b": "#a1b3c7",
+   "normal": 13.036,
+   "protan": {
+    "brettel": 10.689,
+    "vienot": 11.104,
+    "machado": 10.91
+   },
+   "deutan": {
+    "brettel": 10.785,
+    "vienot": 11.192,
+    "machado": 10.731
+   },
+   "tritan": {
+    "brettel": 12.947,
+    "vienot": 14.167,
+    "machado": 15.105
+   }
+  },
+  {
+   "a": "#8f68cc",
+   "b": "#a1b3c7",
+   "normal": 21.468,
+   "protan": {
+    "brettel": 27.098,
+    "vienot": 25.447,
+    "machado": 23.476
+   },
+   "deutan": {
+    "brettel": 20.43,
+    "vienot": 21.478,
+    "machado": 21.585
+   },
+   "tritan": {
+    "brettel": 19.383,
+    "vienot": 20.042,
+    "machado": 26.899
+   }
+  },
+  {
+   "a": "#9d6800",
+   "b": "#b78500",
+   "normal": 11.06,
+   "protan": {
+    "brettel": 11.168,
+    "vienot": 11.106,
+    "machado": 10.976
+   },
+   "deutan": {
+    "brettel": 10.043,
+    "vienot": 10.041,
+    "machado": 10.016
+   },
+   "tritan": {
+    "brettel": 10.145,
+    "vienot": 10.146,
+    "machado": 10.161
+   }
+  },
+  {
+   "a": "#C0392B",
+   "b": "#e5e7eb",
+   "normal": 46.659,
+   "protan": {
+    "brettel": 49.58,
+    "vienot": 50.39,
+    "machado": 49.701
+   },
+   "deutan": {
+    "brettel": 42.041,
+    "vienot": 42.605,
+    "machado": 41.249
+   },
+   "tritan": {
+    "brettel": 45.301,
+    "vienot": 46.612,
+    "machado": 44.816
+   }
+  },
+  {
+   "a": "#C0392B",
+   "b": "#edb345",
+   "normal": 40.841,
+   "protan": {
+    "brettel": 37.684,
+    "vienot": 37.59,
+    "machado": 36.294
+   },
+   "deutan": {
+    "brettel": 25.415,
+    "vienot": 25.418,
+    "machado": 25.289
+   },
+   "tritan": {
+    "brettel": 29.454,
+    "vienot": 29.956,
+    "machado": 29.653
+   }
+  },
+  {
+   "a": "#a7611b",
+   "b": "#cb882e",
+   "normal": 14.221,
+   "protan": {
+    "brettel": 14.702,
+    "vienot": 14.672,
+    "machado": 14.478
+   },
+   "deutan": {
+    "brettel": 12.889,
+    "vienot": 12.877,
+    "machado": 12.839
+   },
+   "tritan": {
+    "brettel": 13.277,
+    "vienot": 13.283,
+    "machado": 13.28
+   }
+  },
+  {
+   "a": "#cb882e",
+   "b": "#edb345",
+   "normal": 12.649,
+   "protan": {
+    "brettel": 12.391,
+    "vienot": 12.417,
+    "machado": 12.283
+   },
+   "deutan": {
+    "brettel": 10.902,
+    "vienot": 10.895,
+    "machado": 10.863
+   },
+   "tritan": {
+    "brettel": 11.328,
+    "vienot": 11.337,
+    "machado": 11.382
+   }
+  },
+  {
+   "a": "#e5e7eb",
+   "b": "#edb345",
+   "normal": 30.005,
+   "protan": {
+    "brettel": 30.116,
+    "vienot": 31.038,
+    "machado": 31.331
+   },
+   "deutan": {
+    "brettel": 30.242,
+    "vienot": 31.439,
+    "machado": 29.908
+   },
+   "tritan": {
+    "brettel": 23.87,
+    "vienot": 25.747,
+    "machado": 23.458
+   }
+  },
+  {
+   "a": "#edb345",
+   "b": "#ffe294",
+   "normal": 12.949,
+   "protan": {
+    "brettel": 11.801,
+    "vienot": 12.027,
+    "machado": 12.399
+   },
+   "deutan": {
+    "brettel": 10.992,
+    "vienot": 10.904,
+    "machado": 10.593
+   },
+   "tritan": {
+    "brettel": 11.685,
+    "vienot": 11.688,
+    "machado": 12.131
+   }
+  }
+ ]
+}
