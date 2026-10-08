@@ -1,7 +1,7 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.ts";
 import { CATEGORIES, endOfMonthISO, primaryAccount, toISODate } from "./model.ts";
-import { roleOfCategory, PIE_SLICES } from "./palette.ts";
+import { roleOfCategory } from "./palette.ts";
 import type {
   BudgetColumn, BudgetState, DayGroup, ISODate, Ledger, LedgerRow, MonthKey, SpendingMix, SpendingSlice,
 } from "./types.ts";
@@ -202,12 +202,10 @@ function monthsBetween(startISO: ISODate, endISO: ISODate): Array<{ key: MonthKe
 //  - nothing else. Orphaned categories keep their amount under one
 //    "Uncategorized" slice rather than vanishing.
 //
-// Beyond MAX_SLICES the tail folds into "Other". This is the BAR's limit —
-// the bar is the full view, and eight rows beside their own labels is what
-// it has always shown. The PIE folds further, to four plus Other, because
-// four is all the brass ramp can keep apart; that second fold is
-// `foldForPie` below and happens in the view, not here, so the two
-// renderings of one dataset stay one dataset.
+// Beyond MAX_SLICES the tail folds into "Other". Eight rows beside their
+// own labels is what the list has always shown, and with the pie gone
+// this is the only fold there is — the second one existed because a
+// four-step ramp could not carry more wedges, and there is no ramp now.
 const MAX_SLICES = 8;
 
 // The two FIXED buckets are not categories in the sense the others are. A
@@ -234,13 +232,16 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
     totals.set(e.category, round((totals.get(e.category) ?? 0) + e.amount));
   }
 
-  const describe = (categoryId: string): Pick<SpendingSlice, "label" | "bucket" | "role"> => {
+  const describe = (categoryId: string): Pick<SpendingSlice, "label" | "bucket" | "role" | "hue"> => {
     const role = roleOfCategory(categoryId, cats);
     if (categoryId === "bill") return { label: "Fixed bills", bucket: "bill", role };
     if (categoryId === "oneoff") return { label: "One-off", bucket: "oneoff", role };
     const cat = cats.find((c) => c.id === categoryId);
     if (!cat) return { label: "Uncategorized", bucket: "uncategorized", role };
-    return { label: cat.name, bucket: "category", role };
+    // The account's own hue rides along, so a view never has to look a
+    // category up to paint its slice and the two clients cannot disagree
+    // about what color an account is.
+    return { label: cat.name, bucket: "category", role, hue: cat.hue ?? null };
   };
 
   // The transactions inside one bucket, biggest first, same-named ones
@@ -319,33 +320,4 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
   return { slices, total, from, to: horizonISO };
 }
 
-/**
- * The pie's extra fold: top (PIE_SLICES - 1) by amount, everything else as
- * one "Other". Separate from the engine's own fold because the BAR shows
- * more rows than the pie can color, and a chart toggle must not change
- * the data — only how much of it is drawn.
- *
- * Any Other already present is FLATTENED into the new one rather than
- * nested, so `children` is always one level deep and "Other (n)" counts
- * real slices, never a bucket.
- */
-export function foldForPie(slices: SpendingSlice[]): SpendingSlice[] {
-  const flat: SpendingSlice[] = [];
-  for (const s of slices) {
-    if (s.bucket === "other") flat.push(...(s.children ?? []));
-    else flat.push(s);
-  }
-  if (flat.length <= PIE_SLICES) return flat;
-  const keep = flat.slice(0, PIE_SLICES - 1);
-  const rest = flat.slice(PIE_SLICES - 1);
-  keep.push({
-    key: "__other__",
-    label: `Other (${rest.length})`,
-    amount: round(rest.reduce((t, r) => t + r.amount, 0)),
-    percent: round(rest.reduce((t, r) => t + r.percent, 0)),
-    bucket: "other",
-    role: "uncategorized",
-    children: rest,
-  });
-  return keep;
-}
+

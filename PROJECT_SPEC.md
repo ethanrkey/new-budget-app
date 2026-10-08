@@ -1968,6 +1968,52 @@ Further out:
   responder claims a gesture only once it is more horizontal than
   vertical so a flick still scrolls the page under it.
 
+- **Color maps to the ACCOUNT, and the index is STORED** (2026-10-09).
+  A hue is an identity now: your Roth IRA is one color on its Dashboard
+  card, its chart line and its slice of planned spending, and it keeps
+  that color when another account is added or deleted. Loans all share
+  one color, spending is slate, Other stays gray.
+
+  **Why the index is stored, and why that is NOT a reversal of migration
+  13.** Thirteen removed a stored color index from these same entities.
+  That index was a USER'S ARBITRARY CHOICE, and an arbitrary choice
+  carries no information — it said what a category was called, which its
+  name already said. This one is an APP-ASSIGNED IDENTITY, and an
+  identity that does not persist is not an identity: assignment by
+  position was measured reshuffling three accounts' colors when the
+  first of four was deleted, which is survivable for decoration and
+  fatal for identity. Same field shape, opposite reason. Do not "clean
+  this up" by deriving it again.
+
+  Assignment is the lowest free index at creation, so a deleted
+  account's color is reusable and no existing account's ever moves;
+  backfilled in display order so nothing changes on upgrade. `order`
+  cannot stand in — reordering rewrites it.
+
+  **Eight hues, measured, then degrade.** Eight is what clears the gate's
+  own floor all-pairs under four vision types with the loan, spending,
+  Other and degraded colors reserved. The ninth account does NOT wrap
+  onto someone else's color, which would break the guarantee silently:
+  a bar draws an OUTLINE, because no fill can collide with a fill.
+
+  **The pie is gone.** Measured on real data before dropping it: under
+  this system a pie is 45%, 61% and 98% one slate wedge across the three
+  accounts with data, because spending is most of every window by
+  definition. The sorted bar it leaves behind needs no legend and no
+  color-matching, reads identically under every vision type, and — the
+  part that buys something — is no longer capped by how many colors a
+  ramp can carry, so `foldForPie` and the second fold went with it.
+
+  Three things the gate caught while picking the colors, each recorded
+  because each was a plausible choice: a blue-gray loan color sat ΔE2000
+  4.3 from Other's gray under protanopia (two grays for two meanings);
+  a magenta account hue sat 8.6 from the expense red under tritanopia;
+  and the gate itself was checking only the WEB's red, so a candidate
+  came within 1.7 of the phone's. It now checks each client's red
+  against the modes that client renders, which is accurate rather than
+  merely strict — the phone is dark-only, so holding light colors to its
+  red would be inventing a constraint.
+
 - **`kind` decides a SIGN, so normalize validates it** (2026-10-09,
   `inferCategoryKind`). It was `if (cat.kind) return cat.kind` — a
   truthiness test, not an enum check — so any non-empty junk survived

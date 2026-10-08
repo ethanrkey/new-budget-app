@@ -3,7 +3,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } f
 import { computeCategoryHistory, computeLoggedContributions, computeNetPosition, computeMonthVariance } from "../engine/progress.ts";
 import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.ts";
 import { primaryAccount, todayISO } from "../engine/model.ts";
-import { cardColor, roleOfTrackerCategory, roleSuffix, NEUTRAL_LINE, LOAN_LINE } from "../engine/palette.ts";
+import { accountColor, roleOfTrackerCategory, roleSuffix, NEUTRAL_LINE, LOAN_COLOR, DEGRADED_SOLID } from "../engine/palette.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
 import LoanSetupModal from "./LoanSetupModal.jsx";
@@ -67,15 +67,17 @@ export default function Dashboard({
           onDeleteSnapshot={(id) => onDeleteAccountSnapshot(account.id, id)}
         />
 
-        {/* COLOR BY POSITION, cycling — decoration, not meaning. It is
-            here so five cards on one screen are five distinguishable
-            objects; it says nothing about the account, and the Checking
-            card takes none of it (cash has no hue, and never had). */}
-        {assetCats.map((cat, i) => (
+        {/* THE ACCOUNT'S OWN HUE, stored on the category, so it is the
+            same color here, on its chart line and on its slice of planned
+            spending — and it does not move when another account is
+            deleted. Past the eighth account there is none left, and the
+            card falls back to a measured neutral. The Checking card takes
+            no hue at all; cash never had one. */}
+        {assetCats.map((cat) => (
           <AssetCard
             key={cat.id}
             category={cat}
-            color={cardColor(i, isDark)}
+            color={accountColor(cat.hue, isDark) ?? DEGRADED_SOLID[isDark ? "dark" : "light"]}
             history={computeCategoryHistory(state, cat.id)}
             contributions={computeLoggedContributions(state, cat.id, today)}
             today={today}
@@ -95,6 +97,7 @@ export default function Dashboard({
           summary={computeDebtSummary(state)}
           debtCats={debtCats}
           onEditLoanById={(id) => setLoanModal({ cat: debtCats.find((c) => c.id === id) })}
+          isDark={isDark}
           state={state}
           today={today}
           onAddLoan={() => setLoanModal({})}
@@ -463,13 +466,13 @@ function AssetCard({ category, color, isDark, history, contributions, today, onL
 // computes it (computeLoanHistory / expected), so putting the chart back is
 // a render change, not a re-derivation.
 // "expected remaining vs. actual remaining" appears nowhere by design.
-function LoanCard({ category, state, today, progress, history, onLog, onEdit, onUpdateSnapshot, onDeleteSnapshot }) {
+function LoanCard({ category, isDark, state, today, progress, history, onLog, onEdit, onUpdateSnapshot, onDeleteSnapshot }) {
   // NO CARD COLOR FOR LOANS. Five loan cards therefore look alike, which
   // is the right trade: the Debt section collapses to one card by default,
   // so you only ever see them all at once after choosing to, and each is
   // labeled. Spending five hues on a list you opened on purpose buys
   // nothing and makes the Dashboard louder.
-  const color = LOAN_LINE;
+  const color = LOAN_COLOR[isDark ? "dark" : "light"];
   const latest = progress.latest;
   const monthKey = today.slice(0, 7);
 
@@ -627,7 +630,7 @@ const DEBTS_PREF = "debts-expanded";
 const FAN_MS = 260;      // must match the duration classes below
 const STAGGER_MS = 45;   // per-card delay, so they fan rather than pop together
 
-function DebtSection({ summary, debtCats, state, today, onAddLoan, onLog, onEditTerms, onEditLoanById, onUpdateSnapshot, onDeleteSnapshot }) {
+function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog, onEditTerms, onEditLoanById, onUpdateSnapshot, onDeleteSnapshot }) {
   const [expanded, setExpanded] = useState(() => getDeviceFlag(DEBTS_PREF, false));
   // A grid item can't collapse to nothing without leaving a hole in the grid,
   // so the loan cards genuinely mount and unmount. `closing` keeps them
@@ -685,6 +688,7 @@ function DebtSection({ summary, debtCats, state, today, onAddLoan, onLog, onEdit
             {isLoanConfigured(cat) ? (
               <LoanCard
                 category={cat}
+                isDark={isDark}
                 state={state}
                 today={today}
                 progress={computeLoanProgress(state, cat, today)}

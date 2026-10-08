@@ -51,25 +51,29 @@
     "id": "roth",
     "name": "Roth",
     "order": 0,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 0
    },
    {
     "id": "saved",
     "name": "Saved",
     "order": 1,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 1
    },
    {
     "id": "brokerage",
     "name": "Brokerage",
     "order": 2,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 2
    },
    {
     "id": "loans",
     "name": "Loans",
     "order": 3,
-    "kind": "debt"
+    "kind": "debt",
+    "hue": 3
    }
   ],
   "accountSnapshots": {
@@ -128,25 +132,29 @@
     "id": "roth",
     "name": "Roth",
     "order": 0,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 0
    },
    {
     "id": "saved",
     "name": "Saved",
     "order": 1,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 1
    },
    {
     "id": "brokerage",
     "name": "Brokerage",
     "order": 2,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 2
    },
    {
     "id": "loans",
     "name": "Loans",
     "order": 3,
-    "kind": "debt"
+    "kind": "debt",
+    "hue": 3
    }
   ],
   "accountSnapshots": {
@@ -205,25 +213,29 @@
     "id": "roth",
     "name": "Roth",
     "order": 0,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 0
    },
    {
     "id": "saved",
     "name": "Saved",
     "order": 1,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 1
    },
    {
     "id": "brokerage",
     "name": "Brokerage",
     "order": 2,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 2
    },
    {
     "id": "loans",
     "name": "Loans",
     "order": 3,
-    "kind": "debt"
+    "kind": "debt",
+    "hue": 3
    }
   ],
   "accountSnapshots": {
@@ -282,19 +294,22 @@
     "id": "c1",
     "name": "Car Debt",
     "order": 0,
-    "kind": "debt"
+    "kind": "debt",
+    "hue": 0
    },
    {
     "id": "c2",
     "name": "Vacation",
     "order": 1,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 1
    },
    {
     "id": "loans",
     "name": "Loans",
     "order": 2,
-    "kind": "debt"
+    "kind": "debt",
+    "hue": 2
    }
   ],
   "accountSnapshots": {
@@ -363,25 +378,29 @@
     "id": "roth",
     "name": "Roth",
     "order": 0,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 0
    },
    {
     "id": "saved",
     "name": "Saved",
     "order": 1,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 1
    },
    {
     "id": "brokerage",
     "name": "Brokerage",
     "order": 2,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 2
    },
    {
     "id": "loans",
     "name": "Loans",
     "order": 3,
-    "kind": "debt"
+    "kind": "debt",
+    "hue": 3
    }
   ],
   "accountSnapshots": {
@@ -444,7 +463,8 @@
     "kind": "debt",
     "originalPrincipal": 18000,
     "interestRate": 5.8,
-    "interestStartDate": "2026-12-01"
+    "interestStartDate": "2026-12-01",
+    "hue": 0
    }
   ],
   "accountSnapshots": {
@@ -526,7 +546,8 @@
     "kind": "debt",
     "originalPrincipal": 18000,
     "interestRate": 5.8,
-    "interestStartDate": null
+    "interestStartDate": null,
+    "hue": 0
    },
    {
     "id": "loan-L2",
@@ -535,7 +556,8 @@
     "kind": "debt",
     "originalPrincipal": 2000,
     "interestRate": 6.5,
-    "interestStartDate": null
+    "interestStartDate": null,
+    "hue": 1
    }
   ],
   "accountSnapshots": {
@@ -599,20 +621,23 @@
     "name": "Savings",
     "order": 0,
     "kind": "asset",
-    "assetKind": "savings"
+    "assetKind": "savings",
+    "hue": 0
    },
    {
     "id": "lvx1h03m",
     "name": "Investments",
     "order": 1,
     "kind": "asset",
-    "assetKind": "investment"
+    "assetKind": "investment",
+    "hue": 1
    },
    {
     "id": "reachgfx",
     "name": "Debt",
     "order": 2,
-    "kind": "debt"
+    "kind": "debt",
+    "hue": 2
    }
   ],
   "accountSnapshots": {
@@ -673,7 +698,8 @@
     "id": "k",
     "name": "Roth",
     "order": 0,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 0
    }
   ],
   "accountSnapshots": {
@@ -757,7 +783,8 @@
     "id": "k",
     "name": "Roth",
     "order": 0,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 0
    }
   ],
   "accountSnapshots": {
@@ -817,7 +844,8 @@
     "id": "k",
     "name": "Roth",
     "order": 0,
-    "kind": "asset"
+    "kind": "asset",
+    "hue": 0
    }
   ],
   "accountSnapshots": {
@@ -879,20 +907,23 @@
     "name": "Savings",
     "order": 0,
     "kind": "asset",
-    "assetKind": "savings"
+    "assetKind": "savings",
+    "hue": 0
    },
    {
     "id": "lvx1h03m",
     "name": "Investments",
     "order": 1,
     "kind": "asset",
-    "assetKind": "investment"
+    "assetKind": "investment",
+    "hue": 1
    },
    {
     "id": "reachgfx",
     "name": "Debt",
     "order": 2,
-    "kind": "debt"
+    "kind": "debt",
+    "hue": 2
    }
   ],
   "accountSnapshots": {

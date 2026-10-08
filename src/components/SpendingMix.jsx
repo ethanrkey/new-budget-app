@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { pieFill, barFill } from "../engine/palette.ts";
-import { foldForPie } from "../engine/compute.ts";
+import { sliceFill, DEGRADED_SOLID } from "../engine/palette.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 
 // ---- Where the PLANNED outflow goes, over the Ledger's own window ----
@@ -28,7 +26,6 @@ import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 // rows in place, which is the bar's whole advantage. Both views show the
 // same data; they already differ in how much is drawn versus listed.
 const COLLAPSED_PREF = "ledger-mix-collapsed";
-const KIND_PREF = "ledger-mix-bar";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -54,8 +51,19 @@ function Amount({ d }) {
   );
 }
 
+// A null fill is an account past the eighth hue. It draws as an OUTLINE
+// rather than borrowing a color that already belongs to another account —
+// no fill can collide with a fill, and the row's label carries the
+// identity, as it does for every row.
 function Swatch({ fill }) {
-  return <span className="h-2.5 w-2.5 rounded-sm shrink-0 self-center" style={{ backgroundColor: fill }} />;
+  return (
+    <span
+      className="h-2.5 w-2.5 rounded-sm shrink-0 self-center"
+      style={fill
+        ? { backgroundColor: fill }
+        : { border: `1.5px solid ${DEGRADED_SOLID.light}`, backgroundColor: "transparent" }}
+    />
+  );
 }
 
 function Chevron({ open }) {
@@ -87,32 +95,17 @@ function prettyDate(iso) {
 
 export default function SpendingMix({ mix, isDark }) {
   const [collapsed, setCollapsed] = useStickyFlag(COLLAPSED_PREF, true);
-  // Bar is the DEFAULT and sits first: it reads proportions precisely,
-  // labels every row inline, and the role colors carry further in a flat
-  // bar than in a wedge. The pie is the alternative, not the baseline.
-  const [asBar, setAsBar] = useStickyFlag(KIND_PREF, true);
   // Component state, not devicePrefs: opening Other is a drill-down you do
   // to answer a question, not a layout preference worth remembering.
   const [otherOpen, setOtherOpen] = useState(false);
 
-  // ONE DATASET, two depths. The bar renders what the engine returned; the
-  // pie folds further to four plus Other, because four is all the ramp can
-  // keep apart. The toggle changes how much is DRAWN, never the data.
-  //
-  // A child of Other is never ranked: in the pie it stays gray like the
-  // wedge it came out of, and in the bar it is a named row like any other.
-  const source = asBar ? mix.slices : foldForPie(mix.slices);
-  const data = source.map((s, rank) => {
-    const other = s.bucket === "other";
-    return {
-      ...s,
-      fill: asBar ? barFill(other, isDark) : pieFill(rank, other, isDark),
-      children: s.children?.map((c) => ({
-        ...c,
-        fill: asBar ? barFill(false, isDark) : pieFill(0, true, isDark),
-      })),
-    };
-  });
+  // A fill is an IDENTITY now, so it comes from the slice rather than from
+  // its position: the account's own hue, one color for every loan, slate
+  // for spending, gray for Other. `null` is an account past the eighth
+  // hue — that row draws an outlined swatch rather than borrowing a color
+  // that already belongs to someone else.
+  const paint = (s) => ({ ...s, fill: sliceFill(s, isDark) });
+  const data = mix.slices.map((s) => ({ ...paint(s), children: s.children?.map(paint) }));
   const empty = data.length === 0;
 
   return (
@@ -134,24 +127,6 @@ export default function SpendingMix({ mix, isDark }) {
             <path d="M6 9l6 6 6-6" />
           </svg>
         </button>
-        {!collapsed && !empty && (
-          <div className="flex items-center gap-1 shrink-0 -ml-0.5" role="group" aria-label="Chart type">
-            {[["Bar", true], ["Pie", false]].map(([label, val]) => (
-              <button
-                key={label}
-                onClick={() => setAsBar(val)}
-                aria-pressed={asBar === val}
-                className={`text-xs px-2 py-1 rounded-md transition ${
-                  asBar === val
-                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-medium"
-                    : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}>
@@ -167,10 +142,8 @@ export default function SpendingMix({ mix, isDark }) {
               <p className="text-sm text-gray-400 py-4 text-center">
                 Nothing going out in this window yet.
               </p>
-            ) : asBar ? (
-              <BarView data={data} total={mix.total} otherOpen={otherOpen} onToggleOther={setOtherOpen} />
             ) : (
-              <PieView data={data} isDark={isDark} otherOpen={otherOpen} onToggleOther={setOtherOpen} />
+              <BarView data={data} total={mix.total} otherOpen={otherOpen} onToggleOther={setOtherOpen} />
             )}
           </div>
         </div>
@@ -187,36 +160,6 @@ function useStickyFlag(name, fallback) {
     value,
     (next) => { setDeviceFlag(name, next); setValue(next); },
   ];
-}
-
-function PieView({ data, isDark, otherOpen, onToggleOther }) {
-  return (
-    <div className="flex flex-col sm:flex-row items-center gap-4">
-      <div className="h-52 w-full sm:w-52 shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="amount"
-              nameKey="label"
-              innerRadius="52%"
-              outerRadius="88%"
-              paddingAngle={2}
-              stroke={isDark ? "#111827" : "#ffffff"}
-              strokeWidth={2}
-              isAnimationActive={false}
-            >
-              {data.map((d) => <Cell key={d.key} fill={d.fill} />)}
-            </Pie>
-            <Tooltip content={<MixTip />} />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      {/* The legend is not decoration: the category palette's separation is
-          tight enough that identity must never rest on color alone. */}
-      <Legend data={data} otherOpen={otherOpen} onToggleOther={onToggleOther} />
-    </div>
-  );
 }
 
 function BarView({ data, total, otherOpen, onToggleOther }) {
@@ -267,66 +210,6 @@ function BarRow({ d, total, chevron }) {
     </div>
   );
 }
-
-// Capped width: on a wide screen a full-bleed legend strands each value
-// meters from its own label.
-function Legend({ data, otherOpen, onToggleOther }) {
-  return (
-    <ul className="grow w-full min-w-0 max-w-lg space-y-1">
-      {data.map((d) => {
-        // Same rule as the bar: open replaces, it does not nest under a
-        // summary that would read as double-counting.
-        if (d.children && otherOpen) {
-          return (
-            <li key={d.key}>
-              <ul className="space-y-1">
-                {d.children.map((c) => (
-                  <li key={c.key} className="flex items-baseline justify-between gap-3 text-sm">
-                    <span className="flex items-baseline gap-2 min-w-0">
-                      <Swatch fill={c.fill} />
-                      <SliceLabel d={c} />
-                    </span>
-                    <Amount d={c} />
-                  </li>
-                ))}
-              </ul>
-              <Collapse n={d.children.length} onClick={() => onToggleOther(false)} />
-            </li>
-          );
-        }
-        return (
-          <li key={d.key} className="text-sm">
-            {d.children ? (
-              <button
-                onClick={() => onToggleOther(true)}
-                aria-expanded={false}
-                className="w-full flex items-baseline justify-between gap-3 text-left rounded hover:bg-gray-50 dark:hover:bg-gray-800/60 -mx-1 px-1"
-              >
-                <span className="flex items-baseline gap-2 min-w-0">
-                  <Swatch fill={d.fill} />
-                  <span className="truncate text-gray-700 dark:text-gray-300">{d.label}</span>
-                  <Chevron open={false} />
-                </span>
-                <Amount d={d} />
-              </button>
-            ) : (
-              <span className="flex items-baseline justify-between gap-3">
-                <span className="flex items-baseline gap-2 min-w-0">
-                  <Swatch fill={d.fill} />
-                  <SliceLabel d={d} />
-                </span>
-                <Amount d={d} />
-              </span>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-// The way back. With the summary row gone there is nothing left to click
-// again, so the fold needs its own control.
 function Collapse({ n, onClick }) {
   return (
     <button
@@ -337,17 +220,5 @@ function Collapse({ n, onClick }) {
       <Chevron open />
       Fold {n} back into Other
     </button>
-  );
-}
-
-function MixTip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg px-2.5 py-1.5 shadow-sm text-xs">
-      <div className="font-medium text-gray-700 dark:text-gray-200">{d.label}</div>
-      {d.parentLabel && <div className="text-gray-400">{d.parentLabel}</div>}
-      <div className="tabular-nums text-gray-600 dark:text-gray-400">{money(d.amount)} · {d.percent}%</div>
-    </div>
   );
 }

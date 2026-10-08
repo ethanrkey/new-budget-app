@@ -21,7 +21,7 @@ import {
 } from "../../../src/engine/progress.ts";
 import { computeLoanProgress } from "../../../src/engine/loans.ts";
 import { primaryAccount, todayISO } from "../../../src/engine/model.ts";
-import { cardColor, roleOfTrackerCategory, roleSuffix, LOAN_LINE } from "../../../src/engine/palette.ts";
+import { accountColor, roleOfTrackerCategory, roleSuffix, LOAN_COLOR, DEGRADED_SOLID } from "../../../src/engine/palette.ts";
 import type { BalanceSnapshot, TrackerCategory } from "../../../src/engine/types.ts";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -110,12 +110,13 @@ export default function DashboardScreen() {
           `${account.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
       />
 
-      {/* Color by card POSITION, cycling — decoration, so five accounts
-          are five distinguishable objects. Same function the web calls, so
-          the phone and the laptop give an account the same color. */}
-      {assets.map((cat, i) => (
+      {/* THE ACCOUNT'S OWN HUE, stored on the category, so it is the same
+          color on this card, on its chart line and on its slice of planned
+          spending — and the same color on the laptop. Past the eighth
+          account there is none left and it falls back to a neutral. */}
+      {assets.map((cat) => (
         <AssetCard
-          key={cat.id} cat={cat} color={cardColor(i, true)} chartW={chartW} today={today}
+          key={cat.id} cat={cat} color={accountColor(cat.hue, true) ?? DEGRADED_SOLID.dark} chartW={chartW} today={today}
           online={online}
           onLog={() => setLogging(cat.id)}
           onLogContribution={() => setContributing(cat.id)}
@@ -332,7 +333,7 @@ function DebtCard({ cat, chartW, today, online, onLog, onEditEntry, onDeleteEntr
   const { state } = useBudget();
   // No card color for loans, same as the web: the list is long, the cards
   // are labeled, and five hues on it is decoration you have to decode.
-  const color = LOAN_LINE;
+  const color = LOAN_COLOR.dark;
   const history = computeCategoryHistory(state!, cat.id);
   const p = computeLoanProgress(state!, cat, today);
 

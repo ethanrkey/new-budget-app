@@ -49,10 +49,46 @@ const WORDS = {
   catalogue: "catalog", dialogue: "dialog", analogue: "analog",
 };
 
+// ---- commit-message mode -------------------------------------------------
+// `node scripts/check_spelling.mjs --messages <rev-range>`
+//
+// Added after the rule was broken three times in one day, every time in
+// prose rather than in code, and once INSIDE THE COMMIT that hardened the
+// rule. "Prose discipline stays mine" was tested and failed, so it is a
+// gate now. Installed with `npm run hooks:install`, which points
+// core.hooksPath at scripts/hooks so the hook is versioned like anything
+// else rather than living unshared in .git.
+const messagesArg = process.argv.indexOf("--messages");
+if (messagesArg !== -1) {
+  const range = process.argv[messagesArg + 1];
+  if (!range) { console.error("--messages needs a rev-range"); process.exit(2); }
+  let log = "";
+  try {
+    log = execSync(`git log --format=%H%x00%B%x01 ${range}`, { encoding: "utf8" });
+  } catch {
+    process.exit(0);     // nothing to compare against (a new branch, say)
+  }
+  const pattern = buildPattern();
+  let bad = 0;
+  for (const entry of log.split("\u0001")) {
+    if (!entry.trim()) continue;
+    const [sha, body] = entry.split("\u0000");
+    for (const m of (body ?? "").matchAll(pattern)) {
+      bad++;
+      console.log(`${sha.slice(0, 8)}  "${m[0]}" → "${WORDS[m[0].toLowerCase()]}"`);
+    }
+  }
+  console.log(bad === 0 ? "COMMIT MESSAGES OK (American)" : `\n${bad} BRITISH SPELLING(S) in commit messages`);
+  process.exit(bad === 0 ? 0 : 1);
+}
+
 const SKIP_EXT = new Set([".png", ".jpg", ".jpeg", ".ico", ".ttf", ".woff", ".woff2", ".webmanifest"]);
 const SKIP_FILE = new Set(["package-lock.json", "mobile/package-lock.json", "scripts/check_spelling.mjs"]);
 
-const pattern = new RegExp(`\\b(${Object.keys(WORDS).join("|")})\\b`, "gi");
+function buildPattern() {
+  return new RegExp(`\\b(${Object.keys(WORDS).join("|")})\\b`, "gi");
+}
+const pattern = buildPattern();
 const files = execSync("git ls-files", { encoding: "utf8" }).split("\n").filter(Boolean);
 
 let hits = 0;

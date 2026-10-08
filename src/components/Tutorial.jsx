@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BRASS_RAMP, BAR_COLOR, CARD_COLORS, NEUTRAL_CHART } from "../engine/palette.ts";
+import { ACCOUNT_HUES, LOAN_COLOR, SPENDING_COLOR, NEUTRAL_CHART } from "../engine/palette.ts";
 import { getDeviceTheme } from "../theme.js";
 
 // The full feature walkthrough — everything the app can do, in the order you'd
@@ -303,10 +303,10 @@ export default function Tutorial({ onClose, onStartTour }) {
 // the old legend, and seven hues to memorize is what made the app hard to
 // read. These four entries are the whole system.
 const LEGEND = [
-  { key: "brass", name: "Brass", hint: "the spending chart, and the app's own gold", swatches: (dark) => BRASS_RAMP[dark ? "dark" : "light"] },
-  { key: "bar",   name: "One brass", hint: "every row of the bar chart — the full list, so no ranking", swatches: (dark) => [BAR_COLOR[dark ? "dark" : "light"]] },
-  { key: "cards", name: "Card colors", hint: "telling your Dashboard accounts apart. Decoration, not meaning", swatches: (dark) => CARD_COLORS[dark ? "dark" : "light"] },
-  { key: "gray",  name: "Gray", hint: "“Other”, loans, and anything deliberately not identified", swatches: () => [NEUTRAL_CHART] },
+  { key: "accounts", name: "One per account", hint: "each savings or investment account keeps its own color, everywhere it appears", swatches: (dark) => ACCOUNT_HUES[dark ? "dark" : "light"] },
+  { key: "loans", name: "Loans", hint: "all of them, one color — which loan a row is, its name says", swatches: (dark) => [LOAN_COLOR[dark ? "dark" : "light"]] },
+  { key: "spending", name: "Spending", hint: "bills, one-offs, anything not tagged to an account", swatches: (dark) => [SPENDING_COLOR[dark ? "dark" : "light"]] },
+  { key: "other", name: "Other", hint: "the folded tail of the spending list", swatches: () => [NEUTRAL_CHART] },
 ];
 
 function Block({ block }) {

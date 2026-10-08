@@ -5,6 +5,7 @@
 // changes again, per the same "keep it swappable" principle storage.js
 // itself follows.
 import { blankState, defaultAccounts, sanitizeTabOrder, PRIMARY_ACCOUNT_ID } from "./model.ts";
+import { nextFreeHue, MAX_ACCOUNT_HUES } from "./palette.ts";
 import type { BalanceSnapshot, BudgetState, RawState, TrackerCategory } from "./types.ts";
 
 // One-time migration: very old data had a separate `tracker` field and/or a
@@ -82,6 +83,36 @@ function inferCategoryKind(cat: any): "asset" | "debt" {
   // misclassifying an asset as debt would subtract it from net worth with
   // no such fallback.
   return "asset";
+}
+
+/**
+ * Migration 14 (2026-10-09): every tracker category gets a stored `hue`,
+ * the index of the color that account owns. See palette.ts for why it is
+ * stored rather than derived.
+ *
+ * BACKFILLED IN DISPLAY ORDER so nothing visibly changes on upgrade — the
+ * account that was first keeps the color it had. After that the index is
+ * the account's own and never moves; a new one takes the lowest free
+ * index, so deleting an account frees its color without disturbing
+ * anyone else's. Past the eighth, null, and the views degrade.
+ *
+ * RUNS LAST, after every category any other migration spawns. It did not,
+ * at first, and normalize stopped being idempotent: the debt category
+ * that the loan-item migration creates was invented after the hues were
+ * handed out, so it got one only on a second pass. The golden
+ * idempotency check caught it — normalize(normalize(x)) must equal
+ * normalize(x) or every save rewrites rows that did not change.
+ */
+function assignHues(cats: any[]): any[] {
+  const held: (number | null)[] = cats.map((c) => (typeof c.hue === "number" ? c.hue : null));
+  const byId = new Map<unknown, number | null>();
+  for (const c of [...cats].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+    if (typeof c.hue === "number" && c.hue >= 0 && c.hue < MAX_ACCOUNT_HUES) { byId.set(c.id, c.hue); continue; }
+    const next = nextFreeHue(held);
+    byId.set(c.id, next);
+    held.push(next);
+  }
+  return cats.map((c) => ({ ...c, hue: byId.get(c.id) ?? null }));
 }
 
 // Merge a raw loaded/imported object onto blankState() so every field always
@@ -295,7 +326,7 @@ export function normalize(parsed: any): BudgetState {
     oneoffs: oneoffs.map(stamp).map(migrateLoanItem),
     // Migration 13: the retired `color` index is stripped here rather than
     // merely ignored, for the same reason paidOverrides was.
-    trackerCategories: cats.map(stripRetiredColor),
+    trackerCategories: assignHues(cats).map(stripRetiredColor),
     // Migration 8 (2026-10-02): the old `paidOverrides` field is DROPPED,
     // not carried forward. Mark-a-bill-paid is gone — a paid bill is already
     // inside the verified balance, and buildEvents drops everything before

@@ -45,6 +45,16 @@ interface TrackerCategoryBase {
   id: string;
   name: string;
   order: number;
+  /**
+   * Which account hue this category owns, 0..7, or null past the limit.
+   * STORED, and that is the whole point — see palette.ts. Assigned by the
+   * app, never chosen; `order` cannot stand in for it because reordering
+   * and deleting both move it, and a color that moves is not an identity.
+   * Debt categories carry one too, harmlessly: loans all render in one
+   * color, and keeping the field uniform means nothing has to ask what
+   * kind a category is before it can be saved.
+   */
+  hue?: number | null;
 }
 
 /**
@@ -294,10 +304,14 @@ export interface SpendingSlice {
   /** 0-100, of the window's total planned outflow. */
   percent: number;
   bucket: SpendingBucket;
-  /** What the money is DOING. No longer a color — color is brass by rank
-   *  (see palette.ts) — but still what decides whether an amount is red,
-   *  and still assigned by the engine so both clients agree. */
+  /** What the money is DOING. Decides whether an amount is red, and
+   *  which of the four chart fills a slice takes. */
   role: Role;
+  /** `category` slices belonging to an ACCOUNT: that account's stored hue
+   *  index, carried here so a view never looks a category up to paint a
+   *  slice. Null for loans, spending and Other, and for an account past
+   *  the eighth hue, which draws degraded. */
+  hue?: number | null;
   /** `item` slices only: which fixed bucket it came from, so the view tints
    *  off that bucket's own neutral rather than a shared one. */
   parentBucket?: "bill" | "oneoff";

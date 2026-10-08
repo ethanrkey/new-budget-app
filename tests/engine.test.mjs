@@ -1,5 +1,5 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
-import { computeLedger, computeBudget, computeSpendingByCategory, foldForPie, groupByDay } from "../src/engine/compute.ts";
+import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay } from "../src/engine/compute.ts";
 import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys, activeMonthKeys, fixedSoFar } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
@@ -592,7 +592,7 @@ const explicitCustom = normalize({
   trackerCategories: [{ id: "z1", name: "My Fund", color: 4, order: 0 }],
 });
 eq("an existing custom trackerCategories list passes through, minus the retired color (migration 13)",
-  explicitCustom.trackerCategories, [{ id: "z1", name: "My Fund", order: 0, kind: "asset" }]);
+  explicitCustom.trackerCategories, [{ id: "z1", name: "My Fund", order: 0, kind: "asset", hue: 0 }]);
 
 // ---------- Scenario P2: `kind` (asset/debt) backfill migration ----------
 console.log("\n== Scenario P2: category `kind` backfill (loan-amortization feature) ==");
@@ -961,9 +961,10 @@ eq("Phase 2: legacy checkInBalance/checkInDate are stripped from settings (accou
   [migratedAA.settings.checkInBalance, migratedAA.settings.checkInDate], [undefined, undefined]);
 eq("nothing unrelated was touched (categories bar the retired color, snapshots, settings extras)",
   [migratedAA.trackerCategories, migratedAA.balanceSnapshots, migratedAA.paidOverrides, migratedAA.settings.theme, migratedAA.settings.visibleTrackerCategoryIds],
-  // Migration 13 strips `color`, so the expectation strips it too rather
-  // than comparing against the raw legacy objects.
-  [legacyAA.trackerCategories.map((c) => { const n = { ...c }; delete n.color; return n; }), legacyAA.balanceSnapshots, legacyAA.paidOverrides, "dark", ["roth"]]);
+  // Migration 13 strips `color` and migration 14 adds `hue`, so the
+  // expectation does both rather than comparing against the raw legacy
+  // objects. Everything else must be untouched.
+  [legacyAA.trackerCategories.map((c, i) => { const n = { ...c, hue: i }; delete n.color; return n; }), legacyAA.balanceSnapshots, legacyAA.paidOverrides, "dark", ["roth"]]);
 
 // Idempotent: normalize runs on EVERY load. A second pass must change nothing
 // — no second seed, no re-stamping, byte-identical.
@@ -1524,14 +1525,8 @@ const manyMix = computeSpendingByCategory(manyAL, "2026-09-30");
 check("never more than 8 slices from the engine", manyMix.slices.length, 8);
 eq("the last one is the folded Other", manyMix.slices[7].bucket, "other");
 eq("Other names how many it folded", manyMix.slices[7].label, "Other (4)");
-const manyPie = foldForPie(manyMix.slices);
-check("the pie folds again, to 4 named plus Other", manyPie.length, 5);
-eq("...and its Other is FLAT — the engine's Other is unpacked, not nested",
-  [manyPie[4].label, manyPie[4].children.every((c) => c.bucket !== "other")], ["Other (7)", true]);
-check("...losing no money on the way", round2(manyPie.reduce((t, s) => t + s.amount, 0)), manyMix.total);
-check("...and no percent either", round2(manyPie.reduce((t, s) => t + s.percent, 0)), 100);
-eq("a chart small enough to need no second fold is returned untouched",
-  foldForPie(mixAL.slices).length, mixAL.slices.length);
+// The pie is gone (2026-10-09) and the second fold with it: a ramp that
+// could only carry four wedges was the only reason it existed.
 check("folding loses no money", manyMix.slices.reduce((t, s) => t + s.amount, 0), manyMix.total);
 
 // Empty case.

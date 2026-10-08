@@ -3,6 +3,7 @@
 // a `cadence`) or a OneOff (has a `date`).
 import { uid, primaryAccount, sanitizeTabOrder, blankState } from "./model.ts";
 import { occurrenceDates } from "./generate.ts";
+import { nextFreeHue } from "./palette.ts";
 import type {
   AssetCategory, BalanceSnapshot, BudgetItem, BudgetState, Contribution, DebtCategory,
   AssetKind, ISODate, MonthKey, RecurringItem, TabId,
@@ -222,7 +223,11 @@ export function addCategory(state: BudgetState, name: string, kind: "asset" | "d
   const order = state.trackerCategories.length
     ? Math.max(...state.trackerCategories.map((c) => c.order)) + 1
     : 0;
-  return { ...state, trackerCategories: [...state.trackerCategories, { id: uid(), name, order, kind }] };
+  // The lowest hue nobody holds, so a deleted account's color is reusable
+  // and no existing account's ever moves. Null past the limit; the views
+  // degrade rather than wrapping onto someone else's identity.
+  const hue = nextFreeHue(state.trackerCategories.map((c) => c.hue));
+  return { ...state, trackerCategories: [...state.trackerCategories, { id: uid(), name, order, kind, hue }] };
 }
 
 export function updateCategory(state: BudgetState, id: string, patch: CategoryPatch): BudgetState {

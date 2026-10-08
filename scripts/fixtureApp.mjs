@@ -14,7 +14,6 @@
 // Needs Google Chrome installed (CHROME=/path overrides) and nothing else.
 import { spawn } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
-import { createServer } from "node:net";
 import puppeteer from "puppeteer-core";
 import { splitState, ENTITY_SCHEMA_VERSION } from "../src/engine/entities.ts";
 import { fixtureState } from "./fixture.mjs";
@@ -32,20 +31,29 @@ function supabaseUrl() {
   return m[1].trim().replace(/\/+$/, "");
 }
 
-const waitForPort = (port) =>
-  new Promise((resolve, reject) => {
-    const deadline = Date.now() + 30_000;
-    const tick = () => {
-      const probe = createServer().listen(port, "127.0.0.1");
-      probe.on("listening", () => {
-        probe.close();
-        if (Date.now() > deadline) reject(new Error(`nothing came up on :${port}`));
-        else setTimeout(tick, 200);
-      });
-      probe.on("error", () => resolve()); // in use == the dev server is up
-    };
-    tick();
-  });
+/**
+ * Wait until the dev server ANSWERS, by asking it.
+ *
+ * This used to wait until the port refused a bind, on the theory that
+ * "in use" means "server up". Two things wrong with that, and the second
+ * cost a session: it is a proxy for the thing we need rather than the
+ * thing itself, and it binds 127.0.0.1 while Vite may listen only on
+ * ::1 — so the probe kept succeeding, the wait never resolved, and the
+ * harness reported "nothing came up" about a server that was serving
+ * fine. Fetching the page cannot be wrong about whether the page is
+ * being served.
+ */
+const waitForServer = async (origin, ms = 45_000) => {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    try {
+      const res = await fetch(origin, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) return;
+    } catch { /* not up yet */ }
+    if (Date.now() > deadline) throw new Error(`${origin} never answered`);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+};
 
 // An unsigned JWT. Nothing verifies it: the only code that reads it is
 // auth-js deciding whether the stored session has expired.
@@ -81,7 +89,7 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
 
   const vite = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], { stdio: "ignore" });
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: "shell" });
-  await waitForPort(PORT);
+  await waitForServer(ORIGIN);
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: scale });
 

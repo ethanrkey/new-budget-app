@@ -67,88 +67,126 @@ export function isRetainedOutflow(role: Role): boolean {
 }
 
 
-// ---- Charts: brass, one hue ---------------------------------------------
+// ---- Chart fills ---------------------------------------------------------
 //
-// BY RANK, not by what the slice is. Biggest share gets the first step.
+// THERE IS NO PIE ANY MORE and no ramp with it. The ramp existed to rank
+// four wedges; with color meaning an ACCOUNT, rank is not what a fill has
+// to say. Measured on real data before dropping it: a pie under this
+// system is 45%, 61% and 98% one slate wedge for the three accounts that
+// have any data, because spending is most of every window by definition.
+// That is not a chart. The sorted bar list it leaves behind needs no
+// legend and no color-matching, reads identically under every vision
+// type, and — the part that actually buys something — is no longer capped
+// by how many colors a ramp can carry.
 //
-// The two modes run in OPPOSITE directions, and that is not a mistake: a
-// ramp has to travel AWAY from its surface or its first step disappears
-// into the background. On the dark card the lightest step is the most
-// visible, so dark runs light -> dark; on white it is the reverse.
-export const BRASS_RAMP: Record<"light" | "dark", readonly string[]> = {
-  dark:  ["#ffe294", "#edb345", "#cb882e", "#a7611b"],
-  light: ["#643500", "#804d00", "#9d6800", "#b78500"],
+// Four fills, and only the first is an identity:
+//   ACCOUNT   its own hue, the same one that account wears everywhere
+//   LOAN      one color for all of them
+//   SPENDING  slate — bills, one-offs, anything uncategorized
+//   OTHER     gray, the deliberately unranked tail
+export const NEUTRAL_CHART = "#6b7280";
+
+/** What a slice is, from fields the engine already assigns. */
+export type SliceLike = {
+  bucket: string;
+  role: Role;
+  /** Set only for a category slice belonging to an account. */
+  hue?: number | null;
 };
 
 /**
- * FOUR STEPS IS THE WHOLE RAMP, and the PIE's slice count follows from it
- * rather than the other way round. Measured ΔE2000 on the worst adjacent
- * pair: seven steps of brass came out 4.1-4.5 — two neighbors a reader
- * cannot separate — while four steps come out 8.1 light and 10.9 dark. So
- * the pie is top four plus Other, trading slices for legibility.
- *
- * THIS IS THE PIE'S LIMIT ONLY. The engine folds at its own, larger cap
- * (`compute.ts`), which is what the BAR renders — the bar is the full view,
- * every row sits beside its own label and its own length, and one flat
- * brass means it has no ramp to run out of. Cutting the bar to four rows
- * as well would have removed the view you go to when the pie is too
- * coarse, which is the only reason the coarse pie is acceptable.
+ * The fill for one slice, or null when it must be drawn DEGRADED — an
+ * account past the eighth hue. A bar draws that as an outline; anything
+ * that needs a solid uses DEGRADED_SOLID.
  */
-export const PIE_SLICES = 5; // 4 named + Other
+export function sliceFill(s: SliceLike, isDark: boolean): string | null {
+  if (s.bucket === "other") return NEUTRAL_CHART;
+  if (s.bucket === "category") {
+    if (s.role === "debt") return LOAN_COLOR[isDark ? "dark" : "light"];
+    return accountColor(s.hue, isDark);      // null past the limit
+  }
+  return SPENDING_COLOR[isDark ? "dark" : "light"];
+}
 
-/** The bar is the FULL view and keeps every row, so it cannot use a ramp —
- *  rank would be a lie past the fourth row. One brass, every named row. */
-export const BAR_COLOR: Record<"light" | "dark", string> = {
-  dark: "#edb345",
-  light: "#804d00",
+// ---- Color maps to the ACCOUNT ------------------------------------------
+//
+// Replaces the 2026-10-06 card colors, which were assigned by position and
+// explicitly meant nothing. They now mean something precise: a hue IS an
+// account, the same hue everywhere that account appears — its Dashboard
+// card, its chart line, its slice of planned spending.
+//
+// That promotion is why the index is STORED on the category rather than
+// derived from its position (see `hue` in types.ts). Position reshuffles:
+// delete the first of four accounts and the other three each take someone
+// else's color, which is survivable for decoration and fatal for identity.
+//
+// NOT A REVERSAL OF MIGRATION 13, which removed a stored color index from
+// these same entities. That index was a USER'S ARBITRARY CHOICE, and an
+// arbitrary choice carries no information — it said what a category was
+// called, which its name already said. This one is an APP-ASSIGNED
+// IDENTITY, and an identity that does not persist is not an identity. The
+// field looks the same; the reason is the opposite. Do not "clean this up"
+// by deriving it again.
+//
+// Three fixed roles share the chart with them and so share the budget:
+// loans are all ONE color (not red — red is direction, and every outflow
+// is already red), spending is slate, and Other stays gray.
+export const ACCOUNT_HUES: Record<"light" | "dark", readonly string[]> = {
+  dark:  ["#5cb2eb", "#fcb07e", "#a85ceb", "#95e4b5", "#5a91af", "#eaf91a", "#1aeaf9", "#8e43d0"],
+  light: ["#159ea8", "#e55006", "#8805b8", "#1e7653", "#900433", "#371084", "#761e5f", "#c706e5"],
 };
 
-/** Other, and anything else that is deliberately not identified: the same
- *  gray in both modes (3.67:1 on the dark card, 4.83:1 on white). */
-export const NEUTRAL_CHART = "#6b7280";
+/**
+ * Every loan, whatever kind of debt it is. One color on purpose: which
+ * loan a row belongs to is what its label is for, and eight student loans
+ * in eight hues is what made the old chart unreadable.
+ *
+ * NOT A GRAY, though the first attempt was. The gate rejected it: a
+ * blue-gray loan and the Other gray measured ΔE2000 4.3 apart under
+ * protanopia, which is two grays a reader cannot separate standing for
+ * two different things. Dark brown clears the whole set at 12.1.
+ */
+export const LOAN_COLOR: Record<"light" | "dark", string> = { dark: "#a1b3c7", light: "#3d2314" };
 
-/** Pie fill for the slice at `rank` (0 = biggest). Other is gray wherever
- *  it lands, including the rows it holds when it is expanded — they came
- *  out of the tail and the tail is not ranked. */
-export function pieFill(rank: number, isOther: boolean, isDark: boolean): string {
-  if (isOther) return NEUTRAL_CHART;
-  const ramp = BRASS_RAMP[isDark ? "dark" : "light"];
-  return ramp[Math.min(Math.max(rank, 0), ramp.length - 1)]!;
+/** Bills, one-offs, and anything uncategorized: money spent rather than
+ *  moved. The majority of most windows, which is why it is quiet. */
+export const SPENDING_COLOR: Record<"light" | "dark", string> = { dark: "#e5e7eb", light: "#111827" };
+
+/**
+ * Past the eighth account there is no distinguishable hue left — measured,
+ * at the gate's own floor, against the loan/spending/Other set. The ninth
+ * DEGRADES rather than wrapping: wrapping would give two accounts the same
+ * color silently, which breaks the guarantee without saying so.
+ *
+ * A bar degrades to an OUTLINE — no fill can collide with a fill. A wedge
+ * cannot: an unfilled wedge reads as missing data or a rendering hole, so
+ * where a solid is required this measured neutral is used instead. It
+ * clears ΔE2000 12.6 (dark) / 14.1 (light) against slate, Other, the loan
+ * color and all eight hues.
+ */
+export const DEGRADED_SOLID: Record<"light" | "dark", string> = { dark: "#afa5a1", light: "#a58c83" };
+export const MAX_ACCOUNT_HUES = 8;
+
+/** The color of the account holding `hue`, or null past the limit — null
+ *  means "draw it degraded", which each view answers in its own way. */
+export function accountColor(hue: number | null | undefined, isDark: boolean): string | null {
+  if (hue == null || hue < 0 || hue >= MAX_ACCOUNT_HUES) return null;
+  return ACCOUNT_HUES[isDark ? "dark" : "light"][hue]!;
 }
 
-/** Bar fill. Every named row is one brass; only Other differs. */
-export function barFill(isOther: boolean, isDark: boolean): string {
-  return isOther ? NEUTRAL_CHART : BAR_COLOR[isDark ? "dark" : "light"];
+/** The lowest hue index not already taken, or null when all are. Used at
+ *  category creation and by the backfill, so the two cannot disagree. */
+export function nextFreeHue(taken: ReadonlyArray<number | null | undefined>): number | null {
+  const used = new Set(taken.filter((h): h is number => typeof h === "number"));
+  for (let i = 0; i < MAX_ACCOUNT_HUES; i++) if (!used.has(i)) return i;
+  return null;
 }
 
-// ---- Dashboard cards: decoration, not meaning ---------------------------
-//
-// Assigned by card ORDER, cycling. It tells you nothing about the account —
-// it is there so five cards on one screen are five distinguishable objects
-// and your eye can return to the one it was reading. The list alternates
-// light and dark steps so two neighbors never sit close.
-//
-// LOANS TAKE NO CARD COLOR: gray line, no dot. Five loan cards therefore
-// look alike, which is acceptable because the Debt section collapses to a
-// single card by default and every card inside it is labeled — the color
-// would be decorating a list you have to open on purpose.
-export const CARD_COLORS: Record<"light" | "dark", readonly string[]> = {
-  dark:  ["#8bd4ff", "#8f68cc", "#a1b3c7", "#009393", "#86a6ff"],
-  light: ["#0085b9", "#512685", "#58697b", "#004d4d", "#3e5ab7"],
-};
-
-export function cardColor(index: number, isDark: boolean): string {
-  const set = CARD_COLORS[isDark ? "dark" : "light"];
-  return set[((index % set.length) + set.length) % set.length]!;
-}
-
-/** The checking account and every loan: no hue. Checking has been neutral
- *  since the card was built (cash has no category), and loans join it. */
+/** Checking has never had a hue and still does not. */
 export const NEUTRAL_LINE: Record<"light" | "dark", string> = {
   light: "#111827",
   dark: "#e5e7eb",
 };
-export const LOAN_LINE = NEUTRAL_CHART;
 
 /** Human-readable role names. A role system needs its mapping VISIBLE —
  *  otherwise it is a private language only the code understands. */
