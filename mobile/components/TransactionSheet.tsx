@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView,
+  ActivityIndicator, Platform, Pressable, ScrollView,
   StyleSheet, Text, TextInput, View,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -15,7 +15,12 @@ import type { BudgetItem, BudgetState, ISODate, Cadence } from "../../src/engine
 //
 // Modelled on LogBalance, which is the write surface this app already had
 // — same bottom sheet, same field styling, same disabled-while-saving
-// behaviour, so the second thing you can write looks like the first.
+// behavior, so the second thing you can write looks like the first.
+//
+// CONTENT ONLY: the Modal belongs to BottomSheet. This sheet is reached by
+// swapping the body of a sheet that is already presented, never by
+// presenting a second one — see BottomSheet for why that distinction cost
+// a shipped bug.
 const CADENCE_LABEL: Record<Cadence, string> = {
   weekly: "Weekly", biweekly: "Every 2 weeks", monthly: "Monthly", yearly: "Yearly",
 };
@@ -221,16 +226,13 @@ export default function TransactionSheet({
 
 // ---- pieces -------------------------------------------------------------
 
-function Sheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function Sheet({ children }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.scrim}>
-      <Pressable style={styles.scrimTap} onPress={onClose} accessibilityLabel="Close" />
-      <View style={styles.card}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.cardInner}>
-          {children}
-        </ScrollView>
-      </View>
-    </KeyboardAvoidingView>
+    <View style={styles.card}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.cardInner}>
+        {children}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -286,8 +288,6 @@ function Actions({
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-  scrimTap: { flex: 1 },
   card: { maxHeight: "88%", backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: T.border },
   cardInner: { padding: 20, paddingBottom: 34, gap: 8 },
   title: { color: T.text, fontSize: 17, fontWeight: "700" },

@@ -1855,6 +1855,41 @@ Further out:
   keeping it on decoration would have been importing a constraint from a
   system that no longer exists.
 
+- **One modal per screen; a sheet changes its CONTENT, never presents a
+  second** (2026-10-08, `mobile/components/BottomSheet.tsx`). Picking
+  "Edit just this date" from the scope sheet did nothing at all: the
+  scope sheet's `Modal` unmounted and the editor's `Modal` mounted in one
+  React commit, and iOS will not present a modal while another is
+  dismissing, so the second presentation was swallowed. Delete kept
+  working, which is the tell — an `Alert` is not a `Modal`.
+
+  The usual fix is to present the editor from the first sheet's
+  `onDismiss`. It was not taken. `Modal.onDismiss` is **iOS-only**, so
+  Android would never open the editor at all, and sequencing leaves the
+  two-modal structure in place for the next pair of sheets to rediscover.
+  One host, with the body swapped, means there is no race to sequence
+  around. The same reasoning then caught a second instance before it
+  shipped: reset and delete used to close the sheet and then write, so a
+  fast failure would present the failure modal into a dismissing sheet —
+  they now hold the sheet open until the write lands.
+
+  **The 57 assertions on `mobile/lib/edit.ts` all passed while this was
+  broken**, and that is the finding worth keeping rather than the fix.
+  That file has no React in it on purpose, which is what makes it
+  testable in plain node — and is exactly why it cannot see a
+  presentation bug. It is the standalone-form failure one layer up:
+  the logic was verified, the thing the logic was wired into was not.
+  Covering it needs a renderer the phone's test setup does not have
+  (jest + the RN preset + testing-library), which is a real gap and is
+  named as one here rather than implied to be covered.
+
+- **The tapped row is resolved ONCE** (2026-10-08, `rowTarget`). The
+  sheet's heading, its button labels and the mutation its buttons run all
+  come from one lookup. They used to come from two — a `rowsById` in the
+  view for the name and a `findItem` in the handler for the item — which
+  is a sheet that can say "Delete Paycheck" while deleting something
+  else. The two agreed; the point is that nothing made them.
+
 - **Scope is chosen BEFORE the editor opens, on the phone** (2026-10-08,
   `mobile/components/ScopeSheet.tsx`). The web asks inside the form, with
   a segmented "This date / Every time" that hides the rule's fields in

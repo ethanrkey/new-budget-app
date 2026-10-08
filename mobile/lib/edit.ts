@@ -149,6 +149,26 @@ export function overrideAt(s: BudgetState, ruleId: string, date: ISODate): numbe
   return s.overrides?.[ruleId]?.[date] ?? null;
 }
 
+/**
+ * The item a tapped ledger row refers to, resolved ONCE.
+ *
+ * The sheet's heading, the labels on its buttons and the mutation its
+ * buttons run must all name the same item. Resolving the name in the view
+ * and the item in the handler is two lookups that can disagree, and a
+ * sheet that says "Delete Paycheck" while deleting something else is the
+ * worst bug this screen could have. One function, one answer.
+ */
+export function rowTarget(state: BudgetState, rowId: string): {
+  item: BudgetItem; name: string; recurring: boolean; date: ISODate | null;
+} | null {
+  const id = itemIdOf(rowId);
+  const rule = state.recurring.find((r) => r.id === id);
+  if (rule) return { item: rule, name: rule.name, recurring: true, date: dateOf(rowId) };
+  const one = state.oneoffs.find((o) => o.id === id);
+  if (one) return { item: one, name: one.name, recurring: false, date: dateOf(rowId) };
+  return null;
+}
+
 // ---- What the scope sheet offers ----------------------------------------
 
 export type ScopeAction =

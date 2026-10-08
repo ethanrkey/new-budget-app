@@ -13,7 +13,7 @@
 // intermediate object. "The handler built the right payload" is the claim
 // that was true when that bug shipped.
 import {
-  itemIdOf, dateOf, scopeActions, overrideAt, orphansIfSaved,
+  itemIdOf, dateOf, rowTarget, scopeActions, overrideAt, orphansIfSaved,
   saveItem, saveOccurrence, resetOccurrence, removeItem,
   blankDraft, draftOf, draftError, overrideError, itemFrom, canTrackActuals,
 } from "../mobile/lib/edit.ts";
@@ -61,6 +61,30 @@ const rentRow = ledger.rows.find((r) => r.name === "Rent" && r.date === "2026-12
 is("the engine really does emit <id>@<date>", rentRow.id === "r-rent@2026-12-01");
 eq("...and the overridden date is marked as such", rentRow.overridden, true);
 eq("...carrying the override's amount, not the rule's", rentRow.amount, 1600);
+
+// ---------- 1b. The row the sheet names IS the row it acts on ----------
+// A sheet headed "Delete Paycheck" that deletes something else is the
+// worst bug this screen could have, and it is what two separate lookups —
+// one in the view for the label, one in the handler for the mutation —
+// eventually produce. There is one lookup, and this is it.
+console.log("\n== one resolution per tapped row ==");
+for (const [rowId, name, recurring] of [
+  ["r-rent@2026-12-01", "Rent", true],
+  ["r-pay@2026-10-02", "Paycheck", true],
+  ["o-dent@2026-10-14", "Dentist", false],
+]) {
+  const t = rowTarget(base, rowId);
+  eq(`${rowId} resolves to ${name}`, [t.name, t.recurring, t.item.id], [name, recurring, itemIdOf(rowId)]);
+  eq(`...and the mutation hits that same id`,
+    removeItem(t.item.id)(base).recurring.concat(removeItem(t.item.id)(base).oneoffs).some((i) => i.id === t.item.id),
+    false);
+}
+eq("every row the engine emits resolves to something",
+  ledger.rows.filter((r) => rowTarget(base, r.id) === null).map((r) => r.id), []);
+eq("...and always to the item whose name the row shows",
+  ledger.rows.every((r) => rowTarget(base, r.id).name === r.name), true);
+eq("a row id for an item that no longer exists resolves to null, not a wrong item",
+  rowTarget(base, "r-gone@2026-11-01"), null);
 
 // ---------- 2. What the scope sheet offers ----------
 console.log("\n== the scope sheet ==");

@@ -6,13 +6,14 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useBudget } from "../../components/StateProvider";
 import SpendingMix from "../../components/SpendingMix";
 import CalendarView from "../../components/CalendarView";
+import BottomSheet from "../../components/BottomSheet";
 import ScopeSheet from "../../components/ScopeSheet";
 import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
 import { T, money } from "../../lib/theme";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
 import { ledgerHorizonOf } from "../../../src/engine/model.ts";
 import {
-  itemIdOf, overrideAt, scopeActions, orphansIfSaved,
+  rowTarget, overrideAt, scopeActions, orphansIfSaved,
   saveItem, saveOccurrence, resetOccurrence, removeItem,
   type Draft, type ScopeAction,
 } from "../../lib/edit";
@@ -33,25 +34,39 @@ export default function LedgerScreen() {
   const [sheet, setSheet] = useState<SheetMode | null>(null);
 
   const effective = horizon ?? ledgerHorizonOf(state!);
-  const findItem = (id: string): BudgetItem | null =>
-    state!.recurring.find((r) => r.id === id) ?? state!.oneoffs.find((o) => o.id === id) ?? null;
+  // ONE resolution of the tapped row, used for the heading, the button
+  // labels AND the mutation — so a sheet can never name one item and act
+  // on another. See rowTarget.
+  const target = scopeFor ? rowTarget(state!, scopeFor) : null;
 
-  const scopeRow = scopeFor ? rowsById(state!, scopeFor) : null;
+  async function onScopePick(a: ScopeAction) {
+    const item = target?.item;
+    if (!item) { setScopeFor(null); return; }
 
-  function onScopePick(a: ScopeAction) {
-    const rowId = scopeFor!;
-    const item = findItem(itemIdOf(rowId));
-    setScopeFor(null);
-    if (!item) return;
+    // EDIT: swap the body of the sheet that is already up. `setSheet`
+    // before `setScopeFor(null)` is not load-bearing — they land in one
+    // commit and the host stays visible throughout — but the host's
+    // `visible` must never pass through false, which is what ordering
+    // them this way makes obvious to the next reader.
     if (a.kind === "edit-occurrence") {
       setSheet({ kind: "occurrence", item, date: a.date, current: overrideAt(state!, item.id, a.date) });
-    } else if (a.kind === "edit-rule") {
-      setSheet({ kind: "rule", item });
-    } else if (a.kind === "reset-occurrence") {
-      void commit(resetOccurrence(item.id, a.date), `${item.name} on ${prettyDate(a.date)} reset to the rule`);
-    } else {
-      void commit(removeItem(item.id), `${item.name} deleted`);
+      setScopeFor(null);
+      return;
     }
+    if (a.kind === "edit-rule") {
+      setSheet({ kind: "rule", item });
+      setScopeFor(null);
+      return;
+    }
+
+    // RESET and DELETE write immediately, and the sheet stays up until
+    // the write lands. Closing first would dismiss this modal while the
+    // failure modal was presenting — the same race, one layer along, and
+    // a conflict comes back fast enough to hit it.
+    const ok = a.kind === "reset-occurrence"
+      ? await commit(resetOccurrence(item.id, a.date), `${item.name} on ${prettyDate(a.date)} reset to the rule`)
+      : await commit(removeItem(item.id), `${item.name} deleted`);
+    if (ok) setScopeFor(null);
   }
 
   async function submitDraft(d: Draft) {
@@ -171,40 +186,38 @@ export default function LedgerScreen() {
         />
       )}
 
-      {scopeFor && scopeRow && (
-        <ScopeSheet
-          name={scopeRow.name}
-          actions={scopeActions(state!, scopeFor, scopeRow.recurring)}
-          onPick={onScopePick}
-          onClose={() => setScopeFor(null)}
-        />
-      )}
-
-      {sheet && (
-        <TransactionSheet
-          mode={sheet}
-          state={state!}
-          busy={saving}
-          orphanCount={(d) =>
-            orphansIfSaved(state!, d, sheet.kind === "add" ? null : sheet.item, effective).length}
-          onSaveDraft={submitDraft}
-          onSaveOccurrence={submitOccurrence}
-          onClose={() => setSheet(null)}
-        />
-      )}
+      {/* ONE sheet. Choosing a scope swaps what is inside it; it never
+          dismisses one modal to present another, which is the thing iOS
+          swallows. See components/BottomSheet.tsx. */}
+      <BottomSheet
+        visible={!!sheet || !!target}
+        onClose={() => { setSheet(null); setScopeFor(null); }}
+      >
+        {sheet ? (
+          <TransactionSheet
+            mode={sheet}
+            state={state!}
+            busy={saving}
+            orphanCount={(d) =>
+              orphansIfSaved(state!, d, sheet.kind === "add" ? null : sheet.item, effective).length}
+            onSaveDraft={submitDraft}
+            onSaveOccurrence={submitOccurrence}
+            onClose={() => setSheet(null)}
+          />
+        ) : target ? (
+          <ScopeSheet
+            name={target.name}
+            actions={scopeActions(state!, scopeFor!, target.recurring)}
+            onPick={(a) => { void onScopePick(a); }}
+            onClose={() => setScopeFor(null)}
+          />
+        ) : null}
+      </BottomSheet>
     </View>
   );
 }
 
-/** The tapped row, resolved back to a name and whether it came from a rule.
- *  A one-off has no scope to choose and the sheet reflects that. */
-function rowsById(state: Parameters<typeof scopeActions>[0], rowId: string) {
-  const id = itemIdOf(rowId);
-  const rule = state.recurring.find((r) => r.id === id);
-  if (rule) return { name: rule.name, recurring: true };
-  const one = state.oneoffs.find((o) => o.id === id);
-  return one ? { name: one.name, recurring: false } : null;
-}
+
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: T.bg },

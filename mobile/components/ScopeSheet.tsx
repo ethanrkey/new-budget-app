@@ -1,4 +1,4 @@
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { T } from "../lib/theme";
 import type { ScopeAction } from "../lib/edit";
 
@@ -20,6 +20,11 @@ import type { ScopeAction } from "../lib/edit";
 // DELETE IS HERE TOO, and carries the same ambiguity as edit. It is
 // answered the same way — by naming what goes. "Delete every Rent" cannot
 // be read as "delete Oct 12".
+//
+// This renders CONTENT ONLY — the Modal belongs to BottomSheet, one per
+// screen, so that picking "edit" swaps what is inside a sheet that is
+// already up rather than dismissing one modal and presenting another.
+// See BottomSheet for the bug that taught us.
 const prettyDate = (iso: string) =>
   new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
@@ -61,36 +66,31 @@ export default function ScopeSheet({
   };
 
   return (
-    <Modal transparent animationType="slide" visible onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose}>
-        <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.heading}>{name}</Text>
-          {actions.map((a, i) => {
-            const { text, sub, destructive } = labelFor(a, name);
-            return (
-              <Pressable
-                key={`${a.kind}-${i}`}
-                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-                onPress={() => choose(a)}
-                accessibilityRole="button"
-                accessibilityLabel={text}
-              >
-                <Text style={[styles.rowText, destructive && styles.destructive]}>{text}</Text>
-                {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
-              </Pressable>
-            );
-          })}
-          <Pressable style={[styles.row, styles.cancel]} onPress={onClose} accessibilityRole="button">
-            <Text style={styles.cancelText}>Cancel</Text>
+    <View style={styles.card}>
+      <Text style={styles.heading}>{name}</Text>
+      {actions.map((a, i) => {
+        const { text, sub, destructive } = labelFor(a, name);
+        return (
+          <Pressable
+            key={`${a.kind}-${i}`}
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            onPress={() => choose(a)}
+            accessibilityRole="button"
+            accessibilityLabel={text}
+          >
+            <Text style={[styles.rowText, destructive && styles.destructive]}>{text}</Text>
+            {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
           </Pressable>
-        </Pressable>
+        );
+      })}
+      <Pressable style={[styles.row, styles.cancel]} onPress={onClose} accessibilityRole="button">
+        <Text style={styles.cancelText}>Cancel</Text>
       </Pressable>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
   card: { backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: T.border, paddingTop: 14, paddingBottom: 34, paddingHorizontal: 12 },
   heading: { color: T.faint, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.7, paddingHorizontal: 8, paddingBottom: 8 },
   row: { minHeight: 56, justifyContent: "center", paddingVertical: 10, paddingHorizontal: 8, borderRadius: 12 },
