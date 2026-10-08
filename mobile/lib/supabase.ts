@@ -2,6 +2,7 @@
 import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
+import { backendKind, backendNotice } from "./backend";
 
 // EXPO_PUBLIC_* is inlined at build time, exactly like Vite's VITE_*. The
 // anon key is public by design — RLS is the security model, audited
@@ -24,20 +25,17 @@ export const supabase = createClient(url, anon, {
   },
 });
 
-/**
- * TRUE when this build points somewhere that is not Supabase — the
- * fixture harness (`scripts/fakeSupabase.mjs`), or anything else on
- * plain HTTP.
- *
- * It exists because of a real hour lost on 2026-10-08. The harness is
- * switched on with EXPO_PUBLIC_SUPABASE_URL, and Expo reads env once at
- * METRO START and inlines EXPO_PUBLIC_* into the bundle as literals.
- * Deleting the .env.local afterwards changes nothing: the running server
- * keeps serving a bundle with `http://localhost:5199` baked in, and a
- * physical phone resolves that to itself and fails to connect with no
- * clue why. Killing Metro is the teardown; removing the file is not.
- *
- * So the app says so on screen. A banner is cheap and would have
- * answered the question instantly instead of from the outside.
- */
-export const IS_LOCAL_BACKEND = !/^https:\/\//i.test(url ?? "");
+// Which backend this build is wired to, and the banner for it. The
+// reason this is a DECLARED flag rather than "is the URL https" is in
+// lib/backend.ts: the inference called a local Supabase stack fake data.
+//
+// Why it matters at all: the harness is switched on with
+// EXPO_PUBLIC_SUPABASE_URL, and Expo reads env once at METRO START and
+// inlines EXPO_PUBLIC_* into the bundle as literals. Deleting the
+// .env.local afterwards changes nothing — the running server keeps
+// serving a bundle with the harness URL baked in, and a physical phone
+// resolves localhost to itself and fails to connect with no clue why.
+// Killing Metro is the teardown. The banner is so the app says this out
+// loud instead of looking broken.
+export const BACKEND = backendKind(url, process.env.EXPO_PUBLIC_FIXTURE);
+export const BACKEND_NOTICE = backendNotice(BACKEND);

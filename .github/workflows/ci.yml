@@ -1,7 +1,9 @@
 name: CI
 
-# Runs on every push and pull request: lint, the engine test harness, and a
-# production build. The harness (tests/engine.test.mjs) is the project's
+# Runs on every push and pull request: lint, both typecheckers, every test
+# harness (engine, migrations, CVD reference, the phone's wiring and its
+# renderer suite), the palette gate, the spelling gate, and a production
+# build. The harness (tests/engine.test.mjs) is the project's
 # safety net for every migration and money calculation — it MUST live in
 # the repo and run here, never only on a developer's machine.
 on:
@@ -23,8 +25,16 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      # `mobile/` is NOT a workspace — the root install does not touch it,
+      # and `npm test` ends by running the phone's renderer suite. Without
+      # this step that line fails with "jest: command not found", which is
+      # how CI was broken for one commit on 2026-10-08.
+      - run: npm ci --prefix mobile
       - run: npm run lint
       - run: npm run typecheck
+      # The phone has its own tsconfig and its own strictness; the root
+      # typecheck cannot see it.
+      - run: npx tsc --noEmit --project mobile
       - run: npm test
       # No Supabase env needed: src/supabase.js reads it at runtime only.
       - run: npm run build

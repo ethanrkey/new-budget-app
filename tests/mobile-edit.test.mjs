@@ -17,6 +17,7 @@ import {
   saveItem, saveOccurrence, resetOccurrence, removeItem,
   blankDraft, draftOf, draftError, overrideError, itemFrom, canTrackActuals,
 } from "../mobile/lib/edit.ts";
+import { backendKind, backendNotice } from "../mobile/lib/backend.ts";
 import { normalize } from "../src/engine/stateShape.ts";
 import { computeLedger } from "../src/engine/compute.ts";
 
@@ -187,6 +188,30 @@ eq("every date it generated is gone with it",
   computeLedger(deleted, "2027-02-01").rows.filter((r) => r.name === "Rent").length, 0);
 eq("deleting a one-off leaves the rules alone",
   removeItem("o-dent")(base).recurring.length, base.recurring.length);
+
+// ---------- 9b. Which backend is this build talking to? ----------
+// The first version of this inferred "fixture" from "not https", which is
+// also true of a local Supabase stack holding the user's REAL data. A
+// warning that cries wolf teaches people to ignore the one that matters.
+console.log("\n== backend classification ==");
+eq("real Supabase is production, and says nothing",
+  [backendKind("https://abc.supabase.co"), backendNotice("production")], ["production", null]);
+eq("A LOCAL SUPABASE IS NOT FIXTURE DATA — this is the bug",
+  backendKind("http://localhost:54321"), "local");
+eq("...and its banner does not claim the data is fake",
+  backendNotice("local"), "Local backend — not production");
+eq("the harness declares itself with a flag",
+  backendKind("https://abc.supabase.co", "1"), "fixture");
+eq("...and is caught by its own port when the flag is forgotten",
+  backendKind("http://localhost:5199"), "fixture");
+eq("...on 127.0.0.1 too, which is what a simulator resolves",
+  backendKind("http://127.0.0.1:5199"), "fixture");
+eq("a production host that happens to carry :5199 is NOT called fake",
+  backendKind("https://abc.supabase.co:5199"), "production");
+eq("an unset url is treated as local, never as production",
+  [backendKind(undefined), backendKind("")], ["local", "local"]);
+eq("the loud banner is reserved for invented data",
+  backendNotice("fixture"), "FIXTURE DATA — not connected to your account");
 
 // ---------- 10. Prove the harness can fail ----------
 console.log("\n== the harness itself ==");

@@ -1880,11 +1880,23 @@ Further out:
   grepped. One occurrence of `localhost:5199`, zero of the real host.
   After killing and restarting Metro: zero and one.
 
-  Two things came out of it. The app now shows a banner whenever its
-  backend URL is not https (`IS_LOCAL_BACKEND`), so a harness left
-  running announces itself instead of looking like a broken app. And the
-  teardown is written down here, because "delete the env file" is the
-  obvious wrong answer and I gave it.
+  Two things came out of it. The app now banners which backend it is
+  talking to, so a harness left running announces itself instead of
+  looking like a broken app. And the teardown is written down here,
+  because "delete the env file" is the obvious wrong answer and I gave
+  it.
+
+  **The banner's first version was itself a lie**, caught on review
+  before anyone saw it: it inferred "fixture data" from "not https",
+  which is equally true of a local Supabase stack on
+  `http://localhost:54321` — the user's own REAL data, labeled fake. A
+  warning that cries wolf teaches people to ignore the one that matters.
+  Fixture is now DECLARED (`EXPO_PUBLIC_FIXTURE=1`, set by the harness
+  and nothing else), with one bounded fallback on the harness's own port
+  for when the flag is forgotten; plain http that is not the harness gets
+  a quieter and different message that does not claim the data is fake.
+  `lib/backend.ts` is pure so the classification is tested rather than
+  eyeballed.
 
 - **"Has an expect()" is not coverage; mutation is** (2026-10-08,
   `mobile/scripts/mutate.mjs`). Three times in one week the finding was

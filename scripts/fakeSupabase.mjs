@@ -148,4 +148,13 @@ createServer((req, res) => {
   seed();
   console.log(`fake supabase on http://localhost:${PORT}  (${rows.size} rows)`);
   console.log(`sign in as ${EMAIL} with any password`);
+  console.log("");
+  console.log("Point the app at it, and DECLARE it so the app can say so:");
+  console.log(`  EXPO_PUBLIC_SUPABASE_URL=http://localhost:${PORT} \\`);
+  console.log("  EXPO_PUBLIC_SUPABASE_ANON_KEY=harness \\");
+  console.log("  EXPO_PUBLIC_FIXTURE=1 npx expo start");
+  console.log("");
+  console.log("TEARDOWN IS KILLING METRO, not deleting the env file: Expo reads");
+  console.log("env once at server start and inlines EXPO_PUBLIC_* into the bundle,");
+  console.log("so a running server keeps serving this URL to every device.");
 });
