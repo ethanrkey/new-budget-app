@@ -23,3 +23,21 @@ export const supabase = createClient(url, anon, {
     detectSessionInUrl: false,
   },
 });
+
+/**
+ * TRUE when this build points somewhere that is not Supabase — the
+ * fixture harness (`scripts/fakeSupabase.mjs`), or anything else on
+ * plain HTTP.
+ *
+ * It exists because of a real hour lost on 2026-10-08. The harness is
+ * switched on with EXPO_PUBLIC_SUPABASE_URL, and Expo reads env once at
+ * METRO START and inlines EXPO_PUBLIC_* into the bundle as literals.
+ * Deleting the .env.local afterwards changes nothing: the running server
+ * keeps serving a bundle with `http://localhost:5199` baked in, and a
+ * physical phone resolves that to itself and fails to connect with no
+ * clue why. Killing Metro is the teardown; removing the file is not.
+ *
+ * So the app says so on screen. A banner is cheap and would have
+ * answered the question instantly instead of from the outside.
+ */
+export const IS_LOCAL_BACKEND = !/^https:\/\//i.test(url ?? "");

@@ -952,7 +952,8 @@ fifth tab never needs a migration.
    update rides along for free. Removing one makes you delete code, and the
    sentences describing it live in four other files that go on reading as
    though they were maintained. Grep the removed noun and the removed verb
-   (`recolor`, `color picker`, `Savings columns`, `mark paid`) across
+   (the British spelling of "color", "color picker", "Savings columns",
+   "mark paid") across
    `PROJECT_SPEC.md`, `README.md`, `src/components`, `src/engine` comments
    and `mobile/`. Every stale line the 2026-10-05 sweep found was a
    removal or a rename; not one was an addition.
@@ -960,12 +961,14 @@ fifth tab never needs a migration.
    messages. Not a style preference: the code already says `color`,
    `normalize`, `gray-500`, so British prose beside it meant the same word
    was spelled two ways in one file, and a reader could not tell which was
-   the identifier. Swept 2026-10-08 (124 × "colour" and eleven other forms
-   across 32 files); it had never been done before, because nothing had
-   ever said to do it.
+   the identifier. Swept 2026-10-08 (124 instances of the British spelling
+   of "color", plus eleven other forms, across 32 files); it had never been
+   done before, because nothing had ever said to do it. Enforced since by
+   `scripts/check_spelling.mjs`, which runs in `npm test` — the sweep had
+   started decaying within the week, in prose written the same day.
 
    One trap, hit on the first pass: a blind stem replacement rewrote
-   `@babel/helper-optimise-call-expression` inside `mobile/package-lock.json`
+   a real package name inside `mobile/package-lock.json`
    and would have broken the install. Generated files are out of scope, and
    a sweep like this gets read before it gets committed.
 
@@ -1863,6 +1866,26 @@ Further out:
   keeping it on decoration would have been importing a constraint from a
   system that no longer exists.
 
+- **A harness is torn down by killing the SERVER, not by deleting the
+  file** (2026-10-08). `scripts/fakeSupabase.mjs` is pointed at with
+  `EXPO_PUBLIC_SUPABASE_URL`, and Expo reads env once at METRO START and
+  inlines every `EXPO_PUBLIC_*` into the bundle as a string literal.
+  Removing `mobile/.env.local` afterwards changes nothing at all: the
+  running server keeps serving a bundle with `http://localhost:5199`
+  baked in, which on a physical phone resolves to the phone, and the app
+  fails to connect with no clue why. An hour went into that.
+
+  Verified rather than reasoned about, which is the only reason the
+  answer is trustworthy: the served bundle was fetched from Metro and
+  grepped. One occurrence of `localhost:5199`, zero of the real host.
+  After killing and restarting Metro: zero and one.
+
+  Two things came out of it. The app now shows a banner whenever its
+  backend URL is not https (`IS_LOCAL_BACKEND`), so a harness left
+  running announces itself instead of looking like a broken app. And the
+  teardown is written down here, because "delete the env file" is the
+  obvious wrong answer and I gave it.
+
 - **"Has an expect()" is not coverage; mutation is** (2026-10-08,
   `mobile/scripts/mutate.mjs`). Three times in one week the finding was
   that a passing count implied coverage it did not have — a form verified
@@ -1986,7 +2009,7 @@ Further out:
   the rule silently changes months already reconciled.
 
   **Delete carries the same ambiguity and is answered the same way.** It
-  lives in the same sheet, labelled by what it removes — "Delete Rent",
+  lives in the same sheet, labeled by what it removes — "Delete Rent",
   with "Removes the rule and every date it generates" under it — so it
   cannot be read as "delete Oct 12", and it goes through a native
   destructive `Alert`. There is deliberately NO "delete just this date":

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { loadState, saveState, resetStore } from "../lib/store";
-import { supabase } from "../lib/supabase";
+import { supabase, IS_LOCAL_BACKEND } from "../lib/supabase";
 import { T } from "../lib/theme";
 import SaveFailure from "./SaveFailure";
 import UnsavedNotice from "./UnsavedNotice";
@@ -73,9 +73,9 @@ export function StateProvider({ userId, children }: { userId: string; children: 
   // discarded, never replayed — see lib/stash.ts for why re-applying would
   // be a merge, and why a branch this rare must not be one that writes.
   useEffect(() => {
-    let cancelled = false;
-    readStash(userId).then((s) => { if (!cancelled) setUnsaved(s); });
-    return () => { cancelled = true; };
+    let canceled = false;
+    readStash(userId).then((s) => { if (!canceled) setUnsaved(s); });
+    return () => { canceled = true; };
   }, [userId]);
 
   const commit = useCallback(async (fn: (s: BudgetState) => BudgetState, label: string) => {
@@ -122,6 +122,13 @@ export function StateProvider({ userId, children }: { userId: string; children: 
 
   return (
     <StateCtx.Provider value={{ state, refresh, refreshing, commit, online, saving, prefs, setPref }}>
+      {/* Not your data. See IS_LOCAL_BACKEND — a harness left running is
+          otherwise indistinguishable from the app being broken. */}
+      {IS_LOCAL_BACKEND && (
+        <View style={styles.harness}>
+          <Text style={styles.harnessText}>FIXTURE DATA — not connected to your account</Text>
+        </View>
+      )}
       {children}
       <SaveFailure
         reason={failure}
@@ -144,4 +151,6 @@ const styles = StyleSheet.create({
   err: { color: T.text, fontSize: 17, fontWeight: "600" },
   dim: { color: T.dim, textAlign: "center" },
   link: { color: T.brass, marginTop: 12 },
+  harness: { backgroundColor: T.brass, paddingTop: 54, paddingBottom: 6, paddingHorizontal: 12 },
+  harnessText: { color: "#111827", fontSize: 11, fontWeight: "700", textAlign: "center", letterSpacing: 0.4 },
 });
