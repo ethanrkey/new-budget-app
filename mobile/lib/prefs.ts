@@ -14,11 +14,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const KEY = "budget-app-prefs-v1";
 
 export type Prefs = {
+  /** The Debt section folded away. Collapsed by default: five loan cards
+   *  is most of the Dashboard, and the total is the question most visits
+   *  are really asking. */
+  debtsExpanded: boolean;
   /** Net position folded away. Someone who does not want to be met by a
    *  big red number should not have to put it away again every launch. */
   heroCollapsed: boolean;
 };
-export const DEFAULT_PREFS: Prefs = { heroCollapsed: false };
+export const DEFAULT_PREFS: Prefs = { heroCollapsed: false, debtsExpanded: false };
 
 export async function loadPrefs(): Promise<Prefs> {
   try {

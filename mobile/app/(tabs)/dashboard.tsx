@@ -6,10 +6,12 @@ import {
 } from "react-native";
 import { useBudget } from "../../components/StateProvider";
 import LogBalance, { currently } from "../../components/LogBalance";
+import BottomSheet from "../../components/BottomSheet";
+import LoanSheet from "../../components/LoanSheet";
 import {
   updateAccountBalance, addBalanceSnapshot, addContribution,
   updateAccountSnapshot, deleteAccountSnapshot,
-  updateBalanceSnapshot, deleteBalanceSnapshot,
+  updateBalanceSnapshot, deleteBalanceSnapshot, setupLoan,
 } from "../../../src/engine/mutate.ts";
 import { Sparkline, HBar } from "../../lib/charts";
 import HistoryList from "../../components/HistoryList";
@@ -17,9 +19,9 @@ import { T, money } from "../../lib/theme";
 import { supabase } from "../../lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 import {
-  computeNetPosition, computeCategoryHistory, computeLoggedContributions,
+  computeNetPosition, computeCategoryHistory, computeLoggedContributions, computeMonthVariance,
 } from "../../../src/engine/progress.ts";
-import { computeLoanProgress } from "../../../src/engine/loans.ts";
+import { computeLoanProgress, computeDebtSummary } from "../../../src/engine/loans.ts";
 import { primaryAccount, todayISO } from "../../../src/engine/model.ts";
 import { accountColor, roleOfTrackerCategory, roleSuffix, LOAN_COLOR, DEGRADED_SOLID } from "../../../src/engine/palette.ts";
 import type { BalanceSnapshot, TrackerCategory } from "../../../src/engine/types.ts";
@@ -41,6 +43,7 @@ export default function DashboardScreen() {
   // null = closed; "checking" = the account; otherwise a category id.
   const [logging, setLogging] = useState<string | null>(null);
   const [contributing, setContributing] = useState<string | null>(null);
+  const [editingLoan, setEditingLoan] = useState<TrackerCategory | null>(null);
   const [editing, setEditing] = useState<{ catId: string | null; id: string; amount: number; date: string } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => { supabase.auth.getSession().then(({ data }) => setSession(data.session)); }, []);
@@ -52,6 +55,13 @@ export default function DashboardScreen() {
   const cats = [...state!.trackerCategories].sort((a, b) => a.order - b.order);
   const assets = cats.filter((c) => c.kind !== "debt");
   const debts = cats.filter((c) => c.kind === "debt");
+  // Summed the same way computeNetPosition does it — the last LOGGED
+  // outstanding of each loan — so this card and the hero's Debt figure
+  // can never disagree. A loan with no logged balance contributes
+  // nothing and is counted, rather than quietly showing as zero.
+  const debtSummary = computeDebtSummary(state!);
+  const debtTotal = debtSummary.total;
+  const debtUnlogged = debtSummary.unlogged;
   const chartW = width - 64;
 
   return (
@@ -126,11 +136,36 @@ export default function DashboardScreen() {
             `${cat.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
         />
       ))}
-      {debts.map((cat) => (
+      {/* COLLAPSED BY DEFAULT, like the web. Five loan cards is most of
+          the Dashboard, and "what do I owe in total" is the question
+          almost every visit is actually asking — the per-loan detail is
+          the follow-up, not the opening. The choice is remembered per
+          device, which is the point of putting something away. */}
+      {debts.length > 0 && (
+        <Pressable
+          style={styles.debtHead}
+          onPress={() => { animate(); setPref("debtsExpanded", !prefs.debtsExpanded); }}
+          accessibilityRole="button"
+          accessibilityLabel={prefs.debtsExpanded ? "Hide the loans" : `Show ${debts.length} loans`}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Debt</Text>
+            <Text style={styles.debtTotal}>{money(debtTotal)}</Text>
+            <Text style={styles.dim}>
+              {debts.length} loan{debts.length === 1 ? "" : "s"}
+              {debtUnlogged > 0 ? ` · ${debtUnlogged} with no logged balance` : ""}
+            </Text>
+          </View>
+          <Text style={styles.chev}>{prefs.debtsExpanded ? "⌃" : "⌄"}</Text>
+        </Pressable>
+      )}
+
+      {prefs.debtsExpanded && debts.map((cat) => (
         <DebtCard
-          key={cat.id} cat={cat} chartW={chartW} today={today}
+          key={cat.id} cat={cat} today={today}
           online={online}
           onLog={() => setLogging(cat.id)}
+          onEdit={() => setEditingLoan(cat)}
           onEditEntry={(e) => setEditing({ catId: cat.id, id: e.id, amount: e.amount, date: e.date })}
           onDeleteEntry={(e) => void commit(
             (st) => deleteBalanceSnapshot(st, cat.id, e.id),
@@ -198,6 +233,23 @@ export default function DashboardScreen() {
       {/* A logged reading you got wrong has to be correctable, which is
           what the web has always allowed. `catId: null` is the checking
           account, whose readings live under accountSnapshots. */}
+      <BottomSheet visible={!!editingLoan} onClose={() => setEditingLoan(null)}>
+        {editingLoan && (
+          <LoanSheet
+            cat={editingLoan}
+            busy={saving}
+            onClose={() => setEditingLoan(null)}
+            onSave={async (patch) => {
+              const ok = await commit(
+                (st) => setupLoan(st, { categoryId: editingLoan.id, ...patch }),
+                `${patch.name} terms`
+              );
+              if (ok) setEditingLoan(null);
+            }}
+          />
+        )}
+      </BottomSheet>
+
       {editing && (
         <LogBalance
           title="Edit this reading"
@@ -326,17 +378,33 @@ function AssetCard({ cat, color, chartW, today, online, onLog, onLogContribution
   );
 }
 
-function DebtCard({ cat, chartW, today, online, onLog, onEditEntry, onDeleteEntry }: {
-  cat: TrackerCategory; chartW: number; today: string; online: boolean; onLog: () => void;
+function DebtCard({ cat, today, online, onLog, onEdit, onEditEntry, onDeleteEntry }: {
+  cat: TrackerCategory; today: string; online: boolean;
+  onLog: () => void; onEdit: () => void;
   onEditEntry: (e: BalanceSnapshot) => void; onDeleteEntry: (e: BalanceSnapshot) => void;
 }) {
   const { state } = useBudget();
-  // No card color for loans, same as the web: the list is long, the cards
-  // are labeled, and five hues on it is decoration you have to decode.
-  const color = LOAN_COLOR.dark;
   const history = computeCategoryHistory(state!, cat.id);
   const p = computeLoanProgress(state!, cat, today);
+  const monthKey = today.slice(0, 7);
+  const payments = state!.recurring.filter((r) => r.category === cat.id);
+  const trackable = payments.some((r) => r.variable);
+  const logged = payments.map((r) => computeMonthVariance(r, state!.monthlyActuals, monthKey).actual);
+  const anyLogged = trackable && logged.some((a) => a != null);
+  const paid = logged.reduce((t: number, a) => t + (a ?? 0), 0);
 
+  // THE WEB CARD IN ONE COLUMN — nothing more and nothing less.
+  //
+  // Out: the history chart. A loan's shape is a line going down, which the
+  // numbers under it state better, and the card is long enough already.
+  // Out: every projected figure. computeLoanProgress still returns
+  // expectedNow and computeLoanHistory still annotates each reading —
+  // forecast accuracy is deferred, not canceled — but a projected number
+  // printed beside a logged one invites a comparison this app is not yet
+  // good enough to stand behind.
+  //
+  // In: Log balance and Edit, which the savings cards had and loans did
+  // not, so a wrong loan balance could only be fixed from a laptop.
   return (
     <View style={styles.card}>
       <View style={styles.cardHead}>
@@ -344,40 +412,77 @@ function DebtCard({ cat, chartW, today, online, onLog, onEditEntry, onDeleteEntr
         {roleSuffix(cat.name, roleOfTrackerCategory(cat)) && (
           <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
         )}
-        <View style={{ flex: 1 }} />
-        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}>
-          <Text style={styles.logText}>{online ? "Log" : "Offline"}</Text>
-        </Pressable>
+        <Text style={styles.loanTag}>Loan</Text>
       </View>
+
       <Text style={[styles.cardNum, p?.outstanding == null && { color: T.faint }]}>
         {p?.outstanding != null ? money(p.outstanding) : "—"}
       </Text>
       <Text style={styles.dim}>
-        {p?.latest ? `owed as of ${p.latest.date}` : "Add what you owe today and the Dashboard can show you where you stand."}
+        {p?.outstanding != null && history.length
+          ? `outstanding · logged ${history[history.length - 1]!.date}`
+          : "Log what you owe today to see how far along you are."}
       </Text>
 
-      {p && p.percentPaid != null && (
-        <View style={styles.progress}>
-          <HBar pct={p.percentPaid / 100} color={color} width={chartW} />
-          <Text style={styles.dim}>
-            {p.percentPaid}% paid off of {money(p.basis)}
-            {p.everAboveOriginal ? " (peak owed)" : ""}
+      <View style={styles.loanActions}>
+        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
+          accessibilityRole="button" accessibilityLabel={`Log a balance for ${cat.name}`}>
+          <Text style={styles.logText}>{online ? "Log balance" : "Offline"}</Text>
+        </Pressable>
+        <Pressable onPress={onEdit} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
+          accessibilityRole="button" accessibilityLabel={`Edit ${cat.name}`}>
+          <Text style={styles.logText}>Edit</Text>
+        </Pressable>
+      </View>
+
+      {p?.percentPaid != null && (
+        <View style={styles.loanBlock}>
+          <View style={styles.loanRow}>
+            <Text style={styles.loanStrong}>{p.percentPaid}% paid off</Text>
+            {/* Once interest has put the balance above what was borrowed,
+                the peak owed is the honest basis — "of $2,000" beside a
+                $2,302 balance is simply wrong. */}
+            {p.aboveOriginal == null && (
+              <Text style={styles.dim}>
+                of {money(p.basis)}{p.everAboveOriginal ? " at its highest" : ""}
+              </Text>
+            )}
+          </View>
+          <HBar pct={p.percentPaid / 100} color={LOAN_COLOR.dark} width={260} />
+          {/* Owing more than you borrowed is interest, not broken math. */}
+          {p.aboveOriginal != null && (
+            <Text style={styles.loanFine}>
+              {money(p.outstanding!)} owed · {money(p.original)} borrowed · {money(p.aboveOriginal)} accrued interest
+            </Text>
+          )}
+        </View>
+      )}
+
+      {p && (
+        <View style={styles.loanBlock}>
+          <Text style={styles.loanLabel}>Terms</Text>
+          <Text style={styles.loanStrong}>{p.interestRate}% APR · {money(p.original)}</Text>
+          <Text style={styles.loanFine}>
+            {p.interestStartDate ? `interest from ${p.interestStartDate}` : "interest accruing"}
           </Text>
         </View>
       )}
-      {p && p.aboveOriginal != null && (
-        <Text style={[styles.dim, { color: T.expense }]}>
-          {money(p.aboveOriginal)} above what was borrowed — interest has outpaced payments.
-        </Text>
-      )}
-      {p && p.expectedNow != null && p.outstanding != null && (
-        <Text style={styles.dim}>
-          Projected about {money(p.expectedNow)} by now — you are{" "}
-          {p.outstanding <= p.expectedNow ? "ahead" : "behind"}.
-        </Text>
-      )}
 
-      <Sparkline points={history.map((h) => ({ date: h.date, amount: h.amount }))} color={color} width={chartW} />
+      <View style={styles.loanBlock}>
+        <Text style={styles.loanLabel}>This month</Text>
+        {payments.length === 0 ? (
+          <Text style={styles.loanFine}>No payments planned yet — add a transaction and pick this loan.</Text>
+        ) : trackable ? (
+          <Text style={anyLogged ? styles.loanStrong : styles.loanFine}>
+            {anyLogged ? `paid ${money(paid)}` : "not logged yet"}
+          </Text>
+        ) : (
+          <Text style={styles.loanFine}>
+            {payments.length} payment{payments.length === 1 ? "" : "s"} scheduled
+          </Text>
+        )}
+      </View>
+
       <HistoryList entries={history} online={online} onEdit={onEditEntry} onDelete={onDeleteEntry} />
     </View>
   );
@@ -403,6 +508,15 @@ const styles = StyleSheet.create({
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   dim: { color: T.faint, fontSize: 12, lineHeight: 16 },
   contrib: { marginTop: 4, flexDirection: "row", alignItems: "center", gap: 10 },
+  debtHead: { backgroundColor: T.surface, borderRadius: 14, borderWidth: 1, borderColor: T.border, padding: 14, flexDirection: "row", alignItems: "center", gap: 10 },
+  debtTotal: { color: T.text, fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"], marginTop: 2 },
+  loanTag: { color: T.brass, fontSize: 9, fontWeight: "700", letterSpacing: 0.5, borderWidth: 1, borderColor: T.brass, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, overflow: "hidden" },
+  loanActions: { flexDirection: "row", gap: 8, marginTop: 10 },
+  loanBlock: { marginTop: 12, gap: 3 },
+  loanRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 10, marginBottom: 4 },
+  loanLabel: { color: T.faint, fontSize: 11 },
+  loanStrong: { color: T.text, fontSize: 13, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  loanFine: { color: T.faint, fontSize: 11, lineHeight: 16, fontVariant: ["tabular-nums"] },
   contribNum: { color: T.text, fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
   contribNone: { color: T.faint, fontSize: 12 },
   progress: { gap: 4, marginTop: 4 },

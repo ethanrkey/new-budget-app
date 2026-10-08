@@ -1,10 +1,14 @@
-import { useMemo } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useBudget } from "../../components/StateProvider";
 import { T, money } from "../../lib/theme";
 import { computeBudget } from "../../../src/engine/compute.ts";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../../../src/engine/budgetLayout.ts";
 import { roleOfCategory, isRetainedOutflow } from "../../../src/engine/palette.ts";
+import BottomSheet from "../../components/BottomSheet";
+import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
+import { saveItem, orphansIfSaved, type Draft } from "../../lib/edit";
+import { ledgerHorizonOf } from "../../../src/engine/model.ts";
 import type { BudgetColumn } from "../../../src/engine/types.ts";
 
 // THE PINNED COLUMN, the RN way.
@@ -26,10 +30,33 @@ const SECTION_H = 28;
 const LABEL_W = 150;
 const COL_W = 108;
 
-type Cell = { key: string; label: string; values: (c: BudgetColumn) => number; tone?: string; head?: boolean; bold?: boolean };
+type Cell = {
+  key: string; label: string; values: (c: BudgetColumn) => number;
+  tone?: string; head?: boolean; bold?: boolean;
+  /** The item this row stands for, when there is exactly one. Totals and
+   *  section summaries have none and stay inert. */
+  itemName?: string;
+};
 
 export default function BudgetScreen() {
-  const { state, refresh, refreshing } = useBudget();
+  const { state, refresh, refreshing, commit, online, saving } = useBudget();
+  const [sheet, setSheet] = useState<SheetMode | null>(null);
+
+  // Tapping a row name opens that item's editor, same as the web. A budget
+  // row is a NAME, not an occurrence, so there is no date to scope to and
+  // no scope sheet — it edits the rule, which is the only thing the row
+  // stands for.
+  const openItem = (name: string) => {
+    const item = state!.recurring.find((r) => r.name === name)
+      ?? state!.oneoffs.find((o) => o.name === name);
+    if (item) setSheet({ kind: "rule", item });
+  };
+
+  async function submitDraft(d: Draft) {
+    const existing = sheet && sheet.kind !== "add" ? sheet.item : null;
+    const ok = await commit(saveItem(d, existing), d.name.trim() || "Transaction");
+    if (ok) setSheet(null);
+  }
 
   const { columns, rows } = useMemo(() => {
     const columns = computeBudget(state!, state!.settings.budgetHorizon);
@@ -58,7 +85,7 @@ export default function BudgetScreen() {
         // function so the two cannot drift.
         const retained = isRetainedOutflow(roleOfCategory(catId, cats));
         out.push({
-          key: `e-${n}`, label: n,
+          key: `e-${n}`, label: n, itemName: n,
           values: (c) => Math.abs(c.expenseItems[n]?.val ?? 0),
           ...(retained ? {} : { tone: T.expense }),
         });
@@ -72,6 +99,7 @@ export default function BudgetScreen() {
   }, [state]);
 
   return (
+    <>
     <ScrollView
       style={styles.wrap}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
@@ -88,9 +116,24 @@ export default function BudgetScreen() {
                 <Text style={styles.sectionText}>{r.section}</Text>
               </View>
             ) : (
-              <View key={r.key} style={[styles.cell, { width: LABEL_W, alignItems: "flex-start" }, r.head && styles.cumRow]}>
-                <Text style={[styles.labelText, r.bold && styles.boldText]} numberOfLines={1}>{r.label}</Text>
-              </View>
+              <Pressable
+                key={r.key}
+                style={({ pressed }) => [
+                  styles.cell, { width: LABEL_W, alignItems: "flex-start" },
+                  r.head && styles.cumRow, pressed && r.itemName && styles.rowPressed,
+                ]}
+                disabled={!r.itemName || !online}
+                onPress={() => r.itemName && openItem(r.itemName)}
+                accessibilityRole={r.itemName ? "button" : undefined}
+                accessibilityLabel={r.itemName ? `Edit ${r.itemName}` : undefined}
+              >
+                <Text
+                  style={[styles.labelText, r.bold && styles.boldText, r.itemName && online && styles.tappable]}
+                  numberOfLines={1}
+                >
+                  {r.label}
+                </Text>
+              </Pressable>
             )
           )}
         </View>
@@ -113,7 +156,11 @@ export default function BudgetScreen() {
                           styles.num,
                           r.tone ? { color: r.tone } : null,
                           r.bold && styles.boldText,
-                          r.key === "net" && r.values(c) < 0 && { color: T.expense },
+                          // The monthly net earns a color in BOTH
+                          // directions, same as the web: a positive month
+                          // is the answer the row exists to give, and
+                          // leaving it plain undersold it.
+                          r.key === "net" && { color: r.values(c) < 0 ? T.expense : T.income },
                           r.key === "cum" && r.values(c) < 0 && { color: T.expense },
                         ]}
                         numberOfLines={1}
@@ -130,6 +177,22 @@ export default function BudgetScreen() {
       </View>
       <Text style={styles.foot}>Swipe the months sideways. The row names stay put.</Text>
     </ScrollView>
+      {/* One host, one modal — see components/BottomSheet.tsx. */}
+      <BottomSheet visible={!!sheet} onClose={() => setSheet(null)}>
+        {sheet && (
+          <TransactionSheet
+            mode={sheet}
+            state={state!}
+            busy={saving}
+            orphanCount={(d) =>
+              orphansIfSaved(state!, d, sheet.kind === "add" ? null : sheet.item, ledgerHorizonOf(state!)).length}
+            onSaveDraft={submitDraft}
+            onSaveOccurrence={() => {}}
+            onClose={() => setSheet(null)}
+          />
+        )}
+      </BottomSheet>
+    </>
   );
 }
 
@@ -146,6 +209,10 @@ const styles = StyleSheet.create({
   section: { height: SECTION_H, justifyContent: "center", backgroundColor: T.surface },
   sectionText: { color: T.brass, fontSize: 9, fontWeight: "700", letterSpacing: 0.7, paddingHorizontal: 8 },
   labelText: { color: T.text, fontSize: 12 },
+  // A tappable row says so: the same dotted underline the web uses on an
+  // editable row name, so the affordance is not a thing you discover.
+  tappable: { textDecorationLine: "underline", textDecorationStyle: "dotted", textDecorationColor: T.faint },
+  rowPressed: { backgroundColor: T.surfaceAlt },
   boldText: { fontWeight: "700" },
   num: { color: T.dim, fontSize: 12, fontVariant: ["tabular-nums"] },
   cumRow: { backgroundColor: T.surfaceAlt },

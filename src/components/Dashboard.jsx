@@ -287,7 +287,14 @@ function HistoryChart({ data, color, isDark, projected = false, emptyHint }) {
 }
 
 // ---- Editable history (every logged value stays correctable) ----
-function HistoryList({ entries, onUpdate, onDelete, showProjected, label }) {
+// `showProjected` is gone from the call sites, not from the engine.
+// computeLoanHistory still annotates every reading with what amortization
+// expected at that moment, and computeLoanProgress still carries
+// expectedNow — forecast accuracy is DEFERRED, not canceled, and loan
+// projections are the cleanest signal to come back to. What was removed
+// is only the display: a projected figure beside a logged one invited a
+// comparison the app is not yet good enough to stand behind.
+function HistoryList({ entries, onUpdate, onDelete, label }) {
   const [open, setOpen] = useState(false);
   if (entries.length === 0) return null;
   const noun = label ? `${label}${entries.length === 1 ? "" : "s"}` : "history";
@@ -299,7 +306,7 @@ function HistoryList({ entries, onUpdate, onDelete, showProjected, label }) {
       {open && (
         <div className="mt-2 border-t border-gray-100 dark:border-gray-800 pt-1">
           {[...entries].reverse().map((h) => (
-            <HistoryRow key={h.id} entry={h} showProjected={showProjected} onUpdate={(patch) => onUpdate(h.id, patch)} onDelete={() => onDelete(h.id)} />
+            <HistoryRow key={h.id} entry={h} onUpdate={(patch) => onUpdate(h.id, patch)} onDelete={() => onDelete(h.id)} />
           ))}
         </div>
       )}
@@ -307,7 +314,7 @@ function HistoryList({ entries, onUpdate, onDelete, showProjected, label }) {
   );
 }
 
-function HistoryRow({ entry, showProjected, onUpdate, onDelete }) {
+function HistoryRow({ entry, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [draftAmount, setDraftAmount] = useState(entry.amount);
   const [draftDate, setDraftDate] = useState(entry.date);
@@ -333,9 +340,6 @@ function HistoryRow({ entry, showProjected, onUpdate, onDelete }) {
           <button onClick={() => { setDraftAmount(entry.amount); setDraftDate(entry.date); setEditing(true); }} title="Edit" className="font-medium tabular-nums hover:underline decoration-dotted underline-offset-2">
             {money(entry.amount)}
           </button>
-          {showProjected && entry.expected != null && (
-            <span className="text-xs text-gray-400">projected {money(entry.expected)}</span>
-          )}
           <span className="ml-auto" />
           {confirmDelete ? (
             <span className="text-xs text-expense whitespace-nowrap">
@@ -482,7 +486,10 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
   // budgeted" can report it.
   const payments = state.recurring.filter((r) => r.category === category.id);
   const variances = payments.map((p) => computeMonthVariance(p, state.monthlyActuals, monthKey));
-  const planned = variances.reduce((s, v) => s + v.expected, 0);
+  // The planned total is deliberately NOT computed here any more: it was
+  // the only reader, and leaving a dead sum would invite someone to put
+  // the display back without the reasoning. computeMonthVariance still
+  // returns `expected`; the Spending tab is what it is for.
   const trackable = payments.some((p) => p.variable);
   const paidValues = variances.filter((v, i) => payments[i].variable && v.actual != null).map((v) => v.actual);
   const paid = paidValues.length ? paidValues.reduce((s, a) => s + a, 0) : null;
@@ -559,21 +566,24 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
           <div className="text-xs text-gray-400">{interestFrom ? `interest from ${prettyDate(interestFrom)}` : "interest accruing"}</div>
         </div>
         <div>
+          {/* "planned $X" is gone with the rest of the projected display.
+              What a payment WILL be is a forecast; what you actually paid
+              is a fact, and only the fact is shown here now. The
+              no-payments hint stays — it is the difference between "you
+              paid nothing" and "nothing is scheduled", which is not a
+              projection but a gap in the plan. */}
           <div className="text-xs text-gray-500">This month</div>
           {payments.length === 0 ? (
             <div className="text-xs text-gray-400">No payments planned yet — add a transaction and pick this loan.</div>
+          ) : trackable ? (
+            <div className="font-medium tabular-nums">{paid == null ? <span className="text-xs text-gray-400 font-normal">not logged yet</span> : `paid ${money(paid)}`}</div>
           ) : (
-            <>
-              <div className="font-medium tabular-nums">planned {money(planned)}</div>
-              {trackable && (
-                <div className="text-xs text-gray-400">{paid == null ? "paid: not logged yet" : `paid ${money(paid)}`}</div>
-              )}
-            </>
+            <div className="text-xs text-gray-400">{payments.length} payment{payments.length === 1 ? "" : "s"} scheduled</div>
           )}
         </div>
       </div>
 
-      <HistoryList entries={history} showProjected onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
+      <HistoryList entries={history} onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
     </section>
   );
 }

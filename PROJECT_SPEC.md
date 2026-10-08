@@ -1968,6 +1968,29 @@ Further out:
   responder claims a gesture only once it is more horizontal than
   vertical so a flick still scrolls the page under it.
 
+- **Loans show what is, not what was projected** (2026-10-09). The
+  per-reading "projected $X" and the loan card's "planned" figure are
+  gone from both clients, and the phone's loan chart with them. The
+  ENGINE is untouched: `computeLoanHistory` still annotates every
+  reading with what amortization expected at that moment and
+  `computeLoanProgress` still returns `expectedNow`. Forecast accuracy
+  is deferred, not cancelled, and loan projections are the cleanest
+  signal to come back to — nothing outside those two display sites ever
+  read them, which was checked before removing anything: not the ledger,
+  not net position, not CSV or the JSON backup.
+
+  What stays on the card is fact: percent paid off, the accrued-interest
+  line when you owe more than you borrowed, the terms, and what you
+  actually paid this month. A projected number printed beside a logged
+  one invites a comparison the app is not yet good enough to stand
+  behind.
+
+  The phone's loan card is now the web card in one column, including the
+  Log balance and Edit it never had — a loan balance could previously
+  only be corrected from a laptop. Edit needed somewhere to go, so
+  `LoanSheet` exists: terms only, no delete and no opening balance,
+  because a button that does nothing is worse than no button.
+
 - **Color maps to the ACCOUNT, and the index is STORED** (2026-10-09).
   A hue is an identity now: your Roth IRA is one color on its Dashboard
   card, its chart line and its slice of planned spending, and it keeps
