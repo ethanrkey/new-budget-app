@@ -55,8 +55,32 @@ export function legacyTrackerCategories(): TrackerCategory[] {
 // Categories; misclassifying a real asset as debt would silently feed it
 // through the wrong math with no such fallback).
 function inferCategoryKind(cat: any): "asset" | "debt" {
-  if (cat.kind) return cat.kind;
+  // VALIDATE THE ENUM, do not merely test it for truthiness. This was
+  // `if (cat.kind) return cat.kind`, which let any non-empty junk through
+  // unrepaired — `kind: 1` and `kind: "savings"` both survived normalize
+  // and then read as assets everywhere downstream. `kind: 0`, which is
+  // what `addCategory` wrote for every Category Manager category between
+  // 2026-10-03 and 2026-10-05, was falsy and so WAS re-inferred, which is
+  // the only reason that window did not corrupt anyone's net position.
+  //
+  // It matters because `kind` decides a SIGN, not a style: an asset's
+  // latest snapshot is added to net position and a debt's is subtracted,
+  // so a $4,000 loan filed as an asset moves the number by $8,000 and
+  // silently loses amortization, payoff and accrued interest with it.
+  if (cat.kind === "asset" || cat.kind === "debt") return cat.kind;
+
+  // LOAN TERMS BEAT THE NAME. Only the loan setup form writes
+  // `originalPrincipal`, so a category carrying it is a loan whatever it
+  // is called — a surer signal than matching words, and it catches the
+  // loan someone named "Discover".
+  if (cat.originalPrincipal != null || cat.interestRate != null) return "debt";
+
   if (cat.id === "loans" || /\b(debt|loans?|credit card)\b/i.test(cat.name)) return "debt";
+
+  // Default asset, still the safer direction: a real debt keeps behaving
+  // as it did before the loan feature existed until you flip it, while
+  // misclassifying an asset as debt would subtract it from net worth with
+  // no such fallback.
   return "asset";
 }
 

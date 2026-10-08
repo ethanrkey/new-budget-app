@@ -1968,6 +1968,37 @@ Further out:
   responder claims a gesture only once it is more horizontal than
   vertical so a flick still scrolls the page under it.
 
+- **`kind` decides a SIGN, so normalize validates it** (2026-10-09,
+  `inferCategoryKind`). It was `if (cat.kind) return cat.kind` — a
+  truthiness test, not an enum check — so any non-empty junk survived
+  normalization and read as an asset everywhere downstream.
+
+  That is not a display concern. An asset's latest snapshot is ADDED to
+  net position and a debt's is SUBTRACTED, so a $4,000 loan filed as an
+  asset moves the number by $8,000 in the wrong direction and silently
+  loses amortization, payoff and accrued interest with it, because
+  `isLoanConfigured` reads `kind` too. Measured, and now asserted in the
+  harness as arithmetic rather than described as a risk. The FORECAST is
+  untouched: a transaction's direction comes from the fixed category
+  table and never consults `kind`, so the ledger and every projected
+  balance were always right.
+
+  The Category Manager wrote `kind: 0` for two days after migration 13
+  dropped a parameter. The only reason that window did not corrupt
+  anyone's net worth is that zero is FALSY and so hit the inference
+  path; `1` or `"savings"` would have sailed through. Luck, not design.
+
+  Two changes. The enum is checked by value, and **loan terms now beat
+  the name**: only the loan setup form writes `originalPrincipal`, so a
+  category carrying it is a loan whatever it is called — which catches
+  the loan someone named "Discover", where word-matching does not.
+
+  `scripts/audit_kinds.mjs` answers the question against live data and
+  prints what net position would be if each misfiled row were refiled.
+  Run 2026-10-09 across all four accounts: **nothing misfiled, no
+  invalid kinds**. Every loan had been created through the loan setup
+  form, which passes a literal, rather than through the generic add.
+
 - **A surface with no exit, reported twice** (2026-10-08,
   `mobile/components/DatePicker.tsx`). The Ledger's "through <date>" chip
   opened a date picker that could not be closed — not by choosing a date,

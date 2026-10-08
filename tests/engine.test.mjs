@@ -536,6 +536,33 @@ check("roleSuffix keeps it for a name the user chose",
   [roleSuffix("Roth IRA", "investment"), roleSuffix("Car loan", "debt"), roleSuffix("Emergency fund", "savings")]
     .join("|") === "Investment|Debt|Savings" ? 1 : 0, 1);
 
+// `kind` decides a SIGN, not a style: an asset's snapshot is added to net
+// position and a debt's is subtracted. A junk value that normalize let
+// through used to read as an asset everywhere downstream.
+console.log("\n== kind is validated, not merely truthy ==");
+const kindOf = (cat) => normalize({ trackerCategories: [{ id: "k", name: "Mystery", order: 0, ...cat }] })
+  .trackerCategories.find((c) => c.id === "k").kind;
+check("junk kinds are repaired, not passed through",
+  [1, "savings", "ASSET", {}, []].every((k) => kindOf({ kind: k }) === "asset") ? 1 : 0, 1);
+check("0 — what the Category Manager wrote for two days — becomes asset",
+  kindOf({ kind: 0 }) === "asset" ? 1 : 0, 1);
+check("LOAN TERMS BEAT A JUNK KIND, and beat the name",
+  kindOf({ kind: 1, name: "Discover", originalPrincipal: 5000 }) === "debt" ? 1 : 0, 1);
+check("...an interest rate alone is enough",
+  kindOf({ kind: "", interestRate: 22.9 }) === "debt" ? 1 : 0, 1);
+check("valid kinds are left exactly alone",
+  kindOf({ kind: "asset" }) === "asset" && kindOf({ kind: "debt" }) === "debt" ? 1 : 0, 1);
+
+// The reason it matters, stated as arithmetic rather than as a warning.
+const loanState = (kind) => normalize({
+  accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 1000, balanceAsOf: "2026-10-01", order: 0 }],
+  trackerCategories: [{ id: "d", name: "Discover", order: 0, kind }],
+  balanceSnapshots: { d: [{ id: "s", date: "2026-10-01", amount: 4000 }] },
+});
+check("a $4,000 balance filed as debt subtracts", computeNetPosition(loanState("debt")).net, -3000);
+check("...filed as an asset it ADDS — an $8,000 error on one loan",
+  computeNetPosition(loanState("asset")).net, 5000);
+
 check("paletteColor falls back to gray for an orphaned/out-of-range index (light)",
   paletteColor(999, false) === "#6b7280" ? 1 : 0, 1);
 check("paletteColor falls back to gray for an orphaned/out-of-range index (dark)",
