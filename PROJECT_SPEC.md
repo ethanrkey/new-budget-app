@@ -1022,6 +1022,18 @@ fifth tab never needs a migration.
      value, a hand calculation — and that comparison belongs in the test
      suite, not in the afternoon it was written.
 
+   `scripts/fakeSupabase.mjs` is the phone's version of the same idea: a
+   recording stand-in the simulator is pointed at with
+   `EXPO_PUBLIC_SUPABASE_URL`, so the app runs completely unmodified —
+   real sign-in, real store, real `planWrite` — and every write that
+   leaves the device is readable at `/__log`. Stubbing the provider
+   instead would replace the wiring, which is the thing under test.
+   **Known gap, 2026-10-08:** there is no way to drive a TAP on the
+   simulator from here — `osascript` lacks assistive access and neither
+   `idb` nor `cliclick` is installed — so the last mile is a human
+   finger. Granting Accessibility to the terminal, or installing
+   `idb-companion`, would close it.
+
    `scripts/fixtureApp.mjs` exists so the first bullet costs nothing:
    `openFixtureApp()` boots the real bundle through the real auth gate
    and the real `loadState`, holding an invented account, and hands back
@@ -1201,18 +1213,19 @@ since preferences are not money and last-write-wins is fine for them.
 
 ### Mobile backlog (audited 2026-10-03)
 
-The phone can currently WRITE exactly two things: the verified checking
-balance and a category balance snapshot. Everything else is read-only.
-In build order; **[D]** needs a design decision, **[P]** is a port.
+Audited when the phone could WRITE exactly two things — the verified
+checking balance and a category balance snapshot. Transaction editing and
+the recovery stash landed 2026-10-08 and are struck through below; the
+rest stands. In build order; **[D]** needs a design decision, **[P]** is
+a port.
 
-1. **Add / edit / delete a transaction** [D]. The largest gap — there is
-   no `EventForm` equivalent, so the phone cannot change the forecast at
-   all. The decision is the occurrence-vs-rule scope control: the web
-   uses a segmented "This date / Every time" with the rule's fields
-   hidden in occurrence scope, and the same reasoning applies, but a
-   phone wants a sheet rather than a modal and "Delete" needs a native
-   destructive confirm. The per-item color picker is gone, so the form
-   is smaller than the web's ever was.
+0. ~~**Add / edit / delete a transaction**, and the recovery copy with
+   it.~~ **SHIPPED 2026-10-08.** The phone can change the forecast. Scope
+   is chosen BEFORE the editor opens (`ScopeSheet`), the editor therefore
+   has no mode, and delete is in the same sheet because it carries the
+   same ambiguity. The stash ships in the same commit, as decided. See
+   the decision log.
+
 2. **Account deletion + a Settings screen** [P] — **APP STORE
    SUBMISSION BLOCKER.** Apple's guideline 5.1.1(v) requires an app
    that creates an account to let the user delete it from inside the
@@ -1233,17 +1246,11 @@ In build order; **[D]** needs a design decision, **[P]** is a port.
 7. **Onboarding + guided tour** [D]. A user who signs up ON the phone
    currently lands in an empty app. Decision: port the wizard, or state
    that first-time setup is a web task and say so at the empty state.
-8. **The recovery copy** [D] — **ships WITH item 1, not after it.**
-   Listed eighth because that is its size, not its deadline. This one is
-   a real safety gap rather than a missing feature. The web stashes to `localStorage`
-   SYNCHRONOUSLY before anything replaces in-memory state, and that
-   synchrony is the guarantee. AsyncStorage cannot do it, and iOS can
-   suspend mid-write. Survivable today because a phone write is one
-   small action and a rejected commit rolls back; it stops being
-   survivable the moment the phone can edit in bulk. Item 1 is exactly
-   that moment, so the two land together: shipping transaction editing
-   onto a client with no synchronous recovery stash is shipping the gap,
-   not approaching it.
+8. ~~**The recovery copy** [D].~~ **SHIPPED 2026-10-08** alongside
+   transaction editing, which is what "ships with item 1" meant.
+   `lib/stash.ts`, awaited before the optimistic apply, reported and
+   discarded on relaunch — never replayed.
+
 9. **Export** [D]. A JSON/CSV download means the iOS share sheet, not a
    file download. Import probably does not belong on a phone at all.
 10. **Horizon control** [D]. The phone has a device-local date chip
@@ -1847,6 +1854,57 @@ Further out:
   old gate's all-pairs CVD rule existed because hue meant something, and
   keeping it on decoration would have been importing a constraint from a
   system that no longer exists.
+
+- **Scope is chosen BEFORE the editor opens, on the phone** (2026-10-08,
+  `mobile/components/ScopeSheet.tsx`). The web asks inside the form, with
+  a segmented "This date / Every time" that hides the rule's fields in
+  occurrence scope. The reasoning carries over — scope up front rather
+  than on save, because the fields mean different things in each — but
+  the control does not: a form whose fields appear and disappear as you
+  flip a toggle at the top is much harder to follow at 390px than on a
+  laptop, and iOS already has an answer everyone knows, which is that
+  tapping a repeating event in Calendar asks first. Taking the platform's
+  pattern costs zero learning and leaves an editor with no mode at all.
+
+  ORDER IS THE DEFAULT. "Edit just Oct 12" is first because the two
+  mistakes are not symmetric, which is the same argument that made
+  "This date" the web's default: someone meaning the rule who changes one
+  date notices next month, while someone meaning one date who rewrites
+  the rule silently changes months already reconciled.
+
+  **Delete carries the same ambiguity and is answered the same way.** It
+  lives in the same sheet, labelled by what it removes — "Delete Rent",
+  with "Removes the rule and every date it generates" under it — so it
+  cannot be read as "delete Oct 12", and it goes through a native
+  destructive `Alert`. There is deliberately NO "delete just this date":
+  the engine has no concept of a skipped occurrence, only an override of
+  one's amount, so the button would be for a thing that does not exist.
+  The nearest real action, resetting a date back to the rule's amount, IS
+  offered — and only on a date that has its own amount to reset. Adding a
+  true per-occurrence skip is a data-model change (a new exception list,
+  a migration, `generate.ts`, both clients) and is not in this.
+
+- **The phone's stash is reported, never replayed** (2026-10-08,
+  `mobile/lib/stash.ts`). It ships in the same commit as transaction
+  editing, because shipping bulk editing onto a client with no stash is
+  shipping the gap rather than approaching it. It is awaited before the
+  optimistic apply, so the copy exists before the thing it copies is at
+  risk; AsyncStorage has no synchronous write, so a hard kill inside that
+  window still loses the write. That is the right side to fail on —
+  missing is recoverable, wrong is corruption.
+
+  The designed-looking option was rejected and the rejection is the
+  interesting part. Fingerprint the state the stash was built on, and on
+  relaunch offer to re-apply when the fingerprint still matches: careful,
+  conservative, and **it runs when an app is killed inside a few hundred
+  milliseconds, perhaps once a year per user.** Nothing real would ever
+  exercise that branch — which is precisely how this week's four worst
+  bugs survived (the tombstone collision, the `@ts-check` false positive,
+  a form verified standalone while its wiring was not, and a simulation
+  nobody checked against a known answer). A rare branch that WRITES is
+  the worst kind to get wrong, and the failure mode is a silent bad
+  write. So the stash names what was lost and discards it. The cost is
+  retyping one transaction almost never.
 
 - **A measuring instrument nobody measured** (2026-10-06). The palette
   gate reported that two Dashboard colors were ΔE2000 **2.3** apart under

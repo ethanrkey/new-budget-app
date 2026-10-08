@@ -6,17 +6,67 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useBudget } from "../../components/StateProvider";
 import SpendingMix from "../../components/SpendingMix";
 import CalendarView from "../../components/CalendarView";
+import ScopeSheet from "../../components/ScopeSheet";
+import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
 import { T, money } from "../../lib/theme";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
 import { ledgerHorizonOf } from "../../../src/engine/model.ts";
+import {
+  itemIdOf, overrideAt, scopeActions, orphansIfSaved,
+  saveItem, saveOccurrence, resetOccurrence, removeItem,
+  type Draft, type ScopeAction,
+} from "../../lib/edit";
+import type { BudgetItem } from "../../../src/engine/types.ts";
+
+const prettyDate = (iso: string) =>
+  new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 export default function LedgerScreen() {
-  const { state, refresh, refreshing } = useBudget();
+  const { state, refresh, refreshing, commit, online, saving } = useBudget();
   const [horizon, setHorizon] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [calendar, setCalendar] = useState(false);
+  // Which row was tapped, as its LEDGER ROW ID ("<itemId>@<date>") — the
+  // date half is what makes "just this date" possible, so it is carried
+  // whole and only split by the named helpers in lib/edit.
+  const [scopeFor, setScopeFor] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<SheetMode | null>(null);
 
   const effective = horizon ?? ledgerHorizonOf(state!);
+  const findItem = (id: string): BudgetItem | null =>
+    state!.recurring.find((r) => r.id === id) ?? state!.oneoffs.find((o) => o.id === id) ?? null;
+
+  const scopeRow = scopeFor ? rowsById(state!, scopeFor) : null;
+
+  function onScopePick(a: ScopeAction) {
+    const rowId = scopeFor!;
+    const item = findItem(itemIdOf(rowId));
+    setScopeFor(null);
+    if (!item) return;
+    if (a.kind === "edit-occurrence") {
+      setSheet({ kind: "occurrence", item, date: a.date, current: overrideAt(state!, item.id, a.date) });
+    } else if (a.kind === "edit-rule") {
+      setSheet({ kind: "rule", item });
+    } else if (a.kind === "reset-occurrence") {
+      void commit(resetOccurrence(item.id, a.date), `${item.name} on ${prettyDate(a.date)} reset to the rule`);
+    } else {
+      void commit(removeItem(item.id), `${item.name} deleted`);
+    }
+  }
+
+  async function submitDraft(d: Draft) {
+    const existing = sheet && sheet.kind !== "add" ? sheet.item : null;
+    const ok = await commit(saveItem(d, existing), `${d.name.trim() || "Transaction"}${existing ? "" : " added"}`);
+    if (ok) setSheet(null);
+  }
+
+  async function submitOccurrence(amount: string) {
+    if (!sheet || sheet.kind !== "occurrence") return;
+    const { item, date } = sheet;
+    const ok = await commit(saveOccurrence(item.id, date, amount), `${item.name} on ${prettyDate(date)}`);
+    if (ok) setSheet(null);
+  }
+
   const { sections, rows, ending, mix } = useMemo(() => {
     const ledger = computeLedger(state!, effective);
     return {
@@ -39,6 +89,17 @@ export default function LedgerScreen() {
         </View>
         <Pressable style={styles.chip} onPress={() => setPicking(true)}>
           <Text style={styles.chipText}>through {effective}</Text>
+        </Pressable>
+        {/* Offline is READ-ONLY by decision, so the control says so
+            rather than failing after the tap. */}
+        <Pressable
+          style={[styles.add, !online && styles.addOff]}
+          disabled={!online}
+          onPress={() => setSheet({ kind: "add" })}
+          accessibilityRole="button"
+          accessibilityLabel={online ? "Add transaction" : "Offline"}
+        >
+          <Text style={styles.addText}>{online ? "+ Add" : "Offline"}</Text>
         </Pressable>
       </View>
       {/* The running balance is LIST-ONLY, same as the web: a month grid
@@ -88,7 +149,13 @@ export default function LedgerScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
           renderSectionHeader={({ section }) => <Text style={styles.month}>{section.title}</Text>}
           renderItem={({ item }) => (
-            <View style={styles.row}>
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              disabled={!online}
+              onPress={() => setScopeFor(item.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name}, ${prettyDate(item.date)}, ${money(item.amount)}`}
+            >
               <Text style={styles.day}>{item.date.slice(8)}</Text>
               <View style={styles.name}>
                 <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
@@ -98,13 +165,45 @@ export default function LedgerScreen() {
                 {item.direction === "in" ? "+" : "−"}{money(item.amount).replace("-", "")}
               </Text>
               <Text style={[styles.bal, item.negative && { color: T.expense }]}>{money(item.balance)}</Text>
-            </View>
+            </Pressable>
           )}
           ListEmptyComponent={<Text style={styles.empty}>Nothing projected in this window.</Text>}
         />
       )}
+
+      {scopeFor && scopeRow && (
+        <ScopeSheet
+          name={scopeRow.name}
+          actions={scopeActions(state!, scopeFor, scopeRow.recurring)}
+          onPick={onScopePick}
+          onClose={() => setScopeFor(null)}
+        />
+      )}
+
+      {sheet && (
+        <TransactionSheet
+          mode={sheet}
+          state={state!}
+          busy={saving}
+          orphanCount={(d) =>
+            orphansIfSaved(state!, d, sheet.kind === "add" ? null : sheet.item, effective).length}
+          onSaveDraft={submitDraft}
+          onSaveOccurrence={submitOccurrence}
+          onClose={() => setSheet(null)}
+        />
+      )}
     </View>
   );
+}
+
+/** The tapped row, resolved back to a name and whether it came from a rule.
+ *  A one-off has no scope to choose and the sheet reflects that. */
+function rowsById(state: Parameters<typeof scopeActions>[0], rowId: string) {
+  const id = itemIdOf(rowId);
+  const rule = state.recurring.find((r) => r.id === id);
+  if (rule) return { name: rule.name, recurring: true };
+  const one = state.oneoffs.find((o) => o.id === id);
+  return one ? { name: one.name, recurring: false } : null;
 }
 
 const styles = StyleSheet.create({
@@ -117,6 +216,10 @@ const styles = StyleSheet.create({
   segTextOn: { color: T.bg, fontWeight: "700" },
   chip: { backgroundColor: T.surface, borderColor: T.border, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, minHeight: 34, justifyContent: "center" },
   chipText: { color: T.dim, fontSize: 12 },
+  add: { backgroundColor: T.brass, borderRadius: 999, paddingHorizontal: 14, minHeight: 34, justifyContent: "center" },
+  addOff: { backgroundColor: T.surfaceAlt },
+  addText: { color: "#111827", fontSize: 13, fontWeight: "700" },
+  rowPressed: { backgroundColor: T.surface },
   endingWrap: { paddingHorizontal: 16, paddingBottom: 10 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   ending: { color: T.text, fontSize: 24, fontWeight: "700", fontVariant: ["tabular-nums"] },

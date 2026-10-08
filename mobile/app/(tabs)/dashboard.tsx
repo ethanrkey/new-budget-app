@@ -123,10 +123,14 @@ export default function DashboardScreen() {
           onClose={() => setLogging(null)}
           onSubmit={async (amount, date) => {
             const id = logging;
+            const label = id === "checking"
+              ? `${account.name} balance, as of ${date}`
+              : `${cats.find((c) => c.id === id)?.name ?? "Account"} balance, as of ${date}`;
             const okSaved = await commit((s) =>
               id === "checking"
                 ? updateAccountBalance(s, primaryAccount(s).id, amount, date)
-                : addBalanceSnapshot(s, id, amount, date)
+                : addBalanceSnapshot(s, id, amount, date),
+              label
             );
             if (okSaved) setLogging(null);
           }}
