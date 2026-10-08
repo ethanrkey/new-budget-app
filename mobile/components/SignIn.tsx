@@ -66,7 +66,7 @@ export default function SignIn() {
       >
         {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.ctaText}>Sign in</Text>}
       </Pressable>
-      <Text style={styles.note}>Read-only on mobile for now.</Text>
+      <Text style={styles.note}>Your budget, on the same account as the web.</Text>
     </KeyboardAvoidingView>
   );
 }

@@ -25,6 +25,7 @@ export default function TabLayout() {
       <Tabs.Screen name="index" options={{ title: "Ledger", tabBarIcon: icon("☰") }} />
       <Tabs.Screen name="dashboard" options={{ title: "Dashboard", tabBarIcon: icon("◎") }} />
       <Tabs.Screen name="budget" options={{ title: "Budget", tabBarIcon: icon("▦") }} />
+      <Tabs.Screen name="spending" options={{ title: "Spending", tabBarIcon: icon("◧") }} />
     </Tabs>
   );
 }

@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import {
+  Alert,
   LayoutAnimation, Platform, Pressable, RefreshControl, ScrollView,
   StyleSheet, Text, UIManager, View, useWindowDimensions,
 } from "react-native";
 import { useBudget } from "../../components/StateProvider";
 import LogBalance, { currently } from "../../components/LogBalance";
-import { updateAccountBalance, addBalanceSnapshot } from "../../../src/engine/mutate.ts";
+import {
+  updateAccountBalance, addBalanceSnapshot, addContribution,
+  updateAccountSnapshot, deleteAccountSnapshot,
+  updateBalanceSnapshot, deleteBalanceSnapshot,
+} from "../../../src/engine/mutate.ts";
 import { Sparkline, HBar } from "../../lib/charts";
+import HistoryList from "../../components/HistoryList";
 import { T, money } from "../../lib/theme";
 import { supabase } from "../../lib/supabase";
 import type { Session } from "@supabase/supabase-js";
@@ -16,7 +22,7 @@ import {
 import { computeLoanProgress } from "../../../src/engine/loans.ts";
 import { primaryAccount, todayISO } from "../../../src/engine/model.ts";
 import { cardColor, roleOfTrackerCategory, roleSuffix, LOAN_LINE } from "../../../src/engine/palette.ts";
-import type { TrackerCategory } from "../../../src/engine/types.ts";
+import type { BalanceSnapshot, TrackerCategory } from "../../../src/engine/types.ts";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -31,13 +37,15 @@ const providerNames = (p?: string[]) =>
   (p ?? []).map((x) => PROVIDER_LABEL[x] ?? x).join(" and ") || "—";
 
 export default function DashboardScreen() {
-  const { state, refresh, refreshing, commit, online, saving } = useBudget();
+  const { state, refresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
   // null = closed; "checking" = the account; otherwise a category id.
   const [logging, setLogging] = useState<string | null>(null);
+  const [contributing, setContributing] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ catId: string | null; id: string; amount: number; date: string } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => { supabase.auth.getSession().then(({ data }) => setSession(data.session)); }, []);
   const { width } = useWindowDimensions();
-  const [heroOpen, setHeroOpen] = useState(true);
+  const heroOpen = !prefs.heroCollapsed;
   const today = todayISO();
   const net = computeNetPosition(state!);
   const account = primaryAccount(state!);
@@ -52,14 +60,25 @@ export default function DashboardScreen() {
       contentContainerStyle={styles.pad}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
     >
-      <Pressable style={styles.hero} onPress={() => { animate(); setHeroOpen((v) => !v); }}>
+      {/* FOLDING AWAY HIDES THE NUMBER, which is the whole point of the
+          control — someone who would rather not be met by a big red figure
+          is not helped by collapsing the three lines under it. Matches the
+          web, and the choice is remembered per device. */}
+      <Pressable
+        style={styles.hero}
+        onPress={() => { animate(); setPref("heroCollapsed", heroOpen); }}
+        accessibilityRole="button"
+        accessibilityLabel={heroOpen ? "Hide net position" : "Show net position"}
+      >
         <View style={styles.heroHead}>
           <Text style={styles.label}>Net position</Text>
           <Text style={styles.chev}>{heroOpen ? "⌃" : "⌄"}</Text>
         </View>
-        <Text style={[styles.heroNum, net.net < 0 ? { color: T.expense } : net.net > 0 ? { color: T.income } : null]}>
-          {money(net.net)}
-        </Text>
+        {heroOpen && (
+          <Text style={[styles.heroNum, net.net < 0 ? { color: T.expense } : net.net > 0 ? { color: T.income } : null]}>
+            {money(net.net)}
+          </Text>
+        )}
         {heroOpen && (
           <View style={styles.heroRows}>
             <Line k="Checking (verified)" v={money(net.cash)} />
@@ -82,21 +101,40 @@ export default function DashboardScreen() {
         asOf={account.balanceAsOf}
         online={online}
         onLog={() => setLogging("checking")}
-        history={(state!.accountSnapshots?.[account.id] ?? []).map((s) => ({ date: s.date, amount: s.amount }))}
+        history={state!.accountSnapshots?.[account.id] ?? []}
         color={T.text}
         chartW={chartW}
+        onEditEntry={(e) => setEditing({ catId: null, id: e.id, amount: e.amount, date: e.date })}
+        onDeleteEntry={(e) => void commit(
+          (st) => deleteAccountSnapshot(st, account.id, e.id),
+          `${account.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
       />
 
       {/* Color by card POSITION, cycling — decoration, so five accounts
           are five distinguishable objects. Same function the web calls, so
           the phone and the laptop give an account the same color. */}
       {assets.map((cat, i) => (
-        <AssetCard key={cat.id} cat={cat} color={cardColor(i, true)} chartW={chartW} today={today}
-          online={online} onLog={() => setLogging(cat.id)} />
+        <AssetCard
+          key={cat.id} cat={cat} color={cardColor(i, true)} chartW={chartW} today={today}
+          online={online}
+          onLog={() => setLogging(cat.id)}
+          onLogContribution={() => setContributing(cat.id)}
+          onEditEntry={(e) => setEditing({ catId: cat.id, id: e.id, amount: e.amount, date: e.date })}
+          onDeleteEntry={(e) => void commit(
+            (st) => deleteBalanceSnapshot(st, cat.id, e.id),
+            `${cat.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
+        />
       ))}
       {debts.map((cat) => (
-        <DebtCard key={cat.id} cat={cat} chartW={chartW} today={today}
-          online={online} onLog={() => setLogging(cat.id)} />
+        <DebtCard
+          key={cat.id} cat={cat} chartW={chartW} today={today}
+          online={online}
+          onLog={() => setLogging(cat.id)}
+          onEditEntry={(e) => setEditing({ catId: cat.id, id: e.id, amount: e.amount, date: e.date })}
+          onDeleteEntry={(e) => void commit(
+            (st) => deleteBalanceSnapshot(st, cat.id, e.id),
+            `${cat.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
+        />
       ))}
 
       {/* The same three facts the web shows in Settings. There is no
@@ -137,8 +175,50 @@ export default function DashboardScreen() {
         />
       )}
 
+      {/* Contributions are what you ACTUALLY put in — logged one at a
+          time, never summed from the ledger, which is a forecast. */}
+      {contributing && (
+        <LogBalance
+          title={`Log a contribution to ${cats.find((c) => c.id === contributing)?.name ?? ""}`}
+          cta="Log contribution"
+          busy={saving}
+          onClose={() => setContributing(null)}
+          onSubmit={async (amount, date) => {
+            const id = contributing;
+            const ok = await commit(
+              (st) => addContribution(st, id, amount, date),
+              `${cats.find((c) => c.id === id)?.name ?? "Account"} contribution of ${money(amount)} on ${date}`
+            );
+            if (ok) setContributing(null);
+          }}
+        />
+      )}
+
+      {/* A logged reading you got wrong has to be correctable, which is
+          what the web has always allowed. `catId: null` is the checking
+          account, whose readings live under accountSnapshots. */}
+      {editing && (
+        <LogBalance
+          title="Edit this reading"
+          currentLabel={`Currently ${money(editing.amount)}, logged ${editing.date}`}
+          cta="Save"
+          warn={editing.catId === null}
+          busy={saving}
+          onClose={() => setEditing(null)}
+          onSubmit={async (amount, date) => {
+            const e = editing;
+            const ok = await commit(
+              (st) => e.catId === null
+                ? updateAccountSnapshot(st, primaryAccount(st).id, e.id, { amount, date })
+                : updateBalanceSnapshot(st, e.catId, e.id, { amount, date }),
+              `Reading of ${money(amount)} on ${date}`
+            );
+            if (ok) setEditing(null);
+          }}
+        />
+      )}
+
       <Text style={styles.signout} onPress={() => supabase.auth.signOut()}>Sign out</Text>
-      <Text style={styles.ro}>Read-only on mobile. Edits still happen on the web.</Text>
     </ScrollView>
   );
 }
@@ -161,34 +241,11 @@ function Line({ k, v, tone }: { k: string; v: string; tone?: string }) {
   );
 }
 
-function History({ entries }: { entries: { date: string; amount: number }[] }) {
-  const [open, setOpen] = useState(false);
-  if (entries.length === 0) return null;
-  return (
-    <View>
-      <Pressable onPress={() => { animate(); setOpen((v) => !v); }} style={styles.showBtn}>
-        <Text style={styles.showText}>
-          {open ? "Hide history" : `Show history (${entries.length})`}
-        </Text>
-      </Pressable>
-      {open && (
-        <View style={styles.histWrap}>
-          {[...entries].reverse().map((e, i) => (
-            <View key={`${e.date}-${i}`} style={styles.histRow}>
-              <Text style={styles.histDate}>{e.date}</Text>
-              <Text style={styles.histAmt}>{money(e.amount)}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-function AccountCard({ name, balance, asOf, history, color, chartW, online, onLog }: {
+function AccountCard({ name, balance, asOf, history, color, chartW, online, onLog, onEditEntry, onDeleteEntry }: {
   name: string; balance: number; asOf: string;
-  history: { date: string; amount: number }[]; color: string; chartW: number;
+  history: BalanceSnapshot[]; color: string; chartW: number;
   online: boolean; onLog: () => void;
+  onEditEntry: (e: BalanceSnapshot) => void; onDeleteEntry: (e: BalanceSnapshot) => void;
 }) {
   return (
     <View style={styles.card}>
@@ -203,12 +260,16 @@ function AccountCard({ name, balance, asOf, history, color, chartW, online, onLo
       <Text style={styles.cardNum}>{money(balance)}</Text>
       <Text style={styles.dim}>verified {asOf}</Text>
       <Sparkline points={history} color={color} width={chartW} />
-      <History entries={history} />
+      <HistoryList entries={history} online={online} onEdit={onEditEntry} onDelete={onDeleteEntry} />
     </View>
   );
 }
 
-function AssetCard({ cat, color, chartW, today, online, onLog }: { cat: TrackerCategory; color: string; chartW: number; today: string; online: boolean; onLog: () => void }) {
+function AssetCard({ cat, color, chartW, today, online, onLog, onLogContribution, onEditEntry, onDeleteEntry }: {
+  cat: TrackerCategory; color: string; chartW: number; today: string; online: boolean;
+  onLog: () => void; onLogContribution: () => void;
+  onEditEntry: (e: BalanceSnapshot) => void; onDeleteEntry: (e: BalanceSnapshot) => void;
+}) {
   const { state } = useBudget();
   const history = computeCategoryHistory(state!, cat.id);
   const latest = history.length ? history[history.length - 1] : null;
@@ -239,19 +300,35 @@ function AssetCard({ cat, color, chartW, today, online, onLog }: { cat: TrackerC
       {/* Contributions are LOGGED, never summed from the ledger — the ledger
           is a forecast, so that figure would be what you planned to put in. */}
       <View style={styles.contrib}>
-        <Text style={styles.dim}>Contributed {year}</Text>
-        {contrib.logged ? (
-          <Text style={styles.contribNum}>{money(contrib.byYear[year] ?? 0)}</Text>
-        ) : (
-          <Text style={styles.contribNone}>Nothing logged yet.</Text>
-        )}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.dim}>Contributed {year}</Text>
+          {contrib.logged ? (
+            <Text style={styles.contribNum}>{money(contrib.byYear[year] ?? 0)}</Text>
+          ) : (
+            <Text style={styles.contribNone}>Nothing logged yet.</Text>
+          )}
+        </View>
+        {/* A stat with no way to add to it is a dead end — the figure
+            implied a control that did not exist. */}
+        <Pressable
+          onPress={onLogContribution}
+          disabled={!online}
+          style={[styles.logBtn, !online && styles.logOff]}
+          accessibilityRole="button"
+          accessibilityLabel="Log contribution"
+        >
+          <Text style={styles.logText}>{online ? "+ Contribution" : "Offline"}</Text>
+        </Pressable>
       </View>
-      <History entries={history.map((h) => ({ date: h.date, amount: h.amount }))} />
+      <HistoryList entries={history} online={online} onEdit={onEditEntry} onDelete={onDeleteEntry} />
     </View>
   );
 }
 
-function DebtCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory; chartW: number; today: string; online: boolean; onLog: () => void }) {
+function DebtCard({ cat, chartW, today, online, onLog, onEditEntry, onDeleteEntry }: {
+  cat: TrackerCategory; chartW: number; today: string; online: boolean; onLog: () => void;
+  onEditEntry: (e: BalanceSnapshot) => void; onDeleteEntry: (e: BalanceSnapshot) => void;
+}) {
   const { state } = useBudget();
   // No card color for loans, same as the web: the list is long, the cards
   // are labeled, and five hues on it is decoration you have to decode.
@@ -300,7 +377,7 @@ function DebtCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory;
       )}
 
       <Sparkline points={history.map((h) => ({ date: h.date, amount: h.amount }))} color={color} width={chartW} />
-      <History entries={history.map((h) => ({ date: h.date, amount: h.amount }))} />
+      <HistoryList entries={history} online={online} onEdit={onEditEntry} onDelete={onDeleteEntry} />
     </View>
   );
 }
@@ -324,13 +401,16 @@ const styles = StyleSheet.create({
   cardNum: { color: T.text, fontSize: 24, fontWeight: "700", fontVariant: ["tabular-nums"] },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   dim: { color: T.faint, fontSize: 12, lineHeight: 16 },
-  contrib: { marginTop: 4 },
+  contrib: { marginTop: 4, flexDirection: "row", alignItems: "center", gap: 10 },
   contribNum: { color: T.text, fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
   contribNone: { color: T.faint, fontSize: 12 },
   progress: { gap: 4, marginTop: 4 },
   showBtn: { paddingVertical: 8 },
   showText: { color: T.brass, fontSize: 12 },
   histWrap: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: T.border, paddingTop: 6 },
+  histTap: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 40 },
+  histDel: { minHeight: 40, minWidth: 40, alignItems: "center", justifyContent: "center" },
+  histDelText: { color: T.expense, fontSize: 15 },
   histRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
   histDate: { color: T.faint, fontSize: 12, fontVariant: ["tabular-nums"] },
   histAmt: { color: T.dim, fontSize: 12, fontVariant: ["tabular-nums"] },

@@ -51,12 +51,9 @@ export default function TransactionSheet({
     mode.kind === "occurrence" ? String(mode.current ?? mode.item.amount) : ""
   );
   const [picking, setPicking] = useState<null | "date" | "start" | "end">(null);
-  const [confirmedOrphans, setConfirmedOrphans] = useState(false);
 
-  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => {
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setDraft((d) => ({ ...d, [k]: v }));
-    setConfirmedOrphans(false);
-  };
 
   // ---- Occurrence scope: one field, and nothing else is editable -------
   if (mode.kind === "occurrence") {
@@ -85,7 +82,6 @@ export default function TransactionSheet({
   // ---- Rule scope, and adding -------------------------------------------
   const err = draftError(draft);
   const orphans = err ? 0 : orphanCount(draft);
-  const blocked = orphans > 0 && !confirmedOrphans;
   const cats = [...(state.trackerCategories ?? [])].sort((a, b) => a.order - b.order);
   const showVariable = draft.recurring && canTrackActuals(state, draft.category);
 
@@ -213,12 +209,15 @@ export default function TransactionSheet({
         busy={busy}
         disabled={!!err}
         error={err}
-        cta={blocked ? "Save anyway" : existing ? "Save" : "Add"}
+        // ONE PRESS. The web needs two — "Save", then "Save anyway" — because
+        // it only learns the orphan count when you submit. This sheet counts
+        // them live and shows the warning beside the button, so the warning
+        // has already been read by the time the button is pressed; a second
+        // press would be ceremony, and the label flipping from "Save anyway"
+        // back to "Save" between them reads as a bug.
+        cta={orphans > 0 ? "Save anyway" : existing ? "Save" : "Add"}
         onClose={onClose}
-        onSubmit={() => {
-          if (blocked) { setConfirmedOrphans(true); return; }
-          onSaveDraft(draft);
-        }}
+        onSubmit={() => onSaveDraft(draft)}
       />
     </Sheet>
   );

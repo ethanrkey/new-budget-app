@@ -1,6 +1,7 @@
-import { View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { PanResponder, Text, View } from "react-native";
 import Svg, { Circle, G, Path, Polyline, Rect } from "react-native-svg";
-import { T } from "./theme";
+import { T, money } from "./theme";
 
 // Charts are HAND-ROLLED on react-native-svg rather than pulled from a
 // library, and the reason is the shapes: a donut, a sparkline and a
@@ -51,39 +52,124 @@ export function Donut({ data, size = 150 }: { data: { key: string; amount: numbe
   );
 }
 
-/** A logged-balance history line. Dates are already sorted by the engine. */
+/**
+ * A logged-balance history line you can SCRUB.
+ *
+ * The web gets a Recharts tooltip for free because it has a cursor. A
+ * phone has no hover, so a static line is a picture of your data rather
+ * than a thing you can read: the one question these charts exist to
+ * answer — "what was it in August?" — had no way to be asked.
+ *
+ * Drag anywhere across the chart and it snaps to the nearest reading,
+ * marking it and naming it above. Release and it goes back to showing the
+ * newest, which is the figure printed on the card. PanResponder rather
+ * than a gesture library: this needs one axis and no composition, and the
+ * chart must not start fighting the ScrollView it lives in — the
+ * responder claims the gesture only once the finger has moved further
+ * horizontally than vertically, so a vertical flick still scrolls the
+ * page.
+ *
+ * Touch targets: the whole plot is the target, not the 3px dots. Snapping
+ * to the nearest point means a finger anywhere near the line reads the
+ * value it was aiming at.
+ */
 export function Sparkline({
-  points, color, width, height = 52,
+  points, color, width, height = 68,
 }: { points: { date: string; amount: number }[]; color: string; width: number; height?: number }) {
-  if (points.length < 2) {
+  const [active, setActive] = useState<number | null>(null);
+  const PAD = 8;
+  const plotH = height - 18;            // room for the readout line above
+
+  const geom = useMemo(() => {
+    if (points.length === 0) return null;
+    const ys = points.map((p) => p.amount);
+    const lo = Math.min(...ys), hi = Math.max(...ys);
+    const span = hi - lo || Math.abs(hi) || 1;
+    const x = (i: number) => points.length === 1
+      ? width / 2
+      : (i / (points.length - 1)) * (width - PAD * 2) + PAD;
+    const y = (v: number) => plotH - PAD - ((v - lo) / span) * (plotH - PAD * 2);
+    return { x, y, lo, hi };
+  }, [points, width, plotH]);
+
+  const nearest = useCallback((px: number) => {
+    if (!geom || points.length === 0) return 0;
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const d = Math.abs(geom.x(i) - px);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }, [geom, points]);
+
+  const pan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => points.length > 1,
+    // Claim the gesture only when it is clearly horizontal, so the page
+    // still scrolls under a vertical flick that happens to start here.
+    onMoveShouldSetPanResponder: (_e, g) => points.length > 1 && Math.abs(g.dx) > Math.abs(g.dy),
+    onPanResponderGrant: (e) => setActive(nearest(e.nativeEvent.locationX)),
+    onPanResponderMove: (e) => setActive(nearest(e.nativeEvent.locationX)),
+    onPanResponderRelease: () => setActive(null),
+    onPanResponderTerminate: () => setActive(null),
+  }), [nearest, points.length]);
+
+  if (points.length < 2 || !geom) {
     return (
       <View style={{ height, justifyContent: "center" }}>
         <Svg width={width} height={height}>
           <Rect x={0} y={height / 2} width={width} height={1} fill={T.border} />
-          {points.length === 1 && <Circle cx={width / 2} cy={height / 2} r={3.5} fill={color} />}
+          {points.length === 1 && <Circle cx={width / 2} cy={height / 2} r={4} fill={color} />}
         </Svg>
       </View>
     );
   }
-  const ys = points.map((p) => p.amount);
-  const lo = Math.min(...ys), hi = Math.max(...ys);
-  const span = hi - lo || 1;
-  const pad = 6;
-  const coords = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * (width - pad * 2) + pad;
-    const y = height - pad - ((p.amount - lo) / span) * (height - pad * 2);
-    return `${x},${y}`;
-  });
-  const last = coords[coords.length - 1].split(",");
+
+  const coords = points.map((p, i) => `${geom.x(i)},${geom.y(p.amount)}`);
+  const shown = active ?? points.length - 1;
+  const sx = geom.x(shown), sy = geom.y(points[shown]!.amount);
+  // The readout is clamped inside the chart, so the first and last points
+  // do not push their own label off the edge.
+  const readoutW = 132;
+  const left = Math.max(0, Math.min(width - readoutW, sx - readoutW / 2));
+
   return (
-    <Svg width={width} height={height}>
-      <Polyline points={coords.join(" ")} fill="none" stroke={color} strokeWidth={2}
-        strokeLinejoin="round" strokeLinecap="round" />
-      {/* The newest reading is the one being read; mark it. */}
-      <Circle cx={Number(last[0])} cy={Number(last[1])} r={3.5} fill={color} />
-    </Svg>
+    <View style={{ height }} {...pan.panHandlers}>
+      <View style={{ height: 16, justifyContent: "center" }}>
+        <Text
+          style={{
+            position: "absolute", left, width: readoutW, textAlign: "center",
+            color: active == null ? T.faint : T.text, fontSize: 11,
+            fontVariant: ["tabular-nums"],
+          }}
+          numberOfLines={1}
+        >
+          {prettyDay(points[shown]!.date)}  {money(points[shown]!.amount)}
+        </Text>
+      </View>
+      <Svg width={width} height={plotH}>
+        {/* An area under the line gives the series weight without a grid,
+            which at this size would be more ink than data. */}
+        <Path
+          d={`M${geom.x(0)},${plotH} L${coords.join(" L")} L${geom.x(points.length - 1)},${plotH} Z`}
+          fill={color}
+          opacity={0.12}
+        />
+        <Polyline points={coords.join(" ")} fill="none" stroke={color} strokeWidth={2}
+          strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((p, i) => (
+          <Circle key={`${p.date}-${i}`} cx={geom.x(i)} cy={geom.y(p.amount)} r={2} fill={color} opacity={0.65} />
+        ))}
+        {active != null && <Rect x={sx - 0.5} y={0} width={1} height={plotH} fill={T.dim} opacity={0.5} />}
+        {/* The point being read is drawn with a surface ring so it stays
+            legible where the line crosses it. */}
+        <Circle cx={sx} cy={sy} r={active == null ? 4 : 5.5} fill={color} stroke={T.surface} strokeWidth={2} />
+      </Svg>
+    </View>
   );
 }
+
+const prettyDay = (iso: string) =>
+  new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 export function HBar({ pct, color, width }: { pct: number; color: string; width: number }) {
   const w = Math.max(0, Math.min(1, pct)) * width;

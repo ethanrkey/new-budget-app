@@ -1236,13 +1236,13 @@ a port.
    entering a cash spend while standing in a shop is the case. Decision:
    whether it is the same keep-going-until-closed surface the web has,
    or a single-shot sheet.
-4. **Spending tab** [P]. No fourth tab exists. Logging a monthly actual,
-   the dead-month filter and the untrack nudge all port directly.
+4. ~~**Spending tab** [P].~~ **SHIPPED 2026-10-08.** The fourth tab, with
+   the dead-month filter and the untrack nudge.
 5. **Loan and asset setup / edit terms** [P]. Without it the loan card's
    "Add the rate and original amount" prompt has nowhere to go, and
    `assetKind` cannot be changed on the phone.
-6. **Log a contribution** [P]. Same modal as Log balance with copy
-   overrides, exactly as on the web.
+6. ~~**Log a contribution** [P].~~ **SHIPPED 2026-10-08** — the
+   "Contributed" figure had implied a control that did not exist.
 7. **Onboarding + guided tour** [D]. A user who signs up ON the phone
    currently lands in an empty app. Decision: port the wizard, or state
    that first-time setup is a web task and say so at the empty state.
@@ -1854,6 +1854,50 @@ Further out:
   old gate's all-pairs CVD rule existed because hue meant something, and
   keeping it on decoration would have been importing a constraint from a
   system that no longer exists.
+
+- **The phone is DARK ONLY, and that is a decision** (2026-10-08). The
+  web carries both themes and will keep doing so. The phone will not:
+  this phone is used in dark mode and nowhere else, and a second theme is
+  not one switch — it is a second set of values to pick, check against
+  every surface, and keep correct on every screen added afterwards,
+  forever. `lib/theme.ts` is a flat object of hex values with no mode in
+  it, and that is the shape to keep until someone asks. If a user asks,
+  it becomes a real piece of work rather than a thing half-carried.
+
+- **A renderer for the phone, after the same bug twice** (2026-10-08,
+  `mobile/__tests__`). jest-expo + @testing-library/react-native, 17
+  tests, in `npm test`. It exists because a passing count implied
+  coverage it did not have — twice in two days: a form verified
+  standalone while its routing was not, then 57 green assertions on a
+  scope sheet whose editor never opened.
+
+  **It is deliberately not a second place to test logic.** Anything
+  assertable without a renderer stays in `tests/mobile-edit.test.mjs`,
+  which runs in milliseconds and has no framework. What belongs here is
+  only what needs mounting: does pressing the thing open the thing, is
+  the control disabled when it should be, does the handler receive what
+  the screen was showing. The first test in the file is the bug —
+  pressing "Edit just Dec 1" and asserting the editor is on screen — and
+  the suite was checked against a deliberately broken host before being
+  believed.
+
+  Two notes for whoever maintains it. `render` is ASYNC in RNTL 14 and
+  silently returns a promise with no query methods if you forget to await
+  it, which looks exactly like a broken component. And the shared engine
+  lives above this package, so `moduleNameMapper` points `@babel/runtime`
+  at `mobile/node_modules` — the jest equivalent of what
+  `metro.config.js` does with `nodeModulesPaths`.
+
+- **Scrub, because a phone has no hover** (2026-10-08, `lib/charts.tsx`).
+  The Dashboard's history lines were pictures of data: the one question
+  they exist to answer, "what was it in August?", could not be asked,
+  because the web gets that from a Recharts tooltip and a cursor. Drag
+  across one and it snaps to the nearest reading and names it; release
+  and it returns to the newest, which is the figure printed on the card.
+  The whole plot is the touch target rather than the dots, PanResponder
+  rather than a gesture library (one axis, no composition), and the
+  responder claims a gesture only once it is more horizontal than
+  vertical so a flick still scrolls the page under it.
 
 - **One modal per screen; a sheet changes its CONTENT, never presents a
   second** (2026-10-08, `mobile/components/BottomSheet.tsx`). Picking

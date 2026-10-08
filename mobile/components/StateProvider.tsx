@@ -7,6 +7,7 @@ import { T } from "../lib/theme";
 import SaveFailure from "./SaveFailure";
 import UnsavedNotice from "./UnsavedNotice";
 import { writeStash, clearStash, readStash, type Stash } from "../lib/stash";
+import { loadPrefs, savePrefs, DEFAULT_PREFS, type Prefs } from "../lib/prefs";
 import type { BudgetState } from "../../src/engine/types.ts";
 
 type Reason = "conflict" | "offline" | "error";
@@ -21,10 +22,13 @@ type Ctx = {
   commit: (fn: (s: BudgetState) => BudgetState, label: string) => Promise<boolean>;
   online: boolean;
   saving: boolean;
+  prefs: Prefs;
+  setPref: <K extends keyof Prefs>(k: K, v: Prefs[K]) => void;
 };
 const StateCtx = createContext<Ctx>({
   state: null, refresh: async () => {}, refreshing: false,
   commit: async () => false, online: true, saving: false,
+  prefs: DEFAULT_PREFS, setPref: () => {},
 });
 export const useBudget = () => useContext(StateCtx);
 
@@ -36,6 +40,9 @@ export function StateProvider({ userId, children }: { userId: string; children: 
   const [failure, setFailure] = useState<Reason | null>(null);
   const [online, setOnline] = useState(true);
   const [unsaved, setUnsaved] = useState<Stash | null>(null);
+  // `null` until read from disk — the app does not render until it is set,
+  // so a folded panel never flashes open.
+  const [prefs, setPrefs] = useState<Prefs | null>(null);
   const pending = useRef<{ fn: (s: BudgetState) => BudgetState; label: string } | null>(null);
 
   // Offline is READ-ONLY by decision: cached state for viewing, entry
@@ -51,6 +58,15 @@ export function StateProvider({ userId, children }: { userId: string; children: 
   }, [userId]);
 
   useEffect(() => { resetStore(); refresh(); }, [refresh]);
+  useEffect(() => { loadPrefs().then(setPrefs); }, []);
+
+  const setPref = useCallback(<K extends keyof Prefs>(k: K, v: Prefs[K]) => {
+    setPrefs((p) => {
+      const next = { ...(p ?? DEFAULT_PREFS), [k]: v };
+      void savePrefs(next);
+      return next;
+    });
+  }, []);
 
   // A stash still on disk at launch means a previous session was killed
   // between the optimistic apply and the write landing. It is REPORTED and
@@ -102,10 +118,10 @@ export function StateProvider({ userId, children }: { userId: string; children: 
       </View>
     );
   }
-  if (!state) return <View style={styles.center}><ActivityIndicator color={T.brass} /></View>;
+  if (!state || !prefs) return <View style={styles.center}><ActivityIndicator color={T.brass} /></View>;
 
   return (
-    <StateCtx.Provider value={{ state, refresh, refreshing, commit, online, saving }}>
+    <StateCtx.Provider value={{ state, refresh, refreshing, commit, online, saving, prefs, setPref }}>
       {children}
       <SaveFailure
         reason={failure}
