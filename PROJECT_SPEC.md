@@ -1291,16 +1291,24 @@ Later, in rough order:
    **CLOSED 2026-10-06, superseded.** There are no role shades: the pie is
    a four-step brass ramp, gated on adjacent ΔE2000 and on monotonic
    lightness. Nothing in it can run near navy.
-6. **Tombstone retention / purge job.** 90 days is documented but no
+6. **Count orphans live on the WEB, then one press everywhere.** The
+   phone's editor counts the dated amounts a schedule change would orphan
+   as you type, shows the number beside the button, and saves on one
+   press — the warning has already been read. The web needs two presses
+   ("Save", then "Save anyway") only because it does not learn the count
+   until submit. That is a limitation, not a decision: move the count to
+   render time and the second press goes away. Small, and it ends a
+   difference between the clients that nobody chose.
+7. **Tombstone retention / purge job.** 90 days is documented but no
    purge is scheduled; the rows accumulate. Read-only offline means the
    window only has to outlive online devices refetching, so this is
    housekeeping, not correctness.
-7. ~~**The Ledger prints saving and debt amounts in red, the Budget does
+8. ~~**The Ledger prints saving and debt amounts in red, the Budget does
    not.**~~ **CLOSED 2026-10-08, as intended behavior.** Unified on
    2026-10-06, reverted on the Ledger side two days later after using it:
    the tabs ask different questions and the difference in treatment
    follows from that. Recorded as a decision rather than an inconsistency.
-8. ~~**Color customization / role hue schemes.**~~ **RETIRED 2026-10-06,
+9. ~~**Color customization / role hue schemes.**~~ **RETIRED 2026-10-06,
    moot.** The question was whether per-category recolor should return or
    whether the user should pick each ROLE's hue. Neither survives the
    rework: roles no longer have hues to pick. What is left to customize is
@@ -1311,7 +1319,7 @@ Later, in rough order:
    tab is unreadable", and the answer was fewer colors rather than
    different ones.
 
-9. **Retired palette machinery still exported from the engine.**
+10. **Retired palette machinery still exported from the engine.**
    `CATEGORY_PALETTE`, `paletteColor` and the `PaletteIndex` type survive
    in `model.ts`/`types.ts` with no renderer left to use them —
    `ColorSwatches` was the last one and is gone. Deleting them reaches
@@ -1854,6 +1862,32 @@ Further out:
   old gate's all-pairs CVD rule existed because hue meant something, and
   keeping it on decoration would have been importing a constraint from a
   system that no longer exists.
+
+- **"Has an expect()" is not coverage; mutation is** (2026-10-08,
+  `mobile/scripts/mutate.mjs`). Three times in one week the finding was
+  that a passing count implied coverage it did not have — a form verified
+  standalone while its routing was not, 57 green assertions on a scope
+  sheet whose editor never opened, and a test written for an unexported
+  component that asserted literally nothing and was only caught because
+  it failed to compile.
+
+  So the renderer suite was audited by breaking things. 22 mutations, one
+  per claim the suite makes: drop the occurrence option, let `rowTarget`
+  return the wrong item, skip the delete confirm, make validation always
+  pass, ignore `busy`, hand the history row's editor the wrong entry,
+  rest the sparkline on the first reading instead of the last. **All 22
+  were caught, and all 17 tests die to at least one** — which is the
+  direction that matters, because a test nothing can kill is decoration.
+  The runner reports both and exits non-zero on either.
+
+  Its limit is worth stating with the result: it only covers what someone
+  thought to break. It replaces nothing about reading a test and asking
+  what it would miss; it catches the case where the answer is
+  "everything".
+
+  The plain-node suites were scanned the same day for one-line
+  tautologies — an assertion whose expected side is computed the same way
+  as its actual side. None found.
 
 - **The phone is DARK ONLY, and that is a decision** (2026-10-08). The
   web carries both themes and will keep doing so. The phone will not:
