@@ -3,7 +3,7 @@ import {
   ActivityIndicator, Platform, Pressable, ScrollView,
   StyleSheet, Text, TextInput, View,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
 import { CADENCES } from "../../src/engine/model.ts";
 import { blankDraft, draftOf, draftError, overrideError, canTrackActuals, type Draft } from "../lib/edit";
@@ -173,25 +173,15 @@ export default function TransactionSheet({
       )}
 
       {picking && (
-        <DateTimePicker
-          value={new Date((picking === "date" ? draft.date : picking === "start" ? draft.startDate : draft.endDate || draft.startDate) + "T00:00:00")}
-          mode="date"
-          display={Platform.OS === "ios" ? "inline" : "default"}
-          themeVariant="dark"
-          onChange={(_e, d) => {
-            setPicking(Platform.OS === "ios" ? picking : null);
-            if (!d) return;
-            const iso = d.toISOString().slice(0, 10) as ISODate;
-            if (picking === "date") set("date", iso);
-            else if (picking === "start") set("startDate", iso);
+        <DatePicker
+          value={picking === "date" ? draft.date : picking === "start" ? draft.startDate : draft.endDate || draft.startDate}
+          onPick={(iso) => {
+            if (picking === "date") set("date", iso as ISODate);
+            else if (picking === "start") set("startDate", iso as ISODate);
             else set("endDate", iso);
           }}
+          onClose={() => setPicking(null)}
         />
-      )}
-      {picking && Platform.OS === "ios" && (
-        <Pressable style={styles.doneDate} onPress={() => setPicking(null)} accessibilityRole="button">
-          <Text style={styles.clearText}>Done</Text>
-        </Pressable>
       )}
 
       {/* Moving a rule's day leaves date-specific amounts behind — an

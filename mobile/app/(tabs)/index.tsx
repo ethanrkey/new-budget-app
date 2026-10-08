@@ -2,11 +2,11 @@ import { useMemo, useState } from "react";
 import {
   Platform, Pressable, RefreshControl, SectionList, StyleSheet, Text, View,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useBudget } from "../../components/StateProvider";
 import SpendingMix from "../../components/SpendingMix";
 import CalendarView from "../../components/CalendarView";
 import BottomSheet from "../../components/BottomSheet";
+import DatePicker from "../../components/DatePicker";
 import ScopeSheet from "../../components/ScopeSheet";
 import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
 import { T, money } from "../../lib/theme";
@@ -102,7 +102,12 @@ export default function LedgerScreen() {
             </Pressable>
           ))}
         </View>
-        <Pressable style={styles.chip} onPress={() => setPicking(true)}>
+        <Pressable
+          style={styles.chip}
+          onPress={() => setPicking(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Project through ${effective}. Change the date.`}
+        >
           <Text style={styles.chipText}>through {effective}</Text>
         </Pressable>
         {/* Offline is READ-ONLY by decision, so the control says so
@@ -132,19 +137,6 @@ export default function LedgerScreen() {
 
   return (
     <View style={styles.wrap}>
-      {picking && (
-        <DateTimePicker
-          value={new Date(effective + "T00:00:00")}
-          mode="date"
-          display={Platform.OS === "ios" ? "inline" : "default"}
-          themeVariant="dark"
-          onChange={(_e, d) => {
-            setPicking(Platform.OS === "ios");
-            if (d) setHorizon(d.toISOString().slice(0, 10));
-          }}
-        />
-      )}
-
       {calendar ? (
         <SectionList
           sections={[{ title: "", data: [0] }]}
@@ -189,11 +181,21 @@ export default function LedgerScreen() {
       {/* ONE sheet. Choosing a scope swaps what is inside it; it never
           dismisses one modal to present another, which is the thing iOS
           swallows. See components/BottomSheet.tsx. */}
+      {/* EVERY transient surface on this screen goes through the one
+          host, the date picker included — that is what makes "tap outside
+          to dismiss" true of all of them rather than of whichever ones
+          someone remembered. */}
       <BottomSheet
-        visible={!!sheet || !!target}
-        onClose={() => { setSheet(null); setScopeFor(null); }}
+        visible={!!sheet || !!target || picking}
+        onClose={() => { setSheet(null); setScopeFor(null); setPicking(false); }}
       >
-        {sheet ? (
+        {picking ? (
+          <DatePicker
+            value={effective}
+            onPick={setHorizon}
+            onClose={() => setPicking(false)}
+          />
+        ) : sheet ? (
           <TransactionSheet
             mode={sheet}
             state={state!}

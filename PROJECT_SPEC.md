@@ -1968,6 +1968,32 @@ Further out:
   responder claims a gesture only once it is more horizontal than
   vertical so a flick still scrolls the page under it.
 
+- **A surface with no exit, reported twice** (2026-10-08,
+  `mobile/components/DatePicker.tsx`). The Ledger's "through <date>" chip
+  opened a date picker that could not be closed — not by choosing a date,
+  not by tapping outside. Shipped in the very first Expo commit and
+  untouched since.
+
+  **Why the one-modal fix did not cover it, which is the part worth
+  keeping.** That fix was about `Modal` presentation races. This picker
+  is not a Modal at all: on iOS `display="inline"` renders it straight
+  into the component tree, so the single host never saw it. And it was
+  not a race but a missing dismissal — `setPicking(Platform.OS === "ios")`
+  evaluates to `setPicking(true)`, so choosing a date RE-OPENED it, and
+  with no modal there was no scrim to tap. A second dismissal path, with
+  nothing on it.
+
+  Two things, because fixing the one screen would have left the pattern.
+  Every date picker in the app is now one component that owns all three
+  exits — pick, Done, and Android's own cancel — so a caller cannot
+  create a pickerless-exit surface. And the Ledger's picker goes through
+  the same `BottomSheet` as its sheets, which is what makes "tap outside
+  to dismiss" true of every transient surface on that screen rather than
+  of the ones someone remembered.
+
+  The test opens it and closes it. "The chip exists" would have passed
+  for the entire time it was broken.
+
 - **One modal per screen; a sheet changes its CONTENT, never presents a
   second** (2026-10-08, `mobile/components/BottomSheet.tsx`). Picking
   "Edit just this date" from the scope sheet did nothing at all: the

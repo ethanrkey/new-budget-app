@@ -18,6 +18,11 @@
 //
 // Measured 2026-10-08: 22 mutations, 22 killed, and every one of the 17
 // tests dies to at least one.
+// --verbose is NOT cosmetic: with more than one test file jest stops
+// printing per-test lines, and this runner parses them. Without it the
+// script reported every mutation as surviving and "All 0 tests" — loudly
+// wrong, which is the only acceptable way for a verification tool to
+// break, but still wrong.
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -53,6 +58,20 @@ const MUTATIONS = [
    'disabled={!online}', 'disabled={false}'],
   ["sparkline rests on the FIRST reading", "lib/charts.tsx",
    'const shown = active ?? points.length - 1;', 'const shown = active ?? 0;'],
+  // The Ledger picker, reported twice and fixed on 2026-10-08. These
+  // mutations re-create it exactly: the picker that never closes, and
+  // the one with no way out.
+  ["date picker re-opens itself on pick", "components/DatePicker.tsx",
+   'onPick(d.toISOString().slice(0, 10));\n          onClose();',
+   'onPick(d.toISOString().slice(0, 10));'],
+  ["date picker swallows a cancel", "components/DatePicker.tsx",
+   'if (!d || (event as { type?: string })?.type === "dismissed") { onClose(); return; }',
+   'if (!d || (event as { type?: string })?.type === "dismissed") { return; }'],
+  ["date picker loses its Done", "components/DatePicker.tsx",
+   '<Pressable style={styles.done} onPress={onClose} accessibilityRole="button" accessibilityLabel={label}>',
+   '<Pressable style={styles.done} accessibilityRole="button" accessibilityLabel={label}>'],
+  ["the Ledger picker stops going through the host", "app/(tabs)/index.tsx",
+   'visible={!!sheet || !!target || picking}', 'visible={!!sheet || !!target}'],
   ["sparkline draws a readout for one point", "lib/charts.tsx",
    'if (points.length < 2 || !geom) {', 'if (points.length < 1 || !geom) {'],
 
@@ -88,7 +107,7 @@ for (const [label, file, find, repl] of MUTATIONS) {
   }
   writeFileSync(file, orig.replace(find, repl));
   let out = "";
-  try { out = execSync("npx jest 2>&1", { encoding: "utf8" }); }
+  try { out = execSync("npx jest --verbose 2>&1", { encoding: "utf8" }); }
   catch (e) { out = e.stdout || ""; }
   writeFileSync(file, orig);          // always restore, pass or fail
 
@@ -101,7 +120,7 @@ for (const [label, file, find, repl] of MUTATIONS) {
 // THE OTHER DIRECTION, and the more useful one: a test that nothing can
 // kill. Every name in the suite, diffed against the ones that died.
 let baseline = "";
-try { baseline = execSync("npx jest 2>&1", { encoding: "utf8" }); }
+try { baseline = execSync("npx jest --verbose 2>&1", { encoding: "utf8" }); }
 catch (e) { baseline = e.stdout || ""; }
 const allTests = [...baseline.matchAll(/[\u2713\u2715] (.+?)(?: \(\d+ ms\))?$/gm)].map((m) => m[1].trim());
 

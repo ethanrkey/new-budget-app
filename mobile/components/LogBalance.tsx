@@ -3,7 +3,7 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable,
   StyleSheet, Text, TextInput, View,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
 import { todayISO } from "../../src/engine/model.ts";
 
@@ -48,20 +48,16 @@ export default function LogBalance({
           />
 
           <Text style={styles.label}>As of</Text>
-          <Pressable style={styles.field} onPress={() => setPicking(true)}>
+          <Pressable
+            style={styles.field}
+            onPress={() => setPicking(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`As of ${date}. Change the date.`}
+          >
             <Text style={{ color: T.text, fontSize: 16 }}>{date}</Text>
           </Pressable>
           {picking && (
-            <DateTimePicker
-              value={new Date(date + "T00:00:00")}
-              mode="date"
-              display={Platform.OS === "ios" ? "inline" : "default"}
-              themeVariant="dark"
-              onChange={(_e, d) => {
-                setPicking(Platform.OS === "ios");
-                if (d) setDate(d.toISOString().slice(0, 10));
-              }}
-            />
+            <DatePicker value={date} onPick={setDate} onClose={() => setPicking(false)} />
           )}
 
           {warn && (

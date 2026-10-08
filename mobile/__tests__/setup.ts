@@ -10,6 +10,17 @@ jest.mock("@react-native-community/netinfo", () => ({
   fetch: async () => ({ isConnected: true }),
 }));
 
-// The date picker is a native view with no behavior worth faking; the
-// tests that matter here never open it.
-jest.mock("@react-native-community/datetimepicker", () => "DateTimePicker");
+// The date picker is a native view, but WHETHER IT IS ON SCREEN is the
+// thing a dismissal test asserts, so it is faked as a real element with a
+// label — and its last props are captured so a test can fire the change
+// the native picker would have fired.
+export const pickerProps: { current: Record<string, unknown> | null } = { current: null };
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  const { pickerProps: slot } = require("./setup");
+  return function MockDateTimePicker(props: Record<string, unknown>) {
+    slot.current = props;
+    return React.createElement(View, { accessibilityLabel: "Date picker" });
+  };
+});
