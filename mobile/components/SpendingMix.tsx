@@ -8,7 +8,7 @@ import type { SpendingMix as Mix, SpendingSlice } from "../../src/engine/types.t
 
 // The web panel, same data and same rules, different primitives.
 // Carried over verbatim because they are rules, not layout:
-//   - every slice carries its label inline (identity never rests on colour)
+//   - every slice carries its label inline (identity never rests on color)
 //   - item slices carry their parent's name ("Rent · Fixed bills")
 //   - the pie NEVER re-shapes; Other expands in the legend only
 //   - the bar expands rows in place
@@ -24,7 +24,7 @@ export default function SpendingMix({ mix }: { mix: Mix }) {
   const [otherOpen, setOtherOpen] = useState(false);
 
   // Brass, same as the web: the pie ramps by RANK over four wedges plus a
-  // grey Other, the bar is one brass for every named row. The phone is
+  // gray Other, the bar is one brass for every named row. The phone is
   // hardcoded dark, so the dark ramp always.
   const fill = (s: SpendingSlice, rank: number) =>
     asBar ? barFill(s.bucket === "other", true) : pieFill(rank, s.bucket === "other", true);

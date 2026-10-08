@@ -199,11 +199,11 @@ export function reorderList(state: BudgetState, names: string[], name: string, b
 // ---- Tracker category (savings/debt/investment) CRUD ----
 // Deleting a category never touches items that reference it — an orphaned
 // category id just renders as a neutral "Uncategorized" (see
-// budgetLayout.ts, and the `uncategorized` role's grey) rather than blocking
+// budgetLayout.ts, and the `uncategorized` role's gray) rather than blocking
 // the delete or silently reassigning someone's data.
 
 /**
- * `color` is no longer chosen or read — colour is derived from what the
+ * `color` is no longer chosen or read — color is derived from what the
  * money does (engine/palette.ts). The parameter stays so existing callers
  * and stored data keep their shape, and a value is still written so a blob
  * round-trips unchanged; nothing paints with it. Removing the field is a
@@ -435,7 +435,7 @@ export function moveTab(state: BudgetState, draggedId: TabId, beforeId: TabId | 
 export interface SetupAssetInput {
   categoryId?: string | null;
   name: string;
-  // No `color`. Colour is derived from role as of 2026-10-03, and the field
+  // No `color`. Color is derived from role as of 2026-10-03, and the field
   // outlived its picker by a few hours: LoanSetupModal still rendered a
   // swatch row whose value setupLoan() then silently dropped on the floor.
   // A control that discards what you type is worse than no control.

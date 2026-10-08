@@ -87,7 +87,7 @@ function VariableSpendingRow({ item, monthKeys, monthlyActuals, onSet, onDelete,
               <th className="py-1 pr-3 font-medium">Month</th>
               <th className="py-1 pr-3 font-medium text-right">Expected</th>
               <th className="py-1 pr-3 font-medium text-right">Actual</th>
-              <th className="py-1 font-medium text-right">Delta</th>
+              <th className="py-1 font-medium text-right">Difference</th>
             </tr>
           </thead>
           <tbody>
@@ -131,11 +131,11 @@ function MonthRow({ item, monthKey, monthlyActuals, onSet, onDelete }) {
           className="w-24 px-1.5 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-right"
         />
       </td>
-      <td className={`py-1.5 text-right font-medium ${v.delta == null ? "text-gray-300 dark:text-gray-600" : v.delta > 0 ? "text-expense" : v.delta < 0 ? "text-income" : "text-gray-400"}`}>
-        {/* A delta against a month with nothing due is not a variance —
+      <td className={`py-1.5 text-right font-medium ${v.difference == null ? "text-gray-300 dark:text-gray-600" : v.difference > 0 ? "text-expense" : v.difference < 0 ? "text-income" : "text-gray-400"}`}>
+        {/* A difference against a month with nothing due is not a variance —
             pricing it as one is what made "+$150.00" read as overspending
             when the rule had not started. */}
-        {v.occurrences === 0 ? "—" : v.delta == null ? "—" : (v.delta > 0 ? "+" : "") + money(v.delta)}
+        {v.occurrences === 0 ? "—" : v.difference == null ? "—" : (v.difference > 0 ? "+" : "") + money(v.difference)}
       </td>
     </tr>
   );

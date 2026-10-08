@@ -16,7 +16,7 @@ import type { Role } from "./palette.ts";
 export type ISODate = string;
 /** A calendar month, "YYYY-MM". The key for monthlyActuals. */
 export type MonthKey = string;
-/** An index into CATEGORY_PALETTE, not a hex colour. */
+/** An index into CATEGORY_PALETTE, not a hex color. */
 export type PaletteIndex = number;
 
 // ---- Categories ----------------------------------------------------------
@@ -103,7 +103,7 @@ interface ItemBase {
   order: number;
   /** Stamped automatically; there is no picker while there is one account. */
   accountId?: string;
-  /** Per-item palette override; null means "use the category's colour". */
+  /** Per-item palette override; null means "use the category's color". */
   color?: PaletteIndex | null;
 }
 
@@ -278,8 +278,8 @@ export interface Ledger {
 /**
  * Which bucket a slice represents. `category` slices carry a palette index
  * the user chose; the rest are deliberately NEUTRAL — the user never assigned
- * them a colour, and the 8-hue palette is already fully spoken for, so
- * inventing a 9th and 10th hue would break the categorical colour rules.
+ * them a color, and the 8-hue palette is already fully spoken for, so
+ * inventing a 9th and 10th hue would break the categorical color rules.
  */
 // `item` is one transaction broken out of a fixed bucket — always, not on a
 // threshold. See ALWAYS_BY_ITEM in compute.ts for why the fixed buckets and
@@ -294,7 +294,7 @@ export interface SpendingSlice {
   /** 0-100, of the window's total planned outflow. */
   percent: number;
   bucket: SpendingBucket;
-  /** What the money is DOING. No longer a colour — colour is brass by rank
+  /** What the money is DOING. No longer a color — color is brass by rank
    *  (see palette.ts) — but still what decides whether an amount is red,
    *  and still assigned by the engine so both clients agree. */
   role: Role;

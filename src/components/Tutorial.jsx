@@ -68,9 +68,9 @@ const SECTIONS = [
       ]],
       ["p", "Changing one date gives that occurrence its own amount — Electric is $112 most months but $180 in July — and the row is marked “· edited” so an amount that disagrees with its rule doesn't look like a bug. Editing the rule later never wipes those; your July stays $180. Moving the rule to a different day of the month does drop them, because an override belongs to a date, and the form tells you how many before you save."],
       ["p", "Each cumulative column is labeled with the category it tracks, and sized to fit that name — two loans called “Student Loan AA” and “Student Loan AB” stay tellable apart."],
-      ["p", "“List” and “Calendar” show the same transactions two ways. The calendar is a month grid: a coloured dot per transaction, the day's net, and a click on any day for the detail. The running balance only appears in the list — a month grid has nowhere to put it, and rather than fake one the calendar leaves it out."],
+      ["p", "“List” and “Calendar” show the same transactions two ways. The calendar is a month grid: a colored dot per transaction, the day's net, and a click on any day for the detail. The running balance only appears in the list — a month grid has nowhere to put it, and rather than fake one the calendar leaves it out."],
       ["p", "“Planned spending” at the top breaks the window down by category — pie or bar, your choice, and it follows the horizon slider. It is the forecast: your rules, with income left out. It is not a record of what you actually spent; that comparison lives on the Spending tab."],
-      ["p", "Bills and one-offs are always shown as the individual transactions inside them, never as one slice: \"Fixed bills\" is just where anything you didn't categorize lands, so a wedge labelled that tells you nothing. The categories you made yourself stay whole. Each broken-out slice keeps its bucket's name beside it, like \"Rent · Fixed bills\"."],
+      ["p", "Bills and one-offs are always shown as the individual transactions inside them, never as one slice: \"Fixed bills\" is just where anything you didn't categorize lands, so a wedge labeled that tells you nothing. The categories you made yourself stay whole. Each broken-out slice keeps its bucket's name beside it, like \"Rent · Fixed bills\"."],
       ["p", "Past eight slices the rest fold into \"Other\" so the chart stays readable. Click it to see what's in there — the bar chart opens the rows in place, and the pie lists them beside the chart without redrawing the wedge. Either way the \"Other\" line is replaced by its parts, with a link to fold them back."],
     ],
   },
@@ -113,7 +113,7 @@ const SECTIONS = [
         "Log the real balance whenever you check it — Log balance on the card.",
       ]],
       ["p", "Every logged balance and contribution is editable and deletable afterwards, under “Show history” / “Show contributions”. Fat-finger a number and you can just fix it."],
-      ["p", "“Edit” on a card renames it, recolours it, and is where deleting lives. Deleting tells you how many transactions are tagged to it first — those are scheduled, so they stay in your ledger as uncategorized rather than vanishing and quietly changing your forecast."],
+      ["p", "“Edit” on a card renames it, recolors it, and is where deleting lives. Deleting tells you how many transactions are tagged to it first — those are scheduled, so they stay in your ledger as uncategorized rather than vanishing and quietly changing your forecast."],
     ],
   },
   {
@@ -146,7 +146,7 @@ const SECTIONS = [
     title: "Your categories",
     body: [
       ["p", "Your categories are your own buckets: Emergency fund, Roth IRA, Brokerage, Car loan, anything. Settings → Categories to rename, reorder, or delete them, or add one without an opening balance."],
-      ["p", "Each one is one of three kinds, and the kind decides both what its card shows and what colour it gets everywhere in the app. You don't pick a colour — see “What the colours mean”."],
+      ["p", "Each one is one of three kinds, and the kind decides both what its card shows and what color it gets everywhere in the app. You don't pick a color — see “What the colors mean”."],
       ["dl", [
         ["Savings", "Cash you control. Its card shows the balance you log and what you've contributed."],
         ["Investment", "Value the market moves — a Roth IRA, a 401k, a brokerage, an HSA. Same card, but no projected line: projecting a market is guessing. An account you never touch is still market-exposed."],
@@ -156,14 +156,14 @@ const SECTIONS = [
     ],
   },
   {
-    id: "colours",
-    title: "What the colours mean",
+    id: "colors",
+    title: "What the colors mean",
     body: [
-      ["p", "Colour does three jobs here and they don't overlap. Nothing is chosen by you, and nothing is a code you have to learn — the words on screen always say what a thing is."],
+      ["p", "Color does three jobs here and they don't overlap. Nothing is chosen by you, and nothing is a code you have to learn — the words on screen always say what a thing is."],
       ["legend"],
-      ["p", "The spending chart is one colour because it is answering one question: how does this window divide up? In the pie the four biggest shares run darkest to lightest and everything else is one grey “Other” — four steps is as many as one colour can keep clearly apart, so the chart shows four rather than pretending to show nine. The bar is the full list and keeps every row."],
-      ["p", "On the Dashboard, each savings or investment card gets its own colour so you can find the one you were reading. That's all it means — it's assigned by the card's position, not by what the account is. Loans share a plain grey, and your checking account has no colour at all."],
-      ["note", "Red and green are the only colours that mean something: green is money coming in, red is money going out. Money you moved to savings, put into an investment, or paid against a loan stays plain — it left your checking account, but it isn't gone."],
+      ["p", "The spending chart is one color because it is answering one question: how does this window divide up? In the pie the four biggest shares run darkest to lightest and everything else is one gray “Other” — four steps is as many as one color can keep clearly apart, so the chart shows four rather than pretending to show nine. The bar is the full list and keeps every row."],
+      ["p", "On the Dashboard, each savings or investment card gets its own color so you can find the one you were reading. That's all it means — it's assigned by the card's position, not by what the account is. Loans share a plain gray, and your checking account has no color at all."],
+      ["note", "Red and green are the only colors that mean something: green is money coming in, red is money going out. Money you moved to savings, put into an investment, or paid against a loan stays plain — it left your checking account, but it isn't gone."],
     ],
   },
 
@@ -299,14 +299,14 @@ export default function Tutorial({ onClose, onStartTour }) {
   );
 }
 
-// What each colour is FOR. The job, not a taxonomy of money — that was
-// the old legend, and seven hues to memorise is what made the app hard to
+// What each color is FOR. The job, not a taxonomy of money — that was
+// the old legend, and seven hues to memorize is what made the app hard to
 // read. These four entries are the whole system.
 const LEGEND = [
   { key: "brass", name: "Brass", hint: "the spending chart, and the app's own gold", swatches: (dark) => BRASS_RAMP[dark ? "dark" : "light"] },
   { key: "bar",   name: "One brass", hint: "every row of the bar chart — the full list, so no ranking", swatches: (dark) => [BAR_COLOR[dark ? "dark" : "light"]] },
-  { key: "cards", name: "Card colours", hint: "telling your Dashboard accounts apart. Decoration, not meaning", swatches: (dark) => CARD_COLORS[dark ? "dark" : "light"] },
-  { key: "grey",  name: "Grey", hint: "“Other”, loans, and anything deliberately not identified", swatches: () => [NEUTRAL_CHART] },
+  { key: "cards", name: "Card colors", hint: "telling your Dashboard accounts apart. Decoration, not meaning", swatches: (dark) => CARD_COLORS[dark ? "dark" : "light"] },
+  { key: "gray",  name: "Gray", hint: "“Other”, loans, and anything deliberately not identified", swatches: () => [NEUTRAL_CHART] },
 ];
 
 function Block({ block }) {

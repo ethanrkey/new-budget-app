@@ -10,7 +10,7 @@
 -- client never deletes an entity row:
 --
 --   requesting deletion  = INSERT one row here
---   cancelling it        = DELETE that row   <- the delete policy below
+--   canceling it        = DELETE that row   <- the delete policy below
 --   the actual purge     = SECURITY DEFINER, server-side, never the client
 --
 -- Giving the client DELETE on budget_entities would widen the only thing
@@ -43,7 +43,7 @@ create policy "request own deletion"
   to authenticated
   with check (auth.uid() = user_id);
 
--- Cancelling is the one delete a client performs anywhere in this app.
+-- Canceling is the one delete a client performs anywhere in this app.
 drop policy if exists "cancel own deletion" on account_deletions;
 create policy "cancel own deletion"
   on account_deletions for delete

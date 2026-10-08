@@ -33,7 +33,7 @@ function migrateItem(item: any): any {
 // feature replaces.
 export function legacyTrackerCategories(): TrackerCategory[] {
   return [
-    // No colour and no assetKind: these are the ids a legacy state's items
+    // No color and no assetKind: these are the ids a legacy state's items
     // already point at, so the names must not change — but nothing here can
     // answer "market-exposed or not", and a migration must not guess it.
     { id: "roth", name: "Roth", order: 0, kind: "asset" },
@@ -64,7 +64,7 @@ function inferCategoryKind(cat: any): "asset" | "debt" {
 // exists, running item migrations and the onboarding-seen / tracker-category
 // migrations below.
 // Migration 13 (2026-10-03): `color` is DROPPED from tracker categories.
-// Colour is derived from role now (engine/palette.ts) and nothing reads
+// Color is derived from role now (engine/palette.ts) and nothing reads
 // the stored index; left in place it would ride along in every save
 // forever, and the next person to see it would reasonably assume it meant
 // something. Stripped the same way `paidOverrides` was — explicitly,

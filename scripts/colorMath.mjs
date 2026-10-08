@@ -1,4 +1,4 @@
-// Colour maths, in its own file so it can be TESTED.
+// Color maths, in its own file so it can be TESTED.
 //
 // It lived inside validate_palette.mjs until 2026-10-06, which meant the
 // gate's measuring instrument could only be exercised by running the gate —
@@ -21,9 +21,9 @@ const hex = (r, g, b) => "#" + [r, g, b].map((v) => Math.round(gam(v) * 255).toS
 export const lab = (h) => labFromLinear(srgb(h).map(lin));
 
 /**
- * Lab from LINEAR-LIGHT rgb, unclamped and unquantised.
+ * Lab from LINEAR-LIGHT rgb, unclamped and unquantized.
  *
- * Measurement never goes back through "#rrggbb". A simulated colour is
+ * Measurement never goes back through "#rrggbb". A simulated color is
  * routinely outside the sRGB gamut, and rounding it to 8 bits and clipping
  * it to [0,1] shifts ΔE by up to ~1.2 — small, but it is error introduced
  * by the instrument rather than present in the thing measured, and it was
@@ -139,12 +139,12 @@ const VIENOT = {
 const mul = (m, v) => m.map((row) => row[0] * v[0] + row[1] * v[1] + row[2] * v[2]);
 
 /**
- * Simulate a dichromat's view of a colour. `kind` is "normal" (identity),
+ * Simulate a dichromat's view of a color. `kind` is "normal" (identity),
  * "protan", "deutan" or "tritan".
  *
  * THIS WAS WRONG UNTIL 2026-10-06 AND NOTHING HAD EVER CHECKED IT. The old
  * version applied a set of coefficients specified for GAMMA-ENCODED sRGB to
- * linearised values. It exaggerated every collapse: two Dashboard colours
+ * linearized values. It exaggerated every collapse: two Dashboard colors
  * measured ΔE2000 2.3 apart under deuteranopia when the real answer is
  * about 10.4, and that fabricated number was then used to argue for
  * relaxing the palette gate. A measuring instrument nobody measured.
@@ -155,7 +155,7 @@ export function simulateLinear(h, kind) {
   return kind === "normal" ? linear : mul(VIENOT[kind], linear);
 }
 
-/** The same thing as a hex, for drawing a swatch. Clamps and quantises,
+/** The same thing as a hex, for drawing a swatch. Clamps and quantizes,
  *  which is right for a pixel and wrong for a measurement — measure with
  *  `deltaE2000Simulated`. */
 export function simulate(h, kind) {
@@ -164,7 +164,7 @@ export function simulate(h, kind) {
   return hex(r, g, b);
 }
 
-/** ΔE2000 between two colours as a given dichromat sees them. */
+/** ΔE2000 between two colors as a given dichromat sees them. */
 export function deltaE2000Simulated(hexA, hexB, kind) {
   return deltaE2000Lab(labFromLinear(simulateLinear(hexA, kind)), labFromLinear(simulateLinear(hexB, kind)));
 }

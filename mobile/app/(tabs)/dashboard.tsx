@@ -87,9 +87,9 @@ export default function DashboardScreen() {
         chartW={chartW}
       />
 
-      {/* Colour by card POSITION, cycling — decoration, so five accounts
+      {/* Color by card POSITION, cycling — decoration, so five accounts
           are five distinguishable objects. Same function the web calls, so
-          the phone and the laptop give an account the same colour. */}
+          the phone and the laptop give an account the same color. */}
       {assets.map((cat, i) => (
         <AssetCard key={cat.id} cat={cat} color={cardColor(i, true)} chartW={chartW} today={today}
           online={online} onLog={() => setLogging(cat.id)} />
@@ -249,8 +249,8 @@ function AssetCard({ cat, color, chartW, today, online, onLog }: { cat: TrackerC
 
 function DebtCard({ cat, chartW, today, online, onLog }: { cat: TrackerCategory; chartW: number; today: string; online: boolean; onLog: () => void }) {
   const { state } = useBudget();
-  // No card colour for loans, same as the web: the list is long, the cards
-  // are labelled, and five hues on it is decoration you have to decode.
+  // No card color for loans, same as the web: the list is long, the cards
+  // are labeled, and five hues on it is decoration you have to decode.
   const color = LOAN_LINE;
   const history = computeCategoryHistory(state!, cat.id);
   const p = computeLoanProgress(state!, cat, today);

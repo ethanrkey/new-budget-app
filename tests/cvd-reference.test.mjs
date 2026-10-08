@@ -3,10 +3,10 @@
 //   node tests/cvd-reference.test.mjs     (runs in `npm test`, so in CI)
 //
 // WHY THIS EXISTS. On 2026-10-06 the palette gate reported that two
-// Dashboard colours were ΔE2000 2.3 apart under deuteranopia — close enough
+// Dashboard colors were ΔE2000 2.3 apart under deuteranopia — close enough
 // to be indistinguishable. The real answer is about 10.4. The gate's
 // dichromat simulation was applying a set of RGB→RGB coefficients
-// specified for GAMMA-ENCODED sRGB to linearised values, and nothing had
+// specified for GAMMA-ENCODED sRGB to linearized values, and nothing had
 // ever checked it against a known answer, so it reported a fabricated
 // number with complete confidence and a design decision was very nearly
 // built on it.

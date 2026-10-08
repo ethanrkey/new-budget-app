@@ -679,10 +679,10 @@ eq("no event carries an isActual flag any more", buildAllEvents(stateR, "2026-11
 // The logged number is not lost — it is what the Spending tab compares.
 eq("computeMonthVariance still sees it: expected from the rule, actual from the log",
   computeMonthVariance(stateR.recurring[0], stateR.monthlyActuals, "2026-09"),
-  { monthKey: "2026-09", occurrences: 1, expected: 150, actual: 187.34, delta: 37.34 });
+  { monthKey: "2026-09", occurrences: 1, expected: 150, actual: 187.34, difference: 37.34 });
 eq("a month with nothing logged reports no actual",
   computeMonthVariance(stateR.recurring[0], stateR.monthlyActuals, "2026-10"),
-  { monthKey: "2026-10", occurrences: 1, expected: 150, actual: null, delta: null });
+  { monthKey: "2026-10", occurrences: 1, expected: 150, actual: null, difference: null });
 
 // The ledger and budget are identical with and without the log.
 const noLogR = { ...stateR, monthlyActuals: {} };
@@ -765,7 +765,7 @@ eq("editing the rule 150 -> 152 moves September too", buildAllEvents(editedU, "2
 // And the comparison still knows what really happened.
 eq("Spending still compares: 2 occurrences expected vs the $150 logged",
   computeMonthVariance(stateU.recurring[0], stateU.monthlyActuals, "2026-09"),
-  { monthKey: "2026-09", occurrences: 2, expected: 300, actual: 150, delta: -150 });
+  { monthKey: "2026-09", occurrences: 2, expected: 300, actual: 150, difference: -150 });
 
 // ---------- Scenario V: logged contributions (not ledger-derived) ----------
 console.log("\n== Scenario V: computeLoggedContributions ==");
@@ -1450,15 +1450,15 @@ const noActualsAL = { ...stateAL, monthlyActuals: {} };
 eq("a logged monthly actual changes nothing — this is the forecast",
   byKey(computeSpendingByCategory(noActualsAL, "2026-11-30")), byKey(mixAL));
 
-// Labels and colour routing.
+// Labels and color routing.
 const rothSlice = mixAL.slices.find((s) => s.key === "rothcat");
 eq("a tracker category carries its name and its ROLE",
   [rothSlice.label, rothSlice.bucket, rothSlice.role], ["Roth", "category", "investment"]);
 const items = mixAL.slices.filter((s) => s.bucket === "item");
-// Role is no longer a colour (2026-10-06) — it is what decides whether the
-// amount beside the slice prints red. The slice carries no colour at all;
+// Role is no longer a color (2026-10-06) — it is what decides whether the
+// amount beside the slice prints red. The slice carries no color at all;
 // the view paints brass by RANK, which is the slice's index.
-eq("a slice carries no colour of its own",
+eq("a slice carries no color of its own",
   [...items, rothSlice].every((s) => !("color" in s) && !("shade" in s)), true);
 eq("each names the bucket it came from, so it can't pass as a category",
   items.map((s) => s.parentLabel).sort(), ["Fixed bills", "Fixed bills", "One-off"]);
@@ -1471,7 +1471,7 @@ eq("a tracker category is never broken out, whatever its share",
 
 // It follows the horizon slider, because it reads the same event list.
 check("a shorter horizon yields a smaller total", computeSpendingByCategory(stateAL, "2026-09-30").total < mixAL.total, true);
-eq("the window is reported for labelling", [mixAL.from, mixAL.to], ["2026-09-01", "2026-11-30"]);
+eq("the window is reported for labeling", [mixAL.from, mixAL.to], ["2026-09-01", "2026-11-30"]);
 
 // An orphaned category keeps its money under one Uncategorized slice.
 const orphanAL = deleteCategory(stateAL, "rothcat");
@@ -1517,7 +1517,7 @@ check("nothing planned -> zero total, not NaN", emptyMix.total, 0);
 
 // ---------- Scenario AN: fixed buckets break out, always ----------
 console.log("\n== Scenario AN: the fixed buckets are not categories ==");
-// The rule has no threshold: "Fixed bills" is where anything uncategorised
+// The rule has no threshold: "Fixed bills" is where anything uncategorized
 // lands, so drawing it whole says nothing at 40% any more than at 100%, and
 // the chart must not change shape as the horizon slider moves.
 const mkAN = (rothAmount) => normalize({
@@ -1584,7 +1584,7 @@ const other = manyItems.slices[7];
 check("Other carries the slices it folded", other.children.length, 5);
 check("...which sum to exactly what it shows",
   round2(other.children.reduce((t, c) => t + c.amount, 0)), other.amount);
-eq("...which stay item slices, carrying no colour of their own",
+eq("...which stay item slices, carrying no color of their own",
   other.children.every((c) => c.bucket === "item" && !("color" in c)), true);
 eq("...and their own labels, so an opened row still says what it is",
   other.children.map((c) => c.label), ["Bill 7", "Bill 8", "Bill 9", "Bill 10", "Bill 11"]);
@@ -1742,7 +1742,7 @@ eq("display settings reset too", [wiped.settings.theme, wiped.settings.visibleTr
 eq("tab order returns to the default", wiped.settings.tabOrder, [...TABS]);
 
 // Equal to a brand-new account once the two deliberately-random parts are
-// normalised away: category uids, which blankState() mints freshAR for any
+// normalized away: category uids, which blankState() mints freshAR for any
 // new account, and horizons, which it derives from today.
 const canon = (st) => JSON.stringify({
   ...st,

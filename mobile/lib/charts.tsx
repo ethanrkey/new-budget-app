@@ -40,7 +40,7 @@ export function Donut({ data, size = 150 }: { data: { key: string; amount: numbe
             const share = d.amount / total;
             const path = arc(r, r, r * 0.95, r * 0.57, cursor, cursor + share);
             cursor += share;
-            // A 2px surface-coloured stroke is the gap between segments —
+            // A 2px surface-colored stroke is the gap between segments —
             // adjacent fills touching is the single most common way a donut
             // reads as one blob.
             return <Path key={d.key} d={path} fill={d.fill} stroke={T.bg} strokeWidth={2} />;

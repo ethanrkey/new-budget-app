@@ -67,7 +67,7 @@ export default function Dashboard({
           onDeleteSnapshot={(id) => onDeleteAccountSnapshot(account.id, id)}
         />
 
-        {/* COLOUR BY POSITION, cycling — decoration, not meaning. It is
+        {/* COLOR BY POSITION, cycling — decoration, not meaning. It is
             here so five cards on one screen are five distinguishable
             objects; it says nothing about the account, and the Checking
             card takes none of it (cash has no hue, and never had). */}
@@ -195,9 +195,9 @@ function Hero({ net }) {
             own overflow, or the content keeps its natural height throughout. */}
         <div className="overflow-hidden">
           <div className={`pt-1 pb-1 transition-opacity duration-200 motion-reduce:transition-none ${collapsed ? "opacity-0" : "opacity-100"}`}>
-            {/* The headline number earns a colour in BOTH directions.
+            {/* The headline number earns a color in BOTH directions.
                 Neutral-when-positive undersold the one figure on the page
-                that is meant to be the answer; red-only made the colour
+                that is meant to be the answer; red-only made the color
                 mean "bad news" rather than "this is your position". */}
             <div className={`text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums ${
               net.net < 0 ? "text-expense" : net.net > 0 ? "text-income" : ""
@@ -392,7 +392,7 @@ function AssetCard({ category, color, isDark, history, contributions, today, onL
             <span className="truncate">{category.name}</span>
             {/* The role in words, which is now the ONLY place the role
                 appears on this card — the dot beside it is the card's
-                position colour and means nothing. Dropped when the name
+                position color and means nothing. Dropped when the name
                 already says it: "SAVINGS · Savings" is a stutter, and it
                 is the default state of a new account. */}
             {roleSuffix(category.name, roleOfTrackerCategory(category)) && (
@@ -401,8 +401,8 @@ function AssetCard({ category, color, isDark, history, contributions, today, onL
               </span>
             )}
           </div>
-          {/* The BALANCE is plain text. It was in the card's colour while
-              that colour meant something; a decorative hue on the one
+          {/* The BALANCE is plain text. It was in the card's color while
+              that color meant something; a decorative hue on the one
               number you came to read is noise. */}
           <div className="mt-1 text-2xl font-semibold tabular-nums">
             {latest ? money(latest.amount) : <span className="text-gray-300 dark:text-gray-600">—</span>}
@@ -464,10 +464,10 @@ function AssetCard({ category, color, isDark, history, contributions, today, onL
 // a render change, not a re-derivation.
 // "expected remaining vs. actual remaining" appears nowhere by design.
 function LoanCard({ category, state, today, progress, history, onLog, onEdit, onUpdateSnapshot, onDeleteSnapshot }) {
-  // NO CARD COLOUR FOR LOANS. Five loan cards therefore look alike, which
+  // NO CARD COLOR FOR LOANS. Five loan cards therefore look alike, which
   // is the right trade: the Debt section collapses to one card by default,
   // so you only ever see them all at once after choosing to, and each is
-  // labelled. Spending five hues on a list you opened on purpose buys
+  // labeled. Spending five hues on a list you opened on purpose buys
   // nothing and makes the Dashboard louder.
   const color = LOAN_LINE;
   const latest = progress.latest;
@@ -493,7 +493,7 @@ function LoanCard({ category, state, today, progress, history, onLog, onEdit, on
             <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
             <span className="truncate">{category.name}</span>
             {/* The mapping, stated — unless the name already states it.
-                A role system that never says what its colours mean is a
+                A role system that never says what its colors mean is a
                 private language only the code understands; a card that
                 reads "SAVINGS · Savings" is noise. */}
             {roleSuffix(category.name, roleOfTrackerCategory(category)) && (
@@ -705,7 +705,7 @@ function DebtSection({ summary, debtCats, state, today, onAddLoan, onLog, onEdit
 
 // One loan card on its way in or out: slides up from behind the root card and
 // fades, staggered by position. Reversed on the way out (the last card leaves
-// first) so it reads as folding back in rather than unravelling.
+// first) so it reads as folding back in rather than unraveling.
 function FanIn({ shown, index, count, children }) {
   const delay = (shown ? index : count - 1 - index) * STAGGER_MS;
   return (

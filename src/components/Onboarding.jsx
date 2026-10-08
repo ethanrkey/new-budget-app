@@ -372,7 +372,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
                     return (
                       <div key={i}>
                         <div className="flex gap-2">
-                          {/* Both fields are LABELLED. Two anonymous boxes
+                          {/* Both fields are LABELED. Two anonymous boxes
                               under a section heading is what made a real
                               user type the amount and leave the name
                               blank — a placeholder alone was not enough. */}

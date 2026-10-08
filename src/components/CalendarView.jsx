@@ -10,7 +10,7 @@ import { todayISO, toISODate } from "../engine/model.ts";
 //
 // Dots show that something happened and roughly what kind. They are NOT
 // asked to carry identity: a 6px circle can't hold a label, so per
-// PROJECT_SPEC's colour rule every dot's category and amount are reachable
+// PROJECT_SPEC's color rule every dot's category and amount are reachable
 // as text — a title/aria-label on hover, and the day detail on click.
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -18,7 +18,7 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // Overflow is CAPPED rather than wrapped. Cells in a grid row share a
 // height, so wrapping a busy day makes the whole ROW taller and gives its
-// quiet neighbours whitespace — it flattens the contrast between busy and
+// quiet neighbors whitespace — it flattens the contrast between busy and
 // quiet days instead of sharpening it. "+2" is text, reads at any size, and
 // says "more here than fits" more loudly than a fifth dot would.
 const DOT_CAP = { narrow: 3, wide: 5 };
@@ -55,7 +55,7 @@ export default function CalendarView({ ledger, trackerCategories = [], onEditIte
   const [selected, setSelected] = useState(null);
 
   // THE DOTS MEAN "something happened here" AND NOTHING ELSE. They were
-  // role-coloured until 2026-10-06; now they are secondary-text grey, like
+  // role-colored until 2026-10-06; now they are secondary-text gray, like
   // every other mark that is a count rather than a claim. A month grid is
   // read for density — busy weeks against quiet ones — and seven hues
   // scattered through it competed with exactly that. The day detail names
@@ -122,7 +122,7 @@ export default function CalendarView({ ledger, trackerCategories = [], onEditIte
               {day && (
                 <>
                   <Dots day={day} catName={catName} />
-                  {/* Net is text, never colour — and it is dropped below sm,
+                  {/* Net is text, never color — and it is dropped below sm,
                       where "-$1,650.00" simply does not fit a ~52px cell. */}
                   <div className={`hidden sm:block mt-1 text-[11px] tabular-nums leading-none ${
                     day.net < 0 ? "text-expense" : day.net > 0 ? "text-income" : "text-gray-400"}`}>
@@ -204,7 +204,7 @@ function DayDetail({ day, catName, onEditItem, onClose }) {
                 <span className="h-2 w-2 rounded-full shrink-0 self-center bg-gray-400 dark:bg-gray-500" />
                 <span className="truncate text-gray-700 dark:text-gray-300">{r.name}</span>
                 {r.overridden && <span className="text-xs text-gray-400 shrink-0">· edited</span>}
-                {/* The dot's meaning, in words — the relief the colour rule asks for. */}
+                {/* The dot's meaning, in words — the relief the color rule asks for. */}
                 <span className="text-xs text-gray-400 shrink-0">{catName(r.category)}</span>
               </span>
               <span className={`shrink-0 tabular-nums ${r.direction === "in" ? "text-income" : "text-expense"}`}>

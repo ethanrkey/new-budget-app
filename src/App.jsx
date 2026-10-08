@@ -362,25 +362,25 @@ export default function App() {
   // straight over real cloud data on nothing more than a transient error.)
   useEffect(() => {
     if (!session) { setState(null); setLoadError(null); setDeletionRequest(null); resetSyncState(); return; }
-    let cancelled = false;
+    let canceled = false;
     setLoadError(null);
     // Is this account already scheduled for deletion? Asked on every load,
     // because a pending deletion has to be visible from the moment you open
     // the app, not only if you happen to go looking in Settings.
-    fetchDeletionRequest(session.user.id).then((r) => { if (!cancelled) setDeletionRequest(r); });
+    fetchDeletionRequest(session.user.id).then((r) => { if (!canceled) setDeletionRequest(r); });
     // Sweep any account whose grace period has expired. The backstop for
     // pg_cron being unavailable; non-fatal, never blocks this load.
     purgeDueAccounts();
     loadState(session.user.id)
       .then(({ state: s }) => {
-        if (cancelled) return;
+        if (canceled) return;
         skipNextSave.current = true;
         setState(s);
         // Open on whichever tab this user dragged to the front.
         setTab(sanitizeTabOrder(s.settings.tabOrder)[0]);
       })
-      .catch((err) => { if (!cancelled) { console.error(err); setLoadError(err); } });
-    return () => { cancelled = true; };
+      .catch((err) => { if (!canceled) { console.error(err); setLoadError(err); } });
+    return () => { canceled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, retryTick]);
 

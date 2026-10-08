@@ -84,7 +84,7 @@ chrome).
 became a marketing page, a home-screen launch opened it instead of the app.
 `id` must NOT be changed to match: it is the install identity, and changing
 it makes this a different app to the browser, orphaning every existing
-install. The manifest alone is also not enough — **iOS only honours
+install. The manifest alone is also not enough — **iOS only honors
 `start_url` from 16.4, and before that Add to Home Screen bookmarks whatever
 page you were on**, so an install made from the landing page launches there
 for ever, as does any install created before this shipped. `main.jsx`
@@ -339,7 +339,7 @@ balance updates). Nothing is append-only.
   **The DELETE policy went on `account_deletions`, not on
   `budget_entities`,** and that is the warning in `schema.sql` being heeded
   rather than ignored. The client never deletes an entity row: requesting
-  is an INSERT, cancelling is a DELETE *of the request*, and the purge
+  is an INSERT, canceling is a DELETE *of the request*, and the purge
   cannot run as the user at all, since removing an `auth.users` row needs
   privileges no client has. Granting DELETE on `budget_entities` would
   widen the only thing standing between a public anon key and everyone's
@@ -544,14 +544,14 @@ Conventions worth knowing before touching numbers:
   (`devicePrefs.js`: `hero-collapsed`, `debts-expanded`) live in
   localStorage. They never sync, never conflict between devices, and never
   count as a change worth writing to Supabase.
-- **Colour does three jobs and they do not overlap** (2026-10-06,
+- **Color does three jobs and they do not overlap** (2026-10-06,
   `engine/palette.ts`). This REPLACES the role palette of 2026-10-03, which
   derived a hue from what the money was doing. Roles still exist and still
   decide things — red versus plain, which categories can carry a cumulative
   column, how the Budget sections — but **nothing derives a hue from a role
   any more.**
 
-  | Job | Colour | Means something? |
+  | Job | Color | Means something? |
   |---|---|---|
   | Charts and brand | brass, one hue | no — rank, in the pie only |
   | Dashboard account cards | five cool hues by card POSITION | **no** — decoration that helps scanning |
@@ -559,7 +559,7 @@ Conventions worth knowing before touching numbers:
 
   **Why the role palette came out, when it passed every check it was given.**
   It did pass: seven hues, all-pairs ΔE across four vision types, a CI gate.
-  The failure was upstream of the numbers — asking colour to carry a
+  The failure was upstream of the numbers — asking color to carry a
   TAXONOMY at all. Seven hues is seven things to learn before the app means
   anything, and three days in, the person who commissioned it still could
   not read the Ledger. A chart in one hue says "these are shares of one
@@ -588,21 +588,28 @@ Conventions worth knowing before touching numbers:
   flattens any Other it is handed rather than nesting, so `children` is
   always one level deep and "Other (n)" counts real slices.
 
-  **Card colour is decoration, stated as such.** Assigned by card order,
-  cycling, alternating light and dark steps so neighbours never sit close.
-  It says nothing about the account. Loans take NO card colour — grey line,
+  **Card color is decoration, stated as such.** Assigned by card order,
+  cycling, alternating light and dark steps so neighbors never sit close.
+  It says nothing about the account. Loans take NO card color — gray line,
   no dot — so five loan cards look alike; acceptable because the Debt
   section collapses to one card by default and each card inside is
-  labelled. Checking has never had a hue and still does not.
+  labeled. Checking has never had a hue and still does not.
 
-  **Red is money GONE.** A transfer to savings, a contribution and a loan
-  payment all leave the checking account and none of them is money gone, so
-  they print plain. `isRetainedOutflow` is the one place that rule lives.
+  **Red is money GONE — and the two tabs answer that differently on
+  purpose.** The LEDGER reds every outflow, savings transfers and loan
+  payments included: it is a running balance read down a column, and what
+  matters there is that the money left the account. The BUDGET prints
+  saving and debt rows plain: it answers where the month's money WENT, and
+  "saved" and "spent" are genuinely different answers to that question.
+  One rule was tried across both from 2026-10-06 and the Ledger half was
+  reverted on 2026-10-08 after living with it — a plain $300 beside a red
+  $112 made the plain one look like it was not coming out.
+  `isRetainedOutflow` is the Budget's rule only, and says so.
 
   **The gate enforces the thresholds under every vision type, with no
   exemptions.** Adjacent steps of the brass ramp >= 8.0, every pair of card
-  colours >= 9.0, measured in ΔE2000 under normal, protan, deutan and
-  tritan; every chart, card and direction colour >= 3:1 on both surfaces it
+  colors >= 9.0, measured in ΔE2000 under normal, protan, deutan and
+  tritan; every chart, card and direction color >= 3:1 on both surfaces it
   can land on. Monotonic L* on the ramp is asserted ON TOP of the ΔE floor,
   not instead of it: lightness is the one channel no dichromacy touches, so
   it is what guarantees the ORDER survives, which a ΔE number does not say.
@@ -610,7 +617,7 @@ Conventions worth knowing before touching numbers:
   Measured 2026-10-06: brass ramp worst adjacent pair 10.9 dark / 8.1
   light; card set worst of ALL pairs 9.2 dark / 10.7 light; lowest contrast
   3.16:1. Direction measures 5.5 under deuteranopia, which is the classic
-  red/green collapse and is legal only because colour never carries it
+  red/green collapse and is legal only because color never carries it
   alone — the sign, the column and the label all repeat it.
 
   **The gate's instrument is itself under test.** `tests/cvd-reference.test.mjs`
@@ -619,7 +626,7 @@ Conventions worth knowing before touching numbers:
   `npm test`. It exists because the simulation was silently wrong for a
   day; see the decision log.
 
-- **Where colour appears at all.** Chart marks, the Dashboard's account
+- **Where color appears at all.** Chart marks, the Dashboard's account
   lines and their label dot, and amounts (red/green). NOT on the hero,
   section headers, chrome, the tab bar, ledger row names, ledger column
   headers, calendar dots, the category manager, or the Budget's rows —
@@ -627,7 +634,7 @@ Conventions worth knowing before touching numbers:
   needed one.
 
 - **RULE: any view that orders categories by value must not rest identity on
-  colour alone.** The relief is inline labels — the category's name next to
+  color alone.** The relief is inline labels — the category's name next to
   its mark, not only in a legend. With one hue in the charts this is no
   longer a near miss to be managed but the load-bearing mechanism: the pie's
   ramp says rank and nothing else, so the label IS the identity.
@@ -637,7 +644,7 @@ Conventions worth knowing before touching numbers:
   may indicate presence or density, but the identity behind it has to be
   reachable as text — a tooltip, a detail panel, an adjacent list. The
   calendar's day dots are the worked example, and since 2026-10-06 they are
-  honest about it: they are secondary-text grey and claim only "something
+  honest about it: they are secondary-text gray and claim only "something
   happened here", with each carrying a title naming its category, item and
   amount, and the day detail listing every transaction in words.
 
@@ -728,7 +735,7 @@ fifth tab never needs a migration.
   horizon slider stays in the toolbar because it genuinely drives both.
   A **List / Calendar** toggle switches the rendering (`CalendarView.jsx`,
   per device via `devicePrefs`, `ledger-calendar`). The calendar is a month
-  grid over the same rows: category-coloured dots plus the day's net, click a
+  grid over the same rows: category-colored dots plus the day's net, click a
   day for its transactions. **The running balance is list-only** — a
   7-column grid has nowhere to put it, and it is the list's whole reason to
   exist; a faked or omitted-but-implied balance would have two views
@@ -737,7 +744,7 @@ fifth tab never needs a migration.
   Per-day aggregation is `groupByDay` in the engine, so a day's net and the
   running balance can never tell different stories.
   Dot overflow is CAPPED (`+N`), not wrapped: grid cells share a row height,
-  so wrapping makes the whole row taller and gives quiet neighbours
+  so wrapping makes the whole row taller and gives quiet neighbors
   whitespace — it flattens the busy/quiet contrast instead of sharpening it.
   Caps are 3 below `sm`, 5 above; below `sm` the cell also drops the net,
   which does not fit a ~45px cell, and shows it in the day detail instead.
@@ -754,8 +761,8 @@ fifth tab never needs a migration.
   do.** These are not two kinds of the same thing. A tracker category is a
   bucket the user created and named deliberately, so grouping by it is the
   whole reason it exists. `bill` is the DEFAULT bucket — where anything the
-  user didn't categorise lands — so drawing it as one slice is grouping by
-  "uncategorised", which carries no information at 40% any more than at
+  user didn't categorize lands — so drawing it as one slice is grouping by
+  "uncategorized", which carries no information at 40% any more than at
   100%. So `ALWAYS_BY_ITEM` (`bill`, `oneoff`) is replaced by its own
   transactions as slices — `bucket: "item"`, carrying `parentBucket`,
   `parentLabel` and `shade`/`shadeCount` — unconditionally. Same-named
@@ -778,8 +785,8 @@ fifth tab never needs a migration.
 
   - **Pie: the wedge never changes.** Seventeen wedges would be unreadable
     and 1-2% slivers unhittable, so the expansion happens in the LEGEND
-    beside the pie. The expanded rows carry their own colours with no wedge
-    to point at, which the legend says once ("All inside the grey wedge")
+    beside the pie. The expanded rows carry their own colors with no wedge
+    to point at, which the legend says once ("All inside the gray wedge")
     rather than per row; segmenting the wedge is more machinery than it is
     worth.
   - **Bar: the rows expand in place**, full list with amounts and
@@ -799,13 +806,13 @@ fifth tab never needs a migration.
   problem), as was a tooltip listing the contents (tooltips do not exist on
   touch, and this app is used on a phone daily).
 
-  Colour in this panel is brass and nothing else (2026-10-06). The PIE
-  ramps by RANK over four wedges plus a grey Other; the BAR gives every
+  Color in this panel is brass and nothing else (2026-10-06). The PIE
+  ramps by RANK over four wedges plus a gray Other; the BAR gives every
   named row the same brass, because the bar keeps every row and a ramp
   would start lying at the fifth. The ramp runs AWAY from the surface in
   each mode — light steps on the dark card, dark steps on the white one —
   which is why the two arrays run in opposite directions. Item slices are
-  no longer tints of anything, so the colour rule applies at its strictest:
+  no longer tints of anything, so the color rule applies at its strictest:
   every item slice carries its parent's name inline ("Rent · Fixed bills")
   in the legend, the bars and the tooltip, because that label is now the
   only thing distinguishing it.
@@ -949,6 +956,19 @@ fifth tab never needs a migration.
    `PROJECT_SPEC.md`, `README.md`, `src/components`, `src/engine` comments
    and `mobile/`. Every stale line the 2026-10-05 sweep found was a
    removal or a rename; not one was an addition.
+1a. **American spelling everywhere** — UI copy, comments, this file, commit
+   messages. Not a style preference: the code already says `color`,
+   `normalize`, `gray-500`, so British prose beside it meant the same word
+   was spelled two ways in one file, and a reader could not tell which was
+   the identifier. Swept 2026-10-08 (124 × "colour" and eleven other forms
+   across 32 files); it had never been done before, because nothing had
+   ever said to do it.
+
+   One trap, hit on the first pass: a blind stem replacement rewrote
+   `@babel/helper-optimise-call-expression` inside `mobile/package-lock.json`
+   and would have broken the install. Generated files are out of scope, and
+   a sweep like this gets read before it gets committed.
+
 2. **README.md stays current** for a public audience. Its screenshots are
    the SAME generated set the landing page uses (`public/screenshots/`,
    `npm run screenshots`) — there is no second hand-made set to forget. The
@@ -966,14 +986,14 @@ fifth tab never needs a migration.
    failures in one week were the same failure wearing different clothes:
    a form verified standalone while its routing was never clicked, so the
    feature was broken and the component perfect; a scripted edit asserted
-   as text but never as behaviour, so it shipped looking applied; and an
+   as text but never as behavior, so it shipped looking applied; and an
    end-to-end check that only ever supplied well-formed input, so it
    proved the arithmetic while the form was unusable. The rule that covers
    all three:
    - **Start from the real entry point.** A click on the actual surface,
      not the component in isolation.
-   - **Assert every replacement**, and when the edit is behavioural assert
-     the behaviour — `grep` proves the text changed, never that the code
+   - **Assert every replacement**, and when the edit is behavioral assert
+     the behavior — `grep` proves the text changed, never that the code
      does what the text says.
    - **Feed it the wrong input too.** Blank fields, half-filled rows,
      values in the wrong box. A harness that only supplies correct input
@@ -1130,7 +1150,7 @@ since preferences are not money and last-write-wins is fine for them.
 - **The verified balance is DERIVED from the newest snapshot**, not stored
   alongside it. That deletes a conflict class rather than solving one: "the
   later as-of date wins" becomes `max(date)` over append-only rows, with no
-  rule to enforce. One intended behaviour change — correcting the NEWEST
+  rule to enforce. One intended behavior change — correcting the NEWEST
   snapshot now moves the anchor, where correcting September still leaves
   October alone.
 - **Deletes are tombstones**, never absences, so a delete outranks a stale
@@ -1191,7 +1211,7 @@ In build order; **[D]** needs a design decision, **[P]** is a port.
    uses a segmented "This date / Every time" with the rule's fields
    hidden in occurrence scope, and the same reasoning applies, but a
    phone wants a sheet rather than a modal and "Delete" needs a native
-   destructive confirm. The per-item colour picker is gone, so the form
+   destructive confirm. The per-item color picker is gone, so the form
    is smaller than the web's ever was.
 2. **Account deletion + a Settings screen** [P] — **APP STORE
    SUBMISSION BLOCKER.** Apple's guideline 5.1.1(v) requires an app
@@ -1268,20 +1288,20 @@ Later, in rough order:
    purge is scheduled; the rows accumulate. Read-only offline means the
    window only has to outlive online devices refetching, so this is
    housekeeping, not correctness.
-7. ~~**The Ledger still prints saving and debt amounts in red**, while the
-   Budget deliberately does not.~~ **CLOSED 2026-10-06.** Both tabs now ask
-   `isRetainedOutflow` — one function, one rule, and the phone calls it
-   too. Red means money gone; a transfer to savings, a contribution and a
-   loan payment print plain.
-8. ~~**Colour customisation / role hue schemes.**~~ **RETIRED 2026-10-06,
-   moot.** The question was whether per-category recolour should return or
+7. ~~**The Ledger prints saving and debt amounts in red, the Budget does
+   not.**~~ **CLOSED 2026-10-08, as intended behavior.** Unified on
+   2026-10-06, reverted on the Ledger side two days later after using it:
+   the tabs ask different questions and the difference in treatment
+   follows from that. Recorded as a decision rather than an inconsistency.
+8. ~~**Color customization / role hue schemes.**~~ **RETIRED 2026-10-06,
+   moot.** The question was whether per-category recolor should return or
    whether the user should pick each ROLE's hue. Neither survives the
-   rework: roles no longer have hues to pick. What is left to customise is
-   one brass ramp and five decorative card colours, and a scheme picker for
+   rework: roles no longer have hues to pick. What is left to customize is
+   one brass ramp and five decorative card colors, and a scheme picker for
    decoration is a settings screen that buys nothing. Worth keeping from
    that entry, because it turned out to be the right instinct pointing at
    the wrong fix: the complaint read as "wrong hue" and was actually "this
-   tab is unreadable", and the answer was fewer colours rather than
+   tab is unreadable", and the answer was fewer colors rather than
    different ones.
 
 9. **Retired palette machinery still exported from the engine.**
@@ -1334,7 +1354,7 @@ Further out:
   - **`spendingSliceColor` moved into `engine/model.ts`.** Two clients
     render that chart now, and a tint ramp reimplemented per client is a
     drift waiting to happen — the web and the phone would slowly disagree
-    about what colour a slice is. The web imports it from there now.
+    about what color a slice is. The web imports it from there now.
 
   Kept verbatim because they are rules, not layout: every slice carries its
   label inline, item slices carry their parent's name, the pie never
@@ -1423,7 +1443,7 @@ Further out:
   reasoning that the failure was the degenerate one-wedge-at-100% shape.
   That reasoning was wrong, and a future pass should not re-derive the
   threshold as a clever idea. The fixed buckets are not categories in the
-  same sense as the others: `bill` is where uncategorised money lands by
+  same sense as the others: `bill` is where uncategorized money lands by
   default, so grouping by it says nothing at ANY share — 62% of a real
   window was the biggest slice and the least informative one — not merely at
   100%. A threshold also makes the chart change shape as the horizon slider
@@ -1588,7 +1608,7 @@ Further out:
   the whole picture. Not someone with land and property holdings — that
   is why manual entry works at all, because the dataset stays small
   enough to maintain.
-- **Semantic families constrain hue BEFORE the gate optimises lightness**
+- **Semantic families constrain hue BEFORE the gate optimizes lightness**
   (2026-10-03). The order of operations was wrong and produced a system
   its own designer could not read. Hues were picked without a semantic
   rule and the search was left to separate them, which put bills at 255°
@@ -1597,25 +1617,25 @@ Further out:
   wrong by meaning.
 
   Families now: **out** (bill, one-off, debt) warm, **keep** (savings,
-  investment) cool, **in** (income) green, and grey for no category. Every
+  investment) cool, **in** (income) green, and gray for no category. Every
   same-family pair is a semantic SIBLING, so splitting them by lightness
   reinforces the meaning rather than fighting it. The gate enforces this
   first: cross-family roles must be >= 60° apart in hue, checked before any
   ΔE maths, so a future edit cannot quietly recreate two blues.
 
 - **The mapping is stated, in three places.** A role system that never
-  says what its colours mean is a private language only the code
+  says what its colors mean is a private language only the code
   understands. Dashboard cards name the role beside the category
   ("Roth IRA · Investment"), About carries a legend of all seven, and the
   spending chart already labels every slice inline.
 
 - **Budget: direction owns the amounts, role owns a dot** (2026-10-03).
-  Role colour used to override the red/green on every saving/debt cell,
-  putting two colour systems in the same text. The amounts are direction
+  Role color used to override the red/green on every saving/debt cell,
+  putting two color systems in the same text. The amounts are direction
   only. (The dot this entry originally moved the role onto is gone too —
   2026-10-06 — and the rule survives it: one signal per element, and on
   these cells the signal is direction.)
-- **The extras step: both fields labelled, no row silently dropped**
+- **The extras step: both fields labeled, no row silently dropped**
   (2026-10-03). `collectAccounts` filtered on a non-empty NAME, so a row
   with an amount and a blank name vanished without a word. A real user hit
   exactly that: the name box had no label, only a placeholder, under a
@@ -1641,7 +1661,7 @@ Further out:
   unusable. A harness that only ever supplies correct input is testing the
   code's arithmetic, not the product.
 - **Saving and debt amounts in the Budget are NOT red** (2026-10-03).
-  They render in the default text colour while bills and one-offs stay
+  They render in the default text color while bills and one-offs stay
   red, and that asymmetry is deliberate rather than an oversight: money
   moved into savings or investments, or put against a loan, is not money
   you lost. It left checking, which the running balance already shows.
@@ -1656,13 +1676,13 @@ Further out:
   150 → green, 240 → blue, 300 → purple), and `ROLE_HUE` records the
   input while the swatch sheet is what any claim about appearance has to
   be read off.
-- **Hue specified in one colour space, described in another, is a trap**
+- **Hue specified in one color space, described in another, is a trap**
   (2026-10-03). OKLCH hue and HSL hue are different numbers for the same
   wheel and they diverge hard: OKLCH 20° is HSL 346° (lipstick pink), not
-  red. The palette was specified in OKLCH, described in ordinary colour
+  red. The palette was specified in OKLCH, described in ordinary color
   words, and shipped as brown-and-navy while its own documentation said
   gold-and-blue. `ROLE_HUE` records the OKLCH input because that is what
-  the search optimises; **every claim about what a colour LOOKS like must
+  the search optimizes; **every claim about what a color LOOKS like must
   be read off a rendered swatch**, never off the number. At L .55 the
   mapping is 30 → red, 58 → orange, 80 → amber, 150 → green, 240 → blue,
   300 → purple, and that table is in `palette.ts` so the next person does
@@ -1757,7 +1777,7 @@ Further out:
   loan-editor check below was the second, within the hour.
 
 - **A control that discards what you type is worse than no control**
-  (2026-10-03). The role palette removed per-category colour, and
+  (2026-10-03). The role palette removed per-category color, and
   `LoanSetupModal` kept rendering a swatch row for several hours after
   `setupLoan()` stopped writing the value — the function still ACCEPTED
   a `color` argument and dropped it on the floor, which is why nothing
@@ -1767,7 +1787,7 @@ Further out:
 
 - **A card does not say "SAVINGS · Savings"** (2026-10-03,
   `roleSuffix`). Naming the role beside a category is what makes the
-  colour system readable instead of a private language — but the three
+  color system readable instead of a private language — but the three
   seeded categories are named Savings, Investments and Debt, which ARE
   the role labels, so the stutter was the DEFAULT state of every new
   account rather than an edge case. The suffix is dropped when the name
@@ -1780,8 +1800,8 @@ Further out:
 - ~~**The Ledger gets role dots.**~~ **REVERSED after one day**
   (added 2026-10-05, removed 2026-10-06), and the reversal is the useful
   part. The dots were the right answer to the question asked — the Ledger
-  was the one surface the colour system never reached — and the question
-  was wrong. The tab was not unreadable for want of colour; it was
+  was the one surface the color system never reached — and the question
+  was wrong. The tab was not unreadable for want of color; it was
   unreadable because seven hues meant seven things to learn, and adding an
   eighth surface to learn them on made the system bigger, not clearer. A
   day of living with it is what showed that, which is the argument for
@@ -1805,15 +1825,15 @@ Further out:
   The count of what was left out is stated rather than silently dropped.
 
 - **A system can be internally correct and still be the wrong system**
-  (2026-10-06, the colour rework). The role palette passed everything it
+  (2026-10-06, the color rework). The role palette passed everything it
   was ever asked: seven hues, all-pairs ΔE across four vision types, a
   3:1 contrast floor per surface, a CI gate that had already caught nine
   bad candidates. Every measurement said it was good. Three days in, the
   person it was built for still could not read the Ledger.
 
-  The error was a level above the numbers. Colour was being asked to
+  The error was a level above the numbers. Color was being asked to
   carry a TAXONOMY — seven categories of money, each a hue — and a
-  taxonomy in colour is a key you have to memorise before the app means
+  taxonomy in color is a key you have to memorize before the app means
   anything. No amount of validating the hues could have surfaced that,
   because the hues were not the problem; the job they had been given was.
   Worth remembering the next time a check suite is green and the thing
@@ -1822,17 +1842,17 @@ Further out:
   What replaced it is smaller in every direction. One hue for charts, so
   a chart says "shares of one total" and the labels say which. Five
   decorative hues on the Dashboard, explicitly meaning nothing. Red and
-  green for direction, which is the one place colour was always pulling
+  green for direction, which is the one place color was always pulling
   its weight. The validator shrank with it, and that is a feature: the
   old gate's all-pairs CVD rule existed because hue meant something, and
   keeping it on decoration would have been importing a constraint from a
   system that no longer exists.
 
 - **A measuring instrument nobody measured** (2026-10-06). The palette
-  gate reported that two Dashboard colours were ΔE2000 **2.3** apart under
+  gate reported that two Dashboard colors were ΔE2000 **2.3** apart under
   deuteranopia — indistinguishable. The real answer is about **10.4**. Its
   dichromat simulation was applying a set of RGB→RGB coefficients that are
-  specified for GAMMA-ENCODED sRGB to linearised values, which exaggerated
+  specified for GAMMA-ENCODED sRGB to linearized values, which exaggerated
   every collapse by three to four times.
 
   The damage was not the wrong number, it was what got built on it. Within
@@ -1850,12 +1870,12 @@ Further out:
   RIGHT number. A test that can fail and a test that is correct are two
   different claims.
 
-  The fix is structural, not a patched function. The colour maths moved to
+  The fix is structural, not a patched function. The color maths moved to
   `scripts/colorMath.mjs` so it can be imported without running the gate;
   `tests/cvd-reference.test.mjs` compares every pair the gate measures
   against coloraide 8.13 under three published models, and runs in CI.
   Agreement with Viénot is exact to 0.00 across 141 comparisons — the last
-  residual was the instrument rounding simulated colours to 8-bit hex
+  residual was the instrument rounding simulated colors to 8-bit hex
   before measuring them, which is right for a pixel and wrong for a
   measurement. The reference file records how it was generated. With the
   simulation fixed, the palette passes the originally specified thresholds

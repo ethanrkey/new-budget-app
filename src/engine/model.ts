@@ -51,7 +51,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
 
   // A tracker category shape (for reference):
   // { id, name, order, kind, assetKind?, originalPrincipal?, interestRate?, interestStartDate? }
-  // There is no `color`: migration 13 stripped it and colour is derived from
+  // There is no `color`: migration 13 stripped it and color is derived from
   // role (see engine/palette.ts). `id` is what an item's
   // `category` field holds for a savings/debt/investment item. `kind` is
   // "asset" (default — Savings, Investments: balance accumulates from
@@ -68,7 +68,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
   // legacy roth/saved/brokerage/loans as their own editable categories.
   export function defaultTrackerCategories(): TrackerCategory[] {
     return [
-      // Colour is derived from role, so the defaults carry assetKind
+      // Color is derived from role, so the defaults carry assetKind
       // instead — the one thing about them that cannot be inferred.
       { id: uid(), name: "Savings",     order: 0, kind: "asset", assetKind: "savings" },
       { id: uid(), name: "Investments", order: 1, kind: "asset", assetKind: "investment" },

@@ -14,7 +14,7 @@ import type { LedgerRow, TrackerCategory } from "../../src/engine/types.ts";
 //
 // Kept from the web because they are rules: dots are capped (not wrapped —
 // grid cells share a row height, so wrapping flattens the busy/quiet
-// contrast that is the whole point), identity never rests on colour so the
+// contrast that is the whole point), identity never rests on color so the
 // detail list names the category in words, and the running balance stays
 // out — a month grid has nowhere honest to put it.
 const DOT_CAP = 4;
@@ -50,7 +50,7 @@ export default function CalendarView({
     id === "bill" ? "Fixed bill" : id === "oneoff" ? "One-off" : id === "income" ? "Income"
       : categories.find((c) => c.id === id)?.name ?? "Uncategorized";
   // The dots mean "something happened here" and nothing else — secondary
-  // grey since 2026-10-06, matching the web. A month grid is read for
+  // gray since 2026-10-06, matching the web. A month grid is read for
   // density, and hues scattered through it competed with exactly that.
 
   const detail = picked ? days.get(picked) : null;
@@ -112,7 +112,7 @@ export default function CalendarView({
             <Pressable key={r.id} style={styles.detailRow} onPress={() => onPick?.(r.id)}>
               <View style={[styles.dot, { backgroundColor: T.faint }]} />
               <Text style={styles.detailName} numberOfLines={1}>{r.name}</Text>
-              {/* Identity never rests on colour: the category in words. */}
+              {/* Identity never rests on color: the category in words. */}
               <Text style={styles.detailCat}>{catName(r.category)}</Text>
               <Text style={[styles.detailAmt, { color: r.direction === "in" ? T.income : T.expense }]}>
                 {r.direction === "in" ? "+" : "−"}{money(r.amount).replace("-", "")}

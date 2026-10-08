@@ -7,7 +7,7 @@ import { T } from "../lib/theme";
 //
 // A modal rather than a toast, deliberately — a toast is dismissed by
 // time, and the thing being reported is that your change is gone unless
-// you act. This asks for an acknowledgement.
+// you act. This asks for an acknowledgment.
 export default function SaveFailure({
   reason, onRetry, onDismiss, onReload,
 }: {

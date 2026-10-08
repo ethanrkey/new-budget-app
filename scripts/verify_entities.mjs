@@ -74,9 +74,9 @@ for (const blob of blobs) {
 
   // An account with NO stored categories gets three seeded by normalize(),
   // with ids from uid() — fresh on every call. So the blob side and the
-  // database side cannot agree on those ids, and that is correct behaviour,
+  // database side cannot agree on those ids, and that is correct behavior,
   // not drift: seeding is not migrating (maintenance rule 5's scoping note).
-  // Canonicalise the seeded ids for that case ONLY, and say so, because
+  // Canonicalize the seeded ids for that case ONLY, and say so, because
   // quietly loosening a verification is how a real difference hides.
   const wasSeeded = !Array.isArray(blob.state?.trackerCategories) || blob.state.trackerCategories.length === 0;
   const canon = (st) => (wasSeeded

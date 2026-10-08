@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { groupByMonth, computeSpendingByCategory } from "../engine/compute.ts";
 import { todayISO, ledgerHorizonOf, LEDGER_MAX_MONTHS } from "../engine/model.ts";
-import { roleOfCategory, isRetainedOutflow } from "../engine/palette.ts";
 import HorizonSlider from "./HorizonSlider.jsx";
 import InfoTip from "./InfoTip.jsx";
 import SpendingMix from "./SpendingMix.jsx";
@@ -289,12 +288,6 @@ function FragmentGroup({ group, sortedCats, visibleIds, colCount, selectMode, se
       </tr>
       {group.rows.map((r) => {
         const itemId = baseId(r.id);
-        // Role no longer picks a colour — it picks whether the amount is
-        // red. A transfer to savings, a contribution and a loan payment all
-        // leave the account and none of them is money gone, so they print
-        // plain. The Budget has done this since 2026-10-03 and the Ledger
-        // reddened the same $300 until 2026-10-06; one rule, one place.
-        const retained = r.direction === "out" && isRetainedOutflow(roleOfCategory(r.category, sortedCats));
         return (
           <tr
             key={r.id}
@@ -331,7 +324,17 @@ function FragmentGroup({ group, sortedCats, visibleIds, colCount, selectMode, se
             <td className="py-2 sm:py-1.5 pr-3 text-right text-income">
               {r.direction === "in" ? money(r.amount) : ""}
             </td>
-            <td className={`py-2 sm:py-1.5 pr-3 text-right ${retained ? "" : "text-expense"}`}>
+            {/* EVERY outflow is red here, including savings, investments
+                and loan payments — reverted 2026-10-08 after three days of
+                the softer rule. The Ledger is a running balance read down
+                a column, and in that reading what matters is that the
+                money left: a plain $300 beside a red $112 made the plain
+                one look like it was not coming out. The Budget keeps the
+                softer rule because it answers a different question —
+                where the month's money WENT — and there "saved" and
+                "spent" are genuinely different answers. Deliberate
+                asymmetry, not an oversight. */}
+            <td className="py-2 sm:py-1.5 pr-3 text-right text-expense">
               {r.direction === "out" ? money(r.amount) : ""}
             </td>
             <td className={`py-2 sm:py-1.5 pr-3 text-right font-medium ${r.negative ? "text-expense" : ""}`}>

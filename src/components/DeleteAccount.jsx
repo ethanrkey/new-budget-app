@@ -7,7 +7,7 @@ import { useState } from "react";
 //   step that silently never arrives is worse than none: it would look
 //   like deletion failed while the request sat there unconfirmed. In-app
 //   confirmation only, and the copy carries the weight instead.
-// - No immediate purge. Seven days, cancellable from the same screen,
+// - No immediate purge. Seven days, cancelable from the same screen,
 //   because the failure mode of an irreversible button is unrecoverable
 //   and the failure mode of a delay is mild annoyance.
 //
@@ -30,7 +30,7 @@ export default function DeleteAccount({ email, request, onRequest, onCancel }) {
           Everything is permanently deleted on{" "}
           <strong>{when.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</strong>
           {days > 0 ? ` — ${days} day${days === 1 ? "" : "s"} from now.` : " — today."}{" "}
-          You can still use the app until then, and cancelling undoes this completely.
+          You can still use the app until then, and canceling undoes this completely.
         </p>
         <button
           onClick={async () => { setBusy(true); await onCancel(); setBusy(false); }}

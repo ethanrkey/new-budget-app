@@ -70,7 +70,7 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
   }
 
   // `nameCat` (row -> category id) is deliberately not destructured: the
-  // only thing that used it was the per-row role colour, retired
+  // only thing that used it was the per-row role color, retired
   // 2026-10-06. The layout still groups by category — that is `savingGroups`.
   const { otherIncomeNames, sectionItems, savingGroups } = computeBudgetLayout(budget, trackerCategories);
   const th = "py-2 px-3 text-right font-semibold whitespace-nowrap";
@@ -176,7 +176,7 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
 
           {/* SAVING / DEBT: one header, rows clustered by category, reorder
               — arrows or drag — never crosses a category cluster. No dot:
-              colour stopped encoding role on 2026-10-06, and the section
+              color stopped encoding role on 2026-10-06, and the section
               header already says what these rows are. */}
           {sectionItems.saving.length ? (
             <>
@@ -252,7 +252,7 @@ function DataRow({
         const v = pick(c);
         const show = hideZero ? v !== 0 : true;
         // Direction OWNS the amounts, and since 2026-10-06 it is the only
-        // thing colour says here: green in, red out, plain for an outflow
+        // thing color says here: green in, red out, plain for an outflow
         // that was saved rather than spent. Saving/debt rows pass no tone,
         // which is how they stay plain.
         const colorClass = muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "";

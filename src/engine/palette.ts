@@ -1,19 +1,19 @@
-// ---- Colour: brass for charts, cool hues for cards, red/green for direction
+// ---- Color: brass for charts, cool hues for cards, red/green for direction
 //
 // ROLE STILL EXISTS AND STILL MATTERS — it decides whether an amount is red
 // or plain, which categories can carry a cumulative column, how the Budget
 // groups its sections. What it no longer does is pick a HUE. Nothing in the
-// UI derives a colour from a role as of 2026-10-06.
+// UI derives a color from a role as of 2026-10-06.
 //
 // Why the role palette came out. Seven hues across two modes is seven
 // things to learn before the app means anything, and a user who had lived
 // with it for three days still could not read the Ledger. The failure was
 // not the hues — they passed every all-pairs CVD check — it was asking
-// colour to carry a taxonomy at all. A chart that is one hue says "these
+// color to carry a taxonomy at all. A chart that is one hue says "these
 // are shares of one total", which is the only thing a spending chart has to
 // say; the label beside each slice already says which share.
 //
-// What colour does now, in three jobs that do not overlap:
+// What color does now, in three jobs that do not overlap:
 //
 //   BRASS      charts and brand. One hue, ranked by size. The brand's own
 //              gold, so the chart reads as part of the app rather than as a
@@ -41,21 +41,31 @@ export type Role =
  *  About page lists the roles in, and the order a role check iterates. */
 export const ROLE_ORDER: Role[] = ["income", "bill", "oneoff", "savings", "investment", "debt", "uncategorized"];
 
-// ---- Direction: the only place colour still carries meaning -------------
+// ---- Direction: the only place color still carries meaning -------------
 //
-// Red is money GONE. A transfer to savings, a contribution to a brokerage
-// and a loan payment all leave the checking account, and none of them is
-// money gone — pricing them as expenses is the app telling you off for
-// saving. The Budget has worked this way since 2026-10-03; the Ledger was
-// still reddening them until 2026-10-06, so the two tabs disagreed about
-// the same $300 on the same day.
+// Red is money GONE, green is money in — and the two tabs answer that
+// question differently ON PURPOSE.
+//
+//   LEDGER   every outflow is red, savings and loan payments included. It
+//            is a running balance read down a column, and what matters
+//            there is that the money left the account. A plain $300 beside
+//            a red $112 made the plain one look like it was not coming out.
+//   BUDGET   saving and debt rows are plain. It answers a different
+//            question — where the month's money WENT — and "saved" and
+//            "spent" are genuinely different answers to that one.
+//
+// This was one rule for three days (2026-10-06 to 2026-10-08) and the
+// Ledger half was reverted after living with it. The asymmetry is
+// deliberate; `isRetainedOutflow` is the Budget's rule only.
 export const RETAINED_ROLES: ReadonlyArray<Role> = ["savings", "investment", "debt"];
 
 /** True when an outflow is money KEPT — savings, an investment, a payment
- *  against a loan. Such an amount is plain text, never red. */
+ *  against a loan. Used by the BUDGET, which groups by where money went.
+ *  The Ledger deliberately does not ask: see above. */
 export function isRetainedOutflow(role: Role): boolean {
   return RETAINED_ROLES.includes(role);
 }
+
 
 // ---- Charts: brass, one hue ---------------------------------------------
 //
@@ -73,7 +83,7 @@ export const BRASS_RAMP: Record<"light" | "dark", readonly string[]> = {
 /**
  * FOUR STEPS IS THE WHOLE RAMP, and the PIE's slice count follows from it
  * rather than the other way round. Measured ΔE2000 on the worst adjacent
- * pair: seven steps of brass came out 4.1-4.5 — two neighbours a reader
+ * pair: seven steps of brass came out 4.1-4.5 — two neighbors a reader
  * cannot separate — while four steps come out 8.1 light and 10.9 dark. So
  * the pie is top four plus Other, trading slices for legibility.
  *
@@ -94,10 +104,10 @@ export const BAR_COLOR: Record<"light" | "dark", string> = {
 };
 
 /** Other, and anything else that is deliberately not identified: the same
- *  grey in both modes (3.67:1 on the dark card, 4.83:1 on white). */
+ *  gray in both modes (3.67:1 on the dark card, 4.83:1 on white). */
 export const NEUTRAL_CHART = "#6b7280";
 
-/** Pie fill for the slice at `rank` (0 = biggest). Other is grey wherever
+/** Pie fill for the slice at `rank` (0 = biggest). Other is gray wherever
  *  it lands, including the rows it holds when it is expanded — they came
  *  out of the tail and the tail is not ranked. */
 export function pieFill(rank: number, isOther: boolean, isDark: boolean): string {
@@ -116,11 +126,11 @@ export function barFill(isOther: boolean, isDark: boolean): string {
 // Assigned by card ORDER, cycling. It tells you nothing about the account —
 // it is there so five cards on one screen are five distinguishable objects
 // and your eye can return to the one it was reading. The list alternates
-// light and dark steps so two neighbours never sit close.
+// light and dark steps so two neighbors never sit close.
 //
-// LOANS TAKE NO CARD COLOUR: grey line, no dot. Five loan cards therefore
+// LOANS TAKE NO CARD COLOR: gray line, no dot. Five loan cards therefore
 // look alike, which is acceptable because the Debt section collapses to a
-// single card by default and every card inside it is labelled — the colour
+// single card by default and every card inside it is labeled — the color
 // would be decorating a list you have to open on purpose.
 export const CARD_COLORS: Record<"light" | "dark", readonly string[]> = {
   dark:  ["#8bd4ff", "#8f68cc", "#a1b3c7", "#009393", "#86a6ff"],
@@ -197,7 +207,7 @@ export function roleOfCategory(
   if (categoryId === "oneoff") return "oneoff";
   const cat = categories.find((c) => c.id === categoryId);
   // An orphan — a category that was deleted out from under a transaction —
-  // is genuinely uncategorised, which is why that bucket keeps grey.
+  // is genuinely uncategorized, which is why that bucket keeps gray.
   if (!cat) return "uncategorized";
   return cat.kind === "debt" ? "debt" : assetRole(cat.assetKind);
 }

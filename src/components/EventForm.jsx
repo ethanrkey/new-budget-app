@@ -168,7 +168,7 @@ export default function EventForm({
               </p>
             </div>
             {/* Everything else belongs to the rule, so it is not shown here
-                rather than shown disabled — a greyed field you can never
+                rather than shown disabled — a grayed field you can never
                 use on this screen is just clutter. */}
             <p className="text-xs text-gray-500">
               Name, category, cadence and dates belong to the rule. Switch to

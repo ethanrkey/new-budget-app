@@ -25,7 +25,10 @@ export interface MonthVariance {
   expected: number;
   /** What was logged, or null when nothing has been. */
   actual: number | null;
-  delta: number | null;
+  /** Logged minus expected. Named `difference` and not `delta` because the
+   *  column header says Difference, and a field that disagrees with the
+   *  label above it is a small tax on everyone who reads either. */
+  difference: number | null;
 }
 
 export interface LoggedContributions {
@@ -97,7 +100,7 @@ export function computeMonthVariance(item: RecurringItem, monthlyActuals: Budget
     occurrences,
     expected,
     actual: actual ?? null,
-    delta: actual != null ? round(actual - expected) : null,
+    difference: actual != null ? round(actual - expected) : null,
   };
 }
 
@@ -226,7 +229,7 @@ export function fixedSoFar(
     .map((mk) => computeMonthVariance(item, monthlyActuals, mk))
     .filter((v) => v.actual != null && v.occurrences > 0);
   if (logged.length < minMonths) return null;
-  if (!logged.every((v) => v.delta === 0)) return null;
+  if (!logged.every((v) => v.difference === 0)) return null;
   return { months: logged.length, amount: logged[0]!.actual! };
 }
 

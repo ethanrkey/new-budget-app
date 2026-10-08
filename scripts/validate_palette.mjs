@@ -5,17 +5,17 @@
 // The old 8-hue palette shipped a Blue/Indigo pair that was indistinguishable
 // under deuteranopia, and it survived for months because the check was a
 // script nobody re-ran after the palette changed. That is the actual lesson:
-// a validated palette is not a property of the colours, it is a property of
+// a validated palette is not a property of the colors, it is a property of
 // the process. So this exits non-zero.
 //
 // Rewritten 2026-10-06 for the brass/card system. The role palette it used
-// to check no longer exists — colour stopped encoding role, so there is no
+// to check no longer exists — color stopped encoding role, so there is no
 // semantic hue-family rule left to enforce.
 //
 // Thresholds are the designer's, enforced under NORMAL, PROTAN, DEUTAN and
 // TRITAN, with no exemptions. An earlier version of this file carved out
 // exemptions for the ramp and the cards on the argument that only
-// meaning-bearing colour needs a CVD floor. The argument was reasonable;
+// meaning-bearing color needs a CVD floor. The argument was reasonable;
 // the numbers that motivated it were not. `simulate()` was broken (see
 // colorMath.mjs), reporting collapses three to four times worse than real,
 // and the "relaxation" was invented to accommodate a bug. The palette
@@ -29,7 +29,7 @@ import { BRASS_RAMP, CARD_COLORS, BAR_COLOR, NEUTRAL_CHART, NEUTRAL_LINE } from 
 import { deltaE2000Simulated, contrast, lab } from "./colorMath.mjs";
 
 const RAMP_MIN = 8.0;  // adjacent steps of the brass ramp, worst vision type
-const CARD_MIN = 9.0;  // every pair of card colours, worst vision type
+const CARD_MIN = 9.0;  // every pair of card colors, worst vision type
 const MIN_CONTRAST = 3;
 
 // Direction. Not imported from palette.ts because these are Tailwind theme
@@ -119,10 +119,10 @@ for (const mode of ["dark", "light"]) {
   if (lowest[0] >= MIN_CONTRAST) ok(`contrast, lowest ${lowest[0].toFixed(2)}:1 — ${lowest[1]}`);
 
   // ---- 4. Direction, reported. Red/green is the only meaning-bearing
-  //         colour left and a protanope cannot separate it; it is legal
+  //         color left and a protanope cannot separate it; it is legal
   //         only because the sign, the column and the label repeat it.
   const [dirD, dirV] = worst(DIRECTION.income, DIRECTION.expense);
-  console.log(`      income/expense measure ΔE2000 ${dirD.toFixed(1)} under ${dirV} — legal only because colour never carries it alone`);
+  console.log(`      income/expense measure ΔE2000 ${dirD.toFixed(1)} under ${dirV} — legal only because color never carries it alone`);
 }
 
 console.log(failures === 0 ? "\nPALETTE OK" : `\n${failures} FAILED`);

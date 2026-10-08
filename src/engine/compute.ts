@@ -212,8 +212,8 @@ const MAX_SLICES = 8;
 
 // The two FIXED buckets are not categories in the sense the others are. A
 // tracker category is a bucket the user made and named on purpose; "bill" is
-// where anything they did NOT categorise lands. Drawing it as one slice is
-// grouping by "uncategorised", which says as little at 40% as at 100% — so
+// where anything they did NOT categorize lands. Drawing it as one slice is
+// grouping by "uncategorized", which says as little at 40% as at 100% — so
 // these always break out by item. No threshold: the chart must not change
 // shape as the horizon slider moves. Tracker categories always stay whole;
 // grouping them is the whole reason they exist.
@@ -259,7 +259,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
   for (const [key, amount] of totals) {
     const d = describe(key);
     // Items take their bucket's ROLE, which is what decides whether the
-    // amount beside them is red. Not a colour any more.
+    // amount beside them is red. Not a color any more.
     const fixed = d.bucket === "bill" || d.bucket === "oneoff" ? d.bucket : null;
     const items = fixed ? itemsOf(key) : [];
     if (fixed && items.length > 0) {
@@ -301,7 +301,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
       // The fold KEEPS its members rather than discarding them. "Other" is
       // otherwise the one slice you can learn nothing from — the same
       // complaint as a single "Fixed bills" wedge, a layer down — so the
-      // view can open it on demand. Expanded, they are grey like the row
+      // view can open it on demand. Expanded, they are gray like the row
       // they came out of: the ramp is a ranking, and the tail is the part
       // that is deliberately not ranked.
       children: rest,
@@ -322,7 +322,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
 /**
  * The pie's extra fold: top (PIE_SLICES - 1) by amount, everything else as
  * one "Other". Separate from the engine's own fold because the BAR shows
- * more rows than the pie can colour, and a chart toggle must not change
+ * more rows than the pie can color, and a chart toggle must not change
  * the data — only how much of it is drawn.
  *
  * Any Other already present is FLATTENED into the new one rather than

@@ -35,7 +35,7 @@ import type {
  *
  * UNPROVEN as of 2026-10-02: the refusal path has no lagging build to test
  * against, because there is no iOS client yet. The stamp is here now because
- * retrofitting it later is a second migration; the behaviour it enables is
+ * retrofitting it later is a second migration; the behavior it enables is
  * not yet verified against the scenario it exists for.
  */
 export const ENTITY_SCHEMA_VERSION = 1;
@@ -141,7 +141,7 @@ export function splitState(state: BudgetState): Entity[] {
  * "the later as-of date wins" becomes `max(date)` for free, with no rule to
  * enforce and nothing to get wrong.
  *
- * One behaviour follows from that and is intended: correcting the NEWEST
+ * One behavior follows from that and is intended: correcting the NEWEST
  * snapshot now moves the anchor, where before editing any snapshot left it
  * alone. Correcting September still leaves October's anchor untouched, which
  * is the case that actually mattered.

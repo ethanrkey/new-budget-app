@@ -5,7 +5,7 @@ import { foldForPie } from "../engine/compute.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 
 // ---- Where the PLANNED outflow goes, over the Ledger's own window ----
-// Forecast data, labelled as such. It reads the same event list the table
+// Forecast data, labeled as such. It reads the same event list the table
 // below it renders, so it moves with the horizon slider and never touches a
 // logged number. An actual-spending breakdown is a different chart on a
 // different tab.
@@ -17,13 +17,13 @@ import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 //
 // The fixed buckets (bills, one-offs) arrive already broken out into their
 // own transactions — always, not on a threshold — because "Fixed bills" is
-// where uncategorised money lands and grouping by it says nothing. Tracker
+// where uncategorized money lands and grouping by it says nothing. Tracker
 // categories arrive whole. That is the engine's call; this file only has to
-// colour and label the two kinds so they can't be mistaken for each other.
+// color and label the two kinds so they can't be mistaken for each other.
 //
 // "Other" folds the tail past the fourth slice. It opens on click — differently
 // per view, on purpose. The PIE never re-shapes: its wedge stays whole and
-// grey (seventeen wedges would be unreadable, and 1-2% slivers unhittable),
+// gray (seventeen wedges would be unreadable, and 1-2% slivers unhittable),
 // and the expansion happens in the legend beside it. The BAR expands its
 // rows in place, which is the bar's whole advantage. Both views show the
 // same data; they already differ in how much is drawn versus listed.
@@ -36,7 +36,7 @@ const money = (n) =>
 // ONE HUE, and the two views spend it differently because they are
 // different claims:
 //
-//   PIE  a ramp by RANK. The pie draws four wedges and a grey Other, so
+//   PIE  a ramp by RANK. The pie draws four wedges and a gray Other, so
 //        rank is a true statement about every wedge in it.
 //   BAR  flat brass. The bar is the full view and keeps every row, so a
 //        ramp would run out and start lying at the fifth.
@@ -68,7 +68,7 @@ function Chevron({ open }) {
   );
 }
 
-// Identity never rests on colour alone, and with one hue it cannot: the
+// Identity never rests on color alone, and with one hue it cannot: the
 // label carries it. An item slice names the bucket it came out of inline,
 // so "Rent" reads as "Rent · Fixed bills" rather than passing as a
 // category of its own.
@@ -88,7 +88,7 @@ function prettyDate(iso) {
 export default function SpendingMix({ mix, isDark }) {
   const [collapsed, setCollapsed] = useStickyFlag(COLLAPSED_PREF, true);
   // Bar is the DEFAULT and sits first: it reads proportions precisely,
-  // labels every row inline, and the role colours carry further in a flat
+  // labels every row inline, and the role colors carry further in a flat
   // bar than in a wedge. The pie is the alternative, not the baseline.
   const [asBar, setAsBar] = useStickyFlag(KIND_PREF, true);
   // Component state, not devicePrefs: opening Other is a drill-down you do
@@ -99,7 +99,7 @@ export default function SpendingMix({ mix, isDark }) {
   // pie folds further to four plus Other, because four is all the ramp can
   // keep apart. The toggle changes how much is DRAWN, never the data.
   //
-  // A child of Other is never ranked: in the pie it stays grey like the
+  // A child of Other is never ranked: in the pie it stays gray like the
   // wedge it came out of, and in the bar it is a named row like any other.
   const source = asBar ? mix.slices : foldForPie(mix.slices);
   const data = source.map((s, rank) => {
@@ -213,7 +213,7 @@ function PieView({ data, isDark, otherOpen, onToggleOther }) {
         </ResponsiveContainer>
       </div>
       {/* The legend is not decoration: the category palette's separation is
-          tight enough that identity must never rest on colour alone. */}
+          tight enough that identity must never rest on color alone. */}
       <Legend data={data} otherOpen={otherOpen} onToggleOther={onToggleOther} />
     </div>
   );
@@ -269,7 +269,7 @@ function BarRow({ d, total, chevron }) {
 }
 
 // Capped width: on a wide screen a full-bleed legend strands each value
-// metres from its own label.
+// meters from its own label.
 function Legend({ data, otherOpen, onToggleOther }) {
   return (
     <ul className="grow w-full min-w-0 max-w-lg space-y-1">

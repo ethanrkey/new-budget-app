@@ -46,7 +46,7 @@ export default function CategoryManager({ categories, onAdd, onUpdate, onDelete,
         </div>
         <p className="text-xs text-gray-500 mb-4">
           These are your own buckets — Savings, Investments, Debt, or anything else you track. Rename,
-          reorder, or delete them any time. There is nothing to colour: the only colours in
+          reorder, or delete them any time. There is nothing to color: the only colors in
           the app are the chart&apos;s and red/green for direction. Deleting one doesn&apos;t touch existing
           transactions — they keep their history, just shown as uncategorized.
         </p>

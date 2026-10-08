@@ -36,7 +36,7 @@ expands into a card per loan when you want the detail.
 Then a card per account. Savings and investment cards chart the balances you've
 logged — just that one line — plus what you've actually contributed, logged one
 contribution at a time. Not summed from the ledger: the ledger is a plan, and a
-plan labelled "contributed" is a lie you tell yourself. An account you never log
+plan labeled "contributed" is a lie you tell yourself. An account you never log
 (a 401k taken out before the paycheck) says so rather than claiming $0.00. There's no projected line on them on purpose: for a savings
 account it's arithmetic you can do in your head, and for anything market-
 exposed it can't tell a market dip apart from a transaction you never recorded.
@@ -54,9 +54,9 @@ Accounts and loans are created here too — "+ Add account" and "+ Add loan"
 open their own short setup form. A savings account or a loan is its own
 category (and, for a loan, APR and interest start date); money moving in or
 out is an ordinary transaction tagged to it, so setting one up never invents a
-transaction. You don't pick colours anywhere: colour encodes what the money is
+transaction. You don't pick colors anywhere: color encodes what the money is
 DOING — income, a bill, a one-off, savings, an investment, debt — so the same
-kind of money is the same colour in every view, and two savings accounts look
+kind of money is the same color in every view, and two savings accounts look
 related instead of arbitrary.
 
 ### Budget — month by month
@@ -74,7 +74,7 @@ net carried forward. Rows are reorderable, the horizon is a slider.
 
 The projection expanded into individual dated transactions with a running
 balance, grouped by month — or the same data as a **month calendar**, with
-coloured dots and each day's net, and a click for the day's transactions. (The
+colored dots and each day's net, and a click for the day's transactions. (The
 running balance stays in the list; a month grid has nowhere honest to put it.)
 Either way there's a collapsible **Planned spending** breakdown
 above it — where the money in this window is going, by category, as a pie or a

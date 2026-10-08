@@ -17,7 +17,7 @@ const path = window.location.pathname.replace(/\/+$/, "") || "/";
 
 // A HOME-SCREEN LAUNCH ALWAYS OPENS THE APP, never the marketing page.
 // manifest.webmanifest says start_url "/app", but that is not enough on its
-// own: iOS only honours start_url from 16.4, and before that Add to Home
+// own: iOS only honors start_url from 16.4, and before that Add to Home
 // Screen bookmarks whatever page you happened to be on — so an install made
 // from the landing page launches to the landing page for ever. Any install
 // created before this shipped is in exactly that state. Checking the display
