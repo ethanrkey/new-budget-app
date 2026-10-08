@@ -104,6 +104,11 @@ export default function BudgetScreen() {
       style={styles.wrap}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
     >
+      {/* The affordance, said ONCE. It was a dotted underline on every
+          tappable row, which at this density reads as noise rather than
+          as a hint — N marks for one fact. A line of text costs one. */}
+      <Text style={styles.hint}>Tap a row name to edit it.</Text>
+
       <View style={styles.sheet}>
         {/* (a) the pinned column */}
         <View style={{ width: LABEL_W }}>
@@ -128,7 +133,7 @@ export default function BudgetScreen() {
                 accessibilityLabel={r.itemName ? `Edit ${r.itemName}` : undefined}
               >
                 <Text
-                  style={[styles.labelText, r.bold && styles.boldText, r.itemName && online && styles.tappable]}
+                  style={[styles.labelText, r.bold && styles.boldText]}
                   numberOfLines={1}
                 >
                   {r.label}
@@ -161,7 +166,12 @@ export default function BudgetScreen() {
                           // is the answer the row exists to give, and
                           // leaving it plain undersold it.
                           r.key === "net" && { color: r.values(c) < 0 ? T.expense : T.income },
-                          r.key === "cum" && r.values(c) < 0 && { color: T.expense },
+                          // CUMULATIVE NET is white in both directions,
+                          // matching the web, where that row is the one on
+                          // the dark bar. It is a running position rather
+                          // than a month's win or loss, so coloring it by
+                          // sign says something the row does not mean.
+                          r.key === "cum" && { color: T.text },
                         ]}
                         numberOfLines={1}
                       >
@@ -209,10 +219,8 @@ const styles = StyleSheet.create({
   section: { height: SECTION_H, justifyContent: "center", backgroundColor: T.surface },
   sectionText: { color: T.brass, fontSize: 9, fontWeight: "700", letterSpacing: 0.7, paddingHorizontal: 8 },
   labelText: { color: T.text, fontSize: 12 },
-  // A tappable row says so: the same dotted underline the web uses on an
-  // editable row name, so the affordance is not a thing you discover.
-  tappable: { textDecorationLine: "underline", textDecorationStyle: "dotted", textDecorationColor: T.faint },
   rowPressed: { backgroundColor: T.surfaceAlt },
+  hint: { color: T.faint, fontSize: 11, paddingHorizontal: 16, paddingBottom: 8 },
   boldText: { fontWeight: "700" },
   num: { color: T.dim, fontSize: 12, fontVariant: ["tabular-nums"] },
   cumRow: { backgroundColor: T.surfaceAlt },

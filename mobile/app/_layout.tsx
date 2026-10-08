@@ -6,6 +6,7 @@ import { Stack } from "expo-router";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { StateProvider } from "../components/StateProvider";
+import { Chrome } from "../components/Chrome";
 import SignIn from "../components/SignIn";
 import { T } from "../lib/theme";
 
@@ -35,7 +36,9 @@ export default function RootLayout() {
           <SignIn />
         ) : (
           <StateProvider userId={session.user.id}>
-            <Stack screenOptions={{ headerShown: false }} />
+            <Chrome session={session}>
+              <Stack screenOptions={{ headerShown: false }} />
+            </Chrome>
           </StateProvider>
         )}
       </View>

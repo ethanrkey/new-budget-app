@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from "recharts";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
 import { computeCategoryHistory, computeLoggedContributions, computeNetPosition, computeMonthVariance } from "../engine/progress.ts";
 import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.ts";
 import { primaryAccount, todayISO } from "../engine/model.ts";
@@ -236,7 +236,7 @@ function Stat({ label, value }) {
 
 // ---- Chart ----
 // Schwab-style: thin line, recessive axes, hover any point for value + date.
-// `data` is [{ date, amount, expected? }]; the projected series is drawn
+// `data` is [{ date, amount }]; `expected` may ride along on loan entries
 // dashed and neutral (gray) — for an investment the gap is mostly the
 // market, not an error, so it's never colored good/bad.
 function ChartTip({ active, payload, label, color }) {
@@ -255,7 +255,12 @@ function ChartTip({ active, payload, label, color }) {
   );
 }
 
-function HistoryChart({ data, color, isDark, projected = false, emptyHint }) {
+// `projected` is gone as a prop, not just unused: the dashed amortization
+// line came off the loan chart on 2026-10-09 with the rest of the
+// projected display. The engine still computes it — computeLoanHistory
+// annotates every reading — and putting the line back is a render change,
+// not a re-derivation, for whenever forecast accuracy is picked up again.
+function HistoryChart({ data, color, isDark, emptyHint }) {
   const points = data.filter((d) => d.amount != null);
   if (points.length < 2) {
     return (
@@ -275,11 +280,8 @@ function HistoryChart({ data, color, isDark, projected = false, emptyHint }) {
           <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: axis }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={28} />
           <YAxis hide domain={["auto", "auto"]} />
           <Tooltip content={<ChartTip color={color} />} cursor={{ stroke: axis, strokeDasharray: "3 3" }} />
-          {projected && <Legend verticalAlign="top" align="right" height={20} iconType="plainline" wrapperStyle={{ fontSize: 11, color: axis }} formatter={(v) => (v === "amount" ? "Actual" : "Projected")} />}
+
           <Line type="monotone" dataKey="amount" name="amount" stroke={color} strokeWidth={2} dot={{ r: 3, strokeWidth: 0, fill: color }} activeDot={{ r: 5 }} connectNulls={false} isAnimationActive={false} />
-          {projected && (
-            <Line type="monotone" dataKey="expected" name="expected" stroke="#9ca3af" strokeWidth={2} strokeDasharray="4 4" dot={false} activeDot={{ r: 4, fill: "#9ca3af" }} connectNulls isAnimationActive={false} />
-          )}
         </LineChart>
       </ResponsiveContainer>
     </div>

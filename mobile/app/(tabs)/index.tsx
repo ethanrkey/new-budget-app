@@ -11,7 +11,7 @@ import ScopeSheet from "../../components/ScopeSheet";
 import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
 import { T, money } from "../../lib/theme";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
-import { ledgerHorizonOf } from "../../../src/engine/model.ts";
+import { ledgerHorizonOf, primaryAccount } from "../../../src/engine/model.ts";
 import {
   rowTarget, overrideAt, scopeActions, orphansIfSaved,
   saveItem, saveOccurrence, resetOccurrence, removeItem,
@@ -34,6 +34,7 @@ export default function LedgerScreen() {
   const [sheet, setSheet] = useState<SheetMode | null>(null);
 
   const effective = horizon ?? ledgerHorizonOf(state!);
+  const account = primaryAccount(state!);
   // ONE resolution of the tapped row, used for the heading, the button
   // labels AND the mutation — so a sheet can never name one item and act
   // on another. See rowTarget.
@@ -122,14 +123,27 @@ export default function LedgerScreen() {
           <Text style={styles.addText}>{online ? "+ Add" : "Offline"}</Text>
         </Pressable>
       </View>
+      {/* THE INPUT IS THE HEADLINE, NOT THE OUTPUT. This had it the wrong
+          way round: a big "Ending balance" at the top and the verified
+          checking balance — the one number every row below is computed
+          forward from — nowhere on the screen at all. A projection
+          printed larger than the fact it rests on teaches the wrong
+          thing about which of the two to trust. The web has always had
+          this hierarchy; the phone did not. */}
+      <View style={styles.anchorWrap}>
+        <Text style={styles.label}>{account.name}</Text>
+        <Text style={styles.anchor}>{money(account.balance)}</Text>
+        <Text style={styles.anchorAsOf}>verified {account.balanceAsOf}</Text>
+      </View>
+
       {/* The running balance is LIST-ONLY, same as the web: a month grid
           has nowhere honest to put it, and faking one would have the cell
           and the balance telling different stories. */}
       {!calendar && (
-        <View style={styles.endingWrap}>
-          <Text style={styles.label}>Ending balance</Text>
-          <Text style={[styles.ending, ending < 0 && { color: T.expense }]}>{money(ending)}</Text>
-        </View>
+        <Text style={styles.endingLine}>
+          Ending balance{" "}
+          <Text style={[styles.endingValue, ending < 0 && { color: T.expense }]}>{money(ending)}</Text>
+        </Text>
       )}
       <SpendingMix mix={mix} />
     </>
@@ -235,9 +249,12 @@ const styles = StyleSheet.create({
   addOff: { backgroundColor: T.surfaceAlt },
   addText: { color: "#111827", fontSize: 13, fontWeight: "700" },
   rowPressed: { backgroundColor: T.surface },
-  endingWrap: { paddingHorizontal: 16, paddingBottom: 10 },
+  anchorWrap: { paddingHorizontal: 16, paddingBottom: 8 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
-  ending: { color: T.text, fontSize: 24, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  anchor: { color: T.text, fontSize: 26, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  anchorAsOf: { color: T.faint, fontSize: 11 },
+  endingLine: { color: T.faint, fontSize: 12, paddingHorizontal: 16, paddingBottom: 10 },
+  endingValue: { color: T.dim, fontVariant: ["tabular-nums"] },
   listPad: { paddingBottom: 28 },
   month: { backgroundColor: T.bg, color: T.brass, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, paddingHorizontal: 16, paddingVertical: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.border },

@@ -1294,7 +1294,16 @@ Later, in rough order:
    **CLOSED 2026-10-06, superseded.** There are no role shades: the pie is
    a four-step brass ramp, gated on adjacent ΔE2000 and on monotonic
    lightness. Nothing in it can run near navy.
-6. **Count orphans live on the WEB, then one press everywhere.** The
+6. **Copy pass, in the author's voice, across web and mobile.** The
+   words have accreted over weeks of sessions and were written by me,
+   not by him. Before publish.
+7. **Capability parity audit: enumerate, do not fix.** Does the phone do
+   everything the web does, everywhere we want it to? The answer today
+   is no and the list is not written down — which is exactly how the
+   date picker went unreported twice and the chart-scrub fix went
+   missing from a batch. Produce the list; decide what is deliberate
+   (import, first-run setup) and what is a gap. Before publish.
+8. **Count orphans live on the WEB, then one press everywhere.** The
    phone's editor counts the dated amounts a schedule change would orphan
    as you type, shows the number beside the button, and saves on one
    press — the warning has already been read. The web needs two presses
@@ -1302,16 +1311,16 @@ Later, in rough order:
    until submit. That is a limitation, not a decision: move the count to
    render time and the second press goes away. Small, and it ends a
    difference between the clients that nobody chose.
-7. **Tombstone retention / purge job.** 90 days is documented but no
+9. **Tombstone retention / purge job.** 90 days is documented but no
    purge is scheduled; the rows accumulate. Read-only offline means the
    window only has to outlive online devices refetching, so this is
    housekeeping, not correctness.
-8. ~~**The Ledger prints saving and debt amounts in red, the Budget does
+10. ~~**The Ledger prints saving and debt amounts in red, the Budget does
    not.**~~ **CLOSED 2026-10-08, as intended behavior.** Unified on
    2026-10-06, reverted on the Ledger side two days later after using it:
    the tabs ask different questions and the difference in treatment
    follows from that. Recorded as a decision rather than an inconsistency.
-9. ~~**Color customization / role hue schemes.**~~ **RETIRED 2026-10-06,
+11. ~~**Color customization / role hue schemes.**~~ **RETIRED 2026-10-06,
    moot.** The question was whether per-category recolor should return or
    whether the user should pick each ROLE's hue. Neither survives the
    rework: roles no longer have hues to pick. What is left to customize is
@@ -1322,7 +1331,7 @@ Later, in rough order:
    tab is unreadable", and the answer was fewer colors rather than
    different ones.
 
-10. **Retired palette machinery still exported from the engine.**
+12. **Retired palette machinery still exported from the engine.**
    `CATEGORY_PALETTE`, `paletteColor` and the `PaletteIndex` type survive
    in `model.ts`/`types.ts` with no renderer left to use them —
    `ColorSwatches` was the last one and is gone. Deleting them reaches
@@ -1968,13 +1977,51 @@ Further out:
   responder claims a gesture only once it is more horizontal than
   vertical so a flick still scrolls the page under it.
 
+- **The input is the headline, not the output** (2026-10-09, the
+  phone's Ledger). It opened with a large "Ending balance" and showed
+  the verified checking balance nowhere at all — the one number every
+  row below is computed forward from was absent, while a projection
+  derived from it was the biggest thing on the screen. A forecast
+  printed larger than the fact it rests on teaches the wrong thing
+  about which of the two to trust. The web has always had this the
+  right way round; only the phone was inverted.
+
+- **The copy lives in one place, not two** (2026-10-09,
+  `src/content/`). Giving the phone an About page and a tour meant
+  either duplicating thirteen sections and four stops, or extracting
+  them. They are extracted: pure data, no React, no platform, imported
+  by both clients, which render them differently — the web as a sidebar
+  beside a panel, the phone as a chip row above a full screen. The
+  swatches in the color legend stay live values from palette.ts rather
+  than copy, so the page cannot describe a color the app does not use.
+  Two copies of an explanation is how one goes stale, and this project
+  has already paid that bill twice with screenshots and a README.
+
+- **Five header items, one corner button** (2026-10-09,
+  `components/Chrome.tsx`). The web header holds Setup, About, Import,
+  Export and Settings. Five do not fit at 390px and the tab bar belongs
+  to the four things you DO, so everything you configure or read once
+  sits behind one control in the corner — where iOS has trained people
+  to look — and the tabs stay navigation rather than administration.
+
+  **The danger zone is on the Settings root, not behind Account.**
+  Apple looks for in-app account deletion specifically, and three taps
+  deep is three chances to conclude it is not there.
+
+  Import is deliberately absent: picking a CSV on a phone is awkward,
+  and import is where the duplicate-snapshot bug lived. Setup folds
+  into onboarding, which is its own backlog item. Export is present and
+  is the SHARE SHEET, not a download — a browser download has nowhere
+  to land on iOS, and the share sheet is the platform's answer for
+  moving data off a device.
+
 - **Loans show what is, not what was projected** (2026-10-09). The
   per-reading "projected $X" and the loan card's "planned" figure are
   gone from both clients, and the phone's loan chart with them. The
   ENGINE is untouched: `computeLoanHistory` still annotates every
   reading with what amortization expected at that moment and
   `computeLoanProgress` still returns `expectedNow`. Forecast accuracy
-  is deferred, not cancelled, and loan projections are the cleanest
+  is deferred, not canceled, and loan projections are the cleanest
   signal to come back to — nothing outside those two display sites ever
   read them, which was checked before removing anything: not the ledger,
   not net position, not CSV or the JSON backup.

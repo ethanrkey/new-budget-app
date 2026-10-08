@@ -173,19 +173,6 @@ export default function DashboardScreen() {
         />
       ))}
 
-      {/* The same three facts the web shows in Settings. There is no
-          Settings screen here yet, so they sit with Sign out, which is the
-          only other account-level control on the phone. */}
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Account</Text>
-        <Row k="Signed in" v={session?.user?.email ?? "—"} />
-        <Row k="Via" v={providerNames(session?.user?.app_metadata?.providers as string[] | undefined)} />
-        <Row k="Member since" v={
-          session?.user?.created_at
-            ? new Date(session.user.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
-            : "—"
-        } />
-      </View>
 
       {logging && (
         <LogBalance
@@ -271,7 +258,6 @@ export default function DashboardScreen() {
         />
       )}
 
-      <Text style={styles.signout} onPress={() => supabase.auth.signOut()}>Sign out</Text>
     </ScrollView>
   );
 }

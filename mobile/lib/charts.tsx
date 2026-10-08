@@ -36,7 +36,14 @@ import { T, money } from "./theme";
 export function Sparkline({
   points, color, width, height = 68,
 }: { points: { date: string; amount: number }[]; color: string; width: number; height?: number }) {
+  // WHERE YOU LEFT IT. `active` survives the release: lifting a finger
+  // is not "never mind", it is "that one". Snapping back to the newest
+  // reading meant the chart forgot the answer the moment you stopped
+  // asking, which made it feel like it had not heard you. `touching`
+  // is separate, because the crosshair belongs to the gesture and the
+  // selection does not.
   const [active, setActive] = useState<number | null>(null);
+  const [touching, setTouching] = useState(false);
   const PAD = 8;
   const plotH = height - 18;            // room for the readout line above
 
@@ -67,10 +74,10 @@ export function Sparkline({
     // Claim the gesture only when it is clearly horizontal, so the page
     // still scrolls under a vertical flick that happens to start here.
     onMoveShouldSetPanResponder: (_e, g) => points.length > 1 && Math.abs(g.dx) > Math.abs(g.dy),
-    onPanResponderGrant: (e) => setActive(nearest(e.nativeEvent.locationX)),
+    onPanResponderGrant: (e) => { setTouching(true); setActive(nearest(e.nativeEvent.locationX)); },
     onPanResponderMove: (e) => setActive(nearest(e.nativeEvent.locationX)),
-    onPanResponderRelease: () => setActive(null),
-    onPanResponderTerminate: () => setActive(null),
+    onPanResponderRelease: () => setTouching(false),
+    onPanResponderTerminate: () => setTouching(false),
   }), [nearest, points.length]);
 
   if (points.length < 2 || !geom) {
@@ -119,10 +126,10 @@ export function Sparkline({
         {points.map((p, i) => (
           <Circle key={`${p.date}-${i}`} cx={geom.x(i)} cy={geom.y(p.amount)} r={2} fill={color} opacity={0.65} />
         ))}
-        {active != null && <Rect x={sx - 0.5} y={0} width={1} height={plotH} fill={T.dim} opacity={0.5} />}
+        {touching && <Rect x={sx - 0.5} y={0} width={1} height={plotH} fill={T.dim} opacity={0.5} />}
         {/* The point being read is drawn with a surface ring so it stays
             legible where the line crosses it. */}
-        <Circle cx={sx} cy={sy} r={active == null ? 4 : 5.5} fill={color} stroke={T.surface} strokeWidth={2} />
+        <Circle cx={sx} cy={sy} r={touching ? 5.5 : 4} fill={color} stroke={T.surface} strokeWidth={2} />
       </Svg>
     </View>
   );
