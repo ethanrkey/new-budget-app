@@ -1119,6 +1119,23 @@ save. Architecture around it is settled — server-authoritative, account requir
 and **offline is READ-ONLY** (cached state for viewing, writes gated on
 connectivity).
 
+**Encryption at rest: CONTESTED as of 2026-10-09 — do not treat either
+answer as settled.** A handoff written the same day from the auditing
+chat records the opposite conclusion: "the chosen direction was encrypted
+at rest with the user holding the keys ... given the app may go to
+Ethan's dad's friends and then to strangers," with a note that
+retrofitting encryption onto plaintext rows is strictly harder than
+starting with it. That is a direct contradiction of what follows, and
+both documents describe themselves as decided. The contradiction is real
+rather than verbal: the objection below (a user who clears their browser
+must not lose everything) does not weaken as the user base grows, and the
+argument above (strangers should not have to trust the author with their
+complete financial state) does not weaken because recovery is hard. They
+are two goods in conflict and one has to lose. **Nobody has made that
+call; the code implements the version below.** Whoever makes it should
+also size the retrofit, because the cost of deciding late is the only
+part that is growing. The original entry, unchanged:
+
 **Encryption at rest: DECIDED, not pending** (2026-10-01, reaffirmed
 2026-10-02). Supabase's disk-level encryption and nothing more — no
 column-level keys, not end-to-end. Column-level with user-held keys means a
@@ -1290,6 +1307,28 @@ what, not by size.
 16. Tombstone retention / purge job — *Later* item 9.
 17. Retired palette machinery still exported — *Later* item 12.
 18. Favicon, leading zero in numeric inputs.
+
+**G. Non-code App Store work — parallel to everything above**
+
+Needs no build and no TestFlight, so none of it is blocked by band A.
+
+23. **Apple Developer Program enrollment — 2026-10-13, $99.** The one
+    item on the critical path that nobody here controls the timing of.
+    Not gated on the app being finished; start it regardless of state.
+24. **The iOS app icon is still the Expo template** — the blue chevron
+    on pale blue, layout guides and crosshairs included. Checked by
+    looking at `mobile/assets/images/icon.png` on 2026-10-09, because a
+    handoff note recorded the icon as done. The WEB icon is settled; the
+    phone's is scaffold. Belongs with mobile item 12.
+25. **App Privacy questionnaire.** The item that takes real thought —
+    this app holds a user's complete financial state and Apple asks
+    about exactly that.
+26. Privacy policy at a public URL (`/privacy` exists and is live),
+    support URL, store description, screenshots per device class, age
+    rating, export compliance.
+27. **Remove `key-budget-app.vercel.app`** from the Vercel domains and
+    the Supabase redirect allow-list. A second origin that can complete
+    an auth redirect is a second thing to get wrong.
 
 **F. Product, further out and deliberately vague**
 
@@ -1591,6 +1630,11 @@ a port.
     one value that is painful to change afterward: it is what App Store
     Connect, the provisioning profile and any future associated-domains
     entitlement all key off.
+
+Not built, and not yet decided either way: the native iOS 26 Liquid
+Glass tab bar via `expo-router/native-tabs`. It needs a `ThemeProvider` —
+the system derives the bar background from content and ignores a JS-only
+color scheme — which is a real change to a dark-only app, not a flag.
 
 Deliberately NOT ported: drag-to-reorder (HTML5 drag never fires from
 touch, and the web already disables it on phones), and the Budget's
