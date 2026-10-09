@@ -141,6 +141,24 @@ Live, single-user-per-account, deployed on Vercel from `main`. Actively
 developed. Goal: a full web app plus a connected iOS app sharing the same
 engine (which is why the engine is pure JS with no UI or backend imports).
 
+**Scope, settled 2026-10-09.** Four answers that had been assumed rather
+than stated, and each one closes off work:
+
+- **iOS only. Android never matters.** The `android` block in
+  `mobile/app.json` is template residue, not a plan.
+- **No monetization now, and never ads.** Nothing in the data model or
+  the UI is to be shaped around a future ad slot or a tracking need, and
+  the privacy copy can keep saying what it says.
+- **The App Store is the goal**, which makes the submission blockers real
+  deadlines rather than tidiness.
+- **Built so that someone who is not the author finds it useful**, with
+  the door left open if it ever gains traction. This is the one with
+  teeth: it promotes the copy pass and the parity audit from polish to
+  requirements, it makes cold onboarding a feature rather than a
+  convenience, and it means any place the app quietly assumes it is being
+  used by its author is a defect. It is NOT a license to build
+  multi-tenant machinery nobody has asked for.
+
 ## 3. Architecture
 
 ```
@@ -1222,6 +1240,65 @@ since preferences are not money and last-write-wins is fine for them.
   dual-write phase, not before cutover.
 
 
+### The whole list, ranked (2026-10-09)
+
+One place to look. Every line points at a fuller entry below or in the
+*Later* list; nothing here repeats the reasoning. Ranked by what stops
+what, not by size.
+
+**A. Stops a TestFlight build existing at all**
+
+1. Nobody can sign in on the phone — mobile item 1. Option D (email OTP);
+   the email gate is open as of 2026-10-09.
+2. `mobile/app.json` is still the Expo template and no iOS build has ever
+   been made — mobile item 12. Do the bundle identifier early.
+
+**B. Stops it surviving review, or surviving contact with a tester**
+
+3. Account deletion / Settings, built but never pressed — mobile item 2.
+   5.1.1(v) is a hard requirement and an unpressed screen is a claim.
+4. The rest of the nav, same condition — About, the tour, Export (mobile
+   item 9), plus Budget cumulative-net white, the tappable-row underline
+   and the loan card. All typecheck, all bundle, none tapped.
+5. Verify the pg_cron purge actually ran — *Later* item 2. The app
+   promises deletion in seven days; nobody has watched it happen once.
+   Shipping an unwatched promise about destroying data is the worst
+   version of this list.
+
+**C. "Useful to someone who is not the author" — now requirements, not polish**
+
+6. Copy pass in the author's voice, web and mobile — *Later* item 6,
+   which absorbs the two deferred copy items (*Later* item 0).
+7. Capability parity audit, enumerate without fixing — *Later* item 7.
+8. Onboarding that works cold on a phone — mobile item 7. A user who
+   signs up on the phone currently lands in an empty app.
+9. Sweep for places the app assumes its author is the one using it. New,
+   from the 2026-10-09 scope decision; no entry yet.
+
+**D. Mobile feature gaps, in build order**
+
+10. Quick entry — mobile item 3.
+11. Loan and asset setup / edit terms — mobile item 5. Without it the
+    loan card's own prompt has nowhere to go.
+12. Horizon control: device-local chip or synced setting — mobile item 10.
+
+**E. Debt, paid down when it is in the way**
+
+13. The nine audit findings from 2026-09-24 — *Later* item 4.
+14. `storage.js` under `// @ts-check` — *Later* item 3.
+15. Count orphans live on the web, one press everywhere — *Later* item 8.
+16. Tombstone retention / purge job — *Later* item 9.
+17. Retired palette machinery still exported — *Later* item 12.
+18. Favicon, leading zero in numeric inputs.
+
+**F. Product, further out and deliberately vague**
+
+19. Multi-account model (payment method per transaction, credit cards
+    with limits). The one deliberate architectural step still ahead.
+20. Live multi-device sync over Realtime.
+21. Goal-based savings; tying one-offs to a recurring item by name.
+22. Bank linking. Much later, if ever.
+
 ### Mobile backlog (audited 2026-10-03)
 
 Audited when the phone could WRITE exactly two things — the verified
@@ -1276,18 +1353,23 @@ a port.
    matter. Two caveats, both checkable in the Resend dashboard and
    neither verifiable from here:
 
-   - **A verified sending domain.** Without one, Resend permits sending
-     only to the account's own address. Two different recipient domains
-     appear as Delivered in the log, which is good evidence a domain is
-     verified, but it is evidence rather than confirmation — read
-     Resend -> Domains.
-   - **The suppression list.** One of the three older sends **Bounced**.
-     A bounced address can be suppressed, and a suppressed address
-     silently receives nothing forever after, which for a sign-in link
-     means an account that simply cannot log in and no error that says
-     why. Read Resend -> Suppressions before trusting any of this, and
-     treat a bounce on the author's own address as the thing most worth
-     watching, since it is the account used to test everything else.
+   - **A verified sending domain: CONFIRMED 2026-10-09.** Resend ->
+     Domains lists `keybudget.app`, status Verified, created the same day
+     sending began. Resend's no-verified-domain restriction (send only to
+     the account's own address) therefore does not apply, and mail can
+     reach anyone. Both halves of the gate are open: Supabase is out of
+     the way because SMTP is custom, and Resend is out of the way because
+     the domain is verified.
+   - **The one bounce was bu.edu**, whose receiving rules are stricter
+     than most, per the author. That explains the cause and does not
+     clear the consequence: a bounced address can land on Resend ->
+     Suppressions, and a suppressed address receives nothing ever again
+     with no error anywhere that says so — which for a sign-in link is an
+     account that cannot log in for reasons invisible from inside the
+     app. Worth one look, and worth remembering that the author's own
+     bu.edu address is the one used to test everything, so it is the
+     likeliest address to be silently unreachable. A personal address is
+     the better test target.
 
    Also recorded from `GET /auth/v1/settings` on the live project:
    `google: true`, `email: true`, `apple: false`, `mailer_autoconfirm:
@@ -1422,8 +1504,10 @@ a port.
    `lib/stash.ts`, awaited before the optimistic apply, reported and
    discarded on relaunch — never replayed.
 
-9. **Export** [D]. A JSON/CSV download means the iOS share sheet, not a
-   file download. Import probably does not belong on a phone at all.
+9. **Export** [D] — **BUILT 2026-10-08, NOT YET PRESSED ON A DEVICE.**
+   `mobile/components/ExportSheet.tsx`, reached from the nav. Import is
+   deliberately not on the phone. Like items 2 and 11, it typechecks and
+   bundles and nobody has tapped it.
 10. **Horizon control** [D]. The phone has a device-local date chip
     where the web has a synced slider. The chip is arguably the better
     phone control; the decision is whether it should write
@@ -1493,6 +1577,20 @@ a port.
        three, so "offer Google on iOS" and "offer Sign in with Apple"
        are the same decision.
 
+
+12. **`mobile/app.json` is still the Expo template, and that is a
+    submission blocker nobody had written down.** Found 2026-10-09. The
+    app is named `mobile`, its slug is `mobile`, its scheme is `mobile`,
+    `ios.bundleIdentifier` is absent entirely, the icons are the template
+    icons, and there is an `android` block for a platform that will never
+    ship. No iOS build has ever been produced from this project — not a
+    simulator build, not an EAS build, not a TestFlight upload. Every
+    other item in this list assumes a build exists to put them in. Small
+    work, almost entirely configuration, and it should be done early
+    rather than on submission night, because the bundle identifier is the
+    one value that is painful to change afterward: it is what App Store
+    Connect, the provisioning profile and any future associated-domains
+    entitlement all key off.
 
 Deliberately NOT ported: drag-to-reorder (HTML5 drag never fires from
 touch, and the web already disables it on phones), and the Budget's
@@ -1625,13 +1723,18 @@ Further out:
   in place, calendar dots are capped rather than wrapped, the day detail
   names the category in words, and the running balance stays list-only.
 
-  **Read-only, deliberately.** The per-entity write path with its version
-  guards is real work, and shipping it the same night production data
-  moved would risk the phone writing bad rows to answer a question —
-  "does this feel like an app" — that writing does not help answer.
-  Email+password auth only: Google OAuth needs a redirect that survives
-  the Expo Go sandbox, and the magic-link fallback is down behind the
-  broken confirmation email. `mobile/tsconfig.json` sets
+  **Read-only, deliberately** — *as of 2026-10-02, when this was written.
+  No longer true: the phone has had a real write path since 2026-10-08.
+  Kept as the record of why it shipped read-only first.* The per-entity
+  write path with its version guards is real work, and shipping it the
+  same night production data moved would risk the phone writing bad rows
+  to answer a question — "does this feel like an app" — that writing does
+  not help answer. Email+password auth only: Google OAuth needs a
+  redirect that survives the Expo Go sandbox, and the magic-link fallback
+  is down behind the broken confirmation email. *That last clause was
+  wrong within a day — Resend has been delivering since 2026-10-03 — and
+  it is the third copy of the same stale claim found on 2026-10-09. The
+  live version of this question is mobile backlog item 1.* `mobile/tsconfig.json` sets
   `allowImportingTsExtensions` and includes `../src/engine`; the root
   ESLint ignores `mobile` because it is a separate project whose Metro
   config is legitimately CommonJS. **Metro resolves the explicit `.ts`
@@ -1652,7 +1755,9 @@ Further out:
   limits, full initial setup wizard) — the account list is already shaped
   for it; this is the one deliberate architectural step still ahead.
 - Bank linking (Plaid-style) — much later.
-- iOS client sharing `src/engine`.
+- ~~iOS client sharing `src/engine`.~~ **DONE 2026-10-02**, and the phone
+  has had a write path since 2026-10-08. What is left of it is the
+  mobile backlog above, not this line.
 
 ## 11. Decision log (why things are the way they are)
 
