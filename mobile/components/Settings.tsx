@@ -149,7 +149,7 @@ export default function Settings({
               <Text style={[styles.actionText, styles.danger]}>Delete my account</Text>
               <Text style={styles.rowSub}>
                 Schedules everything for deletion in 7 days: the sign-in, every rule, every logged
-                balance. Cancellable until then. After that it is gone and there is no backup to
+                balance. Cancelable until then. After that it is gone and there is no backup to
                 restore from. Type DELETE to confirm.
               </Text>
               <TextInput
