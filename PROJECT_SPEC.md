@@ -348,11 +348,19 @@ balance updates). Nothing is append-only.
   purge date back for ever, which is a deletion that never happens wearing
   the costume of one that does.
 
-  **No email confirmation**, because the project's SMTP is down and a
-  confirmation that silently never arrives is worse than none — it would
-  look like deletion failed while the request sat unconfirmed. In-app
-  only: type DELETE, and the copy enumerates what goes, to the same
-  standard as Wipe Data.
+  **No email confirmation.** Written 2026-10-02 because the project's SMTP
+  was down and a confirmation that silently never arrives is worse than
+  none — it would look like deletion failed while the request sat
+  unconfirmed. **That reason expired on 2026-10-03**, when custom SMTP
+  (Resend) started delivering; it was never revisited because nothing
+  prompted a reread. The behavior has NOT changed and is not changed here:
+  in-app only, type DELETE, and the copy enumerates what goes, to the same
+  standard as Wipe Data. What changed is its standing — an email step is
+  now a decision nobody has made rather than a constraint, and it is
+  genuinely arguable in both directions (a second channel is real
+  protection against a hijacked session; it is also a new way for the most
+  destructive action in the app to stall silently). Left open deliberately
+  rather than settled in passing.
 - **A save that does not land says so.** `SyncNotice` has a third kind,
   `error`: a write that fails for any reason other than a conflict used to
   be `console.error` only, so the app went on looking normal while nothing
@@ -1250,36 +1258,38 @@ a port.
    at review, this stops the build from being usable by the people it
    would be sent to.
 
-   **The gate under every option below: transactional email.** The
-   built-in email service cannot reach a tester at all. From the
-   Supabase docs on custom SMTP, verbatim:
+   **The email gate: CLEARED, and it was never actually shut.** Custom
+   SMTP is configured on this project through **Resend**, and nothing in
+   this repo said so — the only record here, until 2026-10-09, was the
+   2026-10-02 claim that "the project's SMTP is down", written the day
+   before the first successful send and never reread. Evidence, from the
+   Resend dashboard on 2026-10-09: four "Your sign-in link" messages in
+   the last fifteen days, the oldest three about 2026-10-03 and the
+   newest the probe sent from this session, which shows **Delivered**.
+   So the mailer is not merely accepting mail — it is landing it.
 
-   > Unless you configure a custom SMTP server for your project,
-   > Supabase Auth will refuse to deliver messages to addresses that are
-   > not part of the project's team.
+   That retires the Supabase restriction this entry was built around.
+   "Supabase Auth will refuse to deliver messages to addresses that are
+   not part of the project's team" and the two-per-hour ceiling apply to
+   the BUILT-IN service only; with custom SMTP, Supabase is out of the
+   recipient business entirely and Resend's rules are the ones that
+   matter. Two caveats, both checkable in the Resend dashboard and
+   neither verifiable from here:
 
-   and on its throughput:
+   - **A verified sending domain.** Without one, Resend permits sending
+     only to the account's own address. Two different recipient domains
+     appear as Delivered in the log, which is good evidence a domain is
+     verified, but it is evidence rather than confirmation — read
+     Resend -> Domains.
+   - **The suppression list.** One of the three older sends **Bounced**.
+     A bounced address can be suppressed, and a suppressed address
+     silently receives nothing forever after, which for a sign-in link
+     means an account that simply cannot log in and no error that says
+     why. Read Resend -> Suppressions before trusting any of this, and
+     treat a bounce on the author's own address as the thing most worth
+     watching, since it is the account used to test everything else.
 
-   > Currently this value is set to 2 messages per hour.
-
-   The same page lists the service's intended uses as "Exploring and
-   getting started with Supabase Auth, Setting up and testing email
-   templates with the members of the project's team, Building toy
-   projects, demos or any non-mission-critical application", and says
-   custom SMTP is required for "Passwordless accounts using one-time
-   passwords or links sent over email (OTP, magic link, invites)".
-
-   Tested 2026-10-08, not assumed: `POST /auth/v1/otp` for the author's
-   own address returned **HTTP 200 in 0.79s**. GoTrue sends in the
-   request path, so a 200 means SMTP accepted the message — the mailer
-   is not dead, which retires the "down behind a broken confirmation
-   email" note in `SignIn.tsx`. What a 200 for a team member's address
-   does NOT establish is whether a tester's address would be refused.
-   The one thing that settles it is the FROM address on that email: if
-   it is `supabase.io`, this is the built-in service and the testers are
-   unreachable until custom SMTP exists; if it is a configured domain,
-   custom SMTP is already on and that gate is already clear. Also
-   recorded from `GET /auth/v1/settings` on the live project:
+   Also recorded from `GET /auth/v1/settings` on the live project:
    `google: true`, `email: true`, `apple: false`, `mailer_autoconfirm:
    false`.
 
@@ -1374,10 +1384,13 @@ a port.
    cannot coexist then D costs the web's magic link, and that changes
    the trade.
 
-   **Build order, which is not negotiable in any of these shapes:**
-   custom SMTP first (or nobody receives anything), then the send test
-   against a tester's address, then the Google-only reach test, then the
-   screen.
+   **Build order.** Custom SMTP was the first step and it is already
+   done, which is why this entry is now smaller than it looked. What
+   remains: confirm the verified domain and the suppression list, then
+   send to a tester's address and watch it land, then the Google-only
+   reach test (point 3 above, the one real unknown), then the template
+   question, then the screen. Nothing here needs an Apple Developer
+   account, which is the whole argument for D.
 
 2. **Account deletion + a Settings screen** [P] — **BUILT 2026-10-08,
    NOT YET PRESSED ON A DEVICE.** This was the App Store submission

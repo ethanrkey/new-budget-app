@@ -3,9 +3,12 @@ import { useState } from "react";
 // The most destructive action in the app, and the one Apple requires to be
 // reachable in-app. Two things it does NOT do:
 //
-// - No email confirmation. The project's SMTP is down, and a confirmation
-//   step that silently never arrives is worse than none: it would look
-//   like deletion failed while the request sat there unconfirmed. In-app
+// - No email confirmation. This was written on 2026-10-02 because the
+//   project's SMTP was down and a confirmation that silently never
+//   arrives is worse than none. THAT REASON IS GONE: custom SMTP (Resend)
+//   has been delivering sign-in mail since 2026-10-03. The behavior is
+//   unchanged on purpose, but it now rests on a choice rather than on a
+//   constraint, and the choice has not been made — see the spec. In-app
 //   confirmation only, and the copy carries the weight instead.
 // - No immediate purge. Seven days, cancelable from the same screen,
 //   because the failure mode of an irreversible button is unrecoverable
