@@ -1229,6 +1229,156 @@ a port.
    same ambiguity. The stash ships in the same commit, as decided. See
    the decision log.
 
+1. **NO ACCOUNT CREATED THROUGH THIS APP CAN SIGN IN ON THE PHONE** [D]
+   — **THE TOP BLOCKER. It outranks item 2.** First reported
+   2026-10-08 as "Google OAuth is missing on mobile", which is the small
+   version of it.
+
+   The web creates accounts two ways and neither one produces a
+   password: `src/auth.js:12` is `signInWithOAuth({ provider: "google" })`
+   and `src/auth.js:23` is `signInWithOtp`, the magic link. The phone
+   makes exactly one call, `signInWithPassword`
+   (`mobile/components/SignIn.tsx:24`). `signUp` and
+   `resetPasswordForEmail` appear nowhere in the repo. So the set of
+   accounts that can sign in on the phone is the set of accounts whose
+   password was set from outside the app — which is one account, the
+   author's, set by hand through the admin API. Every Google user and
+   every magic-link user is locked out, and between them that is
+   everybody. The two TestFlight testers cannot log in.
+
+   That is why it sits above account deletion: 5.1.1(v) stops the build
+   at review, this stops the build from being usable by the people it
+   would be sent to.
+
+   **The gate under every option below: transactional email.** The
+   built-in email service cannot reach a tester at all. From the
+   Supabase docs on custom SMTP, verbatim:
+
+   > Unless you configure a custom SMTP server for your project,
+   > Supabase Auth will refuse to deliver messages to addresses that are
+   > not part of the project's team.
+
+   and on its throughput:
+
+   > Currently this value is set to 2 messages per hour.
+
+   The same page lists the service's intended uses as "Exploring and
+   getting started with Supabase Auth, Setting up and testing email
+   templates with the members of the project's team, Building toy
+   projects, demos or any non-mission-critical application", and says
+   custom SMTP is required for "Passwordless accounts using one-time
+   passwords or links sent over email (OTP, magic link, invites)".
+
+   Tested 2026-10-08, not assumed: `POST /auth/v1/otp` for the author's
+   own address returned **HTTP 200 in 0.79s**. GoTrue sends in the
+   request path, so a 200 means SMTP accepted the message — the mailer
+   is not dead, which retires the "down behind a broken confirmation
+   email" note in `SignIn.tsx`. What a 200 for a team member's address
+   does NOT establish is whether a tester's address would be refused.
+   The one thing that settles it is the FROM address on that email: if
+   it is `supabase.io`, this is the built-in service and the testers are
+   unreachable until custom SMTP exists; if it is a configured domain,
+   custom SMTP is already on and that gate is already clear. Also
+   recorded from `GET /auth/v1/settings` on the live project:
+   `google: true`, `email: true`, `apple: false`, `mailer_autoconfirm:
+   false`.
+
+   **The options. 4.8 is quoted in full at item 11; the test it applies
+   is "does the iOS app use a third-party login service".**
+
+   - **A. Google + Sign in with Apple on iOS.** Compliant, and the
+     largest build: a Google iOS client and its reversed-client-id URL
+     scheme, `expo-apple-authentication`, an Apple Service ID and
+     signing key, both providers enabled in Supabase (`apple` is
+     `false` today), and a third identity to link on accounts that
+     already carry two. Needs `ios.bundleIdentifier`, absent from
+     `app.json`, and a real `expo.scheme`, still the template's
+     `"mobile"`.
+   - **B. Google alone on iOS.** Fails 4.8 on the plain reading, and
+     the way you learn that is a rejection in review.
+   - **C. Give every account a password.** No third-party login on iOS,
+     so 4.8 never applies. Needs a set-password / reset flow.
+   - **D. Magic link / email OTP on the phone — the same
+     `signInWithOtp` the web already calls. PREFERRED.** Proposed
+     2026-10-08. Evaluated against C below, point by point, because it
+     is the option this entry was first written without.
+
+   **D versus C.**
+
+   1. **4.8 does not trigger.** Correct, and for the same reason C
+      relies on: an email OTP against this project's own user table is
+      not "a third-party or social login service", so the guideline's
+      trigger clause is never met and the "exclusively uses your
+      company's own account setup and sign-in systems" exception covers
+      it besides.
+   2. **No password anywhere.** Correct, and it is worth more than it
+      sounds. With no password there is nothing to store, nothing to
+      rotate, no reset flow, no strength rule, and no second credential
+      that can drift out of sync with the identity that owns the
+      account.
+   3. **Does it reach accounts created via Google? UNRESOLVED, and it
+      is the one point that is not safely assumable.** The docs say
+      automatic linking is the behavior rather than a setting — there is
+      no per-project switch for it to be "on" or "off" (the only
+      linking toggle, `GOTRUE_SECURITY_MANUAL_LINKING_ENABLED`, is the
+      separate manual-linking beta), and the condition it names is a
+      verified address: "It would also be an insecure practice to
+      automatically link an identity to a user with an unverified email
+      address since that could lead to pre-account takeover attacks."
+      Google verifies the address, so a Google-created user here is
+      confirmed and an OTP for that address should find the existing
+      row. AGAINST that, the `signInWithOtp` reference says the error
+      "will not distinguish between the cases where the account does
+      not exist or, that the account can only be accessed via social
+      login" — which only makes sense if "reachable only by social
+      login" is a real state an account can be in. The live identity
+      table would settle it immediately and is a production read that
+      was refused, so the check is either the dashboard
+      (Authentication -> Users; a single row showing both `email` and
+      `google` is linking having happened in this project) or a real
+      OTP against a Google-only account, comparing the returned
+      `user.id` with the web's. **This risk is identical under C**: a
+      reset email for a social-only account faces the same question, so
+      it is not a reason to prefer C.
+   4. **The six-digit code avoids deep linking entirely.** Confirmed,
+      and not plan-gated — it is an email-template edit, not a feature
+      tier. `{{ .Token }}` is documented as "a 6-digit
+      One-Time-Password (OTP) that can be used instead of the
+      `{{ .ConfirmationURL }}`", and the client call is "the 'verify
+      OTP' method ... with the user's email address, the code, and a
+      type of `email`". So: no URL scheme, no bundle identifier, no
+      associated-domains file, no redirect that has to survive the Expo
+      Go sandbox — which is the exact cost that kept OAuth off the
+      phone in the first place.
+
+   **Verdict: D is strictly smaller than C, and C contains D.** Any
+   set-a-password flow for a user who has no password must first prove
+   the address — which is an OTP send and verify — and only then call
+   `updateUser({ password })`. So C is D plus a password form plus a
+   stored credential, and the extra is the part that buys nothing. D
+   also fixes the magic-link users the moment it ships, where C asks
+   every one of them to invent a password to reach an app they were
+   using without one.
+
+   **One wrinkle D has and C does not, flagged rather than solved:
+   there is one email template for both clients.** The web wants a
+   clickable `{{ .ConfirmationURL }}`; the phone wants a typed
+   `{{ .Token }}`. The variables are two renderings of one credential —
+   `{{ .TokenHash }}` is documented as "a hashed version of the
+   `{{ .Token }}`" and is what the confirmation URL is built from — so a
+   template carrying both ought to serve both clients from one send.
+   The `signInWithOtp` reference is less comfortable than that, saying
+   the presence of `{{ .Token }}` means an OTP sends "instead", and the
+   templates page does not address the pair at all. UNTESTED. Resolve
+   it with one real send before building the screen, because if the two
+   cannot coexist then D costs the web's magic link, and that changes
+   the trade.
+
+   **Build order, which is not negotiable in any of these shapes:**
+   custom SMTP first (or nobody receives anything), then the send test
+   against a tester's address, then the Google-only reach test, then the
+   screen.
+
 2. **Account deletion + a Settings screen** [P] — **BUILT 2026-10-08,
    NOT YET PRESSED ON A DEVICE.** This was the App Store submission
    blocker: Apple's guideline 5.1.1(v) requires an app that creates an
@@ -1237,8 +1387,9 @@ a port.
    account facts, sign-out (previously stranded on the Dashboard), and
    the danger zone at the Settings root as decided. It typechecks and it
    bundles; nobody has tapped it. Until someone does, treat the blocker
-   as closed in code and open in fact — see item 11, which is the
-   sign-in half of the same submission question.
+   as closed in code and open in fact — and note that item 1 now
+   outranks it: an app nobody can sign in to does not get as far as
+   needing a delete button.
 3. **Quick entry** [D]. Arguably worth MORE on a phone than on the web —
    entering a cash spend while standing in a shop is the case. Decision:
    whether it is the same keep-going-until-closed surface the web has,
@@ -1265,30 +1416,9 @@ a port.
     phone control; the decision is whether it should write
     `settings.ledgerHorizon` like the web does, or stay local.
 
-11. **Sign-in parity — the phone can only let in an account that already
-    has a password, and nothing in this app ever sets one** [D] —
-    **TESTFLIGHT BLOCKER.** Reported 2026-10-08 as "Google OAuth
-    doesn't exist on mobile"; reading the two sign-in paths makes it
-    wider than that.
-
-    The facts, from the code rather than from a guess:
-
-    - `src/auth.js` offers exactly two doors on the web:
-      `signInWithOAuth({ provider: "google" })` and `signInWithOtp` (the
-      magic link). Neither one sets a password.
-    - `mobile/components/SignIn.tsx` makes exactly one call:
-      `signInWithPassword`. There is no sign-up, no magic link, no
-      OAuth, and no reset.
-    - `resetPasswordForEmail` and `signUp` appear nowhere in the repo.
-
-    So it is not only the Google users who are locked out of the phone —
-    a magic-link user is too. Every account born on the web has no
-    password, and the phone has no other way in. The one account that
-    does sign in on device has a password that was set outside the app.
-    HOW MANY real users that affects is not recorded here: the live
-    identity list is a production read, so count it from the Supabase
-    dashboard (Authentication -> Users, provider column) before deciding
-    how urgent this is.
+11. **Apple guideline 4.8 as it actually reads** — the citation item 1
+    depends on, kept separate so it is quoted once and not
+    paraphrased twice.
 
     **What Apple requires, checked 2026-10-08 against the live
     guidelines page (App Review Guidelines, "Last Updated: June 8,
@@ -1350,34 +1480,6 @@ a port.
        three, so "offer Google on iOS" and "offer Sign in with Apple"
        are the same decision.
 
-    **The three shapes, with what each one actually costs.**
-
-    - **A. Google + Sign in with Apple on iOS.** Compliant on the plain
-      reading, and the largest build: a Google iOS client plus its
-      reversed-client-id URL scheme, `expo-apple-authentication`, an
-      Apple Service ID and signing key, both providers configured in
-      Supabase, and identity linking for a third provider on accounts
-      that already carry two. Needs `ios.bundleIdentifier` in
-      `app.json`, which is absent today, and a real app scheme —
-      `expo.scheme` is still the template's `"mobile"`.
-    - **B. Google alone on iOS.** Fails 4.8 on the plain reading, and
-      the way you would find out is a rejection during review, which is
-      the outcome this entry exists to avoid.
-    - **C. No third-party login on iOS; make sure every account has a
-      password.** 4.8 never applies. The work is a set-password / reset
-      flow, which needs transactional email to work — and the comment
-      at the top of `mobile/components/SignIn.tsx` records that path as
-      down ("the magic-link fallback is down behind a broken
-      confirmation email"). That claim is from an earlier session and
-      has not been retested; it is the first thing to check, because
-      the email has to work before launch regardless of which shape
-      wins.
-
-    **Recommendation: C, if the email is fixable** — it is the smallest
-    compliant build, it fixes the magic-link users as well as the Google
-    ones, and it needs no Apple Developer configuration beyond the
-    bundle identifier a build needs anyway. If the email cannot be made
-    to work, A. Not B.
 
 Deliberately NOT ported: drag-to-reorder (HTML5 drag never fires from
 touch, and the web already disables it on phones), and the Budget's
@@ -1396,11 +1498,12 @@ Later, in rough order:
    month and this becomes a line.", reads as three short sentences
    fighting each other. Neither is a bug; both want writing rather than
    coding, which is why they are not fixed in passing.
-1. **The mobile backlog above**, item 11 especially — the phone can only
-   sign in an account that already has a password, and nothing in this
-   app ever sets one, so a web user who signed up with Google or a magic
-   link cannot get in at all. That is the TestFlight blocker now that
-   transaction editing and in-app account deletion are both built.
+1. **The mobile backlog above, item 1** — no account created through
+   this app can sign in on the phone, because the web never sets a
+   password and the phone accepts nothing else. That is the top
+   blocker, above account deletion, now that transaction editing and
+   the Settings screen are both built. Custom SMTP gates every fix for
+   it.
 2. **Verify the pg_cron purge actually ran.** `cron.job` is scheduled;
    `cron.job_run_details` has not been read since. A deletion feature
    nobody has watched execute is a claim, not a feature.
