@@ -16,8 +16,12 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-08: 22 mutations, 22 killed, and every one of the 17
-// tests dies to at least one.
+// Measured 2026-10-09: 34 mutations, 34 killed, and every one of the 32
+// renderer tests dies to at least one. The twelve added that day were written
+// BECAUSE the run before them reported nine new sign-in tests that no
+// mutation could reach — the list only covers what someone thought to
+// break, so a new test file means new entries here or the suite is
+// trusted for no reason.
 // --verbose is NOT cosmetic: with more than one test file jest stops
 // printing per-test lines, and this runner parses them. Without it the
 // script reported every mutation as surviving and "All 0 tests" — loudly
@@ -25,6 +29,9 @@
 // break, but still wrong.
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+
+/** Plain-node suites that import mobile/lib directly, relative to mobile/. */
+const NODE_SUITES = ["tests/mobile-signin.test.mjs", "tests/mobile-edit.test.mjs"];
 
 /** [what is broken, file, find, replace-with] */
 const MUTATIONS = [
@@ -93,11 +100,55 @@ const MUTATIONS = [
    'onPress={() => confirmDelete(e)}', 'onPress={() => onDelete(e)}'],
   ["reset option loses its date", "components/ScopeSheet.tsx",
    'return { text: `Reset ${prettyDate(a.date)} to the rule`',
-   'return { text: `Reset to the rule`']
+   'return { text: `Reset to the rule`'],
+
+  // --- sign-in. Nine tests arrived 2026-10-09 and no mutation could
+  // reach any of them, which is exactly the state this script exists to
+  // make visible: a suite nothing can kill is decoration.
+  ["the address is sent raw, so an iOS capital letter matches nobody", "lib/signin.ts",
+   "return raw.trim().toLowerCase();", "return raw;"],
+  ["a five-digit code counts as ready", "lib/signin.ts",
+   "return normalizeCode(code).length === CODE_LENGTH;", "return normalizeCode(code).length >= CODE_LENGTH - 1;"],
+  ["a pasted code keeps its spaces", "lib/signin.ts",
+   'return raw.replace(/\\D/g, "").slice(0, CODE_LENGTH);', "return raw.slice(0, CODE_LENGTH);"],
+  ["the rate limit is swallowed like every other error", "lib/signin.ts",
+   'if (rateLimited) return "A code was just sent. Wait a minute before asking for another.";', "// mutated"],
+  ["a failed send leaks which addresses have accounts", "lib/signin.ts",
+   "  return null;\n}\n\n/**\n * What to say when the VERIFY fails.", "  return error.message ?? null;\n}\n\n/**\n * What to say when the VERIFY fails."],
+  ["a wrong code says nothing useful", "lib/signin.ts",
+   'return "That code is wrong or has expired. Check the latest email, or ask for a new code.";',
+   'return "Error.";'],
+  ["the resend cooldown never elapses", "lib/signin.ts",
+   "return Math.max(0, RESEND_COOLDOWN_SECONDS - elapsed);", "return RESEND_COOLDOWN_SECONDS;"],
+  ["the send never advances to the code step", "components/SignIn.tsx",
+   'if (!resending) { setCode(""); setStep("code"); }', "// mutated"],
+  ["the code step forgets which address it is waiting on", "components/SignIn.tsx",
+   "email: clean,\n      token: normalizeCode(code),", 'email: "someone@else.com",\n      token: normalizeCode(code),'],
+  ["going back wipes the address you mistyped", "components/SignIn.tsx",
+   'onPress={() => { setStep("email"); setError(null); }}', 'onPress={() => { setStep("email"); setError(null); setEmail(""); }}'],
+  ["resend is pressable during the cooldown", "components/SignIn.tsx",
+   "disabled={busy || cooldown > 0}", "disabled={busy}"],
+  ["sign-in creates an account for a typo", "components/SignIn.tsx",
+   "options: { shouldCreateUser: false },", "options: { shouldCreateUser: true },"],
 ];
 
 const killedBy = new Map();
 const survived = [];
+
+/** Names of the node-harness checks that FAIL right now, if any. */
+function runNodeHarness() {
+  for (const suite of NODE_SUITES) {
+    let out = "";
+    try { execSync(`node ../${suite} 2>&1`, { encoding: "utf8" }); continue; }
+    catch (e) { out = e.stdout || ""; }
+    const failed = [...out.matchAll(/^FAIL  (.+)$/gm)].map((m) => `${suite}: ${m[1].trim()}`);
+    // A harness that exits non-zero without naming a check still counts
+    // as a kill — silence here would read as "nothing noticed".
+    if (failed.length) return failed;
+    return [`${suite}: exited non-zero`];
+  }
+  return [];
+}
 
 for (const [label, file, find, repl] of MUTATIONS) {
   const orig = readFileSync(file, "utf8");
@@ -109,9 +160,16 @@ for (const [label, file, find, repl] of MUTATIONS) {
   let out = "";
   try { out = execSync("npx jest --verbose 2>&1", { encoding: "utf8" }); }
   catch (e) { out = e.stdout || ""; }
+  // The OTHER suite. `lib/` is imported by the plain-node harness as well
+  // as by the renderer, and a mutation this file can only reach through
+  // logic would otherwise be reported as surviving while a test in
+  // tests/mobile-signin.test.mjs was failing loudly one directory up.
+  // "Can anything kill these tests" has to mean anything.
+  const node = runNodeHarness();
   writeFileSync(file, orig);          // always restore, pass or fail
 
   const dead = [...out.matchAll(/\u2715 (.+?) \(/g)].map((m) => m[1]);
+  dead.push(...node);
   for (const d of dead) killedBy.set(d, (killedBy.get(d) ?? 0) + 1);
   if (dead.length === 0) { survived.push(label); console.log(`SURVIVED  ${label}`); }
   else console.log(`killed ${String(dead.length).padStart(2)}  ${label}`);

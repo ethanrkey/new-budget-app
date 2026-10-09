@@ -1259,8 +1259,13 @@ what, not by size.
 
 **A. Stops a TestFlight build existing at all**
 
-1. Nobody can sign in on the phone — mobile item 1. Option D (email OTP);
-   the email gate is open as of 2026-10-09.
+1. Sign-in on the phone — mobile item 1. **Option D shipped 2026-10-09**
+   (emailed six-digit code), which unblocks every account the web ever
+   made. Google and Sign in with Apple are still out, and both wait on a
+   development build; Sign in with Apple additionally waits on the paid
+   account. Two things remain to confirm with one real send each: that
+   `{{ .Token }}` and `{{ .ConfirmationURL }}` can share one template,
+   and that a code reaches a Google-created account.
 2. `mobile/app.json` is still the Expo template and no iOS build has ever
    been made — mobile item 12. Do the bundle identifier early.
 
@@ -1274,10 +1279,15 @@ what, not by size.
    not yet reproduced or specified, and the only open defect on the
    screen. Still never pressed: **Export** (mobile item 9) and the
    **rebuilt loan card**.
-5. Verify the pg_cron purge actually ran — *Later* item 2. The app
-   promises deletion in seven days; nobody has watched it happen once.
-   Shipping an unwatched promise about destroying data is the worst
-   version of this list.
+5. Watch the purge actually delete something — *Later* item 2.
+   **Half-confirmed 2026-10-09:** `cron.job_run_details` shows six
+   consecutive nights, 2026-10-04 through 2026-10-09, every one
+   `succeeded` at 03:17 with `1 row`. So the schedule is real and the
+   function runs clean. What that does NOT show is a deletion, because
+   no account has ever been due — a successful run with nothing to purge
+   and a successful run that destroys an account are the same line in
+   that table. The remaining test is a throwaway account with a
+   backdated purge date, watched end to end, and never the real one.
 
 **C. "Useful to someone who is not the author" — now requirements, not polish**
 

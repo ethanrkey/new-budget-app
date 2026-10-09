@@ -20,7 +20,10 @@ export const supabase = createClient(url, anon, {
     storage: AsyncStorage,
     persistSession: true,
     autoRefreshToken: true,
-    // No OAuth redirect to catch in Expo Go — email + password only here.
+    // Nothing to catch in a URL: sign-in is an emailed six-digit code,
+    // typed into the app, so no redirect ever comes back. This flips to
+    // true the day Google or Sign in with Apple lands, which needs a
+    // development build and a registered scheme — see components/SignIn.
     detectSessionInUrl: false,
   },
 });

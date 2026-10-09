@@ -24,3 +24,52 @@ jest.mock("@react-native-community/datetimepicker", () => {
     return React.createElement(View, { accessibilityLabel: "Date picker" });
   };
 });
+
+// Supabase auth, recorded rather than stubbed silently. The sign-in tests
+// assert WHAT REACHED the client, so the mock keeps every call and lets a
+// test arm the next failure — which is the only way to exercise the
+// anti-enumeration branch and the rate-limit branch, neither of which can
+// be produced by a real server on demand.
+export const authCalls: {
+  otp: unknown[];
+  verify: unknown[];
+  nextOtpError: { message: string; status: number } | null;
+  nextVerifyError: { message: string; status: number } | null;
+} = { otp: [], verify: [], nextOtpError: null, nextVerifyError: null };
+
+jest.mock("../lib/supabase", () => {
+  const { authCalls: calls } = require("./setup");
+  return {
+    supabase: {
+      auth: {
+        signInWithOtp: async (args: unknown) => {
+          calls.otp.push(args);
+          const error = calls.nextOtpError;
+          calls.nextOtpError = null;
+          return { data: {}, error };
+        },
+        verifyOtp: async (args: unknown) => {
+          calls.verify.push(args);
+          const error = calls.nextVerifyError;
+          calls.nextVerifyError = null;
+          return { data: {}, error };
+        },
+        signInWithPassword: async () => ({ data: {}, error: null }),
+      },
+    },
+    BACKEND: "production",
+    BACKEND_NOTICE: null,
+  };
+});
+
+// Safe-area insets. The real provider measures a native view that does not
+// exist under jest, so `useSafeAreaInsets` throws outside one. Fixed
+// numbers are honest here: no test asserts a layout offset, and a test
+// that did would be asserting the simulator's notch rather than the app.
+jest.mock("react-native-safe-area-context", () => {
+  const actual = jest.requireActual("react-native-safe-area-context");
+  return {
+    ...actual,
+    useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }),
+  };
+});
