@@ -1119,22 +1119,16 @@ save. Architecture around it is settled — server-authoritative, account requir
 and **offline is READ-ONLY** (cached state for viewing, writes gated on
 connectivity).
 
-**Encryption at rest: CONTESTED as of 2026-10-09 — do not treat either
-answer as settled.** A handoff written the same day from the auditing
-chat records the opposite conclusion: "the chosen direction was encrypted
-at rest with the user holding the keys ... given the app may go to
-Ethan's dad's friends and then to strangers," with a note that
-retrofitting encryption onto plaintext rows is strictly harder than
-starting with it. That is a direct contradiction of what follows, and
-both documents describe themselves as decided. The contradiction is real
-rather than verbal: the objection below (a user who clears their browser
-must not lose everything) does not weaken as the user base grows, and the
-argument above (strangers should not have to trust the author with their
-complete financial state) does not weaken because recovery is hard. They
-are two goods in conflict and one has to lose. **Nobody has made that
-call; the code implements the version below.** Whoever makes it should
-also size the retrofit, because the cost of deciding late is the only
-part that is growing. The original entry, unchanged:
+**Encryption at rest: the 2026-10-09 contradiction is CLOSED.** A handoff
+from the auditing chat recorded "encrypted at rest with the user holding
+the keys" as the chosen direction, which read as a reversal of the entry
+below. It was not one. The author's account, 2026-10-09: end-to-end was
+what he WANTED, he and the chat worked through it, and they concluded it
+was not fully feasible — which is the same conclusion, and the same
+reason, as the entry below. The handoff recorded the aspiration and
+dropped the verdict. Nothing changes; the entry below stands as written
+and is the one to trust. Recorded only so the next reader who finds that
+handoff does not reopen it.
 
 **Encryption at rest: DECIDED, not pending** (2026-10-01, reaffirmed
 2026-10-02). Supabase's disk-level encryption and nothing more — no
@@ -1274,9 +1268,12 @@ what, not by size.
 
 3. Account deletion / Settings, built but never pressed — mobile item 2.
    5.1.1(v) is a hard requirement and an unpressed screen is a claim.
-4. The rest of the nav, same condition — About, the tour, Export (mobile
-   item 9), plus Budget cumulative-net white, the tappable-row underline
-   and the loan card. All typecheck, all bundle, none tapped.
+4. The rest of the nav. **Tested on device 2026-10-09: the tour works,
+   Budget cumulative net is white, the tappable-row underline is gone.**
+   About renders but **its tabs are wonky** — reported in those words,
+   not yet reproduced or specified, and the only open defect on the
+   screen. Still never pressed: **Export** (mobile item 9) and the
+   **rebuilt loan card**.
 5. Verify the pg_cron purge actually ran — *Later* item 2. The app
    promises deletion in seven days; nobody has watched it happen once.
    Shipping an unwatched promise about destroying data is the worst
@@ -1315,11 +1312,18 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
 23. **Apple Developer Program enrollment — 2026-10-13, $99.** The one
     item on the critical path that nobody here controls the timing of.
     Not gated on the app being finished; start it regardless of state.
-24. **The iOS app icon is still the Expo template** — the blue chevron
-    on pale blue, layout guides and crosshairs included. Checked by
-    looking at `mobile/assets/images/icon.png` on 2026-10-09, because a
-    handoff note recorded the icon as done. The WEB icon is settled; the
-    phone's is scaffold. Belongs with mobile item 12.
+24. ~~**The iOS app icon is still the Expo template.**~~ **DONE
+    2026-10-09.** It was the blue chevron on pale blue with the layout
+    guides still visible, found by looking at the file after a handoff
+    note recorded the icon as done. Now generated from
+    `public/favicon.svg` — the one definition of the mark — by
+    `scripts/make_app_icon.mjs`, so the phone cannot drift from the web.
+    Square rather than pre-rounded, because iOS masks it itself and a
+    rounded source gets rounded twice; opaque, because Apple rejects an
+    alpha channel; 1024x1024, asserted by the script rather than
+    assumed. The splash mark came from the same pass, and the splash
+    background went from the template's white to `#111827`, which was a
+    white flash on launch in a dark-only app.
 25. **App Privacy questionnaire.** The item that takes real thought —
     this app holds a user's complete financial state and Apple asks
     about exactly that.
@@ -1617,19 +1621,36 @@ a port.
        are the same decision.
 
 
-12. **`mobile/app.json` is still the Expo template, and that is a
-    submission blocker nobody had written down.** Found 2026-10-09. The
-    app is named `mobile`, its slug is `mobile`, its scheme is `mobile`,
-    `ios.bundleIdentifier` is absent entirely, the icons are the template
-    icons, and there is an `android` block for a platform that will never
-    ship. No iOS build has ever been produced from this project — not a
-    simulator build, not an EAS build, not a TestFlight upload. Every
-    other item in this list assumes a build exists to put them in. Small
-    work, almost entirely configuration, and it should be done early
-    rather than on submission night, because the bundle identifier is the
-    one value that is painful to change afterward: it is what App Store
+12. **App identity: FIXED 2026-10-09. The build itself still does not
+    exist.** `mobile/app.json` was the untouched Expo template — named
+    `mobile`, slug `mobile`, scheme `mobile`, no `ios.bundleIdentifier`
+    at all, template icons, and an `android` block for a platform that
+    will never ship. Now: name **Key Budget**, slug `key-budget`, scheme
+    `keybudget`, `ios.bundleIdentifier` **`app.keybudget`** (the domain
+    reversed), the android block deleted, `supportsTablet` false because
+    the layout is a phone layout and claiming iPad means iPad
+    screenshots and an iPad review, and `userInterfaceStyle` **dark**
+    rather than `automatic`, which simply applies the dark-only decision
+    that was already made.
+
+    **The bundle identifier is reversible right now and stops being so
+    the moment it is registered with Apple** — it is what App Store
     Connect, the provisioning profile and any future associated-domains
-    entitlement all key off.
+    entitlement key off. Enrollment is 2026-10-13, so there is a window
+    and it is this one.
+
+    **What remains is the thing itself: no iOS build has ever been
+    produced from this project** — not a simulator build, not an EAS
+    build, not a TestFlight upload. Expo Go is a generic host app that
+    loads a JS bundle; it is not this app, and every item in band A
+    assumes a binary exists to put them in. Two routes, both open:
+    `eas build -p ios --profile development` with `ios.simulator` true,
+    which needs a free Expo account and **no** Apple Developer
+    membership and runs in the cloud; or `npx expo run:ios` locally,
+    which needs CocoaPods installed (Xcode 16.4 is present; `pod` is
+    not, and system Ruby is 2.6, so that means Homebrew). The cloud
+    route is the one worth doing first, because it proves the pipeline
+    before the paid clock starts.
 
 Not built, and not yet decided either way: the native iOS 26 Liquid
 Glass tab bar via `expo-router/native-tabs`. It needs a `ThemeProvider` —
