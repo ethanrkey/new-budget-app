@@ -1229,12 +1229,16 @@ a port.
    same ambiguity. The stash ships in the same commit, as decided. See
    the decision log.
 
-2. **Account deletion + a Settings screen** [P] — **APP STORE
-   SUBMISSION BLOCKER.** Apple's guideline 5.1.1(v) requires an app
-   that creates an account to let the user delete it from inside the
-   app. The web has it; the phone does not, so the build cannot be
-   submitted as it stands. This is not a nicety and not a "later". The screen also wants sign-out (currently stranded on
-   the Dashboard), the account facts, and Wipe Data.
+2. **Account deletion + a Settings screen** [P] — **BUILT 2026-10-08,
+   NOT YET PRESSED ON A DEVICE.** This was the App Store submission
+   blocker: Apple's guideline 5.1.1(v) requires an app that creates an
+   account to let the user delete it from inside the app, and the phone
+   had no such screen. `mobile/components/Settings.tsx` now carries the
+   account facts, sign-out (previously stranded on the Dashboard), and
+   the danger zone at the Settings root as decided. It typechecks and it
+   bundles; nobody has tapped it. Until someone does, treat the blocker
+   as closed in code and open in fact — see item 11, which is the
+   sign-in half of the same submission question.
 3. **Quick entry** [D]. Arguably worth MORE on a phone than on the web —
    entering a cash spend while standing in a shop is the case. Decision:
    whether it is the same keep-going-until-closed surface the web has,
@@ -1261,6 +1265,120 @@ a port.
     phone control; the decision is whether it should write
     `settings.ledgerHorizon` like the web does, or stay local.
 
+11. **Sign-in parity — the phone can only let in an account that already
+    has a password, and nothing in this app ever sets one** [D] —
+    **TESTFLIGHT BLOCKER.** Reported 2026-10-08 as "Google OAuth
+    doesn't exist on mobile"; reading the two sign-in paths makes it
+    wider than that.
+
+    The facts, from the code rather than from a guess:
+
+    - `src/auth.js` offers exactly two doors on the web:
+      `signInWithOAuth({ provider: "google" })` and `signInWithOtp` (the
+      magic link). Neither one sets a password.
+    - `mobile/components/SignIn.tsx` makes exactly one call:
+      `signInWithPassword`. There is no sign-up, no magic link, no
+      OAuth, and no reset.
+    - `resetPasswordForEmail` and `signUp` appear nowhere in the repo.
+
+    So it is not only the Google users who are locked out of the phone —
+    a magic-link user is too. Every account born on the web has no
+    password, and the phone has no other way in. The one account that
+    does sign in on device has a password that was set outside the app.
+    HOW MANY real users that affects is not recorded here: the live
+    identity list is a production read, so count it from the Supabase
+    dashboard (Authentication -> Users, provider column) before deciding
+    how urgent this is.
+
+    **What Apple requires, checked 2026-10-08 against the live
+    guidelines page (App Review Guidelines, "Last Updated: June 8,
+    2026") rather than from memory.** Guideline 4.8, Login Services,
+    verbatim:
+
+    > Apps that use a third-party or social login service (such as
+    > Facebook Login, Google Sign-In, Log in with X, Sign In with
+    > LinkedIn, Login with Amazon, or WeChat Login) to set up or
+    > authenticate the user's primary account with the app must also
+    > offer as an equivalent option another login service with the
+    > following features:
+    >
+    > - the login service limits data collection to the user's name and
+    >   email address;
+    > - the login service allows users to keep their email address
+    >   private as part of setting up their account; and
+    > - the login service does not collect interactions with your app
+    >   for advertising purposes without consent.
+    >
+    > A user's primary account is the account they establish with your
+    > app for the purposes of identifying themselves, signing in, and
+    > accessing your features and associated services.
+    >
+    > Another login service is not required if:
+    >
+    > - Your app exclusively uses your company's own account setup and
+    >   sign-in systems.
+    > - Your app is an alternative app marketplace, or an app
+    >   distributed from an alternative app marketplace, that uses a
+    >   marketplace-specific login for account, download, and commerce
+    >   features.
+    > - Your app is an education, enterprise, or business app that
+    >   requires the user to sign in with an existing education or
+    >   enterprise account.
+    > - Your app uses a government or industry-backed citizen
+    >   identification system or electronic ID to authenticate users.
+    > - Your app is a client for a specific third-party service and
+    >   users are required to sign in to their mail, social media, or
+    >   other third-party account directly to access their content.
+
+    Three things follow, and the first two are the guideline's own
+    words while the third is an inference, marked as one:
+
+    1. 4.8 is triggered by the app USING a third-party login service.
+       An iOS build that offers none never reaches the requirement —
+       that is the "exclusively uses your company's own account setup
+       and sign-in systems" exception, and it is the cheapest compliant
+       shape available here.
+    2. The guideline never names Sign in with Apple. It asks for
+       "another login service" with three features, and any service
+       with them qualifies.
+    3. INFERENCE, not quoted: this app's own email login cannot be that
+       second option, because it fails the second feature. Keeping an
+       address private "as part of setting up their account" means a
+       relay; an app that authenticates against its own user table
+       receives the real address and has nowhere to hide it. In
+       practice Sign in with Apple is the only service that meets all
+       three, so "offer Google on iOS" and "offer Sign in with Apple"
+       are the same decision.
+
+    **The three shapes, with what each one actually costs.**
+
+    - **A. Google + Sign in with Apple on iOS.** Compliant on the plain
+      reading, and the largest build: a Google iOS client plus its
+      reversed-client-id URL scheme, `expo-apple-authentication`, an
+      Apple Service ID and signing key, both providers configured in
+      Supabase, and identity linking for a third provider on accounts
+      that already carry two. Needs `ios.bundleIdentifier` in
+      `app.json`, which is absent today, and a real app scheme —
+      `expo.scheme` is still the template's `"mobile"`.
+    - **B. Google alone on iOS.** Fails 4.8 on the plain reading, and
+      the way you would find out is a rejection during review, which is
+      the outcome this entry exists to avoid.
+    - **C. No third-party login on iOS; make sure every account has a
+      password.** 4.8 never applies. The work is a set-password / reset
+      flow, which needs transactional email to work — and the comment
+      at the top of `mobile/components/SignIn.tsx` records that path as
+      down ("the magic-link fallback is down behind a broken
+      confirmation email"). That claim is from an earlier session and
+      has not been retested; it is the first thing to check, because
+      the email has to work before launch regardless of which shape
+      wins.
+
+    **Recommendation: C, if the email is fixable** — it is the smallest
+    compliant build, it fixes the magic-link users as well as the Google
+    ones, and it needs no Apple Developer configuration beyond the
+    bundle identifier a build needs anyway. If the email cannot be made
+    to work, A. Not B.
+
 Deliberately NOT ported: drag-to-reorder (HTML5 drag never fires from
 touch, and the web already disables it on phones), and the Budget's
 pinned-column grid, which is already reshaped to one card per month.
@@ -1278,9 +1396,11 @@ Later, in rough order:
    month and this becomes a line.", reads as three short sentences
    fighting each other. Neither is a bug; both want writing rather than
    coding, which is why they are not fixed in passing.
-1. **The mobile backlog above**, items 1-2 especially — the phone cannot
-   edit a transaction, and in-app account deletion is an App Store
-   submission blocker.
+1. **The mobile backlog above**, item 11 especially — the phone can only
+   sign in an account that already has a password, and nothing in this
+   app ever sets one, so a web user who signed up with Google or a magic
+   link cannot get in at all. That is the TestFlight blocker now that
+   transaction editing and in-app account deletion are both built.
 2. **Verify the pg_cron purge actually ran.** `cron.job` is scheduled;
    `cron.job_run_details` has not been read since. A deletion feature
    nobody has watched execute is a claim, not a feature.
