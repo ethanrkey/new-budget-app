@@ -411,6 +411,58 @@ balance updates). Nothing is append-only.
   boundary. No secrets are in git (history swept 2026-09-13).
 - Financial CSVs are gitignored (`*.csv`). Never commit user data.
 
+## 5a. Live configuration that is not in this repo
+
+Settings that live in a dashboard, that no test can read, and that the
+code silently depends on. Each one here has already broken something or
+answered a question that was open. **When one of these changes, it is
+written here in the same sitting** — there is no other record of it.
+
+**Supabase -> Authentication**
+
+- **Email OTP Length: 6.** Was **8** until 2026-10-10. The phone's
+  `CODE_LENGTH` is 6, its field caps entry at 6 and `normalizeCode`
+  slices to 6, so with the dashboard at 8 every real code was truncated
+  into a wrong one. Sign-in would have failed for everybody with "that
+  code is wrong or has expired" as the only clue, while the code in the
+  email was perfectly correct. The two numbers must agree and nothing in
+  the repo can check it.
+- **Magic Link template carries BOTH** `{{ .ConfirmationURL }}` and
+  "Or enter this code in the app: `{{ .Token }}`". **This settles the
+  open question**: the two coexist in one template, so the web keeps its
+  clickable link and the phone gets a typed code from the same send. The
+  docs were not clear on it — the `signInWithOtp` reference says the
+  presence of `{{ .Token }}` sends a code "instead" — and the answer came
+  from a real send that arrived and signed in on the device, 2026-10-10.
+- **Providers enabled: google, email.** `apple` is off, and turning it on
+  is part of the Sign in with Apple work, not a separate step.
+- `mailer_autoconfirm` is false.
+
+**Resend**
+
+- **Custom SMTP, sending domain `keybudget.app`, Verified** since
+  2026-10-03. This is what makes mail reach anyone: Supabase's built-in
+  service refuses every address outside the project team, at two per
+  hour. Without it there is no sign-in for a tester and no password
+  reset for anybody.
+- One bu.edu bounce, cause identified as BU's own receiving rules. The
+  consequence to watch is the suppression list, because a suppressed
+  address receives nothing ever again and says so nowhere.
+
+**Platform behavior that is nobody's setting**
+
+- **Gmail does not get iOS one-time-code autofill.** Apple reads
+  Mail.app, not Gmail's app, so a Gmail user types the six digits. Known
+  and accepted — it is why the field also accepts a paste and strips
+  whatever comes with it.
+
+**Vercel**
+
+- `key-budget-app.vercel.app` is still a live origin and still in the
+  Supabase redirect allow-list. Removing it is on the list: a second
+  origin that can complete an auth redirect is a second thing to get
+  wrong.
+
 ## 6. Migrations and conventions
 
 All shape changes go through `engine/stateShape.js normalize()`, which runs on

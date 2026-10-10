@@ -98,6 +98,30 @@ test("a rate limit is told to the user instead, because waiting for a code that 
   expect(screen.queryByPlaceholderText("000000")).toBeNull();
 });
 
+test("OFFLINE says so, and does not pretend a code is coming", async () => {
+  // The bug this replaces: every failure that was not a rate limit was
+  // swallowed, so a phone with no signal advanced to a code field and
+  // waited for mail that had never been requested.
+  authCalls.nextOtpError = { message: "Network request failed" };
+  await render(<SignIn />);
+  await userEvent.type(screen.getByPlaceholderText("you@example.com"), "ethan@example.com");
+  await pressWhenEnabled("Email me a code");
+
+  expect(await screen.findByText(/check your connection/i)).toBeOnTheScreen();
+  expect(screen.queryByPlaceholderText("000000")).toBeNull();
+});
+
+test("a server that answered badly is spoken too, without blaming the wifi", async () => {
+  authCalls.nextOtpError = { status: 500, message: "Error sending magic link email" };
+  await render(<SignIn />);
+  await userEvent.type(screen.getByPlaceholderText("you@example.com"), "ethan@example.com");
+  await pressWhenEnabled("Email me a code");
+
+  expect(await screen.findByText(/went wrong/i)).toBeOnTheScreen();
+  expect(screen.queryByText(/connection/i)).toBeNull();
+  expect(screen.queryByPlaceholderText("000000")).toBeNull();
+});
+
 test("five digits sends nothing, and the button says so", async () => {
   await render(<SignIn />);
   const field = await askForCode("ethan@example.com");

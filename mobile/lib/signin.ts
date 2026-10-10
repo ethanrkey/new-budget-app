@@ -15,6 +15,14 @@
 // whatever was done to it from outside — which for everyone but the
 // author is nothing at all.
 
+// SIX, AND THIS NUMBER IS NOT OURS ALONE. It has to equal
+// Authentication -> Email OTP Length in the Supabase dashboard, which was
+// set to EIGHT until 2026-10-10. With the two disagreeing, the field caps
+// what you can enter at six, `normalizeCode` slices to six, and every
+// real eight-digit code is truncated into a wrong one — so sign-in fails
+// for everybody, with "that code is wrong" as the only clue, and the code
+// in the email is correct. Nothing in this repo can read that setting, so
+// it is written down in the spec under live configuration instead.
 export const CODE_LENGTH = 6;
 
 /** Supabase sends at most one OTP per address per minute. */
@@ -58,32 +66,61 @@ export function resendIn(lastSentAtMs: number | null, nowMs: number): number {
   return Math.max(0, RESEND_COOLDOWN_SECONDS - elapsed);
 }
 
-type AuthError = { message?: string; status?: number } | null | undefined;
+type AuthError = { message?: string; status?: number; code?: string } | null | undefined;
+
+/** The one failure that means "there is no account at that address". */
+function isUnknownAccount(error: NonNullable<AuthError>): boolean {
+  // With `shouldCreateUser: false`, GoTrue refuses an address it does not
+  // know with this specific signup error. It is the ONLY failure that is
+  // about who the user is rather than about whether the request worked.
+  return error.code === "otp_disabled" || /signups not allowed/i.test(error.message ?? "");
+}
+
+function isRateLimited(error: NonNullable<AuthError>): boolean {
+  return error.status === 429
+    || error.code === "over_email_send_rate_limit"
+    || /rate limit|too many|after \d+ seconds|security purposes/i.test(error.message ?? "");
+}
+
+function isUnreachable(error: NonNullable<AuthError>): boolean {
+  // supabase-js reports a dead network as a fetch failure with no HTTP
+  // status at all, which is exactly how it differs from a server that
+  // answered badly.
+  return (error.status == null || error.status === 0)
+    && /failed to fetch|network request failed|network error|load failed/i.test(error.message ?? "");
+}
 
 /**
- * What to say when the SEND fails — and the answer is usually nothing.
+ * What to say when the SEND fails. Returns a message to show INSTEAD of
+ * advancing to the code step, or null to advance.
  *
- * Supabase deliberately refuses to distinguish "no such account" from
- * "that account can only be reached another way", because an error that
- * distinguishes them is an account-enumeration oracle: type addresses
- * until one answers differently and you have learned who banks here. So
- * the screen advances to the code step either way and says a code is on
- * its way IF the address has an account.
+ * ONE failure is hidden, and only one: the address has no account.
+ * Supabase does distinguish that case — with `shouldCreateUser: false` it
+ * answers with a signup error naming it — so the concealment is this
+ * app's choice, not the server's. The reason to make it: an error that
+ * distinguishes "no account here" from "code sent" is an
+ * account-enumeration oracle, and someone with a list of addresses can
+ * learn which of them bank here by typing them in. So that one advances
+ * to the code step and says a code is on its way IF the address has an
+ * account, which is true.
  *
- * The one exception is a rate limit, and it is an exception because the
- * silence costs more than the leak. A rate-limited user is staring at a
- * code field waiting for mail that is definitely not coming; telling them
- * to wait a minute reveals only that the address was asked for recently,
- * which they already know because they are the one who asked.
- *
- * Returns a message to show INSTEAD of advancing, or null to advance.
+ * EVERY OTHER FAILURE IS SPOKEN, and the first version of this function
+ * got that wrong: it hid anything that was not a rate limit, so a dead
+ * network, a 500, and an SMTP outage all produced a confident "a code is
+ * on its way" and a code field that would wait forever. Those failures
+ * reveal nothing about who has an account — they are about whether the
+ * request happened at all — so there is nothing to protect and a user
+ * owed an answer.
  */
 export function sendFailureMessage(error: AuthError): string | null {
   if (!error) return null;
-  const rateLimited =
-    error.status === 429 || /rate|too many|after \d+ seconds|security purposes/i.test(error.message ?? "");
-  if (rateLimited) return "A code was just sent. Wait a minute before asking for another.";
-  return null;
+  if (isUnknownAccount(error)) return null;
+  if (isRateLimited(error)) return "A code was just sent. Wait a minute before asking for another.";
+  if (isUnreachable(error)) return "Can't reach the server. Check your connection and try again.";
+  // A server that answered, badly. Worth separating from the above
+  // because the user can do nothing about it and should not be told to
+  // check their wifi.
+  return "Something went wrong sending the code. Try again in a moment.";
 }
 
 /**

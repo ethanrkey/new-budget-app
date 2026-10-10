@@ -18,9 +18,12 @@ function prettyDate(iso) {
 function shortDate(iso) {
   return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric" });
 }
-function sortedSnaps(list) {
-  return [...(list || [])].sort((a, b) => (a.date === b.date ? 0 : a.date < b.date ? -1 : 1));
-}
+// `sortedSnaps` used to live here and is gone as of 2026-10-10. It was a
+// local repair for a missing guarantee: the lists arrive sorted now,
+// established in `assembleState` and in `normalize`, with an invariant
+// test that shuffles rows and asserts the order. Sorting again here was
+// what kept this bug invisible on the web while the phone — which has no
+// equivalent line — drew the same data backwards.
 
 const CARD = "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 flex flex-col gap-4";
 const LABEL = "text-[11px] font-medium uppercase tracking-wider text-gray-500";
@@ -51,7 +54,7 @@ export default function Dashboard({
 
   const logCat = logFor ? cats.find((c) => c.id === logFor) : null;
   const contribCat = contribFor ? cats.find((c) => c.id === contribFor) : null;
-  const logLatest = logCat ? sortedSnaps(state.balanceSnapshots?.[logCat.id]).at(-1) : null;
+  const logLatest = logCat ? (state.balanceSnapshots?.[logCat.id] ?? []).at(-1) : null;
 
   return (
     <div className="space-y-5">
@@ -60,7 +63,7 @@ export default function Dashboard({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <CheckingCard
           account={account}
-          snapshots={sortedSnaps(state.accountSnapshots?.[account.id])}
+          snapshots={state.accountSnapshots?.[account.id] ?? []}
           isDark={isDark}
           onUpdate={onUpdateAccountBalance}
           onUpdateSnapshot={(id, patch) => onUpdateAccountSnapshot(account.id, id, patch)}
@@ -243,7 +246,9 @@ function ChartTip({ active, payload, label, color }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs shadow-lg">
-      <div className="text-gray-500 mb-1">{prettyDate(label)}</div>
+      {/* The ISO date rides along on the datum. `label` is the x value,
+          which is a timestamp now that the axis is a real time axis. */}
+      <div className="text-gray-500 mb-1">{prettyDate(payload[0]?.payload?.date ?? label)}</div>
       {payload.map((p) => (
         <div key={p.dataKey} className="flex items-center gap-2 tabular-nums">
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.dataKey === "amount" ? color : "#9ca3af" }} />
@@ -273,11 +278,28 @@ function HistoryChart({ data, color, isDark, emptyHint }) {
     );
   }
   const axis = isDark ? "#6b7280" : "#9ca3af";
+  // A REAL TIME AXIS, not one point per slot.
+  //
+  // Recharts spaces a category axis evenly by index, so six days between
+  // readings drew the same width as one and the slope — the only thing
+  // this chart says — was wrong by whatever the gap happened to be. The
+  // axis was labeled with dates the whole time, which makes it the
+  // two-scales mistake in miniature: a chart that claims to be time and
+  // is not. Logging is irregular by nature, because you log when you
+  // happen to check your bank, so the gaps are the normal case and not an
+  // edge. Dropping the intermediate labels would have hidden the evidence
+  // and left the slope just as wrong.
+  const series = data.map((d) => ({ ...d, t: Date.parse(`${d.date}T00:00:00`) }));
   return (
     <div className="h-40 -mx-2">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 12 }}>
-          <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: axis }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={28} />
+        <LineChart data={series} margin={{ top: 8, right: 12, bottom: 0, left: 12 }}>
+          <XAxis
+            dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]}
+            tickFormatter={(t) => shortDate(new Date(t).toISOString().slice(0, 10))}
+            tick={{ fontSize: 11, fill: axis }} axisLine={false} tickLine={false}
+            interval="preserveStartEnd" minTickGap={28}
+          />
           <YAxis hide domain={["auto", "auto"]} />
           <Tooltip content={<ChartTip color={color} />} cursor={{ stroke: axis, strokeDasharray: "3 3" }} />
 

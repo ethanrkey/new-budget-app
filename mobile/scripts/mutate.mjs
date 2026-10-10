@@ -16,7 +16,7 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-10: 37 mutations, 37 killed, and every one of the 36
+// Measured 2026-10-10: 40 mutations, 40 killed, and every one of the 38
 // renderer tests dies to at least one. The twelve added that day were written
 // BECAUSE the run before them reported nine new sign-in tests that no
 // mutation could reach — the list only covers what someone thought to
@@ -112,9 +112,9 @@ const MUTATIONS = [
   ["a pasted code keeps its spaces", "lib/signin.ts",
    'return raw.replace(/\\D/g, "").slice(0, CODE_LENGTH);', "return raw.slice(0, CODE_LENGTH);"],
   ["the rate limit is swallowed like every other error", "lib/signin.ts",
-   'if (rateLimited) return "A code was just sent. Wait a minute before asking for another.";', "// mutated"],
+   '  if (isRateLimited(error)) return "A code was just sent. Wait a minute before asking for another.";', "  // mutated"],
   ["a failed send leaks which addresses have accounts", "lib/signin.ts",
-   "  return null;\n}\n\n/**\n * What to say when the VERIFY fails.", "  return error.message ?? null;\n}\n\n/**\n * What to say when the VERIFY fails."],
+   "  if (isUnknownAccount(error)) return null;", '  if (isUnknownAccount(error)) return "No account for that address.";'],
   ["a wrong code says nothing useful", "lib/signin.ts",
    'return "That code is wrong or has expired. Check the latest email, or ask for a new code.";',
    'return "Error.";'],
@@ -137,6 +137,13 @@ const MUTATIONS = [
    "void verify(next);", "void verify();"],
   ["a rejected code is auto-submitted again on the next keystroke", "components/SignIn.tsx",
    "next !== attempted.current", "true"],
+  ["every send failure is hidden, so offline looks like success", "lib/signin.ts",
+   "  if (isUnknownAccount(error)) return null;", "  return null;"],
+  ["a server error is swallowed instead of spoken", "lib/signin.ts",
+   '  return "Something went wrong sending the code. Try again in a moment.";', "  return null;"],
+  ["offline is reported as a server error", "lib/signin.ts",
+   '  if (isUnreachable(error)) return "Can\'t reach the server. Check your connection and try again.";',
+   "  // mutated"],
 ];
 
 const killedBy = new Map();

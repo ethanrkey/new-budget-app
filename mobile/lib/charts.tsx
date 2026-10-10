@@ -52,9 +52,22 @@ export function Sparkline({
     const ys = points.map((p) => p.amount);
     const lo = Math.min(...ys), hi = Math.max(...ys);
     const span = hi - lo || Math.abs(hi) || 1;
-    const x = (i: number) => points.length === 1
-      ? width / 2
-      : (i / (points.length - 1)) * (width - PAD * 2) + PAD;
+    // SPACED BY DATE, not by index. Readings are logged whenever you
+    // happen to check your bank, so the gaps between them are uneven by
+    // nature; placing them one per slot makes a six-day drift and a
+    // one-day drift draw the same slope, and slope is the whole message
+    // of a line this small. Same change as the web chart, same day —
+    // they are two renderings of one series and a disagreement between
+    // them is the thing that started this.
+    const t = points.map((p) => Date.parse(`${p.date}T00:00:00`));
+    const t0 = t[0], tSpan = t[t.length - 1] - t0;
+    const x = (i: number) => {
+      if (points.length === 1) return width / 2;
+      // Every reading on the same date: no time to spread over, so fall
+      // back to even spacing rather than dividing by zero.
+      const frac = tSpan > 0 ? (t[i] - t0) / tSpan : i / (points.length - 1);
+      return frac * (width - PAD * 2) + PAD;
+    };
     const y = (v: number) => plotH - PAD - ((v - lo) / span) * (plotH - PAD * 2);
     return { x, y, lo, hi };
   }, [points, width, plotH]);

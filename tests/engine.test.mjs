@@ -13,6 +13,7 @@ import { parseLedgerCSV } from "../src/engine/ledgerCsvImport.ts";
 import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../src/engine/backupShape.ts";
 import { isStale, makeRecoveryEnvelope, isRecoveryEnvelope } from "../src/engine/syncGuard.ts";
 import { roleSuffix } from "../src/engine/palette.ts";
+import { assembleState } from "../src/engine/entities.ts";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const money = (n) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -1879,6 +1880,75 @@ eq("no rows -> empty map", groupByDay([]).size, 0);
 console.log("\n== monthsDiff / addMonthsISO ==");
 check("monthsDiff(Sep 1 -> May 1) = 8", monthsDiff("2026-09-01", "2027-05-01"), 8);
 eq("addMonthsISO then monthsDiff round-trips", monthsDiff("2026-09-15", addMonthsISO("2026-09-15", 7)), 7);
+
+// ---------- date order is a GUARANTEE, not a coincidence ----------
+//
+// Rows come back from Postgres in no order. Every snapshot list is read as
+// a time series somewhere, so the join has to establish order rather than
+// inherit it. On 2026-10-10 it did not, and the phone drew four October
+// checking readings at the left of the sparkline while the header, which
+// picks by max(date), stayed right — a card disagreeing with itself.
+//
+// The shuffle is seeded so a failure is reproducible rather than a thing
+// that happened once on someone's machine.
+console.log("\n== snapshot lists come back in date order ==");
+{
+  const dates = ["2026-09-21", "2026-10-08", "2026-09-27", "2026-10-03", "2026-10-06", "2026-10-04"];
+  let seed = 20261010;
+  const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const shuffled = (arr) => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  const ascending = (list) => list.every((s, i) => i === 0 || list[i - 1].date <= s.date);
+
+  const rows = shuffled(dates).flatMap((date, n) => [
+    { kind: "accountSnapshot", id: `a-${date}`, schemaVersion: 1,
+      data: { accountId: PRIMARY_ACCOUNT_ID, id: `a-${date}`, date, amount: 100 + n } },
+    { kind: "snapshot", id: `s-${date}`, schemaVersion: 1,
+      data: { categoryId: "c-save", id: `s-${date}`, date, amount: 200 + n } },
+    { kind: "contribution", id: `k-${date}`, schemaVersion: 1,
+      data: { categoryId: "c-save", id: `k-${date}`, date, amount: 25 } },
+  ]);
+  rows.unshift({ kind: "account", id: PRIMARY_ACCOUNT_ID, schemaVersion: 1,
+    data: { id: PRIMARY_ACCOUNT_ID, name: "Checking", kind: "checking", balance: 0, balanceAsOf: "2026-09-21", order: 0 } });
+  rows.unshift({ kind: "category", id: "c-save", schemaVersion: 1,
+    data: { id: "c-save", name: "Savings", kind: "asset", assetKind: "savings", order: 0 } });
+
+  // The input really is out of order, or the test proves nothing.
+  const givenOrder = rows.filter((r) => r.kind === "accountSnapshot").map((r) => r.data.date);
+  eq("the fixture rows are genuinely shuffled", ascending(givenOrder.map((date) => ({ date }))), false);
+
+  const joined = assembleState(rows);
+  eq("assembleState sorts accountSnapshots", ascending(joined.accountSnapshots[PRIMARY_ACCOUNT_ID]), true);
+  eq("assembleState sorts balanceSnapshots", ascending(joined.balanceSnapshots["c-save"]), true);
+  eq("assembleState sorts contributionLog", ascending(joined.contributionLog["c-save"]), true);
+  eq("the anchor is the newest reading, not the last row",
+    joined.accounts[0].balanceAsOf, "2026-10-08");
+
+  // normalize is the other way in — the JSON import and the recovery
+  // envelope never touch assembleState.
+  const fromDocument = normalize({
+    settings: {},
+    accounts: [{ id: PRIMARY_ACCOUNT_ID, name: "Checking", kind: "checking", balance: 0, balanceAsOf: "2026-09-21", order: 0 }],
+    trackerCategories: [{ id: "c-save", name: "Savings", kind: "asset", assetKind: "savings", order: 0 }],
+    accountSnapshots: { [PRIMARY_ACCOUNT_ID]: shuffled(dates).map((date) => ({ id: `a-${date}`, date, amount: 1 })) },
+    balanceSnapshots: { "c-save": shuffled(dates).map((date) => ({ id: `s-${date}`, date, amount: 2 })) },
+  });
+  eq("normalize sorts accountSnapshots", ascending(fromDocument.accountSnapshots[PRIMARY_ACCOUNT_ID]), true);
+  eq("normalize sorts balanceSnapshots", ascending(fromDocument.balanceSnapshots["c-save"]), true);
+
+  // The property the renderers actually depend on: first is oldest, last
+  // is newest, so a sparkline reads left to right and a reversed history
+  // reads newest first.
+  const snaps = fromDocument.accountSnapshots[PRIMARY_ACCOUNT_ID];
+  eq("oldest first", snaps[0].date, "2026-09-21");
+  eq("newest last", snaps[snaps.length - 1].date, "2026-10-08");
+}
 
 console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
 process.exit(failures === 0 ? 0 : 1);

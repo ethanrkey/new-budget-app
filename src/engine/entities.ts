@@ -152,23 +152,47 @@ export function assembleState(entities: Entity[]): RawState {
 
   const settings = (entities.find((e) => e.kind === "settings")?.data ?? {}) as Settings;
 
+  // DATE ORDER IS ESTABLISHED HERE, not assumed by whoever renders it.
+  //
+  // `entities` arrives in whatever order the rows came back, and a
+  // Postgres select without an `order by` has no order at all — it is
+  // free to change between two identical queries. Every one of these
+  // three lists is read as a time series somewhere (a sparkline, a
+  // history list, a loan's progress), so row order leaking into them is a
+  // chart drawn backwards. It did exactly that on the phone's checking
+  // card on 2026-10-10: four October readings rendered at the left of the
+  // sparkline and the bottom of the history, while the header — which
+  // picks by `max(date)` rather than by position — stayed correct, so the
+  // card disagreed with itself.
+  //
+  // Sorted here AND in `normalize`'s `dedupeByDate`, deliberately. This
+  // function is exported and used without normalize by the verification
+  // and audit scripts, where an unordered list makes a comparison lie;
+  // normalize is the guarantee for every other path in, including the
+  // JSON import and the recovery envelope.
+  const byDate = <T extends { date: string }>(list: T[]) =>
+    list.sort((a, b) => a.date.localeCompare(b.date));
+
   const accountSnapshots: Record<string, BalanceSnapshot[]> = {};
   for (const row of byKind<{ accountId: string } & BalanceSnapshot>("accountSnapshot")) {
     const { accountId, ...snap } = row;
     (accountSnapshots[accountId] ||= []).push(snap);
   }
+  for (const list of Object.values(accountSnapshots)) byDate(list);
 
   const balanceSnapshots: Record<string, BalanceSnapshot[]> = {};
   for (const row of byKind<{ categoryId: string } & BalanceSnapshot>("snapshot")) {
     const { categoryId, ...snap } = row;
     (balanceSnapshots[categoryId] ||= []).push(snap);
   }
+  for (const list of Object.values(balanceSnapshots)) byDate(list);
 
   const contributionLog: Record<string, Contribution[]> = {};
   for (const row of byKind<{ categoryId: string } & Contribution>("contribution")) {
     const { categoryId, ...c } = row;
     (contributionLog[categoryId] ||= []).push(c);
   }
+  for (const list of Object.values(contributionLog)) byDate(list);
 
   const monthlyActuals: Record<string, Record<MonthKey, number>> = {};
   for (const row of byKind<{ itemId: string; month: MonthKey; amount: number }>("actual"))

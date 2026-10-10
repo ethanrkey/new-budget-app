@@ -33,8 +33,11 @@ jest.mock("@react-native-community/datetimepicker", () => {
 export const authCalls: {
   otp: unknown[];
   verify: unknown[];
-  nextOtpError: { message: string; status: number } | null;
-  nextVerifyError: { message: string; status: number } | null;
+  // `status` is optional on purpose: supabase-js reports a dead network
+  // as a fetch failure with no HTTP status at all, and that absence is
+  // exactly what the offline branch keys on.
+  nextOtpError: { message: string; status?: number; code?: string } | null;
+  nextVerifyError: { message: string; status?: number; code?: string } | null;
 } = { otp: [], verify: [], nextOtpError: null, nextVerifyError: null };
 
 jest.mock("../lib/supabase", () => {

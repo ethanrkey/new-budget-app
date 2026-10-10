@@ -171,7 +171,15 @@ function stripRetiredColor(cat: TrackerCategory): TrackerCategory {
 function dedupeByDate(list: BalanceSnapshot[]): BalanceSnapshot[] {
   const byDate = new Map<string, BalanceSnapshot>();
   for (const s of list) byDate.set(s.date, s); // later wins, as a correction
-  return [...byDate.values()];
+  // SORTED, and that is a guarantee the rest of the app is allowed to rely
+  // on. Added 2026-10-10 after the phone drew its checking history out of
+  // order: `assembleState` builds these lists in Postgres row order, which
+  // has none, and the web had been hiding it by sorting again at the one
+  // place it happened to render them. A list whose order is meaningful in
+  // four readers and guaranteed in none is a bug waiting for the fifth.
+  // ISO dates sort correctly as strings, which is most of why the format
+  // was chosen.
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // Migration 10 (2026-10-02): drop per-owner containers that hold nothing.

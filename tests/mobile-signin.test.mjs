@@ -74,28 +74,55 @@ const not = (label, cond) => eq(label, !!cond, false);
 
 // ---- what a failed SEND is allowed to reveal -------------------------
 {
-  // The rule: say nothing that distinguishes one account from another.
+  // Exactly ONE failure is hidden: the address has no account. Supabase
+  // does distinguish it — the concealment is this app's — and the reason
+  // is that an error which distinguishes "no account" from "code sent"
+  // lets anyone with a list of addresses learn who banks here.
   eq("no error means advance", sendFailureMessage(null), null);
-  eq("a nonexistent account advances silently", sendFailureMessage({ status: 422, message: "Signups not allowed for otp" }), null);
-  eq("a social-only account advances silently", sendFailureMessage({ status: 400, message: "Unable to validate email address" }), null);
-  eq("an unknown failure advances silently", sendFailureMessage({ status: 500, message: "boom" }), null);
+  eq("a nonexistent account advances silently",
+    sendFailureMessage({ status: 422, message: "Signups not allowed for otp" }), null);
+  eq("...by error code too, not only by wording",
+    sendFailureMessage({ status: 422, code: "otp_disabled", message: "whatever GoTrue says next year" }), null);
 
-  // The exception, and the reason for it: a rate-limited user is staring
-  // at a code field waiting for mail that is definitely not coming.
+  // EVERYTHING ELSE IS SPOKEN. The first version of this hid every
+  // non-rate-limit failure, so a dead network produced "a code is on its
+  // way" and a code field that would wait forever.
+  is("OFFLINE is spoken", /check your connection/i.test(
+    sendFailureMessage({ message: "Network request failed" })));
+  is("a fetch failure with no status is offline, not a server error", /check your connection/i.test(
+    sendFailureMessage({ status: 0, message: "Failed to fetch" })));
+  is("iOS wording for a dead network is caught too", /check your connection/i.test(
+    sendFailureMessage({ message: "Load failed" })));
+
+  is("a 500 is spoken, and does NOT blame the user's wifi", /went wrong/i.test(
+    sendFailureMessage({ status: 500, message: "Error sending magic link email" })));
+  is("an SMTP outage is a server error, not a missing account", /went wrong/i.test(
+    sendFailureMessage({ status: 500, message: "Error sending confirmation email" })));
+  not("a 500 is not reported as offline", /connection/i.test(
+    sendFailureMessage({ status: 500, message: "Error sending magic link email" })));
+
   is("a 429 is spoken aloud", /wait a minute/i.test(sendFailureMessage({ status: 429, message: "x" })));
   is("the 60-second wording is caught without the status",
     /wait a minute/i.test(sendFailureMessage({ message: "For security purposes, you can only request this after 60 seconds" })));
-  is("the word 'rate' is caught too", /wait a minute/i.test(sendFailureMessage({ message: "email rate limit exceeded" })));
+  is("the send-rate error code is caught too",
+    /wait a minute/i.test(sendFailureMessage({ code: "over_email_send_rate_limit", message: "" })));
 
-  // The property that matters more than any single case: for every
-  // failure that is NOT a rate limit, the screen behaves identically.
-  const quiet = [
+  // The property that matters: exactly one failure is indistinguishable
+  // from success, and it is the one about account existence.
+  const hidden = [
     { status: 422, message: "Signups not allowed for otp" },
-    { status: 400, message: "Unable to validate email address: invalid format" },
-    { status: 404, message: "User not found" },
-    { status: 500, message: "internal error" },
+    { status: 422, code: "otp_disabled", message: "" },
   ].map(sendFailureMessage);
-  is("every non-rate-limit failure is indistinguishable", quiet.every((m) => m === null));
+  is("only the account-existence failures are hidden", hidden.every((m) => m === null));
+
+  const spoken = [
+    { message: "Network request failed" },
+    { status: 429, message: "rate limit" },
+    { status: 500, message: "Error sending magic link email" },
+    { status: 400, message: "Unable to validate email address: invalid format" },
+    { status: 503, message: "service unavailable" },
+  ].map(sendFailureMessage);
+  is("every other failure says something", spoken.every((m) => typeof m === "string" && m.length > 0));
 }
 
 // ---- what a failed VERIFY says ---------------------------------------
