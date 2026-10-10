@@ -967,6 +967,39 @@ fifth tab never needs a migration.
   starts from a click on the actual surface, and the harness asserts what
   the handler RECEIVED, not just what the form renders.
 
+### A harness landmine: two `fireEvent.changeText` calls destroy the renderer
+
+Found 2026-10-10 while adding auto-submit to the sign-in code field.
+
+**The rule: in `mobile/__tests__`, drive every text field with
+`userEvent.type`, `userEvent.paste` or `userEvent.clear`, never with
+`fireEvent.changeText`.**
+
+The second `fireEvent.changeText` against a controlled `TextInput`
+detaches the tree. Nothing fails at that moment — the test doing it
+passes. The NEXT test's `render()` returns null, and every query in it
+fails with "unable to find an element", so the failures all land in
+tests that are correct and the broken one is green. Eight failures were
+attributed to a feature that worked.
+
+Reproduced on a four-line component with a `useState` and a `TextInput`
+and no app code in it, so it is the harness — some interaction of
+React 19, `@testing-library/react-native` 14 and `jest-expo` — and not
+any screen. `userEvent.type` types key by key and survives it;
+`userEvent.paste` is the single-event case.
+
+Why it had never bitten: nothing in `ledger.test.tsx` or
+`sheets.test.tsx` types twice in one test. Audited on the day — zero
+`fireEvent.changeText` calls in either file.
+
+This is the third instance of the standing shape in this repo, and the
+worst of them: **a verification tool that fails somewhere other than the
+fault.** The fixture server that reported a working Vite as down, the
+mutation runner that called every mutation a survivor, and now a test
+harness that blames the next test. In each case the tool was trusted
+because it was green, and in each case the fix was to reproduce the
+tool's own behavior on something with a known answer.
+
 ## 9. Maintenance rules (standing — apply to every commit)
 
 1. **This spec matches the code.** A change that makes it wrong updates it in

@@ -16,7 +16,7 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-09: 34 mutations, 34 killed, and every one of the 32
+// Measured 2026-10-10: 37 mutations, 37 killed, and every one of the 36
 // renderer tests dies to at least one. The twelve added that day were written
 // BECAUSE the run before them reported nine new sign-in tests that no
 // mutation could reach — the list only covers what someone thought to
@@ -121,15 +121,22 @@ const MUTATIONS = [
   ["the resend cooldown never elapses", "lib/signin.ts",
    "return Math.max(0, RESEND_COOLDOWN_SECONDS - elapsed);", "return RESEND_COOLDOWN_SECONDS;"],
   ["the send never advances to the code step", "components/SignIn.tsx",
-   'if (!resending) { setCode(""); setStep("code"); }', "// mutated"],
+   'if (!resending) setStep("code");', "// mutated"],
   ["the code step forgets which address it is waiting on", "components/SignIn.tsx",
-   "email: clean,\n      token: normalizeCode(code),", 'email: "someone@else.com",\n      token: normalizeCode(code),'],
+   "email: clean,\n      token,", 'email: "someone@else.com",\n      token,'],
   ["going back wipes the address you mistyped", "components/SignIn.tsx",
-   'onPress={() => { setStep("email"); setError(null); }}', 'onPress={() => { setStep("email"); setError(null); setEmail(""); }}'],
+   'onPress={() => { setStep("email"); setError(null); attempted.current = null; }}', 'onPress={() => { setStep("email"); setError(null); attempted.current = null; setEmail(""); }}'],
   ["resend is pressable during the cooldown", "components/SignIn.tsx",
    "disabled={busy || cooldown > 0}", "disabled={busy}"],
   ["sign-in creates an account for a typo", "components/SignIn.tsx",
    "options: { shouldCreateUser: false },", "options: { shouldCreateUser: true },"],
+  ["the sixth digit does not submit on its own", "components/SignIn.tsx",
+   "    if (next.length === CODE_LENGTH && !busy && next !== attempted.current) {\n      void verify(next);\n    }",
+   "    // mutated"],
+  ["auto-submit sends the stale state, not the digit just typed", "components/SignIn.tsx",
+   "void verify(next);", "void verify();"],
+  ["a rejected code is auto-submitted again on the next keystroke", "components/SignIn.tsx",
+   "next !== attempted.current", "true"],
 ];
 
 const killedBy = new Map();

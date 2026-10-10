@@ -40,6 +40,11 @@ export default function SignIn() {
   const [sentAt, setSentAt] = useState<number | null>(null);
   const [cooldown, setCooldown] = useState(0);
   const codeField = useRef<TextInput>(null);
+  // The last code this screen has already tried. Auto-submit fires once
+  // per distinct code and never again for the same one, which is what
+  // keeps a rejected code from being re-sent forever while the user looks
+  // at it.
+  const attempted = useRef<string | null>(null);
 
   // A countdown rather than a disabled button with no explanation: the
   // one-per-minute limit is Supabase's, and a button that does nothing
@@ -71,23 +76,60 @@ export default function SignIn() {
     setBusy(false);
     if (blocked) { setError(blocked); return; }
     setSentAt(Date.now());
-    if (!resending) { setCode(""); setStep("code"); }
+    // Clear on EVERY send, including a resend: the previous code is dead
+    // the moment a new one is issued, and leaving six stale digits in the
+    // field is both a thing to delete by hand and a code the auto-submit
+    // has already tried and will not try again.
+    setCode("");
+    attempted.current = null;
+    if (!resending) setStep("code");
     setTimeout(() => codeField.current?.focus(), 0);
   }
 
-  async function verify() {
-    if (busy || !codeReady(code)) return;
+  // `entered` lets the auto-submit pass the digit it just received:
+  // `setCode` has not landed in state yet at that moment, and reading
+  // the stale value would verify five digits.
+  async function verify(entered?: string) {
+    const token = normalizeCode(entered ?? code);
+    if (busy || !codeReady(token)) return;
+    attempted.current = token;
     setBusy(true);
     setError(null);
     const { error: err } = await supabase.auth.verifyOtp({
       email: clean,
-      token: normalizeCode(code),
+      token,
       type: "email",
     });
     setBusy(false);
     // On success there is nothing to do: the auth listener swaps this
     // screen for the app. Only the failure needs saying.
     if (err) setError(verifyFailureMessage(err));
+  }
+
+  // Submit on the sixth digit, however it arrived — typed, pasted, or
+  // dropped in whole by the iOS one-time-code keyboard suggestion. A
+  // six-digit field has exactly one thing you can do when it is full, and
+  // making the user find a button afterward is a step that exists only
+  // because the screen did not notice.
+  //
+  // Done here rather than in an effect on `code` DELIBERATELY. An effect
+  // would also run when `busy` flips back after a rejection, so every
+  // guard against re-sending a dead code would be a guard against an
+  // infinite loop — one bad edit away from the app hammering the auth
+  // endpoint. A change handler only runs when something changed, so the
+  // loop cannot exist to be guarded against.
+  //
+  // The button stays, and it is not decoration: a code that was rejected
+  // is still sitting in the field, `attempted` already holds it, and
+  // auto-submit will correctly refuse to send it again. Pressing is how
+  // you retry the same digits — after a resend, or when the first attempt
+  // failed for a reason that has since passed.
+  function onCodeChange(raw: string) {
+    const next = normalizeCode(raw);
+    setCode(next);
+    if (next.length === CODE_LENGTH && !busy && next !== attempted.current) {
+      void verify(next);
+    }
   }
 
   return (
@@ -145,14 +187,14 @@ export default function SignIn() {
             autoComplete="one-time-code"
             maxLength={CODE_LENGTH}
             value={code}
-            onChangeText={(raw) => setCode(normalizeCode(raw))}
-            onSubmitEditing={verify}
+            onChangeText={onCodeChange}
+            onSubmitEditing={() => verify()}
             returnKeyType="go"
           />
           {error && <Text style={styles.err}>{error}</Text>}
           <Pressable
             style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed, (busy || !codeReady(code)) && styles.disabled]}
-            onPress={verify}
+            onPress={() => verify()}
             disabled={busy || !codeReady(code)}
             accessibilityRole="button"
             accessibilityLabel="Sign in"
@@ -161,7 +203,7 @@ export default function SignIn() {
           </Pressable>
 
           <View style={styles.row}>
-            <Pressable onPress={() => { setStep("email"); setError(null); }} accessibilityRole="button" accessibilityLabel="Use a different address">
+            <Pressable onPress={() => { setStep("email"); setError(null); attempted.current = null; }} accessibilityRole="button" accessibilityLabel="Use a different address">
               <Text style={styles.link}>Use a different address</Text>
             </Pressable>
             <Pressable onPress={() => send(true)} disabled={busy || cooldown > 0} accessibilityRole="button" accessibilityLabel="Resend the code">
