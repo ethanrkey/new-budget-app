@@ -16,7 +16,7 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-11: 54 mutations, 54 killed, and every one of the 48
+// Measured 2026-10-11: 59 mutations, 59 killed, and every one of the 54
 // renderer tests dies to at least one. The twelve added that day were written
 // BECAUSE the run before them reported nine new sign-in tests that no
 // mutation could reach — the list only covers what someone thought to
@@ -31,7 +31,11 @@ import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 /** Plain-node suites that import mobile/lib directly, relative to mobile/. */
-const NODE_SUITES = ["tests/mobile-signin.test.mjs", "tests/mobile-edit.test.mjs"];
+const NODE_SUITES = [
+  "tests/mobile-signin.test.mjs",
+  "tests/mobile-edit.test.mjs",
+  "tests/mobile-firstrun.test.mjs",
+];
 
 /** [what is broken, file, find, replace-with] */
 const MUTATIONS = [
@@ -153,6 +157,22 @@ const MUTATIONS = [
    "onPress={() => setActive(s.id)}", "onPress={() => {}}"],
   ["the tour button inside About is inert", "components/About.tsx",
    'onPress={onStartTour} accessibilityRole="button"', 'onPress={() => {}} accessibilityRole="button"'],
+
+  // --- the first-run signpost, 2026-10-11.
+  ["a new account is never recognized, so the signpost never shows", "lib/firstRun.ts",
+   "  if ((state.recurring?.length ?? 0) > 0) return false;", "  return false;"],
+  ["a used account is called new, so the signpost never goes away", "lib/firstRun.ts",
+   "  s.id.startsWith(\"seed-\") && s.amount === 0;", "  true;"],
+  // Renames the middle step's button. A mutation that only ADDED an
+  // unused field was tried first and survived, correctly — it broke
+  // nothing, which is what a useless mutation looks like.
+  ["the income step's button is renamed out from under the screen", "lib/firstRun.ts",
+   '    cta: "Add income",', '    cta: "Add money",'],
+  ["the first-run buttons are wired to the wrong handlers", "components/FirstRun.tsx",
+   "const press = { balance: onLogBalance, income: onAddIncome, bills: onAddBill } as const;",
+   "const press = { balance: onAddBill, income: onLogBalance, bills: onAddIncome } as const;"],
+  ["the first-run buttons are live while offline", "components/FirstRun.tsx",
+   "disabled={!online}", "disabled={false}"],
 
   // --- Google, and the export filename, both added 2026-10-11.
   ["a dismissed Google sheet is reported as a failure", "lib/signin.ts",

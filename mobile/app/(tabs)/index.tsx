@@ -9,9 +9,13 @@ import BottomSheet from "../../components/BottomSheet";
 import DatePicker from "../../components/DatePicker";
 import ScopeSheet from "../../components/ScopeSheet";
 import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
+import FirstRun from "../../components/FirstRun";
+import LogBalance, { currently } from "../../components/LogBalance";
 import { T, money } from "../../lib/theme";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
 import { ledgerHorizonOf, primaryAccount } from "../../../src/engine/model.ts";
+import { updateAccountBalance } from "../../../src/engine/mutate.ts";
+import { isNewAccount } from "../../lib/firstRun";
 import {
   rowTarget, overrideAt, scopeActions, orphansIfSaved,
   saveItem, saveOccurrence, resetOccurrence, removeItem,
@@ -32,6 +36,10 @@ export default function LedgerScreen() {
   // whole and only split by the named helpers in lib/edit.
   const [scopeFor, setScopeFor] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetMode | null>(null);
+  const [logging, setLogging] = useState(false);
+  // A brand-new account, which the phone could not meet until Google
+  // sign-in made accounts creatable on the device. See lib/firstRun.
+  const fresh = isNewAccount(state!);
 
   const effective = horizon ?? ledgerHorizonOf(state!);
   const account = primaryAccount(state!);
@@ -151,7 +159,17 @@ export default function LedgerScreen() {
 
   return (
     <View style={styles.wrap}>
-      {calendar ? (
+      {/* A fresh account gets the signpost in place of a list that has
+          nothing to show and no way to say why. Checked before the
+          calendar too: an empty month grid explains even less. */}
+      {fresh ? (
+        <FirstRun
+          online={online}
+          onLogBalance={() => setLogging(true)}
+          onAddIncome={() => setSheet({ kind: "add" })}
+          onAddBill={() => setSheet({ kind: "add" })}
+        />
+      ) : calendar ? (
         <SectionList
           sections={[{ title: "", data: [0] }]}
           keyExtractor={() => "cal"}
@@ -189,6 +207,27 @@ export default function LedgerScreen() {
             </Pressable>
           )}
           ListEmptyComponent={<Text style={styles.empty}>Nothing projected in this window.</Text>}
+        />
+      )}
+
+      {/* The same balance modal the Dashboard uses, reachable from the
+          first-run block so step one does not mean "go and find another
+          tab". Same mutator, same warning copy, no second way to do it. */}
+      {logging && (
+        <LogBalance
+          title={`Update ${account.name} balance`}
+          currentLabel={currently(account.balance, account.balanceAsOf)}
+          cta="Confirm"
+          warn
+          busy={saving}
+          onClose={() => setLogging(false)}
+          onSubmit={async (amount, date) => {
+            const okSaved = await commit(
+              (st) => updateAccountBalance(st, primaryAccount(st).id, amount, date),
+              `${account.name} balance, as of ${date}`
+            );
+            if (okSaved) setLogging(false);
+          }}
         />
       )}
 

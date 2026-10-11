@@ -366,6 +366,15 @@ balance updates). Nothing is append-only.
   purge date back for ever, which is a deletion that never happens wearing
   the costume of one that does.
 
+  **An Apple gap, recorded 2026-10-11 before it can be forgotten.** When
+  Sign in with Apple ships, deletion acquires a second obligation:
+  revoking the user's Apple tokens. The purge deletes the `auth.users`
+  row, which removes OUR record and leaves Apple's grant in place —
+  Apple requires the revoke call, and it needs the `.p8` signing key, so
+  it belongs in `purge_due_accounts()` or an edge function beside it,
+  never in a client. Nothing here is wrong today, because nothing signs
+  in with Apple yet. It becomes wrong the day something does.
+
   **No email confirmation.** Written 2026-10-02 because the project's SMTP
   was down and a confirmation that silently never arrives is worse than
   none — it would look like deletion failed while the request sat
@@ -2029,6 +2038,33 @@ a port.
 
     **4.8 ties this to Google:** Google is wired and working on the
     phone, and it must not reach the App Store before this does.
+
+    **A SECOND CORRECTION, and this one restores the key.** "No Services
+    ID, no signing key" is right for SIGNING IN and wrong for DELETING.
+    Apple requires an app offering Sign in with Apple to **revoke the
+    user's Apple tokens when the account is deleted** — and the
+    revocation endpoint is authenticated with a client secret JWT
+    signed by the `.p8` key, so it needs the key, the Team ID and the
+    Key ID after all. The native sign-in flow needs none of that; the
+    deletion flow does.
+
+    What that means in this app, where deletion is already built and
+    already verified end to end:
+
+    - `signInAsync` returns an `authorizationCode`. It has to be
+      captured at sign-in and exchanged for an Apple refresh token,
+      because the native flow never gives Supabase a provider refresh
+      token to revoke later. Nothing captures it today.
+    - The revoke call belongs with `purge_due_accounts()`, server-side,
+      because it needs the signing key and a key in a client is not a
+      key. That is an edge function with the `.p8` in its secrets.
+    - It is **not** optional and it is **not** covered by the existing
+      purge: deleting the `auth.users` row removes our record of the
+      user and leaves Apple's grant standing.
+
+    Sized honestly, this is the largest remaining piece of the Apple
+    work — bigger than sign-in itself — and it only exists if Sign in
+    with Apple ships. Its own item, not a line in the sign-in one.
 
 Not built, and not yet decided either way: the native iOS 26 Liquid
 Glass tab bar via `expo-router/native-tabs`. It needs a `ThemeProvider` —
