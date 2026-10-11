@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { T } from "../lib/theme";
 import { ABOUT_SECTIONS, type AboutBlock } from "../../src/content/about.ts";
@@ -60,6 +60,21 @@ function Block({ block }: { block: AboutBlock }) {
 export default function About({ onStartTour, onClose }: { onStartTour: () => void; onClose: () => void }) {
   const [active, setActive] = useState(ABOUT_SECTIONS[0]!.id);
   const section = ABOUT_SECTIONS.find((s) => s.id === active) ?? ABOUT_SECTIONS[0]!;
+  const tabs = useRef<ScrollView>(null);
+  const body = useRef<ScrollView>(null);
+  const chipAt = useRef<Record<string, number>>({});
+
+  // Bring the chosen tab into view, and put the new section at its top.
+  //
+  // Thirteen chips do not fit on a 390pt screen, so tapping the last
+  // visible one left it half off the right edge with no sign that more
+  // existed — and leaving the body scrolled where the PREVIOUS section
+  // ended drops you into the middle of the new one.
+  useEffect(() => {
+    const x = chipAt.current[active];
+    if (x != null) tabs.current?.scrollTo({ x: Math.max(0, x - 16), animated: true });
+    body.current?.scrollTo({ y: 0, animated: false });
+  }, [active]);
 
   return (
     <View style={styles.wrap}>
@@ -70,11 +85,26 @@ export default function About({ onStartTour, onClose }: { onStartTour: () => voi
         </Pressable>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+      {/* THE ROW IS HELD TO ITS OWN HEIGHT. Without this it is a flex
+          child of a `flex: 1` column with nothing else claiming the
+          space, so it grows to fill the screen — and because a
+          ScrollView's content stretches across its cross axis by
+          default, every pill grew with it. At `borderRadius: 999` a tall
+          pill is an oval, and a short label in a tall pill is a circle,
+          which is exactly what it looked like. The height changed per
+          tab because the section below it changed height. */}
+      <View style={styles.chipRow} testID="about-tabs">
+        <ScrollView
+          ref={tabs}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}
+        >
         {ABOUT_SECTIONS.map((s, i) => (
           <Pressable
             key={s.id}
             onPress={() => setActive(s.id)}
+            onLayout={(e) => { chipAt.current[s.id] = e.nativeEvent.layout.x; }}
             style={[styles.chip, s.id === active && styles.chipOn]}
             accessibilityRole="button"
             accessibilityState={{ selected: s.id === active }}
@@ -83,10 +113,11 @@ export default function About({ onStartTour, onClose }: { onStartTour: () => voi
             <Text style={[styles.chipText, s.id === active && styles.chipTextOn]}>{i + 1}. {s.title}</Text>
           </Pressable>
         ))}
-      </ScrollView>
+        </ScrollView>
+      </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.h2}>{section.title}</Text>
+      <ScrollView ref={body} contentContainerStyle={styles.body}>
+        <Text style={styles.h2} accessibilityRole="header">{section.title}</Text>
         {section.body.map((b, i) => <Block key={i} block={b} />)}
 
         {/* The tour lives inside About for the same reason it does on the
@@ -101,13 +132,19 @@ export default function About({ onStartTour, onClose }: { onStartTour: () => voi
   );
 }
 
+const CHIP_H = 34;
+
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: T.bg },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
   title: { color: T.text, fontSize: 18, fontWeight: "700" },
   done: { color: T.brass, fontSize: 15, fontWeight: "600" },
-  chips: { paddingHorizontal: 12, gap: 6, paddingBottom: 10 },
-  chip: { borderWidth: 1, borderColor: T.border, backgroundColor: T.surface, borderRadius: 999, paddingHorizontal: 12, minHeight: 34, justifyContent: "center" },
+  // CHIP_H is the pill, ROW_H is the pill plus the space under it. Both
+  // are fixed numbers rather than minimums: a minimum is what let the
+  // flex layout stretch them.
+  chipRow: { height: CHIP_H + 10, flexGrow: 0, flexShrink: 0 },
+  chips: { paddingHorizontal: 12, gap: 6, alignItems: "center" },
+  chip: { borderWidth: 1, borderColor: T.border, backgroundColor: T.surface, borderRadius: 999, paddingHorizontal: 12, height: CHIP_H, justifyContent: "center" },
   chipOn: { backgroundColor: T.text, borderColor: T.text },
   chipText: { color: T.dim, fontSize: 12 },
   chipTextOn: { color: T.bg, fontWeight: "700" },

@@ -451,10 +451,13 @@ written here in the same sitting** — there is no other record of it.
 
 **Platform behavior that is nobody's setting**
 
-- **Gmail does not get iOS one-time-code autofill.** Apple reads
-  Mail.app, not Gmail's app, so a Gmail user types the six digits. Known
-  and accepted — it is why the field also accepts a paste and strips
-  whatever comes with it.
+- **iOS one-time-code autofill DOES work with Gmail** — measured on the
+  device 2026-10-11, the code appeared above the keyboard. This entry
+  previously said the opposite, on the common belief that Apple only
+  reads Mail.app; that was wrong and is corrected rather than deleted,
+  because it is the kind of claim that gets re-asserted. The field still
+  accepts a paste and strips whatever comes with it, which costs nothing
+  and covers the cases autofill misses.
 
 **Vercel**
 
@@ -1365,6 +1368,17 @@ what, not by size.
    screen. Still never pressed: **Export** (mobile item 9) and the
    **rebuilt loan card**.
 5. Watch the purge actually delete something — *Later* item 2.
+   **IN FLIGHT 2026-10-11.** A throwaway account exists
+   (`ethanrkey23+kbtest@gmail.com`, created on the web by magic link),
+   was signed into on the phone with a code, and was deleted from mobile
+   Settings — the first real press of either the Settings screen or
+   in-app deletion, and both worked. `purge_after` is backdated to
+   2026-10-11 00:14 UTC and confirmed in `account_deletions`. What the
+   03:17 run has to show, and what nobody has ever watched: the
+   `auth.users` row for `242a171d-db90-4d30-bc57-85b8f82dde64` gone AND
+   no `budget_entities` rows left under that id. The cascade is the
+   untested half — a purge reports `succeeded` either way.
+
    **Half-confirmed 2026-10-09:** `cron.job_run_details` shows six
    consecutive nights, 2026-10-04 through 2026-10-09, every one
    `succeeded` at 03:17 with `1 row`. So the schedule is real and the
@@ -1377,12 +1391,59 @@ what, not by size.
 **C. "Useful to someone who is not the author" — now requirements, not polish**
 
 6. Copy pass in the author's voice, web and mobile — *Later* item 6,
-   which absorbs the two deferred copy items (*Later* item 0).
+   which absorbs the two deferred copy items (*Later* item 0) and the
+   nine web-only lines enumerated below.
+
+   **`src/content/about.ts` is shared by both clients and nine of its
+   lines describe a web you cannot do on a phone.** Found 2026-10-11 by
+   reading the About screen on the device. Listed by line so the voice
+   pass does not have to find them again:
+
+   - **:42** "On a computer you can drag the four tabs into whatever
+     order you like" — tab reorder is deliberately not ported.
+   - **:62** "+ Add transaction opens the editor" — the phone's control
+     is not called that.
+   - **:74** "⚡ Quick entry is the same form without the modal closing"
+     — the phone has no quick entry at all. It is mobile backlog item 3.
+   - **:86** "Click any item name" — tap.
+   - **:90** "a click on any day for the detail" — tap.
+   - **:93** "Click it to see what's in there — the bar chart opens the
+     rows in place, and the pie lists them beside the chart" — **this
+     one is wrong on the WEB too. There is no pie.** It was dropped
+     2026-10-09 and the copy describing it was not. The only doc rot in
+     this list that is not a platform difference, and the standing rule
+     it breaks — grep for a feature's name before you commit its
+     deletion — is already written down one section up.
+   - **:107** "Rows can be dragged or arrow-moved within their section.
+     Click a row name" — drag is not ported, arrow-move is web-only.
+   - **:194** "Appearance — Light or dark, remembered PER DEVICE" — the
+     phone is dark only, by decision, so this offers a control that is
+     not there.
+   - **:212** "It's one click and it has saved this project before."
+
+   **The mechanism to prefer, when the pass happens:** a per-block
+   platform variant inside `about.ts` rather than a second file. One
+   file still holds both clients' words, so neither can go stale without
+   the other being looked at — which is the whole reason the copy was
+   shared in the first place. A second mobile copy would re-create the
+   problem that moving it here solved.
 7. Capability parity audit, enumerate without fixing — *Later* item 7.
 8. Onboarding that works cold on a phone — mobile item 7. A user who
    signs up on the phone currently lands in an empty app.
 9. Sweep for places the app assumes its author is the one using it. New,
    from the 2026-10-09 scope decision; no entry yet.
+10. **Settings needs a polish pass.** Pressed for the first time
+    2026-10-11 during the deletion test. It works — account facts,
+    sign-out, the danger zone, and a real deletion all did what they
+    claim — and it looks like a screen nobody has looked at. No entry
+    beyond this one yet; the fault list comes from a second pass on the
+    device.
+11. **A code box on the web sign-in**, low priority, raised 2026-10-11.
+    A magic link opens in whatever browser the mail app hands it to,
+    which is routinely not the one that asked for it — and there the
+    session lands in the wrong browser. The phone already takes a typed
+    code and the template already carries `{{ .Token }}`, so the web
+    needs the input and the `verifyOtp` call and nothing else.
 
 **D. Mobile feature gaps, in build order**
 
@@ -1743,9 +1804,29 @@ a port.
     which needs a free Expo account and **no** Apple Developer
     membership and runs in the cloud; or `npx expo run:ios` locally,
     which needs CocoaPods installed (Xcode 16.4 is present; `pod` is
-    not, and system Ruby is 2.6, so that means Homebrew). The cloud
-    route is the one worth doing first, because it proves the pipeline
-    before the paid clock starts.
+    not, and system Ruby is 2.6).
+
+    **The local route hit an architecture trap worth recording, 2026-10-11.**
+    The Mac is an M4, but the Homebrew in `/usr/local` is an **Intel
+    build running under Rosetta** — almost certainly carried across by
+    Migration Assistant — which is why `brew install cocoapods` warned
+    about an unsupported Tier 3 configuration. The fix is a native
+    install at `/opt/homebrew` and CocoaPods from there. It matters
+    beyond one warning: a native build links against whatever
+    architecture the toolchain hands it, and `node -p process.arch`
+    reporting `x64` on an M4 means the JS toolchain is in the emulated
+    world too. Check that before blaming a build failure on Expo.
+
+    **A dev build is also the only way to find out what Expo Go hides** —
+    the launch screen, the permission strings, the privacy manifest, and
+    any native module Expo Go does not already bundle. None of those
+    appear in the client being used to test today.
+
+    **Google OAuth can be built and tested before 2026-10-13.** It needs
+    the custom scheme, which needs a build, but not the paid account —
+    only Sign in with Apple needs that, for its Service ID and key.
+    Guideline 4.8 governs what SHIPS, not what is built, so the two can
+    be developed apart and released together.
 
 Not built, and not yet decided either way: the native iOS 26 Liquid
 Glass tab bar via `expo-router/native-tabs`. It needs a `ThemeProvider` —

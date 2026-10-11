@@ -16,7 +16,7 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-10: 40 mutations, 40 killed, and every one of the 38
+// Measured 2026-10-11: 44 mutations, 44 killed, and every one of the 43
 // renderer tests dies to at least one. The twelve added that day were written
 // BECAUSE the run before them reported nine new sign-in tests that no
 // mutation could reach — the list only covers what someone thought to
@@ -141,6 +141,19 @@ const MUTATIONS = [
    "  if (isUnknownAccount(error)) return null;", "  return null;"],
   ["a server error is swallowed instead of spoken", "lib/signin.ts",
    '  return "Something went wrong sending the code. Try again in a moment.";', "  return null;"],
+  // --- About. Both faults shipped because nobody had pressed the screen,
+  // and both are layout, which is the half a renderer test can reach.
+  ["the tab row is free to stretch down the screen again", "components/About.tsx",
+   "chipRow: { height: CHIP_H + 10, flexGrow: 0, flexShrink: 0 },",
+   "chipRow: { flexShrink: 0 },"],
+  ["the pills go back to a minimum height, so they balloon", "components/About.tsx",
+   "borderRadius: 999, paddingHorizontal: 12, height: CHIP_H, justifyContent: \"center\" }",
+   "borderRadius: 999, paddingHorizontal: 12, minHeight: CHIP_H, justifyContent: \"center\" }"],
+  ["pressing a tab does not change the section", "components/About.tsx",
+   "onPress={() => setActive(s.id)}", "onPress={() => {}}"],
+  ["the tour button inside About is inert", "components/About.tsx",
+   'onPress={onStartTour} accessibilityRole="button"', 'onPress={() => {}} accessibilityRole="button"'],
+
   ["offline is reported as a server error", "lib/signin.ts",
    '  if (isUnreachable(error)) return "Can\'t reach the server. Check your connection and try again.";',
    "  // mutated"],
