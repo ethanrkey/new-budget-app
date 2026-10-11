@@ -7,6 +7,7 @@
     "simulator": {
       "developmentClient": false,
       "distribution": "internal",
+      "environment": "preview",
       "ios": {
         "simulator": true
       }
