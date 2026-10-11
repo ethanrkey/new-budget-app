@@ -1,6 +1,9 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { T } from "../lib/theme";
+import { todayISO } from "../../src/engine/model.ts";
 import { ledgerToCSV, budgetToCSV } from "../../src/engine/csv.ts";
 import { computeLedger, computeBudget } from "../../src/engine/compute.ts";
 import { ledgerHorizonOf } from "../../src/engine/model.ts";
@@ -9,9 +12,18 @@ import type { BudgetState } from "../../src/engine/types.ts";
 // Export, on a phone, is the SHARE SHEET — not a download.
 //
 // A browser download has nowhere to land on iOS, so the platform answer
-// is to hand the text to whatever the person already uses to move things
-// off the device: Files, Mail, Notes, AirDrop. One API, no permissions,
-// no file picker to get wrong.
+// is to hand the data to whatever the person already uses to move things
+// off the device: Files, Mail, Notes, AirDrop.
+//
+// IT HAS TO BE A FILE, not a message. The first version passed the CSV
+// as `Share.share({ message })`, which is a string with no name and no
+// type — "Save to Files" wrote it as a file literally called `text`,
+// with no extension, which no spreadsheet will open by double-clicking.
+// `title` did nothing, because RN's Share only uses it on Android.
+// Found on a device 2026-10-11. So: write a real file to the cache with
+// a real name, and share its uri. The name carries the date, because
+// an export is a snapshot and two of them in a downloads folder are
+// otherwise indistinguishable.
 //
 // Three exports, same shapes the web produces, from the same engine
 // functions — so a CSV off the phone and a CSV off the laptop are the
@@ -21,11 +33,23 @@ export default function ExportSheet({ state, onClose }: { state: BudgetState; on
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
-  const send = async (key: string, title: string, body: string) => {
+  const send = async (key: string, filename: string, body: string, mimeType: string, uti: string) => {
     setBusy(key);
     setFailed(null);
     try {
-      await Share.share({ message: body, title });
+      if (!(await Sharing.isAvailableAsync())) {
+        setFailed("This device cannot open a share sheet.");
+        return;
+      }
+      // The cache, not documents: an export is a thing on its way out,
+      // and leaving copies in a directory iOS never reclaims would grow
+      // forever. Deleting first makes a second export of the same day
+      // overwrite rather than fail.
+      const file = new File(Paths.cache, filename);
+      try { file.delete(); } catch { /* first export of the day */ }
+      file.create();
+      file.write(body);
+      await Sharing.shareAsync(file.uri, { mimeType, UTI: uti, dialogTitle: filename });
     } catch (e) {
       // A share the person dismisses is not a failure; a share that
       // throws is, and silence is the one thing it must not do.
@@ -36,21 +60,37 @@ export default function ExportSheet({ state, onClose }: { state: BudgetState; on
   };
 
   const horizon = ledgerHorizonOf(state);
-  const rows: { key: string; label: string; hint: string; build: () => { title: string; body: string } }[] = [
+  const stamp = todayISO();
+  const CSV = { mimeType: "text/csv", uti: "public.comma-separated-values-text" };
+  const JSON_ = { mimeType: "application/json", uti: "public.json" };
+
+  const rows: {
+    key: string; label: string; hint: string;
+    build: () => { filename: string; body: string; mimeType: string; uti: string };
+  }[] = [
     {
       key: "ledger", label: "Ledger (CSV)",
       hint: "Every projected transaction in the current window, with its running balance.",
-      build: () => ({ title: "Ledger.csv", body: ledgerToCSV(computeLedger(state, horizon), state.trackerCategories) }),
+      build: () => ({
+        filename: `key-budget-ledger-${stamp}.csv`, ...CSV,
+        body: ledgerToCSV(computeLedger(state, horizon), state.trackerCategories),
+      }),
     },
     {
       key: "budget", label: "Budget (CSV)",
       hint: "The monthly grid, as a spreadsheet.",
-      build: () => ({ title: "Budget.csv", body: budgetToCSV(computeBudget(state, state.settings.budgetHorizon), state.trackerCategories) }),
+      build: () => ({
+        filename: `key-budget-budget-${stamp}.csv`, ...CSV,
+        body: budgetToCSV(computeBudget(state, state.settings.budgetHorizon), state.trackerCategories),
+      }),
     },
     {
       key: "backup", label: "Full backup (JSON)",
       hint: "Everything: rules, categories, every logged balance and contribution. This is the one that is actually a backup — the web's Import can restore it.",
-      build: () => ({ title: "key-budget-backup.json", body: JSON.stringify(state, null, 2) }),
+      build: () => ({
+        filename: `key-budget-backup-${stamp}.json`, ...JSON_,
+        body: JSON.stringify(state, null, 2),
+      }),
     },
   ];
 
@@ -68,7 +108,10 @@ export default function ExportSheet({ state, onClose }: { state: BudgetState; on
             key={r.key}
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             disabled={busy !== null}
-            onPress={() => { const { title, body } = r.build(); void send(r.key, title, body); }}
+            onPress={() => {
+              const { filename, body, mimeType, uti } = r.build();
+              void send(r.key, filename, body, mimeType, uti);
+            }}
             accessibilityRole="button"
             accessibilityLabel={r.label}
           >

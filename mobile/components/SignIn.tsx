@@ -10,6 +10,7 @@ import {
   CODE_LENGTH, codeReady, isPlausibleEmail, normalizeCode, normalizeEmail,
   resendIn, sendFailureMessage, verifyFailureMessage,
 } from "../lib/signin";
+import { GOOGLE_AVAILABLE, signInWithGoogle } from "../lib/google";
 
 // Sign in by emailed code. Two steps, because a code you have not been
 // sent yet is not a field you should be looking at.
@@ -21,15 +22,15 @@ import {
 // them — it authenticates the address, which is the one thing every
 // account here has.
 //
-// GOOGLE AND SIGN IN WITH APPLE ARE NOT HERE YET, and the reason is a
-// build, not a decision. Both hand control to a browser or a system sheet
-// and need it handed back through a registered URL scheme, which Expo Go
-// cannot provide — it is a different app with a different scheme. They
-// land when there is a development build to put them in, and Sign in with
-// Apple additionally needs the paid Apple Developer account for its
-// Service ID and key. Apple's guideline 4.8 ties them together: offering
-// Google obliges an equivalent option, and this app's own email login
-// cannot be it, because it cannot keep an address private. See the spec.
+// GOOGLE IS HERE IN A REAL BUILD AND ABSENT IN EXPO GO, which is a fact
+// about the binary rather than a feature flag: the native module is not
+// in Expo Go, so the button is not drawn there. SIGN IN WITH APPLE is
+// still out, and waits on the paid Apple Developer account for its
+// Service ID and key. Apple's guideline 4.8 ties the two together —
+// offering Google obliges an equivalent option, and this app's own email
+// login cannot be it, because it cannot keep an address private — so
+// Google must not reach the App Store before Apple does. It can reach a
+// simulator and a dev build, which is what this is for.
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<"email" | "code">("email");
@@ -89,6 +90,17 @@ export default function SignIn() {
   // `entered` lets the auto-submit pass the digit it just received:
   // `setCode` has not landed in state yet at that moment, and reading
   // the stale value would verify five digits.
+  async function google() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const { message } = await signInWithGoogle(supabase);
+    setBusy(false);
+    // null means the sheet was dismissed, which is not a failure and is
+    // not worth a line of red under the button.
+    if (message) setError(message);
+  }
+
   async function verify(entered?: string) {
     const token = normalizeCode(entered ?? code);
     if (busy || !codeReady(token)) return;
@@ -166,6 +178,25 @@ export default function SignIn() {
           >
             {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.ctaText}>Email me a code</Text>}
           </Pressable>
+          {GOOGLE_AVAILABLE && (
+            <>
+              <View style={styles.orRow}>
+                <View style={styles.rule} />
+                <Text style={styles.or}>or</Text>
+                <View style={styles.rule} />
+              </View>
+              <Pressable
+                style={({ pressed }) => [styles.google, pressed && styles.ctaPressed, busy && styles.disabled]}
+                onPress={google}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+              >
+                <Text style={styles.googleText}>Continue with Google</Text>
+              </Pressable>
+            </>
+          )}
+
           <Text style={styles.note}>
             No password. We email a six-digit code to the address on your account — the same account as
             the web.
@@ -248,5 +279,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", marginTop: 14 },
   link: { color: T.brass, fontSize: 14 },
   linkOff: { color: T.faint },
+  orRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 18 },
+  rule: { flex: 1, height: 1, backgroundColor: T.border },
+  or: { color: T.faint, fontSize: 12 },
+  google: {
+    marginTop: 12, minHeight: 50, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+  },
+  googleText: { color: T.text, fontSize: 15, fontWeight: "600" },
   note: { color: T.faint, fontSize: 12, textAlign: "center", marginTop: 10, lineHeight: 17 },
 });

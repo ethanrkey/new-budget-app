@@ -16,7 +16,7 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-11: 44 mutations, 44 killed, and every one of the 43
+// Measured 2026-10-11: 54 mutations, 54 killed, and every one of the 48
 // renderer tests dies to at least one. The twelve added that day were written
 // BECAUSE the run before them reported nine new sign-in tests that no
 // mutation could reach — the list only covers what someone thought to
@@ -153,6 +153,32 @@ const MUTATIONS = [
    "onPress={() => setActive(s.id)}", "onPress={() => {}}"],
   ["the tour button inside About is inert", "components/About.tsx",
    'onPress={onStartTour} accessibilityRole="button"', 'onPress={() => {}} accessibilityRole="button"'],
+
+  // --- Google, and the export filename, both added 2026-10-11.
+  ["a dismissed Google sheet is reported as a failure", "lib/signin.ts",
+   'if (code === "SIGN_IN_CANCELLED" || code === "-5" || /cancel/i.test(message)) return null;',
+   'if (false) return null;'],
+  ["a Google failure stops offering the way out that works", "lib/signin.ts",
+   'return message || "Google sign-in didn\'t work. Try the emailed code instead.";',
+   'return message || "Error.";'],
+  ["the Google button is not drawn at all", "components/SignIn.tsx",
+   "{GOOGLE_AVAILABLE && (", "{false && ("],
+  ["the Google error is swallowed", "components/SignIn.tsx",
+   "    if (message) setError(message);", "    // mutated"],
+  ["the export goes out as a nameless string again", "components/ExportSheet.tsx",
+   "await Sharing.shareAsync(file.uri, { mimeType, UTI: uti, dialogTitle: filename });",
+   "await Sharing.shareAsync(file.uri, {});"],
+  ["the ledger export is written with the wrong extension", "components/ExportSheet.tsx",
+   "filename: `key-budget-ledger-${stamp}.csv`", "filename: `key-budget-ledger-${stamp}.txt`"],
+  ["the file is shared empty, so the name is right and the data is gone",
+   "components/ExportSheet.tsx", "file.write(body);", 'file.write("");'],
+  ["the budget export reuses the ledger's filename", "components/ExportSheet.tsx",
+   "filename: `key-budget-budget-${stamp}.csv`", "filename: `key-budget-ledger-${stamp}.csv`"],
+  ["the backup claims to be a csv", "components/ExportSheet.tsx",
+   "filename: `key-budget-backup-${stamp}.json`, ...JSON_,",
+   "filename: `key-budget-backup-${stamp}.json`, ...CSV,"],
+  ["a device that cannot share fails silently", "components/ExportSheet.tsx",
+   '        setFailed("This device cannot open a share sheet.");', "        // mutated"],
 
   ["offline is reported as a server error", "lib/signin.ts",
    '  if (isUnreachable(error)) return "Can\'t reach the server. Check your connection and try again.";',

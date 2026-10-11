@@ -15,6 +15,7 @@
 import {
   CODE_LENGTH, RESEND_COOLDOWN_SECONDS, normalizeEmail, isPlausibleEmail,
   normalizeCode, codeReady, resendIn, sendFailureMessage, verifyFailureMessage,
+  googleFailureMessage,
 } from "../mobile/lib/signin.ts";
 
 let failures = 0, checks = 0;
@@ -138,6 +139,31 @@ const not = (label, cond) => eq(label, !!cond, false);
   const all = [null, { message: "" }, { status: 403, message: "Token has expired or is invalid" }, { status: 429, message: "rate" }];
   is("every verify failure tells you what to do next",
     all.map(verifyFailureMessage).every((m) => /code/i.test(m)));
+}
+
+// ---- what Google sign-in says when it does not work -----------------
+{
+  // A dismissed sheet is NOT a failure. The user closed it because they
+  // changed their mind, and red text under the button would say "that
+  // did not work" about the thing that worked.
+  eq("a cancel says nothing", googleFailureMessage({ code: "SIGN_IN_CANCELLED" }), null);
+  eq("the iOS cancel code says nothing", googleFailureMessage({ code: "-5" }), null);
+  eq("a cancel by wording says nothing", googleFailureMessage({ message: "The user canceled the sign-in flow." }), null);
+  eq("a double tap says nothing", googleFailureMessage({ code: "IN_PROGRESS" }), null);
+
+  is("offline is spoken", /check your connection/i.test(googleFailureMessage({ message: "Network error" })));
+  // The misconfiguration shape: Supabase refusing the token's audience,
+  // or wanting a nonce the native SDK cannot produce. Worth its own
+  // message, because the user can do nothing and support can do a lot.
+  is("a rejected audience blames us, not the user",
+    /on us/i.test(googleFailureMessage({ message: "Invalid audience in id_token" })));
+  is("a missing nonce lands in the same bucket",
+    /on us/i.test(googleFailureMessage({ message: "Passed nonce and nonce in id_token should either both exist or not." })));
+  is("an unknown failure still says something", googleFailureMessage({ message: "" }).length > 0);
+  is("a null error still says something", googleFailureMessage(null).length > 0);
+  is("every spoken Google failure offers the way out that works",
+    [{ message: "" }, null, { message: "Invalid audience" }]
+      .map(googleFailureMessage).every((m) => /emailed code/i.test(m)));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S)`);

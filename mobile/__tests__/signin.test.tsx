@@ -1,6 +1,6 @@
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import SignIn from "../components/SignIn";
-import { authCalls } from "./setup";
+import { authCalls, googleCalls } from "./setup";
 
 // Sign-in, from the taps. The logic lives in lib/signin.ts and is tested
 // without a renderer in tests/mobile-signin.test.mjs; what is here is the
@@ -32,6 +32,8 @@ beforeEach(() => {
   authCalls.verify.length = 0;
   authCalls.nextOtpError = null;
   authCalls.nextVerifyError = null;
+  googleCalls.count = 0;
+  googleCalls.next = { ok: true, message: null };
 });
 
 /**
@@ -120,6 +122,34 @@ test("a server that answered badly is spoken too, without blaming the wifi", asy
   expect(await screen.findByText(/went wrong/i)).toBeOnTheScreen();
   expect(screen.queryByText(/connection/i)).toBeNull();
   expect(screen.queryByPlaceholderText("000000")).toBeNull();
+});
+
+test("Google is offered on the email step, and pressing it calls through", async () => {
+  await render(<SignIn />);
+  await userEvent.press(screen.getByLabelText("Continue with Google"));
+
+  await waitFor(() => expect(googleCalls.count).toBe(1));
+  // Nothing to assert about success: the auth listener swaps the screen.
+  expect(screen.queryByPlaceholderText("000000")).toBeNull();
+});
+
+test("a dismissed Google sheet says nothing at all", async () => {
+  // The one that is easy to get wrong. A cancel returns no message, and
+  // red text under the button would call a deliberate choice a failure.
+  googleCalls.next = { ok: false, message: null };
+  await render(<SignIn />);
+  await userEvent.press(screen.getByLabelText("Continue with Google"));
+
+  await waitFor(() => expect(googleCalls.count).toBe(1));
+  expect(screen.queryByText(/didn't work|try again|on us/i)).toBeNull();
+});
+
+test("a real Google failure is shown", async () => {
+  googleCalls.next = { ok: false, message: "Can't reach Google. Check your connection and try again." };
+  await render(<SignIn />);
+  await userEvent.press(screen.getByLabelText("Continue with Google"));
+
+  expect(await screen.findByText(/reach Google/i)).toBeOnTheScreen();
 });
 
 test("five digits sends nothing, and the button says so", async () => {

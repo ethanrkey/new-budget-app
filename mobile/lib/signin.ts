@@ -139,3 +139,41 @@ export function verifyFailureMessage(error: AuthError): string {
   }
   return message || "That did not work. Ask for a new code and try again.";
 }
+
+/**
+ * What to tell the user when GOOGLE sign-in fails.
+ *
+ * It lives here rather than in lib/google.ts for a mechanical reason
+ * worth recording: google.ts imports expo-constants, and Node refuses
+ * to type-strip TypeScript inside node_modules, so the plain-node
+ * harness cannot import that file at all. Splitting the pure half out
+ * is what keeps every branch below testable in milliseconds — and the
+ * branches are the point, since most of them are failures that cannot
+ * be produced on demand from a real Google sheet.
+ *
+ * The status codes are matched by VALUE rather than imported, because
+ * importing them would pull the native module into Expo Go.
+ */
+export function googleFailureMessage(error: unknown): string | null {
+  const e = error as { code?: string; message?: string } | null | undefined;
+  const code = e?.code ?? "";
+  const message = e?.message ?? "";
+
+  // A cancel is not a failure. Returning null means say nothing: the
+  // user closed the sheet because they changed their mind, and an error
+  // under the button would read as "that did not work" when it did
+  // exactly what they asked.
+  if (code === "SIGN_IN_CANCELLED" || code === "-5" || /cancel/i.test(message)) return null;
+  if (code === "IN_PROGRESS") return null;
+
+  if (/network|offline|connection/i.test(message)) {
+    return "Can't reach Google. Check your connection and try again.";
+  }
+  // The shape of a misconfiguration: Supabase refusing the token's
+  // audience, or a nonce it expected and did not get. Worth separating,
+  // because the user can do nothing about it and support can.
+  if (/audience|aud |invalid.*token|nonce/i.test(message)) {
+    return "Google signed you in, but this app's setup rejected it. That's on us — try the emailed code instead.";
+  }
+  return message || "Google sign-in didn't work. Try the emailed code instead.";
+}

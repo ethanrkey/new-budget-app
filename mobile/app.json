@@ -29,7 +29,14 @@
           "backgroundColor": "#111827"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-sharing",
+      [
+      "@react-native-google-signin/google-signin",
+      {
+        "iosUrlScheme": "com.googleusercontent.apps.225819918731-h8uii8j71melja4strfhfvvnlcc4pnsf"
+      }
+    ]
     ],
     "experiments": {
       "typedRoutes": true

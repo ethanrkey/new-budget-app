@@ -76,3 +76,62 @@ jest.mock("react-native-safe-area-context", () => {
     useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }),
   };
 });
+
+// The share path, recorded. The export bug was that the CSV went out as
+// a bare string, so iOS saved it as a file called `text` with no
+// extension — the name and the type ARE the feature, which makes them
+// worth asserting rather than mocking away silently.
+export const shared: {
+  files: { path: string; body: string }[];
+  calls: { uri: string; options: Record<string, unknown> }[];
+  available: boolean;
+} = { files: [], calls: [], available: true };
+
+jest.mock("expo-file-system", () => {
+  const { shared: s } = require("./setup");
+  class File {
+    path: string;
+    constructor(dir: { uri: string }, name: string) { this.path = `${dir.uri}${name}`; }
+    get uri() { return this.path; }
+    delete() { /* nothing written yet in a test */ }
+    create() { s.files.push({ path: this.path, body: "" }); }
+    write(body: string) { s.files[s.files.length - 1]!.body = body; }
+  }
+  return { File, Paths: { cache: { uri: "file:///cache/" }, document: { uri: "file:///docs/" } } };
+});
+
+jest.mock("expo-sharing", () => {
+  const { shared: s } = require("./setup");
+  return {
+    isAvailableAsync: async () => s.available,
+    shareAsync: async (uri: string, options: Record<string, unknown>) => { s.calls.push({ uri, options }); },
+  };
+});
+
+// Expo Go has no Google native module, so the button must not be drawn
+// there. Under jest the execution environment is neither, so it is
+// pinned to a bare build — the state a dev build and TestFlight are in.
+jest.mock("expo-constants", () => ({
+  __esModule: true,
+  ExecutionEnvironment: { Bare: "bare", Standalone: "standalone", StoreClient: "storeClient" },
+  default: { executionEnvironment: "bare" },
+}));
+
+// Google sign-in, recorded. The native sheet cannot be driven under
+// jest, so what is tested is the wiring either side of it: is the
+// button drawn, does pressing it call through, and is a returned
+// message shown — including the case where the answer is "say nothing",
+// which is what a dismissed sheet has to look like.
+export const googleCalls: { count: number; next: { ok: boolean; message: string | null } } = {
+  count: 0,
+  next: { ok: true, message: null },
+};
+
+jest.mock("../lib/google", () => {
+  const { googleCalls: g } = require("./setup");
+  return {
+    GOOGLE_AVAILABLE: true,
+    IOS_CLIENT_ID: "test.apps.googleusercontent.com",
+    signInWithGoogle: async () => { g.count++; return g.next; },
+  };
+});

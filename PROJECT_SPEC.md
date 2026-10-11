@@ -467,6 +467,31 @@ written here in the same sitting** — there is no other record of it.
   consequence to watch is the suppression list, because a suppressed
   address receives nothing ever again and says so nowhere.
 
+**Google Cloud (project `budget-app`, number 225819918731)**
+
+- The project and its **Web** OAuth client predate the phone — Google
+  sign-in has worked on the web since September, and the web client and
+  its secret were already in Supabase. Nothing about the iOS work
+  changes them.
+- **New iOS OAuth client** for bundle id `app.keybudget`, added
+  2026-10-11. Its client ID is in `mobile/lib/google.ts` and its
+  reversed form is the `iosUrlScheme` in the Google Sign-In config
+  plugin. A client ID is public by nature; there is no iOS client
+  secret.
+- Supabase -> Providers -> Google now lists **both** client IDs,
+  comma-separated. That is what lets Supabase accept a token whose
+  audience is the iOS client.
+- **The consent screen is PUBLISHED (In production)** as of 2026-10-11.
+  It had been in Testing, which silently limited web Google sign-in to
+  the test-user list — a real defect for anyone else, invisible to the
+  author. Branding is filled in: app name, support email, homepage
+  `https://keybudget.app`, privacy `https://keybudget.app/privacy`,
+  authorized domain `keybudget.app`.
+- **No logo, deliberately.** Uploading one triggers Google's brand
+  verification, which is a review with its own timeline. It can be
+  added later; doing it before launch would put a third party's queue
+  on the critical path.
+
 **Platform behavior that is nobody's setting**
 
 - **iOS one-time-code autofill DOES work with Gmail** — measured on the
@@ -1365,16 +1390,19 @@ what, not by size.
 
 **A. Stops a TestFlight build existing at all**
 
-1. Sign-in on the phone — mobile item 1. **Option D shipped 2026-10-09**
-   (emailed six-digit code) and has now signed a real account in on a
-   real phone twice. The shared-template question is **settled**: one
-   magic-link template carries both `{{ .ConfirmationURL }}` and
-   `{{ .Token }}` and serves both clients. **Still open: whether a code
-   reaches a GOOGLE-created account.** The throwaway was made by magic
-   link, so it did not test that, and it is the one case that could
-   leave a real user locked out. Google and Sign in with Apple are both
-   still out and both wait on a development build; Sign in with Apple
-   additionally waits on the paid account.
+1. ~~Sign-in on the phone.~~ **CLEARED 2026-10-11.** Option D (emailed
+   six-digit code) shipped 2026-10-09 and has signed real accounts in on
+   a real phone. Both open questions are closed: one magic-link template
+   carries `{{ .ConfirmationURL }}` and `{{ .Token }}` and serves both
+   clients, and **a code does reach a Google-created account** — the
+   author's own row shows providers `google, email` and was signed into
+   on the phone with a code on 2026-10-10. So identity linking by email
+   is on in this project, as the docs describe, and the
+   "reachable only by social login" state the `signInWithOtp` reference
+   warns about does not apply here. Google sign-in is now wired on the
+   phone too (mobile item 13); Sign in with Apple waits on the paid
+   account, and 4.8 means Google must not ship to the App Store without
+   it.
 2. **No iOS build exists.** `mobile/app.json` is no longer the template —
    name, slug, scheme, bundle identifier and icon are all real as of
    2026-10-09. The first `npx expo run:ios` on 2026-10-11 got through
@@ -1497,8 +1525,19 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
     this app holds a user's complete financial state and Apple asks
     about exactly that.
 26. Privacy policy at a public URL (`/privacy` exists and is live),
-    support URL, store description, screenshots per device class, age
-    rating, export compliance.
+    support URL, store description, age rating. Export compliance is
+    **done** — `ITSAppUsesNonExemptEncryption: false` in `app.json`.
+28. **App Store screenshots, as its own session.** Made from a DEMO
+    ACCOUNT with realistic invented data, never the author's real
+    finances — the same rule the landing-page screenshots already
+    follow, for the same reason, now with a second audience. Needs one
+    device class's worth per claimed size.
+29. **The voice pass, as one long session and not a sprinkle.** Every
+    string, web and phone, rewritten in the author's voice for
+    personality rather than correctness. It absorbs the two deferred
+    copy items and the nine web-only About lines enumerated in band C,
+    and it is the right moment to add the per-block platform variants
+    rather than doing them twice.
 27. **Remove `key-budget-app.vercel.app`** from the Vercel domains and
     the Supabase redirect allow-list. A second origin that can complete
     an auth redirect is a second thing to get wrong.
@@ -1718,10 +1757,15 @@ a port.
    `lib/stash.ts`, awaited before the optimistic apply, reported and
    discarded on relaunch — never replayed.
 
-9. **Export** [D] — **BUILT 2026-10-08, NOT YET PRESSED ON A DEVICE.**
-   `mobile/components/ExportSheet.tsx`, reached from the nav. Import is
-   deliberately not on the phone. Like items 2 and 11, it typechecks and
-   bundles and nobody has tapped it.
+9. ~~**Export** [D].~~ **SHIPPED, and corrected 2026-10-11.** Tested on
+   a device: the numbers are right (October — in 5541.85, out 3367.19,
+   net 1566.81, cumulative 2174.66). The file was not: it went to the
+   share sheet as a bare string, so iOS saved it as `text` with no
+   extension and no spreadsheet would open it. RN's `Share.share`
+   `title` is Android-only and did nothing. Now the CSV is written to
+   the cache as a real file — `key-budget-ledger-2026-10-11.csv` — and
+   shared by uri with its mime type and UTI. Import stays off the phone
+   deliberately.
 10. **Horizon control** [D]. The phone has a device-local date chip
     where the web has a synced slider. The chip is arguably the better
     phone control; the decision is whether it should write
@@ -1880,6 +1924,40 @@ a port.
     only Sign in with Apple needs that, for its Service ID and key.
     Guideline 4.8 governs what SHIPS, not what is built, so the two can
     be developed apart and released together.
+
+13. **Google sign-in on the phone — WIRED 2026-10-11, untested on a
+    device.** `signInWithIdToken`, native: Google issues the ID token on
+    the device and Supabase takes it directly. No browser, no redirect,
+    no URL scheme round trip. The button is drawn only outside Expo Go,
+    checked with `executionEnvironment` from expo-constants rather than
+    discovered by crashing when pressed, so the phone's Expo Go workflow
+    is untouched.
+
+    **THE NONCE: "Skip nonce checks" has to be ON, and here is the
+    evidence rather than an opinion.** The library cannot produce one.
+    `SignInParams` in
+    `@react-native-google-signin/google-signin@16.1.5` has exactly one
+    field, `loginHint`, and the string "nonce" appears in **zero** files
+    anywhere in that package. So the ID token carries no nonce claim and
+    `signInWithIdToken` has nothing to pass. This is why Supabase ships
+    the toggle at all — it exists for native SDKs that do not expose a
+    nonce.
+
+    **What is given up, stated plainly.** A nonce binds the ID token to
+    one specific sign-in attempt, so a token captured elsewhere cannot
+    be replayed. Without it, Supabase still checks the signature, the
+    issuer, the expiry, and the audience against the registered client
+    IDs — so a replay needs a live, unexpired token minted for THIS
+    app's client IDs. On iOS that token goes from Google's SDK to
+    Supabase over TLS and never touches a browser, a URL bar or a log,
+    so the window is small. Small is not zero, and it is a real trade.
+
+    **The alternative, if that trade is refused:** the browser PKCE
+    flow, which supports a nonce, at the cost of a web view instead of
+    the system sheet, a registered redirect scheme, and the redirect
+    allow-list this path avoids entirely. Not recommended — the UX cost
+    is paid by every user on every sign-in, and the risk avoided is a
+    narrow one.
 
 Not built, and not yet decided either way: the native iOS 26 Liquid
 Glass tab bar via `expo-router/native-tabs`. It needs a `ThemeProvider` —
