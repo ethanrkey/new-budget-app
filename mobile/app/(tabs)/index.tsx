@@ -15,7 +15,7 @@ import { T, money } from "../../lib/theme";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
 import { ledgerHorizonOf, primaryAccount } from "../../../src/engine/model.ts";
 import { updateAccountBalance } from "../../../src/engine/mutate.ts";
-import { isNewAccount } from "../../lib/firstRun";
+import { showFirstRun } from "../../lib/firstRun";
 import {
   rowTarget, overrideAt, scopeActions, orphansIfSaved,
   saveItem, saveOccurrence, resetOccurrence, removeItem,
@@ -27,7 +27,7 @@ const prettyDate = (iso: string) =>
   new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 export default function LedgerScreen() {
-  const { state, refresh, refreshing, commit, online, saving } = useBudget();
+  const { state, refresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
   const [horizon, setHorizon] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [calendar, setCalendar] = useState(false);
@@ -37,9 +37,25 @@ export default function LedgerScreen() {
   const [scopeFor, setScopeFor] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetMode | null>(null);
   const [logging, setLogging] = useState(false);
-  // A brand-new account, which the phone could not meet until Google
-  // sign-in made accounts creatable on the device. See lib/firstRun.
-  const fresh = isNewAccount(state!);
+  // The new-account guide. Shown until the three steps are done or it
+  // is put away — NOT until the first write, which is the bug the first
+  // version shipped with: logging a balance made the whole thing vanish
+  // and left a new user on an empty Ledger with two steps to go and
+  // nothing saying so.
+  const guide = showFirstRun(state!, prefs.firstRunDismissed);
+
+  // Defined here rather than inline so the SectionList header is a
+  // stable element and the list does not remount it on every render.
+  const FirstRunHeader = () => (
+    <FirstRun
+      state={state!}
+      online={online}
+      onLogBalance={() => setLogging(true)}
+      onAddIncome={() => setSheet({ kind: "add" })}
+      onAddBill={() => setSheet({ kind: "add" })}
+      onDismiss={() => setPref("firstRunDismissed", true)}
+    />
+  );
 
   const effective = horizon ?? ledgerHorizonOf(state!);
   const account = primaryAccount(state!);
@@ -157,23 +173,23 @@ export default function LedgerScreen() {
     </>
   );
 
+  // The toolbar always; the guide under it while there are steps left.
+  // Inside the list's header rather than above it, so a tall card
+  // scrolls with the rows instead of pinning them into a sliver.
+  const header = (
+    <>
+      {toolbar}
+      {guide ? <FirstRunHeader /> : null}
+    </>
+  );
+
   return (
     <View style={styles.wrap}>
-      {/* A fresh account gets the signpost in place of a list that has
-          nothing to show and no way to say why. Checked before the
-          calendar too: an empty month grid explains even less. */}
-      {fresh ? (
-        <FirstRun
-          online={online}
-          onLogBalance={() => setLogging(true)}
-          onAddIncome={() => setSheet({ kind: "add" })}
-          onAddBill={() => setSheet({ kind: "add" })}
-        />
-      ) : calendar ? (
+      {calendar ? (
         <SectionList
           sections={[{ title: "", data: [0] }]}
           keyExtractor={() => "cal"}
-          ListHeaderComponent={toolbar}
+          ListHeaderComponent={header}
           renderSectionHeader={() => null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
           renderItem={() => <CalendarView rows={rows} categories={state!.trackerCategories} />}
@@ -183,7 +199,7 @@ export default function LedgerScreen() {
           sections={sections}
           keyExtractor={(r) => r.id}
           stickySectionHeadersEnabled
-          ListHeaderComponent={toolbar}
+          ListHeaderComponent={header}
           contentContainerStyle={styles.listPad}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
           renderSectionHeader={({ section }) => <Text style={styles.month}>{section.title}</Text>}
@@ -206,7 +222,9 @@ export default function LedgerScreen() {
               <Text style={[styles.bal, item.negative && { color: T.expense }]}>{money(item.balance)}</Text>
             </Pressable>
           )}
-          ListEmptyComponent={<Text style={styles.empty}>Nothing projected in this window.</Text>}
+          // With the guide up, "Nothing projected in this window." is
+          // noise under a card that already explains the emptiness.
+          ListEmptyComponent={guide ? null : <Text style={styles.empty}>Nothing projected in this window.</Text>}
         />
       )}
 

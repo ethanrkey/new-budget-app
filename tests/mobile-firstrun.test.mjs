@@ -9,7 +9,7 @@
 // has touched, and the only honest question is "did a person put
 // anything in". Every case below is a way to get that wrong.
 import { normalize } from "../src/engine/stateShape.ts";
-import { isNewAccount } from "../mobile/lib/firstRun.ts";
+import { isNewAccount, firstRunProgress, stepsRemaining, showFirstRun } from "../mobile/lib/firstRun.ts";
 import {
   updateAccountBalance, upsertItem, addBalanceSnapshot, addContribution,
 } from "../src/engine/mutate.ts";
@@ -87,6 +87,49 @@ is("...and is still NEW", isNewAccount(blank));
 
 // Defensive: a state missing the optional maps entirely must not throw.
 is("a bare object is new, not a crash", isNewAccount({ recurring: [], oneoffs: [] }));
+
+// ---- the guide has to SURVIVE ITS OWN FIRST SUCCESS ----------------
+//
+// The bug that reached a phone: the card keyed off isNewAccount, which
+// flips on the first write, so logging a balance made the whole guide
+// disappear and left a new user with two steps to go and nothing
+// saying so.
+{
+  eq("nothing done yet", firstRunProgress(blank), { balance: false, income: false, bills: false });
+  eq("three to go", stepsRemaining(blank), 3);
+
+  const afterBalance = updateAccountBalance(blank, "checking", 4000, "2026-11-01");
+  eq("step one ticks off and the rest do not",
+    firstRunProgress(afterBalance), { balance: true, income: false, bills: false });
+  eq("two to go", stepsRemaining(afterBalance), 2);
+  is("THE BUG: the guide still shows after step one", showFirstRun(afterBalance, false));
+  not("...while isNewAccount alone would have hidden it", isNewAccount(afterBalance));
+
+  const afterIncome = upsertItem(afterBalance, {
+    id: "r-pay", name: "Paycheck", amount: 2100, category: "income",
+    cadence: "biweekly", startDate: "2026-10-09", order: 0,
+  });
+  eq("income ticks off by DIRECTION, not by category name",
+    firstRunProgress(afterIncome), { balance: true, income: true, bills: false });
+  is("still showing with one to go", showFirstRun(afterIncome, false));
+
+  const afterBill = upsertItem(afterIncome, {
+    id: "r-rent", name: "Rent", amount: 1450, category: "bill",
+    cadence: "monthly", dayOfMonth: 1, startDate: "2026-10-01", order: 1,
+  });
+  eq("all three done", stepsRemaining(afterBill), 0);
+  not("and THEN it goes away on its own", showFirstRun(afterBill, false));
+
+  // A one-off counts for the outflow step: someone who entered a
+  // dentist bill has done the thing the step is asking for.
+  const viaOneoff = upsertItem(afterIncome, {
+    id: "o-dent", name: "Dentist", amount: 180, category: "oneoff", date: "2026-10-20", order: 1,
+  });
+  eq("a one-off finishes the outflow step too", stepsRemaining(viaOneoff), 0);
+
+  // Put away by hand, with work outstanding.
+  not("dismissing hides it even with steps left", showFirstRun(blank, true));
+}
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

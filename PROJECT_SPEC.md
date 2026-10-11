@@ -436,6 +436,13 @@ written here in the same sitting** — there is no other record of it.
   code is wrong or has expired" as the only clue, while the code in the
   email was perfectly correct. The two numbers must agree and nothing in
   the repo can check it.
+- **The "Confirm signup" template carries the code too**, added
+  2026-10-11. This one is easy to miss and it broke exactly the people
+  it matters most for: **Supabase uses Confirm signup, not Magic Link,
+  for an address it has never seen**, so a first-time user got an email
+  with a link and no code while every existing user got both. A phone
+  that only takes a typed code had nothing to type. Both templates now
+  carry `{{ .Token }}`.
 - **Magic Link template carries BOTH** `{{ .ConfirmationURL }}` and
   "Or enter this code in the app: `{{ .Token }}`". **This settles the
   open question**: the two coexist in one template, so the web keeps its
@@ -1579,6 +1586,13 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
     the Supabase redirect allow-list. A second origin that can complete
     an auth redirect is a second thing to get wrong.
 
+30. **Universal Links**, after Apple approval. A magic link tapped on
+    the phone opens Safari, not the app — the one place the emailed
+    link and the emailed code disagree about which is the better
+    credential. Needs the `associated domains` entitlement (so: a paid
+    account) and an `apple-app-site-association` file served from
+    keybudget.app. Raised 2026-10-11.
+
 **F. Product, further out and deliberately vague**
 
 19. Multi-account model (payment method per transaction, credit cards
@@ -2065,10 +2079,14 @@ a port.
     What that means in this app, where deletion is already built and
     already verified end to end:
 
-    - `signInAsync` returns an `authorizationCode`. It has to be
-      captured at sign-in and exchanged for an Apple refresh token,
-      because the native flow never gives Supabase a provider refresh
-      token to revoke later. Nothing captures it today.
+    - `signInAsync` returns an `authorizationCode` that **expires in
+      five minutes and can be used once**. "Capture it at sign-in" is
+      therefore not a plan — storing the code and exchanging it at
+      deletion, possibly months later, exchanges nothing. It has to go
+      to the server **immediately**, be exchanged there for an Apple
+      refresh token, and the REFRESH TOKEN is what gets stored and what
+      is revoked later. The native flow never hands Supabase a provider
+      refresh token on its own, so nothing captures any of this today.
     - The revoke call belongs with `purge_due_accounts()`, server-side,
       because it needs the signing key and a key in a client is not a
       key. That is an edge function with the `.p8` in its secrets.

@@ -16,7 +16,7 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-11: 59 mutations, 59 killed, and every one of the 54
+// Measured 2026-10-11: 65 mutations, 65 killed, and every one of the 56
 // renderer tests dies to at least one. The twelve added that day were written
 // BECAUSE the run before them reported nine new sign-in tests that no
 // mutation could reach — the list only covers what someone thought to
@@ -163,14 +163,26 @@ const MUTATIONS = [
    "  if ((state.recurring?.length ?? 0) > 0) return false;", "  return false;"],
   ["a used account is called new, so the signpost never goes away", "lib/firstRun.ts",
    "  s.id.startsWith(\"seed-\") && s.amount === 0;", "  true;"],
+  ["THE SHIPPED BUG: the guide dies on the first write again", "lib/firstRun.ts",
+   "  return !dismissed && stepsRemaining(state) > 0;",
+   "  return !dismissed && isNewAccount(state);"],
+  ["a finished step never ticks off", "lib/firstRun.ts",
+   "    income: items.some((i) => directionOf(i.category) === \"in\"),",
+   "    income: false,"],
+  ["dismissing the guide does nothing", "lib/firstRun.ts",
+   "  return !dismissed && stepsRemaining(state) > 0;", "  return stepsRemaining(state) > 0;"],
+  ["a done step keeps its button, reading as do-it-again", "components/FirstRun.tsx",
+   "          {!done[step.key] && (", "          {true && ("],
+  ["the hide control is inert", "components/FirstRun.tsx",
+   'onPress={onDismiss} hitSlop={10}', 'onPress={() => {}} hitSlop={10}'],
   // Renames the middle step's button. A mutation that only ADDED an
   // unused field was tried first and survived, correctly — it broke
   // nothing, which is what a useless mutation looks like.
   ["the income step's button is renamed out from under the screen", "lib/firstRun.ts",
    '    cta: "Add income",', '    cta: "Add money",'],
   ["the first-run buttons are wired to the wrong handlers", "components/FirstRun.tsx",
-   "const press = { balance: onLogBalance, income: onAddIncome, bills: onAddBill } as const;",
-   "const press = { balance: onAddBill, income: onLogBalance, bills: onAddIncome } as const;"],
+   "    balance: onLogBalance, income: onAddIncome, bills: onAddBill,",
+   "    balance: onAddBill, income: onLogBalance, bills: onAddIncome,"],
   ["the first-run buttons are live while offline", "components/FirstRun.tsx",
    "disabled={!online}", "disabled={false}"],
 

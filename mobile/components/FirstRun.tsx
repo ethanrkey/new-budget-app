@@ -1,55 +1,83 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { T } from "../lib/theme";
-import { FIRST_RUN_STEPS } from "../lib/firstRun";
+import { FIRST_RUN_STEPS, firstRunProgress, type StepKey } from "../lib/firstRun";
+import type { BudgetState } from "../../src/engine/types.ts";
 
-// What a brand-new account sees instead of "Nothing projected in this
-// window." — three steps, each one opening a control the phone already
-// has.
+// What a new account sees above the Ledger — three steps, each one
+// opening a control the phone already has.
 //
 // NOT A WIZARD, and that is the whole design. A ported setup flow would
 // be a second way to create the same things, which is a second thing to
 // keep correct and a second thing to get out of step with the web. This
 // is a signpost: it explains what the screen is for and hands you to
-// the real controls, then disappears the moment you have used one.
+// the real controls.
+//
+// IT SURVIVES ITS OWN FIRST SUCCESS. The first version keyed off "is
+// this account new", which flips on the first write — so logging a
+// balance made the whole guide vanish and left a new user on an empty
+// Ledger with no sign that two more steps existed. Found on a phone.
+// Now each step is ticked off as it is done and the card stays until
+// the work is finished or it is put away by hand.
 //
 // It also answers App Review's minimum-functionality question, which is
 // not a copy problem: a reviewer signing in with Apple gets a fresh
 // account, and if the app's answer is "go to our website" then the app
 // cannot do its job. It can. Every step below is already on the device.
 export default function FirstRun({
-  onLogBalance, onAddIncome, onAddBill, online,
+  state, onLogBalance, onAddIncome, onAddBill, onDismiss, online,
 }: {
+  state: BudgetState;
   onLogBalance: () => void;
   onAddIncome: () => void;
   onAddBill: () => void;
+  onDismiss: () => void;
   online: boolean;
 }) {
-  const press = { balance: onLogBalance, income: onAddIncome, bills: onAddBill } as const;
+  const done = firstRunProgress(state);
+  const press: Record<StepKey, () => void> = {
+    balance: onLogBalance, income: onAddIncome, bills: onAddBill,
+  };
+  const left = FIRST_RUN_STEPS.filter((s) => !done[s.key]).length;
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.heading}>Start here</Text>
+      <View style={styles.headRow}>
+        <Text style={styles.heading}>Start here</Text>
+        <Pressable onPress={onDismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide this guide">
+          <Text style={styles.hide}>Hide</Text>
+        </Pressable>
+      </View>
       <Text style={styles.lede}>
-        This account is empty. Three things and the forecast starts working — all of them on the
-        phone, in about a minute.
+        {left === FIRST_RUN_STEPS.length
+          ? "This account is empty. Three things and the forecast starts working — all of them on the phone, in about a minute."
+          : `${left} to go. The forecast gets more useful with each one.`}
       </Text>
 
       {FIRST_RUN_STEPS.map((step, i) => (
-        <View key={step.key} style={styles.step}>
+        <View key={step.key} style={[styles.step, done[step.key] && styles.stepDone]}>
           <View style={styles.row}>
-            <Text style={styles.num}>{i + 1}</Text>
-            <Text style={styles.title}>{step.title}</Text>
+            <Text style={[styles.num, done[step.key] && styles.numDone]}>{done[step.key] ? "✓" : i + 1}</Text>
+            <Text style={[styles.title, done[step.key] && styles.titleDone]}>
+              {done[step.key] ? step.done : step.title}
+            </Text>
           </View>
-          <Text style={styles.body}>{step.body}</Text>
-          <Pressable
-            style={({ pressed }) => [styles.cta, pressed && styles.pressed, !online && styles.off]}
-            disabled={!online}
-            onPress={press[step.key]}
-            accessibilityRole="button"
-            accessibilityLabel={step.cta}
-          >
-            <Text style={styles.ctaText}>{online ? step.cta : "Offline"}</Text>
-          </Pressable>
+          {/* A finished step keeps its tick and loses its instructions.
+              Leaving the body and the button there would read as "do it
+              again", which is wrong for all three. */}
+          {!done[step.key] && (
+            <>
+              <Text style={styles.body}>{step.body}</Text>
+              <Pressable
+                style={({ pressed }) => [styles.cta, pressed && styles.pressed, !online && styles.off]}
+                disabled={!online}
+                onPress={press[step.key]}
+                accessibilityRole="button"
+                accessibilityLabel={step.cta}
+              >
+                <Text style={styles.ctaText}>{online ? step.cta : "Offline"}</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       ))}
 
@@ -63,19 +91,24 @@ export default function FirstRun({
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40, gap: 10 },
+  wrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 18, gap: 10 },
+  headRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   heading: { color: T.brass, fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.7 },
+  hide: { color: T.faint, fontSize: 13 },
   lede: { color: T.dim, fontSize: 14, lineHeight: 21, marginBottom: 6 },
   step: {
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
     borderRadius: 14, padding: 14, gap: 6,
   },
+  stepDone: { backgroundColor: "transparent", paddingVertical: 10 },
   row: { flexDirection: "row", alignItems: "center", gap: 8 },
   num: {
     color: T.bg, backgroundColor: T.brass, fontSize: 12, fontWeight: "700",
     width: 20, height: 20, borderRadius: 10, textAlign: "center", lineHeight: 20, overflow: "hidden",
   },
+  numDone: { color: T.bg, backgroundColor: T.income },
   title: { color: T.text, fontSize: 15, fontWeight: "700", flex: 1 },
+  titleDone: { color: T.faint, fontWeight: "600" },
   body: { color: T.dim, fontSize: 13, lineHeight: 19 },
   cta: {
     marginTop: 4, alignSelf: "flex-start", minHeight: 40, justifyContent: "center",

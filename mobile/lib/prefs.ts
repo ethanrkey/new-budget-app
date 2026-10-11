@@ -21,8 +21,13 @@ export type Prefs = {
   /** Net position folded away. Someone who does not want to be met by a
    *  big red number should not have to put it away again every launch. */
   heroCollapsed: boolean;
+  /** The new-account guide, put away by hand. Per device, like the rest:
+   *  it is a statement about this screen on this phone, not a fact about
+   *  the budget. It also re-appears on a new device, which is correct —
+   *  the steps it names are still the steps that matter. */
+  firstRunDismissed: boolean;
 };
-export const DEFAULT_PREFS: Prefs = { heroCollapsed: false, debtsExpanded: false };
+export const DEFAULT_PREFS: Prefs = { heroCollapsed: false, debtsExpanded: false, firstRunDismissed: false };
 
 export async function loadPrefs(): Promise<Prefs> {
   try {

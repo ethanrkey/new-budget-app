@@ -1,4 +1,5 @@
 import type { BudgetState } from "../../src/engine/types.ts";
+import { CATEGORIES } from "../../src/engine/model.ts";
 
 // Has this account been used yet?
 //
@@ -70,6 +71,56 @@ export function isNewAccount(state: BudgetState): boolean {
 }
 
 /**
+ * Which of the three steps have actually been done.
+ *
+ * THIS REPLACED A SINGLE BOOLEAN, and the reason is a bug that reached
+ * a phone. `isNewAccount` flips false on the FIRST write, so logging a
+ * balance — step one — made the whole guide disappear and left a new
+ * user on an empty Ledger with no sign that steps two and three
+ * existed. The guide died at exactly the moment it had proved useful.
+ *
+ * A guide has to survive its own first success, so progress is per
+ * step and the thing is shown until every step is done or it is
+ * dismissed.
+ */
+export function firstRunProgress(state: BudgetState): Record<StepKey, boolean> {
+  const items = [...(state.recurring ?? []), ...(state.oneoffs ?? [])];
+  const directionOf = (c: string) => CATEGORIES[c]?.direction ?? "out";
+
+  let balance = false;
+  for (const list of Object.values(state.accountSnapshots ?? {})) {
+    if (list.some((s) => !isSeed(s))) { balance = true; break; }
+  }
+  return {
+    balance,
+    income: items.some((i) => directionOf(i.category) === "in"),
+    // Anything that leaves: a bill, a one-off, a transfer to savings.
+    // Someone who has entered rent has done this step whatever they
+    // called the category.
+    bills: items.some((i) => directionOf(i.category) === "out"),
+  };
+}
+
+/** How many steps are left. Zero means the guide has finished its job. */
+export function stepsRemaining(state: BudgetState): number {
+  const done = firstRunProgress(state);
+  return FIRST_RUN_STEPS.filter((s) => !done[s.key]).length;
+}
+
+/**
+ * Show the guide? Until the work is done, or until asked not to.
+ *
+ * Dismissal is per device and deliberately not account data: it is a
+ * statement about this screen on this phone, not a fact about the
+ * budget. Same rule as every other preference here.
+ */
+export function showFirstRun(state: BudgetState, dismissed: boolean): boolean {
+  return !dismissed && stepsRemaining(state) > 0;
+}
+
+export type StepKey = "balance" | "income" | "bills";
+
+/**
  * The three things a fresh account needs, in the order they make sense.
  *
  * The balance first, because it is the one number every projected row is
@@ -83,23 +134,26 @@ export function isNewAccount(state: BudgetState): boolean {
  * Review's minimum-functionality question: the app does its whole job
  * on the device, and the only thing that was missing was saying so.
  */
-export const FIRST_RUN_STEPS = [
+export const FIRST_RUN_STEPS: readonly { key: StepKey; title: string; body: string; cta: string; done: string }[] = [
   {
     key: "balance",
     title: "Log what's actually in checking",
     body: "Every projected balance is counted forward from this one number and the date you checked it.",
     cta: "Log balance",
+    done: "Balance logged",
   },
   {
     key: "income",
     title: "Add your paycheck",
     body: "A rule, not a one-off — \"every two weeks from Friday\" — so the forecast keeps going without you.",
     cta: "Add income",
+    done: "Income added",
   },
   {
     key: "bills",
     title: "Add a bill or two",
     body: "Rent, a subscription, whatever is predictable. You do not need all of them to see the shape.",
     cta: "Add a bill",
+    done: "Bills added",
   },
-] as const;
+];
