@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "palette": "node scripts/validate_palette.mjs",
     "screenshots": "node scripts/screenshots.mjs",
-    "hooks:install": "git config core.hooksPath scripts/hooks && echo \"hooks installed (core.hooksPath=scripts/hooks)\""
+    "hooks:install": "git config core.hooksPath scripts/hooks && echo \"hooks installed (core.hooksPath=scripts/hooks)\"",
+    "mobile": "npm --prefix mobile start",
+    "mobile:ios": "npm --prefix mobile run ios"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0",

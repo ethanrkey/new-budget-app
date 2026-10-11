@@ -492,6 +492,14 @@ written here in the same sitting** — there is no other record of it.
   added later; doing it before launch would put a third party's queue
   on the critical path.
 
+**Cloudflare**
+
+- **`support@keybudget.app` is live**, routed to the author's Gmail by
+  Cloudflare Email Routing, 2026-10-11. This is the App Store listing's
+  support address and, later, the Google consent screen's. Worth
+  knowing it is a forward and not a mailbox: replies come from the
+  Gmail address unless something is configured to send as it.
+
 **Platform behavior that is nobody's setting**
 
 - **iOS one-time-code autofill DOES work with Gmail** — measured on the
@@ -501,6 +509,15 @@ written here in the same sitting** — there is no other record of it.
   because it is the kind of claim that gets re-asserted. The field still
   accepts a paste and strips whatever comes with it, which costs nothing
   and covers the cases autofill misses.
+
+**Running Metro: `npm run mobile` from the repo root.**
+
+`npx expo start` only works from `mobile/` — the root has no Expo in
+it, and the error it gives is about a missing package rather than about
+being in the wrong directory. Added 2026-10-11 after exactly that,
+alongside `npm run mobile:ios`. Neither does anything `cd mobile` would
+not; they exist so the wrong guess from the root is impossible rather
+than merely documented.
 
 **Vercel**
 
@@ -1416,12 +1433,15 @@ what, not by size.
    2026-10-11.** Pressed, and in the hardest place to get right: a real
    account was deleted through it. 5.1.1(v) is satisfied in fact. What
    remains is cosmetic — item 10.
-4. **The rest of the nav, still unpressed: Export** (mobile item 9) and
-   the **rebuilt loan card**. Confirmed on device so far: the tour,
-   Budget cumulative net white, the tappable-row underline gone
-   (2026-10-09), and the About screen (2026-10-11), whose tab row was
-   genuinely broken — pills ballooning into ovals — and is fixed, but
-   the FIX has not been looked at on a phone yet.
+4. ~~The rest of the nav.~~ **CLEARED 2026-10-11.** All of it is
+   confirmed on a real phone now: the tour, Budget cumulative net
+   white, the underline gone, the rebuilt loan card, the About tab fix,
+   and Export writing a properly named .csv whose numbers check out
+   (October — in 5541.85, out 3367.19, net 1566.81, cumulative
+   2174.66).
+6. **Google sign-in on a real device.** Proven on the simulator, which
+   cannot show the native account sheet because it has no Google
+   account signed in. The first device build is the test.
 5. ~~Watch the purge actually delete something.~~ **PASSED 2026-10-11**,
    end to end on a real account: `auth.users` 0, `budget_entities` 0
    from a baseline of 9, `account_deletions` 0. The cascade was the
@@ -1933,8 +1953,15 @@ a port.
     discovered by crashing when pressed, so the phone's Expo Go workflow
     is untouched.
 
-    **THE NONCE: "Skip nonce checks" has to be ON, and here is the
-    evidence rather than an opinion.** The library cannot produce one.
+    **WORKS, 2026-10-11.** Tested on the simulator build: tapped
+    Continue with Google, got Google's web sign-in (the simulator has no
+    Google account signed in, which is a simulator artifact and not the
+    real flow), and landed in the author's real account with his real
+    data. The native account sheet is what a device shows, and that test
+    comes with the first device build.
+
+    **THE NONCE: "Skip nonce checks" is ON as of 2026-10-11, and here
+    is the evidence rather than an opinion.** The library cannot produce one.
     `SignInParams` in
     `@react-native-google-signin/google-signin@16.1.5` has exactly one
     field, `loginHint`, and the string "nonce" appears in **zero** files
@@ -1958,6 +1985,50 @@ a port.
     allow-list this path avoids entirely. Not recommended — the UX cost
     is paid by every user on every sign-in, and the risk avoided is a
     narrow one.
+
+14. **Sign in with Apple — the plan, ready to execute the moment Apple
+    approves.** Enrollment was paid 2026-10-11 (Individual); everything
+    below is blocked only on the approval email.
+
+    **A correction to what this spec said twice before: the native flow
+    does NOT need a Services ID or a signing key.** Those belong to
+    Apple's WEB OAuth flow, which this app does not use — the web signs
+    in with Google and magic links. For native, per Supabase's own
+    guide, "the bundle identifier serves as the client ID", so the
+    whole Apple-side configuration is one App ID with one capability.
+    That makes this materially smaller than it was written up as.
+
+    1. **Apple Developer portal:** register the App ID `app.keybudget`
+       and enable the *Sign in with Apple* capability on it.
+    2. **Supabase -> Authentication -> Providers -> Apple:** enable, and
+       add **`app.keybudget`** to Client IDs. Nothing else. If anyone
+       ever tests this in Expo Go, `host.exp.Exponent` has to go in that
+       list too — but it cannot be tested there, because the module is
+       native.
+    3. `npx expo install expo-apple-authentication` and add its config
+       plugin, which is what writes the entitlement into the build.
+    4. Code, mirroring `lib/google.ts`:
+       `AppleAuthentication.signInAsync({ requestedScopes: [FULL_NAME,
+       EMAIL] })`, then `signInWithIdToken({ provider: "apple", token:
+       credential.identityToken })`. **No nonce** — Supabase's native
+       Expo example does not generate one, same as Google.
+    5. **Use `AppleAuthenticationButton` from that package, not a
+       hand-drawn button.** Apple's guidelines govern the mark, the
+       wording and the corner radius, and a custom one is a rejection
+       risk for no gain.
+    6. Gate it on `AppleAuthentication.isAvailableAsync()` rather than
+       on the execution environment, since that is the API's own answer
+       and it is iOS-version-dependent as well as build-dependent.
+
+    **The one behavior that surprises people:** Apple returns the user's
+    name and email **only on the very first authorization**. Every later
+    sign-in returns null for both. Anything that wants a display name
+    has to capture it the first time or never get it. This app shows no
+    display name today, so it costs nothing now and would cost a
+    migration later.
+
+    **4.8 ties this to Google:** Google is wired and working on the
+    phone, and it must not reach the App Store before this does.
 
 Not built, and not yet decided either way: the native iOS 26 Liquid
 Glass tab bar via `expo-router/native-tabs`. It needs a `ThemeProvider` —
