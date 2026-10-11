@@ -1348,45 +1348,40 @@ what, not by size.
 **A. Stops a TestFlight build existing at all**
 
 1. Sign-in on the phone — mobile item 1. **Option D shipped 2026-10-09**
-   (emailed six-digit code), which unblocks every account the web ever
-   made. Google and Sign in with Apple are still out, and both wait on a
-   development build; Sign in with Apple additionally waits on the paid
-   account. Two things remain to confirm with one real send each: that
-   `{{ .Token }}` and `{{ .ConfirmationURL }}` can share one template,
-   and that a code reaches a Google-created account.
-2. `mobile/app.json` is still the Expo template and no iOS build has ever
-   been made — mobile item 12. Do the bundle identifier early.
+   (emailed six-digit code) and has now signed a real account in on a
+   real phone twice. The shared-template question is **settled**: one
+   magic-link template carries both `{{ .ConfirmationURL }}` and
+   `{{ .Token }}` and serves both clients. **Still open: whether a code
+   reaches a GOOGLE-created account.** The throwaway was made by magic
+   link, so it did not test that, and it is the one case that could
+   leave a real user locked out. Google and Sign in with Apple are both
+   still out and both wait on a development build; Sign in with Apple
+   additionally waits on the paid account.
+2. **No iOS build exists.** `mobile/app.json` is no longer the template —
+   name, slug, scheme, bundle identifier and icon are all real as of
+   2026-10-09. The first `npx expo run:ios` on 2026-10-11 got through
+   prebuild and CocoaPods and was stopped by Xcode: SDK 57 needs Xcode
+   26.4+ and 16.4 is installed. `mobile/eas.json` has a cloud
+   `simulator` profile as the way around it. See mobile item 12.
 
 **B. Stops it surviving review, or surviving contact with a tester**
 
-3. Account deletion / Settings, built but never pressed — mobile item 2.
-   5.1.1(v) is a hard requirement and an unpressed screen is a claim.
-4. The rest of the nav. **Tested on device 2026-10-09: the tour works,
-   Budget cumulative net is white, the tappable-row underline is gone.**
-   About renders but **its tabs are wonky** — reported in those words,
-   not yet reproduced or specified, and the only open defect on the
-   screen. Still never pressed: **Export** (mobile item 9) and the
-   **rebuilt loan card**.
-5. Watch the purge actually delete something — *Later* item 2.
-   **IN FLIGHT 2026-10-11.** A throwaway account exists
-   (`ethanrkey23+kbtest@gmail.com`, created on the web by magic link),
-   was signed into on the phone with a code, and was deleted from mobile
-   Settings — the first real press of either the Settings screen or
-   in-app deletion, and both worked. `purge_after` is backdated to
-   2026-10-11 00:14 UTC and confirmed in `account_deletions`. What the
-   03:17 run has to show, and what nobody has ever watched: the
-   `auth.users` row for `242a171d-db90-4d30-bc57-85b8f82dde64` gone AND
-   no `budget_entities` rows left under that id. The cascade is the
-   untested half — a purge reports `succeeded` either way.
-
-   **Half-confirmed 2026-10-09:** `cron.job_run_details` shows six
-   consecutive nights, 2026-10-04 through 2026-10-09, every one
-   `succeeded` at 03:17 with `1 row`. So the schedule is real and the
-   function runs clean. What that does NOT show is a deletion, because
-   no account has ever been due — a successful run with nothing to purge
-   and a successful run that destroys an account are the same line in
-   that table. The remaining test is a throwaway account with a
-   backdated purge date, watched end to end, and never the real one.
+3. ~~Account deletion / Settings, built but never pressed.~~ **CLEARED
+   2026-10-11.** Pressed, and in the hardest place to get right: a real
+   account was deleted through it. 5.1.1(v) is satisfied in fact. What
+   remains is cosmetic — item 10.
+4. **The rest of the nav, still unpressed: Export** (mobile item 9) and
+   the **rebuilt loan card**. Confirmed on device so far: the tour,
+   Budget cumulative net white, the tappable-row underline gone
+   (2026-10-09), and the About screen (2026-10-11), whose tab row was
+   genuinely broken — pills ballooning into ovals — and is fixed, but
+   the FIX has not been looked at on a phone yet.
+5. ~~Watch the purge actually delete something.~~ **PASSED 2026-10-11**,
+   end to end on a real account: `auth.users` 0, `budget_entities` 0
+   from a baseline of 9, `account_deletions` 0. The cascade was the
+   half that had never run. Kept here, struck, because this list is
+   where someone looks to ask what is still dangerous, and the answer
+   changing is worth seeing. Full account in *Later* item 2.
 
 **C. "Useful to someone who is not the author" — now requirements, not polish**
 
@@ -1680,10 +1675,12 @@ a port.
    had no such screen. `mobile/components/Settings.tsx` now carries the
    account facts, sign-out (previously stranded on the Dashboard), and
    the danger zone at the Settings root as decided. It typechecks and it
-   bundles; nobody has tapped it. Until someone does, treat the blocker
-   as closed in code and open in fact — and note that item 1 now
-   outranks it: an app nobody can sign in to does not get as far as
-   needing a delete button.
+   bundles. **Pressed for the first time 2026-10-11, and in the hardest
+   place to get right: a real account was deleted through it and the
+   purge destroyed the account and all nine of its rows.** So 5.1.1(v)
+   is satisfied in fact and not only in code. What is left is cosmetic
+   and is item 10 — the screen works and looks like one nobody has
+   looked at.
 3. **Quick entry** [D]. Arguably worth MORE on a phone than on the web —
    entering a cash spend while standing in a shop is the case. Decision:
    whether it is the same keep-going-until-closed surface the web has,
@@ -1894,9 +1891,40 @@ Later, in rough order:
    blocker, above account deletion, now that transaction editing and
    the Settings screen are both built. Custom SMTP gates every fix for
    it.
-2. **Verify the pg_cron purge actually ran.** `cron.job` is scheduled;
-   `cron.job_run_details` has not been read since. A deletion feature
-   nobody has watched execute is a claim, not a feature.
+2. ~~**Verify the pg_cron purge actually ran.**~~ **CLOSED 2026-10-11.
+   PASSED, end to end, on a real account.** It was the oldest honest
+   worry in this document — a deletion feature nobody has watched
+   execute is a claim, not a feature, and this one was a claim for nine
+   days while the app told users their data would be destroyed in seven.
+
+   What was done, in order: a throwaway account
+   (`ethanrkey23+kbtest@gmail.com`) created on the web by magic link and
+   taken through the setup wizard; signed into on the phone with an
+   emailed code; deleted from mobile Settings, which returned "deletion
+   scheduled"; `purge_after` backdated to 2026-10-11 00:14 UTC and
+   confirmed in `account_deletions`; then the 03:17 UTC run watched.
+
+   What it proved, measured after the run against a baseline of 9 rows:
+
+   - `auth.users` for `242a171d-db90-4d30-bc57-85b8f82dde64` — **0**.
+   - `budget_entities` under that id — **0**, down from 9. **The cascade
+     is the half that had never been exercised**, and it is the half
+     that matters: a purge reports `succeeded` whether it destroyed an
+     account or found nothing due, so six clean nights had proved only
+     that the schedule exists.
+   - `account_deletions` for that id — **0**. The request row goes with
+     the user, so a purged account leaves nothing behind anywhere.
+
+   It also happened to be the first real press of the mobile Settings
+   screen and of in-app deletion, both of which had shipped untapped.
+   They worked; Settings still wants a polish pass, which is its own
+   item.
+
+   **What it did NOT prove, and should be said plainly:** the seven-day
+   wait, because the date was backdated, and the cancel path, because
+   nothing was canceled. Neither is load-bearing in the way the cascade
+   was — a delay that fires early is a scheduling bug, not a data-loss
+   bug — but neither has been watched either.
 3. **`storage.js` under `// @ts-check`** — measured at 25 implicit-any
    complaints under `strict`, so a contained afternoon rather than a
    rewrite, and it is the file that touches the typed engine most.
