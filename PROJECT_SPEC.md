@@ -2098,6 +2098,69 @@ a port.
     work — bigger than sign-in itself — and it only exists if Sign in
     with Apple ships. Its own item, not a line in the sign-in one.
 
+15. **Full setup on the phone, at web parity — DECIDED 2026-10-11,
+    PLANNED, NOT STARTED. Lands before App Store submission.** The
+    reasoning is not mine and is worth keeping in his words: most App
+    Store users will never touch the web, so the phone's setup cannot
+    be the lesser version. That overrides the "signpost, not a wizard"
+    call made earlier the same day, and it should — that call was
+    about avoiding DRIFT, and drift is avoidable without crippling the
+    phone.
+
+    **The answer to drift is to share the logic, not the screens.**
+
+    **Phase 1 — extract what setup CREATES (half a day).** The web's
+    wizard is 460 lines of questions over about fifty lines of real
+    logic, and that logic lives in `completeOnboarding` inside
+    `App.jsx` — a React component. It encodes decisions a second
+    implementation would get wrong by omission:
+
+    - a wizard row named "Savings" must REUSE the seeded category of
+      that name rather than making a second one, but only when nothing
+      is logged against it, because reusing one that has history means
+      writing into somebody's real data on a name collision;
+    - debt is created with a balance and NO terms, deliberately, because
+      asking for principal, APR and a start date during setup is where
+      people give up;
+    - the accounts step runs last so that someone who quits before it
+      still leaves with a working forecast.
+
+    So: move it to `src/engine/setup.ts` as a pure
+    `applySetup(state, answers) -> state`. Web calls it, phone calls
+    it, and "one definition of what setup creates" is a fact about the
+    code rather than a promise. Behavior parity is provable rather
+    than hoped for: the golden harness already round-trips normalize
+    over real fixtures, and this is a move, so the output must be
+    byte-identical.
+
+    **Phase 2 — the phone's six steps (2 to 3 days).** Paycheck, rent,
+    other bills, groceries, balance, accounts. Same questions, same
+    order, same output. Built from the primitives already here
+    (BottomSheet, DatePicker, the editor's fields), with renderer tests
+    and mutations to match. Parity is by construction, because the
+    output is `applySetup`.
+
+    **Phase 3 — reconcile with the three-step guide (half a day).**
+    They answer different questions: the flow says "set me up", the
+    guide says "here is what is still missing". Recommendation: a new
+    account gets the flow, with a skip that lands on the guide, and the
+    guide keeps working for anyone who quit partway — it already
+    computes exactly what is outstanding, which is the resume state for
+    free.
+
+    **Three things to settle before Phase 2, none of them blocking
+    Phase 1:**
+
+    - The wizard's copy says "add the rest afterward with Quick Entry",
+      and the phone has no Quick Entry (mobile item 3). Either that
+      sentence gets a platform variant or Quick Entry gets built.
+    - The web copy is marked "Draft copy — expected to be edited" at
+      the top of `Onboarding.jsx` and the voice pass is coming. Put the
+      strings in `src/content/` when the flow is built, so the pass
+      touches one file and not two.
+    - Loan TERMS stay out of setup on both clients. That is a decision
+      already made and worth not quietly reversing on a bigger screen.
+
 Not built, and not yet decided either way: the native iOS 26 Liquid
 Glass tab bar via `expo-router/native-tabs`. It needs a `ThemeProvider` —
 the system derives the bar background from content and ignores a JS-only
