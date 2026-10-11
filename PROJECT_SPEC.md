@@ -1498,8 +1498,16 @@ what, not by size.
    shared in the first place. A second mobile copy would re-create the
    problem that moving it here solved.
 7. Capability parity audit, enumerate without fixing — *Later* item 7.
-8. Onboarding that works cold on a phone — mobile item 7. A user who
-   signs up on the phone currently lands in an empty app.
+8. ~~Onboarding that works cold on a phone.~~ **SHIPPED 2026-10-11 as a
+   signpost, not a wizard.** Google sign-in made it urgent rather than
+   eventual: OAuth provisions a user on first sign-in, so an account
+   can now be born on the phone. The scope collapsed once it was clear
+   the phone ALREADY had every control — `+ Add` opens the editor in
+   add mode, `LogBalance` logs the anchor — so this is three steps
+   pointing at them, in the order that makes a forecast work. Mobile
+   item 7's full wizard stays unported, deliberately: a second way to
+   create the same things is a second thing to keep correct. See
+   `lib/firstRun.ts` for why detecting "new" is harder than it looks.
 9. Sweep for places the app assumes its author is the one using it. New,
    from the 2026-10-09 scope decision; no entry yet.
 10. **Settings needs a polish pass.** Pressed for the first time
@@ -1778,9 +1786,15 @@ a port.
    `assetKind` cannot be changed on the phone.
 6. ~~**Log a contribution** [P].~~ **SHIPPED 2026-10-08** — the
    "Contributed" figure had implied a control that did not exist.
-7. **Onboarding + guided tour** [D]. A user who signs up ON the phone
-   currently lands in an empty app. Decision: port the wizard, or state
-   that first-time setup is a web task and say so at the empty state.
+7. **Onboarding + guided tour** [D] — **DECIDED AND PARTLY SHIPPED
+   2026-10-11.** The decision was "port the wizard, or say setup is a
+   web task", and the answer turned out to be neither: the phone can
+   already do the setup, so it now says so and hands you the controls
+   it has (`components/FirstRun.tsx`). What remains unported is the
+   wizard itself — the guided multi-step flow with its own validation —
+   and it stays unported on purpose, because a second way to create a
+   rule is a second thing to keep correct. The tour already ships
+   inside About.
 8. ~~**The recovery copy** [D].~~ **SHIPPED 2026-10-08** alongside
    transaction editing, which is what "ships with item 1" meant.
    `lib/stash.ts`, awaited before the optimistic apply, reported and
