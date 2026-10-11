@@ -77,13 +77,12 @@ balance, grouped by month — or the same data as a **month calendar**, with
 colored dots and each day's net, and a click for the day's transactions. (The
 running balance stays in the list; a month grid has nowhere honest to put it.)
 Either way there's a collapsible **Planned spending** breakdown
-above it — where the money in this window is going, by category, as a pie or a
+above it — where the money in this window is going, by category, as a sorted
 horizontal bar. It's the forecast, and it says so: no logged number touches
 it. Bills and one-offs are always shown as their own transactions rather than
-as one slice — "Fixed bills" is where anything uncategorized lands, so grouping
+as one row — "Fixed bills" is where anything uncategorized lands, so grouping
 by it tells you nothing — while the categories you made stay whole. Past
-eight slices the tail folds into "Other", which opens on click — in the legend
-for the pie (whose wedge never changes shape), in place for the bar — and the
+eight rows the tail folds into "Other", which opens in place, and the
 summary row is replaced by its parts rather than sitting above them. Optional cumulative columns per savings category,
 multi-select delete, a different amount for one date
 (Electric is $112 but $180 in July) without breaking the rule,
