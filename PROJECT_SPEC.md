@@ -1817,6 +1817,44 @@ a port.
     reporting `x64` on an M4 means the JS toolchain is in the emulated
     world too. Check that before blaming a build failure on Expo.
 
+    **THE LOCAL BUILD IS BLOCKED ON XCODE, measured 2026-10-11.** The
+    first `npx expo run:ios` got as far as a clean CocoaPods install and
+    then `xcodebuild` failed with code 65:
+
+    > `package 'apple' is using Swift tools version 6.2.0 but the
+    > installed version is 6.1.0`
+
+    The package is `node_modules/expo-modules-jsi/apple`, whose
+    `Package.swift` opens with `// swift-tools-version: 6.2`, as does
+    `@expo/expo-modules-macros-plugin/apple`. Swift 6.1.2 is what Xcode
+    16.4 ships. Expo's own SDK 57 requirements say **"Xcode version
+    26.4+"**, so this is a major-version gap and not a flag, a cache or
+    a Rosetta problem — the native toolchain was already confirmed arm64
+    before this ran. Nothing in the repo can work around it; editing a
+    dependency's `Package.swift` would only move the failure into the
+    compiler.
+
+    So the order is: **EAS first, Xcode when it finishes downloading.**
+    `mobile/eas.json` exists with a `simulator` profile — cloud build,
+    an image that has the right Xcode, no Apple Developer membership,
+    and the one interactive step is `eas login` with a free Expo
+    account. Updating Xcode is still worth starting, because local
+    iteration on native code is far faster than a cloud round trip and
+    the update is time rather than work.
+
+    `developmentClient` is deliberately **false** in that profile. A
+    dev client is the better iteration loop, but it needs
+    `expo-dev-client` installed, and that changes what `expo start`
+    serves by default — which would disrupt the Expo Go testing running
+    on the phone right now. The simulator build embeds its bundle
+    instead: slower to iterate, and sufficient to prove the pipeline and
+    to exercise Google's redirect against a real registered scheme.
+
+    `mobile/ios/` now exists (1.2 GB, gitignored by both ignore files).
+    It is generated — `npx expo prebuild --clean` regenerates it, and it
+    must never be edited by hand, since every native setting belongs in
+    `app.json`.
+
     **A dev build is also the only way to find out what Expo Go hides** —
     the launch screen, the permission strings, the privacy manifest, and
     any native module Expo Go does not already bundle. None of those
