@@ -438,6 +438,24 @@ written here in the same sitting** — there is no other record of it.
   is part of the Sign in with Apple work, not a separate step.
 - `mailer_autoconfirm` is false.
 
+**EAS (`@ethankey/key-budget`, project `b1d6b66c-…`)**
+
+- **`EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` are
+  EAS project environment variables**, set in production, preview and
+  development, visibility plaintext. They are NOT read from
+  `mobile/.env` in a cloud build: `.env` is gitignored and EAS uploads
+  what git tracks, so the first build shipped with no backend at all and
+  threw `supabaseUrl is required` before its first frame. Plaintext is
+  the honest visibility for a value inlined into a bundle anyone can
+  unzip; the anon key is public by design and the service role key is
+  not involved.
+- The `simulator` profile pins `environment: preview`, so which set a
+  build reads is a decision rather than a default. Every build log
+  states which environment it loaded — worth reading.
+- **`ITSAppUsesNonExemptEncryption: false`** is declared in `app.json`.
+  The app's only cryptography is HTTPS, which is exempt, and declaring
+  it is what stops App Store Connect asking at every upload.
+
 **Resend**
 
 - **Custom SMTP, sending domain `keybudget.app`, Verified** since
