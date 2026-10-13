@@ -34,8 +34,25 @@ import { T, money } from "./theme";
  * to the nearest point means a finger anywhere near the line reads the
  * value it was aiming at.
  */
+/**
+ * How tall a sparkline is on a phone.
+ *
+ * 68pt was a sparkline in the literal sense — a glyph-height trace
+ * meant to be glanced at. But this one is SCRUBBED, and at 50pt of
+ * plot a finger covers most of the series and small moves between
+ * readings are below the noise of the touch itself. Raised to 170pt
+ * 2026-10-14 after the first real session with it on a device.
+ *
+ * The RANGE is unchanged and stays fitted to the data: a taller box
+ * showing the same lo-to-hi span magnifies the shape, which is the
+ * point. Padding the range to zero would flatten every series that
+ * matters here, because these are balances and they rarely start at
+ * nothing.
+ */
+export const SPARKLINE_HEIGHT = 170;
+
 export function Sparkline({
-  points, color, width, height = 68,
+  points, color, width, height = SPARKLINE_HEIGHT,
 }: { points: { date: string; amount: number }[]; color: string; width: number; height?: number }) {
   // WHERE YOU LEFT IT. `active` survives the release: lifting a finger
   // is not "never mind", it is "that one". Snapping back to the newest
@@ -164,7 +181,7 @@ export function Sparkline({
         <Polyline points={coords.join(" ")} fill="none" stroke={color} strokeWidth={2}
           strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
-          <Circle key={`${p.date}-${i}`} cx={geom.x(i)} cy={geom.y(p.amount)} r={2} fill={color} opacity={0.65} />
+          <Circle key={`${p.date}-${i}`} cx={geom.x(i)} cy={geom.y(p.amount)} r={2.5} fill={color} opacity={0.65} />
         ))}
         {touching && <Rect x={sx - 0.5} y={0} width={1} height={plotH} fill={T.dim} opacity={0.5} />}
         {/* The point being read is drawn with a surface ring so it stays
