@@ -508,6 +508,43 @@ written here in the same sitting** — there is no other record of it.
   added later; doing it before launch would put a third party's queue
   on the critical path.
 
+**App Store Connect / TestFlight**
+
+- **1.0.0 (2) is installed on a real iPhone via TestFlight**, internal
+  group "Team (Expo)", 2026-10-12. Google sign-in verified on the
+  device with the native account sheet, and the emailed code verified
+  on the same build.
+- **EAS holds the credentials**: the distribution certificate and
+  provisioning profile from the first interactive build, plus an App
+  Store Connect API key named "[Expo] EAS Submit", Key ID
+  **H69S428989**. So `eas build` and `eas submit` run non-interactively
+  from here on.
+- **That key has Admin access and App Manager would do.** Low priority,
+  and worth a note rather than a fix: the key can do considerably more
+  than submit builds, and the blast radius of a leaked Admin key is the
+  whole account. Narrow it when something else takes you into that
+  screen.
+- **Internal testers need an App Store Connect user account.** Family
+  and friends therefore go in an EXTERNAL group, whose first build
+  needs Beta App Review.
+
+  **Test Information, ready to paste when that group is made:**
+  Beta App Description — "Key Budget projects your checking balance
+  forward from the rules you describe — your paycheck, your rent, your
+  bills — and keeps that forecast separate from the balances you
+  actually log, so the app never quietly blends what you planned with
+  what happened." Feedback email: `support@keybudget.app`. Marketing
+  URL and Privacy Policy URL: `https://keybudget.app` and
+  `https://keybudget.app/privacy`.
+
+  **Review notes, which are the part that prevents a rejection:**
+  "No demo account is needed. Sign in with Apple, with Google, or with
+  a six-digit code emailed to any address you choose — all three create
+  or reach an account directly on the device. A new account lands on a
+  three-step guide that logs a checking balance and adds income and a
+  bill, so the app's full function is available on the phone without
+  visiting the website."
+
 **Cloudflare**
 
 - **`support@keybudget.app` is live**, routed to the author's Gmail by
@@ -1498,13 +1535,20 @@ what, not by size.
      not there.
    - **:212** "It's one click and it has saved this project before."
 
+   **Outside the repo, same pass:** the Supabase email templates still
+   say "sign-in link" in the subject and the heading, when most people
+   now use the code in the body. Noted 2026-10-12; the author edits
+   those himself, and nothing here can check them.
+
    **The mechanism to prefer, when the pass happens:** a per-block
    platform variant inside `about.ts` rather than a second file. One
    file still holds both clients' words, so neither can go stale without
    the other being looked at — which is the whole reason the copy was
    shared in the first place. A second mobile copy would re-create the
    problem that moving it here solved.
-7. Capability parity audit, enumerate without fixing — *Later* item 7.
+7. ~~Capability parity audit, enumerate without fixing.~~ **RUN
+   2026-10-12**, in its own section below the roadmap. Four real gaps,
+   two of them arguably decisions. Nothing built from it until picked.
 8. ~~Onboarding that works cold on a phone.~~ **SHIPPED 2026-10-11 as a
    signpost, not a wizard.** Google sign-in made it urgent rather than
    eventual: OAuth provisions a user on first sign-in, so an account
@@ -2236,6 +2280,32 @@ a port.
       arguing about: the pie was removed from the app, and a pie icon
       for the tab that no longer has one is a small lie.
 
+18. **EAS Update (over-the-air JS) — planned 2026-10-12, folds into
+    the next native batch.** Build 1.0.0 (2) does not contain
+    `expo-updates`, so the first OTA-capable build has to be a new one
+    regardless; there is no way to add OTA over the air.
+
+    **What can go OTA, once it is in:** anything that is only
+    JavaScript, which is almost everything this project does — screens,
+    copy, engine logic, validation, charts, the setup flow, the parity
+    gaps, the voice pass. A JS change reaches an installed TestFlight
+    build without App Review and without a new build.
+
+    **What always needs a new build**, because it changes the binary:
+    every native module (`expo-haptics`, `expo-apple-authentication`,
+    `expo-updates` itself), native tabs (a native view), anything
+    touching `app.json`'s native surface — the icon, the splash, the
+    bundle identifier, URL schemes, entitlements, Info.plist keys — and
+    an Expo SDK upgrade.
+
+    **The trap worth writing down now:** an OTA update is JS shipped
+    against a binary that may be older than it. Ship JS that calls a
+    native module the installed build does not have and it crashes on
+    launch, with no way to push a fix to a device that cannot start.
+    `expo-updates` has a runtime version for exactly this, and it has
+    to be set up so that a native change bumps it rather than being
+    allowed to land OTA.
+
 17. **Haptics (`expo-haptics`) — planned 2026-10-12, after native
     tabs.** On outcomes, not touches. The rule that keeps it subtle is
     that a haptic answers a question the screen cannot answer fast
@@ -2487,6 +2557,95 @@ Further out:
 - ~~iOS client sharing `src/engine`.~~ **DONE 2026-10-02**, and the phone
   has had a write path since 2026-10-08. What is left of it is the
   mobile backlog above, not this line.
+
+### Capability parity audit (2026-10-12)
+
+*Later* item 7, run. **Enumerate, do not fix** — nothing here is built
+until it is picked.
+
+**How it was built, because the method is the trustworthy part.** Not
+from this document, which has been wrong about capability twice in a
+week. Every exported mutator in `engine/mutate.ts` was cross-referenced
+against both clients' call sites mechanically, and the UI-only
+capabilities (views, pickers, filters, pages) were read off the web's
+component tree. Thirty mutators, four tabs, fifteen web components.
+
+Marked **PRESENT**, **MISSING**, or **WEB-ONLY** where the absence is a
+decision already made and recorded.
+
+#### Writes — from the mutator cross-reference
+
+| Capability | Engine call | Phone |
+|---|---|---|
+| Add / edit / delete a transaction | `upsertItem`, `deleteItem` | PRESENT |
+| Edit one occurrence; reset it | `setOverride`, `clearOverride` | PRESENT |
+| Orphan count before a schedule change | `orphanedOverrideDates` | PRESENT |
+| Log / edit / delete a checking balance | `updateAccountBalance`, `updateAccountSnapshot`, `deleteAccountSnapshot` | PRESENT |
+| Log / edit / delete a category balance | `addBalanceSnapshot`, `updateBalanceSnapshot`, `deleteBalanceSnapshot` | PRESENT |
+| Log a contribution | `addContribution` | PRESENT |
+| **Edit or delete a contribution** | `updateContribution`, `deleteContribution` | **MISSING** |
+| Log / clear a monthly actual | `setMonthlyActual`, `deleteMonthlyActual` | PRESENT |
+| Add / rename / delete / reorder an account | `addCategory`, `updateCategory`, `deleteCategory`, `moveCategory` | PRESENT (2026-10-12) |
+| Set up a loan or an asset | `setupLoan`, `setupAsset` | PRESENT (2026-10-12) |
+| Wipe data | `wipeToNewAccount` | PRESENT |
+| **Multi-select delete** | `deleteItems` | **MISSING** |
+| Reorder rows by hand | `reorderList`, `swapOrder` | WEB-ONLY |
+| Reorder the tabs | `moveTab` | WEB-ONLY |
+
+#### Reads and surfaces
+
+| Capability | Phone |
+|---|---|
+| Ledger list, running balance, month headers | PRESENT |
+| Calendar view of the same transactions | PRESENT |
+| **Ledger "Cumulative columns" picker** | **MISSING** |
+| Budget grid, monthly and cumulative net | PRESENT |
+| Dashboard net position, asset and loan cards, history, charts | PRESENT |
+| Spending tab, variance, untrack nudge, dead-month filter | PRESENT |
+| **Account balance visible on every tab** (web's `AccountStrip`) | **PARTIAL** — Ledger and Dashboard only |
+| Horizon control | PRESENT, different by design: a device-local date chip, not a synced slider |
+| Export (Ledger CSV, Budget CSV, JSON backup) | PRESENT |
+| About, and the guided tour inside it | PRESENT |
+| Settings, account facts, sign-out, danger zone | PRESENT |
+| In-app account deletion, with the 7-day window | PRESENT |
+| New-account first-run guide | **PHONE-ONLY** |
+| Sign in with an emailed code | **PHONE-ONLY** — the web has the link only (*Later* item 11) |
+| Sign in with Google | PRESENT, device-verified 2026-10-12 |
+| CSV import | WEB-ONLY |
+| Quick entry | WEB-ONLY, decided 2026-10-12 |
+| Light / dark theme toggle | WEB-ONLY — the phone is dark by decision |
+| Full setup wizard | WEB-ONLY today; mobile item 15 is building it |
+| Landing page, privacy page | WEB-ONLY by nature |
+
+#### The four real gaps, with a view on each
+
+1. **Edit or delete a contribution.** The phone logs one and cannot
+   correct it. A mistyped contribution is then permanent on the device
+   that made it, which is the shape of bug this project treats as
+   serious — every other logged number here is correctable. The history
+   list already has edit and delete for snapshots; this is the same
+   affordance pointed at a different list. **Smallest and most clearly
+   wrong. Recommended first.**
+2. **The Ledger's "Cumulative columns" picker.** On the web you can
+   show a running total per tracked account beside the rows. On a 390pt
+   screen a column picker is a real design question rather than a port,
+   and the Budget already carries cumulative net. **Worth deciding, not
+   assuming.**
+3. **Multi-select delete.** Web has checkboxes and a bulk delete. The
+   phone deletes one at a time through the scope sheet. Honest
+   assessment: this is a laptop gesture, and the phone's per-row
+   confirm is arguably safer for the same job. **A candidate for
+   WEB-ONLY rather than a gap, if that is the call.**
+4. **The balance on every tab.** The web keeps the anchor visible
+   everywhere because every number is built from it. The phone shows it
+   on two tabs of four. **Cheap to fix, and it is the number the whole
+   forecast rests on.**
+
+#### Where the phone is ahead
+
+Worth recording so parity is not read as one-directional: the emailed
+code, which the web cannot do at all, and the first-run guide, which
+the web does not need because its wizard is always one click away.
 
 ## 11. Decision log (why things are the way they are)
 
