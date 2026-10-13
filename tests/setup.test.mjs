@@ -9,7 +9,10 @@
 // has been testable at all, so the tests are the point of the move as
 // much as the sharing is.
 import { normalize } from "../src/engine/stateShape.ts";
-import { applySetup } from "../src/engine/setup.ts";
+import {
+  applySetup, paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
+  blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
+} from "../src/engine/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
 import { computeLedger } from "../src/engine/compute.ts";
 
@@ -147,6 +150,133 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   }
   eq("a zero balance IS written, because zero is an answer",
     applySetup(blank, { checkInBalance: 0 }, TODAY).accounts[0].balanceAsOf, TODAY);
+}
+
+
+// =====================================================================
+// WHAT THE ANSWERS MEAN — the builders both clients call, added with
+// the phone's flow 2026-10-13. These used to be inline in
+// Onboarding.jsx, where a second implementation could only match them
+// by reading them carefully, and three of them encode a judgment that
+// is easy to get backwards.
+
+// ---- a blank field is a skipped question, not a zero ----------------
+{
+  for (const bad of ["", "   ", "abc", "0", "-50"]) {
+    eq(`a paycheck of ${show(bad)} creates no rule`, paycheckRule(bad, "biweekly", TODAY), null);
+    eq(`rent of ${show(bad)} creates no rule`, rentRule(bad, "1", TODAY), null);
+    eq(`groceries of ${show(bad)} creates no rule`, groceryRule(bad, "weekly", TODAY), null);
+  }
+  eq("a bill row with no amount is dropped", billRules([{ name: "Spotify", amount: "", day: "4" }], TODAY), []);
+  eq("a bill row with no name is dropped", billRules([{ name: "  ", amount: "12", day: "4" }], TODAY), []);
+}
+
+// ---- the balance step is the exception: zero IS an answer -----------
+{
+  eq("an empty balance is not an answer", balanceAnswer("   "), null);
+  eq("a junk balance is not an answer", balanceAnswer("abc"), null);
+  eq("zero is an answer", balanceAnswer("0"), 0);
+  eq("and so is a negative one — overdrafts are real", balanceAnswer("-120.50"), -120.5);
+}
+
+// ---- each rule is the rule the web has always built ------------------
+{
+  const pay = paycheckRule("2100", "biweekly", TODAY);
+  eq("the paycheck is income", pay.category, "income");
+  eq("...named Paycheck", pay.name, "Paycheck");
+  eq("...on the cadence chosen", pay.cadence, "biweekly");
+  eq("...starting today", pay.startDate, TODAY);
+  eq("...on today's day of the month", pay.dayOfMonth, 12);
+  eq("...and carries no order — upsertItem assigns it", pay.order, undefined);
+
+  const groc = groceryRule("150", "weekly", TODAY);
+  eq("groceries are a bill, not a category of their own", groc.category, "bill");
+  eq("...on the cadence chosen", groc.cadence, "weekly");
+}
+
+// ---- rent's day, which the ledger's ordering turns on -----------------
+{
+  eq("the day asked for is the day stored", rentRule("1450", "15", TODAY).dayOfMonth, 15);
+  eq("...and the first occurrence lands on it", rentRule("1450", "15", TODAY).startDate, "2026-10-15");
+  // Clamped into a real month rather than rolling into the next one.
+  eq("the 31st of a 30-day month starts on the 30th", rentRule("1450", "31", "2026-11-05").startDate, "2026-11-30");
+  eq("...but the rule still remembers the 31st", rentRule("1450", "31", "2026-11-05").dayOfMonth, 31);
+  eq("a nonsense day falls back to the 1st", rentRule("1450", "", TODAY).dayOfMonth, 1);
+  eq("...and 99 is clamped, not stored", rentRule("1450", "99", TODAY).dayOfMonth, 31);
+}
+
+// ---- the bills step's defaulted day is TODAY, shown not guessed ------
+{
+  const rows = [
+    { name: "Spotify", amount: "11.99", day: "4" },
+    { name: " Internet ", amount: "70", day: "" },
+  ];
+  const out = billRules(rows, TODAY);
+  eq("both rows become rules", out.length, 2);
+  eq("the typed day is kept", out[0].dayOfMonth, 4);
+  eq("an empty day falls back to today's", out[1].dayOfMonth, 12);
+  eq("the name is trimmed", out[1].name, "Internet");
+  eq("every bill is monthly", out.map((r) => r.cadence), ["monthly", "monthly"]);
+}
+
+// ---- the accounts step: a half-filled row blocks, never drops --------
+{
+  const rows = blankAccountRows();
+  eq("three groups, one empty row each", Object.keys(rows).sort(), ["debt", "investment", "savings"]);
+  eq("empty rows are not started", startedAccountRows(rows).length, 0);
+  eq("...so an untouched step finishes", incompleteAccountRows(rows).length, 0);
+  eq("...and creates nothing", collectAccounts(rows), []);
+
+  // THE BUG THIS EXISTS FOR: an amount with no name used to vanish.
+  const amountOnly = { ...rows, savings: [{ name: "", amount: "8200" }] };
+  eq("an amount with no name IS a started row", startedAccountRows(amountOnly).length, 1);
+  eq("...and it blocks Finish rather than being dropped", incompleteAccountRows(amountOnly).length, 1);
+  eq("...and nothing is created from it", collectAccounts(amountOnly), []);
+
+  const nameOnly = { ...rows, debt: [{ name: "Car loan", amount: "" }] };
+  eq("a name with no amount also blocks", incompleteAccountRows(nameOnly).length, 1);
+
+  const junk = { ...rows, savings: [{ name: "Ally", amount: "abc" }] };
+  eq("an unparseable amount blocks too", incompleteAccountRows(junk).length, 1);
+}
+{
+  const rows = {
+    savings: [{ name: " Ally Savings ", amount: "8200" }, { name: "", amount: "" }],
+    investment: [{ name: "Roth IRA", amount: "15400" }],
+    debt: [{ name: "Car loan", amount: "9100" }],
+  };
+  eq("finished rows survive and are trimmed", collectAccounts(rows), [
+    { name: "Ally Savings", amount: 8200, group: "savings" },
+    { name: "Roth IRA", amount: 15400, group: "investment" },
+    { name: "Car loan", amount: 9100, group: "debt" },
+  ]);
+  eq("the trailing empty row does not block Finish", incompleteAccountRows(rows).length, 0);
+  // A zero is a real balance on this step, unlike an amount field.
+  eq("zero in an account row is kept",
+    collectAccounts({ ...rows, savings: [{ name: "Emergency", amount: "0" }] })[0].amount, 0);
+}
+
+// ---- end to end: the builders feed applySetup ------------------------
+{
+  const answers = {
+    recurring: [paycheckRule("2100", "biweekly", TODAY), rentRule("1450", "1", TODAY),
+      ...billRules([{ name: "Spotify", amount: "11.99", day: "4" }], TODAY),
+      groceryRule("150", "weekly", TODAY)],
+    oneoffs: [],
+    checkInBalance: balanceAnswer("4000"),
+    accounts: collectAccounts({
+      savings: [{ name: "Ally Savings", amount: "8200" }],
+      investment: [{ name: "", amount: "" }],
+      debt: [{ name: "", amount: "" }],
+    }),
+  };
+  const out = applySetup(blank, answers, TODAY);
+  eq("four rules land", out.recurring.length, 4);
+  eq("every rule got an order", out.recurring.map((r) => r.order), [0, 1, 2, 3]);
+  eq("every rule got the primary account", [...new Set(out.recurring.map((r) => r.accountId))], ["checking"]);
+  eq("the anchor is the number typed", out.accounts[0].balance, 4000);
+  eq("the one named account is the only one left", names(out), ["Ally Savings"]);
+  is("and the forecast runs", computeLedger(out, "2026-12-31").rows.length > 0);
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S)`);

@@ -1,4 +1,4 @@
-import { todayISO, primaryAccount } from "./model.ts";
+import { todayISO, toISODate, uid, primaryAccount } from "./model.ts";
 import {
   upsertItem, updateAccountBalance, addCategory, addBalanceSnapshot,
   setupAsset, deleteCategory, countTaggedItems,
@@ -102,4 +102,186 @@ export function applySetup(
   }
 
   return next;
+}
+
+// =====================================================================
+// WHAT THE WIZARD'S ANSWERS MEAN — the other half of the shared
+// definition, added 2026-10-13 when the phone's flow was built.
+//
+// `applySetup` above is what setup CREATES. Everything below is how a
+// typed answer becomes the thing applySetup is given: which strings
+// count as an answer at all, what rule each step builds, and which
+// account rows are finished enough to keep.
+//
+// This is not decoration. Every one of these functions encodes a
+// judgment that a second implementation would have had to guess at —
+// that a blank field is a skipped question rather than a zero, that a
+// negative paycheck is not a paycheck, that a row with an amount and
+// no name must block the Finish button instead of being dropped. The
+// last one is not hypothetical: it is what happened to a real user,
+// and the fix lives here now so it can only be fixed once.
+//
+// Each builder returns `null` for "nothing to add", so a client's
+// Continue and its Skip differ by exactly one line: Continue appends
+// what the builder returned, Skip appends nothing. That is what keeps
+// "Skip discards what was typed" true on both clients without either
+// of them having to remember it.
+
+export type SetupCadence = "weekly" | "biweekly" | "monthly";
+
+/** One row of the "other monthly bills" step, as typed. */
+export type BillRow = { name: string; amount: string; day: string };
+
+/** One row of the accounts step, as typed. */
+export type AccountRow = { name: string; amount: string };
+
+export type SetupGroup = SetupAccount["group"];
+
+/** The accounts step's three groups, each a list of typed rows. */
+export type AccountRows = Record<SetupGroup, AccountRow[]>;
+
+/** The day of the month `iso` falls on. */
+const dayOf = (iso: ISODate): number => Number(iso.slice(8, 10));
+
+/** A typed amount that is a real, positive number — or null. */
+function positive(raw: string): number | null {
+  if (raw.trim() === "") return null;
+  const n = Number(raw);
+  return Number.isNaN(n) || n <= 0 ? null : n;
+}
+
+const clampDay = (raw: string, fallback: number) =>
+  Math.min(31, Math.max(1, Number(raw) || fallback));
+
+// THE `as BudgetItem` CASTS BELOW ARE LOAD-BEARING, not laziness.
+// `order` is required on the type and is deliberately NOT set here:
+// `upsertItem` assigns it from the state the rule is being inserted
+// into, which is the only place that knows what the next one is.
+// Inventing a number here would make two rules fight over position 0.
+
+/** The paycheck step. Null when nothing usable was typed. */
+export function paycheckRule(
+  amount: string, cadence: SetupCadence, today: ISODate = todayISO(),
+): BudgetItem | null {
+  const amt = positive(amount);
+  if (amt == null) return null;
+  return {
+    id: uid(), name: "Paycheck", amount: amt, category: "income",
+    cadence, startDate: today, dayOfMonth: dayOf(today),
+  } as BudgetItem;
+}
+
+/**
+ * The rent step. Null when nothing usable was typed.
+ *
+ * Rent gets a day field of its own, unlike the generic bills, because
+ * the 1st is usually right and because the ledger's ORDERING turns on
+ * it — a bill dated wrong moves the running balance it is subtracted
+ * from. The start date lands in the current month with the day clamped
+ * to that month's length, so asking for the 31st in a 30-day month
+ * produces a real date rather than a rollover into the next one.
+ */
+export function rentRule(
+  amount: string, day: string, today: ISODate = todayISO(),
+): BudgetItem | null {
+  const amt = positive(amount);
+  if (amt == null) return null;
+  const dom = clampDay(day, 1);
+  const d = new Date(today + "T00:00:00");
+  const lastOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(dom, lastOfMonth));
+  return {
+    id: uid(), name: "Rent", amount: amt, category: "bill",
+    cadence: "monthly", startDate: toISODate(d), dayOfMonth: dom,
+  } as BudgetItem;
+}
+
+/**
+ * The other-bills step. Rows with no name or no amount are dropped.
+ *
+ * A date box per row doubles this step's width on a phone and is where
+ * people stop, so the due day DEFAULTS to today and is shown rather
+ * than asked for. Shown, though — never guessed silently.
+ */
+export function billRules(rows: BillRow[], today: ISODate = todayISO()): BudgetItem[] {
+  const out: BudgetItem[] = [];
+  for (const b of rows) {
+    const amt = positive(b.amount);
+    if (!b.name.trim() || amt == null) continue;
+    out.push({
+      id: uid(), name: b.name.trim(), amount: amt, category: "bill",
+      cadence: "monthly", startDate: today, dayOfMonth: clampDay(b.day, dayOf(today)),
+    } as BudgetItem);
+  }
+  return out;
+}
+
+/** The groceries step. Null when nothing usable was typed. */
+export function groceryRule(
+  amount: string, cadence: SetupCadence, today: ISODate = todayISO(),
+): BudgetItem | null {
+  const amt = positive(amount);
+  if (amt == null) return null;
+  return {
+    id: uid(), name: "Groceries", amount: amt, category: "bill",
+    cadence, startDate: today, dayOfMonth: dayOf(today),
+  } as BudgetItem;
+}
+
+/**
+ * The balance step's answer, or null.
+ *
+ * ZERO IS A REAL ANSWER and an empty field is not, which is why this
+ * cannot be `positive()`. Someone whose checking account is empty has
+ * told us something true; someone who typed nothing has not. The whole
+ * forecast is counted forward from this number, and a new user's first
+ * ledger once projected from zero because the two cases were conflated.
+ */
+export function balanceAnswer(raw: string): number | null {
+  if (raw.trim() === "") return null;
+  const n = Number(raw);
+  return Number.isNaN(n) ? null : n;
+}
+
+/** Three empty groups, each with one empty row. */
+export function blankAccountRows(): AccountRows {
+  return { savings: [{ name: "", amount: "" }], investment: [{ name: "", amount: "" }], debt: [{ name: "", amount: "" }] };
+}
+
+type StartedRow = { group: SetupGroup; index: number; name: string; amount: number | null };
+
+/**
+ * Every row somebody has STARTED — either field filled in.
+ *
+ * The first version filtered on a non-empty name, so a row with an
+ * amount and no name was silently discarded. That is exactly what
+ * happened to a real user, because the name box had no label and they
+ * reasonably assumed the section heading named the row. Both fields
+ * are labeled now and a half-filled row is reported rather than
+ * dropped.
+ */
+export function startedAccountRows(rows: AccountRows): StartedRow[] {
+  const out: StartedRow[] = [];
+  for (const group of ["savings", "investment", "debt"] as const) {
+    (rows[group] ?? []).forEach((r, index) => {
+      const amount = r.amount.trim() === "" ? null : Number(r.amount);
+      if (r.name.trim() === "" && amount == null) return;
+      out.push({ group, index, name: r.name.trim(), amount });
+    });
+  }
+  return out;
+}
+
+/** Started rows that are not finished. Non-empty means Finish is blocked. */
+export function incompleteAccountRows(rows: AccountRows): StartedRow[] {
+  return startedAccountRows(rows).filter(
+    (r) => r.name === "" || r.amount == null || Number.isNaN(r.amount)
+  );
+}
+
+/** The finished rows, in the shape `applySetup` takes. */
+export function collectAccounts(rows: AccountRows): SetupAccount[] {
+  return startedAccountRows(rows)
+    .filter((r) => r.name !== "" && r.amount != null && !Number.isNaN(r.amount))
+    .map((r) => ({ name: r.name, amount: r.amount as number, group: r.group }));
 }

@@ -1,63 +1,25 @@
 import { useState } from "react";
-import { uid, todayISO, toISODate } from "../engine/model.ts";
+import { todayISO } from "../engine/model.ts";
+import {
+  paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
+  blankAccountRows, incompleteAccountRows, collectAccounts,
+} from "../engine/setup.ts";
+import {
+  SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, SETUP_STEPS,
+} from "../content/setup.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
-// Draft copy — expected to be edited. Every string a user reads lives here or
-// inline below, so it's easy to find and tweak in one pass.
-const COPY = {
-  paycheck: {
-    title: "What's your take-home pay?",
-    sub: "We'll set this up as a recurring paycheck so your Ledger and Budget stay current on their own.",
-    note: "Have more than one income source (a second job, side income, a partner's paycheck)? Add just one here — you can add the rest afterward with Quick Entry or the + Add button.",
-  },
-  rent: {
-    title: "What's your rent or mortgage?",
-    sub: "This becomes a recurring bill so it shows up every month without re-entering it.",
-  },
-  bills: {
-    title: "Any other monthly bills?",
-    sub: "Phone, internet, subscriptions, memberships — anything that's roughly the same amount every month. Set the day each one is due; it defaults to today.",
-  },
-  groceries: {
-    title: "About how much do you spend on groceries?",
-    sub: "A rough estimate is fine — you can always adjust it later.",
-  },
-  balance: {
-    title: "What's the balance of your primary checking account?",
-    sub: "This is your starting point — everything else projects forward from here.",
-  },
-};
-
-const CADENCE_OPTIONS = [
-  { value: "weekly", label: "Every week" },
-  { value: "biweekly", label: "Every 2 weeks" },
-  { value: "monthly", label: "Every month" },
-];
-
-// "accounts" comes AFTER the balance on purpose. Everything up to the
-// balance is what a working Ledger needs; this step only fills the
-// Dashboard. Ordering it last means someone who quits here still leaves
-// with the forecast working, which is the thing that makes the app worth
-// reopening.
+// The questions. The WORDS are in src/content/setup.ts and the LOGIC is
+// in src/engine/setup.ts, both shared with the phone's flow — what is
+// left here is this client's arrangement of them, which is the only
+// part that should differ. Moved out 2026-10-13, when the phone got the
+// same six steps; before that a sentence or a rule edited here would
+// have had to be found and matched by hand on the other side.
+//
 // Today's date, used for every generic bill. Shown, never hidden.
 const defaultBillDay = new Date().getDate();
 
-const STEPS = ["paycheck", "rent", "bills", "groceries", "balance", "accounts", "done"];
-
-// One screen, three groups — not three steps. The obvious version of this
-// takes the wizard from five questions to eight and people leave; someone
-// with nothing to add passes this in a second.
-//
-// Balance only, no terms, and that is the important call for debt: a loan
-// wants principal, APR and a start date, and asking three numbers per loan
-// during setup is exactly where someone gives up. Name and what you owe
-// now is enough for the category, the Dashboard card and the net position.
-// The card then asks for terms later, when there is something to point at.
-const ACCOUNT_GROUPS = [
-  { key: "savings", label: "Savings", kindNote: "Cash you control — saved as Savings", placeholder: "e.g. Everbank" },
-  { key: "investment", label: "Investments", kindNote: "Value the market moves — saved as Investment", placeholder: "e.g. Roth IRA, 401k, HSA" },
-  { key: "debt", label: "Debt", kindNote: "What you owe now — add the rate later on the card", placeholder: "e.g. Student loan" },
-];
+const STEPS = [...SETUP_STEPS, "done"];
 
 // A short, skippable welcome wizard. Every answer becomes a real
 // recurring rule via the same shape the CSV importers produce
@@ -80,34 +42,11 @@ export default function Onboarding({ initialBalance, onComplete }) {
   const [groceryCadence, setGroceryCadence] = useState("weekly");
 
   const [balanceInput, setBalanceInput] = useState(initialBalance != null ? String(initialBalance) : "");
-  const [accounts, setAccounts] = useState(() =>
-    Object.fromEntries(ACCOUNT_GROUPS.map((g) => [g.key, [{ name: "", amount: "" }]]))
-  );
+  const [accounts, setAccounts] = useState(blankAccountRows);
   const setAccountRow = (group, i, field, value) =>
     setAccounts((a) => ({ ...a, [group]: a[group].map((r, idx) => (idx === i ? { ...r, [field]: value } : r)) }));
   const addAccountRow = (group) =>
     setAccounts((a) => ({ ...a, [group]: [...a[group], { name: "", amount: "" }] }));
-  // A row counts as "started" the moment EITHER field has something in
-  // it. The first version filtered on a non-empty name, so a row with an
-  // amount and no name was silently discarded — which is exactly what
-  // happened to a real user, because the name box had no label and they
-  // reasonably assumed the section heading named the row.
-  const startedRows = () =>
-    ACCOUNT_GROUPS.flatMap((g) =>
-      accounts[g.key].map((r, i) => ({
-        group: g.key, i,
-        name: r.name.trim(),
-        amount: r.amount.trim() === "" ? null : Number(r.amount),
-      })).filter((r) => r.name !== "" || r.amount != null)
-    );
-  // Incomplete rows block Finish and say so. The alternative — inventing a
-  // name from the section heading — would quietly create a category the
-  // user never named, which is the same class of error as dropping it.
-  const incompleteRows = () =>
-    startedRows().filter((r) => r.name === "" || r.amount == null || Number.isNaN(r.amount));
-  const collectAccounts = () =>
-    startedRows().filter((r) => r.name !== "" && r.amount != null && !Number.isNaN(r.amount));
-
   const step = STEPS[stepIndex];
   const questionSteps = STEPS.length - 1; // exclude "done" from the progress count
 
@@ -121,55 +60,30 @@ export default function Onboarding({ initialBalance, onComplete }) {
     // Read the FIELD, not just the committed state: the two can disagree
     // for a render, and this is the one value the entire forecast is built
     // from. It was silently dropped once already.
-    const typed = balanceInput.trim() === "" ? null : Number(balanceInput);
-    const balance = typed != null && !Number.isNaN(typed) ? typed : checkInBalance;
-    onComplete({ recurring, oneoffs: [], checkInBalance: balance, accounts: collectAccounts() });
+    const typed = balanceAnswer(balanceInput);
+    const balance = typed != null ? typed : checkInBalance;
+    onComplete({ recurring, oneoffs: [], checkInBalance: balance, accounts: collectAccounts(accounts) });
   })
 
+  // Each step is one shared builder plus one line of this client's
+  // wiring. Continue appends what the builder returned; Skip appends
+  // nothing, which is what makes "Skip discards what was typed" true
+  // without either client having to remember it.
+  const addIf = (rule) => { if (rule) addRule(rule); };
   function submitPaycheck() {
-    const amt = Number(payAmount);
-    if (payAmount.trim() !== "" && !isNaN(amt) && amt > 0) {
-      addRule({
-        id: uid(), name: "Paycheck", amount: amt, category: "income",
-        cadence: payCadence, startDate: todayISO(), dayOfMonth: new Date().getDate(),
-      });
-    }
+    addIf(paycheckRule(payAmount, payCadence, todayISO()));
     goNext();
   }
   function submitRent() {
-    const amt = Number(rentAmount);
-    const day = Math.min(31, Math.max(1, Number(rentDay) || 1));
-    if (rentAmount.trim() !== "" && !isNaN(amt) && amt > 0) {
-      const d = new Date();
-      d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
-      addRule({
-        id: uid(), name: "Rent", amount: amt, category: "bill",
-        cadence: "monthly", startDate: toISODate(d), dayOfMonth: day,
-      });
-    }
+    addIf(rentRule(rentAmount, rentDay, todayISO()));
     goNext();
   }
   function submitBills() {
-    for (const b of bills) {
-      const amt = Number(b.amount);
-      if (b.name.trim() && !isNaN(amt) && amt > 0) {
-        addRule({
-          id: uid(), name: b.name.trim(), amount: amt, category: "bill",
-          cadence: "monthly", startDate: todayISO(),
-          dayOfMonth: Math.min(31, Math.max(1, Number(b.day) || defaultBillDay)),
-        });
-      }
-    }
+    for (const rule of billRules(bills, todayISO())) addRule(rule);
     goNext();
   }
   function submitGroceries() {
-    const amt = Number(groceryAmount);
-    if (groceryAmount.trim() !== "" && !isNaN(amt) && amt > 0) {
-      addRule({
-        id: uid(), name: "Groceries", amount: amt, category: "bill",
-        cadence: groceryCadence, startDate: todayISO(), dayOfMonth: new Date().getDate(),
-      });
-    }
+    addIf(groceryRule(groceryAmount, groceryCadence, todayISO()));
     goNext();
   }
   // The verified balance is the single value the whole forecast builds
@@ -178,8 +92,8 @@ export default function Onboarding({ initialBalance, onComplete }) {
   // happened for real. `finishNow` also re-reads the input rather than
   // trusting that setCheckInBalance has landed, so there is no path where
   // the number is on screen and not in the result.
-  const balanceAmount = balanceInput.trim() === "" ? null : Number(balanceInput);
-  const balanceValid = balanceAmount != null && !Number.isNaN(balanceAmount);
+  const balanceAmount = balanceAnswer(balanceInput);
+  const balanceValid = balanceAmount != null;
   function submitBalance() {
     if (!balanceValid) return;
     setCheckInBalance(balanceAmount);
@@ -214,7 +128,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
               />
             </div>
             <button onClick={finishNow} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 whitespace-nowrap">
-              Skip setup
+              {COPY.buttons.skipAll}
             </button>
           </div>
         )}
@@ -224,16 +138,16 @@ export default function Onboarding({ initialBalance, onComplete }) {
             <h2 className="text-lg font-semibold">{COPY.paycheck.title}</h2>
             <p className="text-sm text-gray-500">{COPY.paycheck.sub}</p>
             <div>
-              <label className={label}>Amount</label>
+              <label className={label}>{COPY.labels.amount}</label>
               <input className={field} type="number" placeholder="0.00" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} autoFocus />
             </div>
             <div>
-              <label className={label}>How often?</label>
+              <label className={label}>{COPY.labels.cadence}</label>
               <select className={field} value={payCadence} onChange={(e) => setPayCadence(e.target.value)}>
                 {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
-            <p className="text-xs text-gray-400">{COPY.paycheck.note}</p>
+            <p className="text-xs text-gray-400">{COPY.paycheck.note.web}</p>
             <StepButtons onSkip={goNext} onContinue={submitPaycheck} />
           </div>
         )}
@@ -244,11 +158,11 @@ export default function Onboarding({ initialBalance, onComplete }) {
             <p className="text-sm text-gray-500">{COPY.rent.sub}</p>
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className={label}>Amount</label>
+                <label className={label}>{COPY.labels.amount}</label>
                 <input className={field} type="number" placeholder="0.00" value={rentAmount} onChange={(e) => setRentAmount(e.target.value)} autoFocus />
               </div>
               <div className="w-24">
-                <label className={label}>Due on day</label>
+                <label className={label}>{COPY.labels.dueDay}</label>
                 <input className={field} type="number" min="1" max="31" value={rentDay} onChange={(e) => setRentDay(e.target.value)} />
               </div>
             </div>
@@ -264,11 +178,11 @@ export default function Onboarding({ initialBalance, onComplete }) {
               {bills.map((b, i) => (
                 <div key={i} className="flex gap-2 items-center">
                   <label className="flex-1 min-w-0">
-                    <span className="block text-[11px] text-gray-400 mb-0.5">Name</span>
+                    <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.name}</span>
                     <input className={field} placeholder="e.g. Spotify" value={b.name} onChange={(e) => updateBill(i, "name", e.target.value)} />
                   </label>
                   <label className="w-24 shrink-0">
-                    <span className="block text-[11px] text-gray-400 mb-0.5">Amount</span>
+                    <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.amount}</span>
                     <input className={field} type="number" placeholder="0.00" value={b.amount} onChange={(e) => updateBill(i, "amount", e.target.value)} />
                   </label>
                   {/* The day is a GUESS — today's date — and it used to be
@@ -283,7 +197,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
                       date changes the ledger's ordering and therefore the
                       running balance. Defaults to today, visibly. */}
                   <label className="shrink-0">
-                    <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">Due day</span>
+                    <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">{COPY.labels.dueDayShort}</span>
                     <input
                       className={`${field} w-16`}
                       type="number" min="1" max="31"
@@ -299,7 +213,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
               ))}
             </div>
             <button onClick={addBillRow} className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
-              + Add another bill
+              {COPY.bills.add}
             </button>
             <StepButtons onSkip={goNext} onContinue={submitBills} />
           </div>
@@ -311,11 +225,11 @@ export default function Onboarding({ initialBalance, onComplete }) {
             <p className="text-sm text-gray-500">{COPY.groceries.sub}</p>
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className={label}>Amount</label>
+                <label className={label}>{COPY.labels.amount}</label>
                 <input className={field} type="number" placeholder="0.00" value={groceryAmount} onChange={(e) => setGroceryAmount(e.target.value)} autoFocus />
               </div>
               <div className="flex-1">
-                <label className={label}>How often?</label>
+                <label className={label}>{COPY.labels.cadence}</label>
                 <select className={field} value={groceryCadence} onChange={(e) => setGroceryCadence(e.target.value)}>
                   {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
@@ -330,7 +244,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
             <h2 className="text-lg font-semibold">{COPY.balance.title}</h2>
             <p className="text-sm text-gray-500">{COPY.balance.sub}</p>
             <div>
-              <label className={label}>Current balance</label>
+              <label className={label}>{COPY.labels.currentBalance}</label>
               <input className={field} type="number" placeholder="0.00" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} autoFocus />
             </div>
             {/* No Skip here, deliberately — every other step is optional
@@ -343,23 +257,14 @@ export default function Onboarding({ initialBalance, onComplete }) {
             >
               Continue
             </button>
-            {!balanceValid && (
-              <p className="text-xs text-gray-400">
-                Enter the number your bank shows right now — even if it&apos;s 0. Everything in the
-                Ledger is counted forward from it, so the forecast is wrong without it.
-              </p>
-            )}
+            {!balanceValid && <p className="text-xs text-gray-400">{COPY.balance.why}</p>}
           </div>
         )}
 
         {step === "accounts" && (
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold">What else do you track?</h2>
-            <p className="text-sm text-gray-500">
-              These accounts are what will show on your dashboard, which is the page where you see
-              your full current financial picture. These can be added and updated at any time
-              whenever needed.
-            </p>
+            <h2 className="text-lg font-semibold">{COPY.accounts.title}</h2>
+            <p className="text-sm text-gray-500">{COPY.accounts.sub}</p>
             {ACCOUNT_GROUPS.map((g) => (
               <div key={g.key}>
                 <label className={label}>{g.label}</label>
@@ -377,7 +282,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
                               user type the amount and leave the name
                               blank — a placeholder alone was not enough. */}
                           <label className="flex-1">
-                            <span className="block text-[11px] text-gray-400 mb-0.5">Name</span>
+                            <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.name}</span>
                             <input
                               className={`${field} ${needsName ? "border-expense" : ""}`}
                               placeholder={g.placeholder}
@@ -387,7 +292,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
                           </label>
                           <label className="w-32">
                             <span className="block text-[11px] text-gray-400 mb-0.5">
-                              {g.key === "debt" ? "Owed now" : "Balance"}
+                              {g.key === "debt" ? COPY.labels.owedNow : COPY.labels.balance}
                             </span>
                             <input
                               className={`${field} ${needsAmount ? "border-expense" : ""}`}
@@ -400,7 +305,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
                         </div>
                         {(needsName || needsAmount) && (
                           <p className="text-xs text-expense mt-1">
-                            {needsName ? "Give this one a name, or clear the amount." : "Add the balance, or clear the name."}
+                            {needsName ? COPY.accounts.needsName : COPY.accounts.needsAmount}
                           </p>
                         )}
                       </div>
@@ -411,33 +316,33 @@ export default function Onboarding({ initialBalance, onComplete }) {
                   onClick={() => addAccountRow(g.key)}
                   className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mt-1"
                 >
-                  + Add another
+                  {COPY.accounts.add}
                 </button>
               </div>
             ))}
             <button
               onClick={goNext}
-              disabled={incompleteRows().length > 0}
+              disabled={incompleteAccountRows(accounts).length > 0}
               className="w-full py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90 disabled:opacity-40"
             >
-              Finish
+              {COPY.buttons.finish}
             </button>
           </div>
         )}
 
         {step === "done" && (
           <div className="space-y-4 text-center py-4">
-            <h2 className="text-lg font-semibold">All set!</h2>
+            <h2 className="text-lg font-semibold">{COPY.done.title}</h2>
             <p className="text-sm text-gray-500">
               {recurring.length > 0
-                ? `We've added ${recurring.length} recurring item${recurring.length === 1 ? "" : "s"} to get you started. You can edit, delete, or add more anytime.`
-                : "No problem — you can add everything yourself whenever you're ready."}
+                ? COPY.done.withRules(recurring.length)
+                : COPY.done.withoutRules}
             </p>
             <button
               onClick={finishNow}
               className="w-full py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90"
             >
-              Go to my budget
+              {COPY.done.cta}
             </button>
           </div>
         )}
@@ -446,11 +351,11 @@ export default function Onboarding({ initialBalance, onComplete }) {
   );
 }
 
-function StepButtons({ onSkip, onContinue, continueLabel = "Continue" }) {
+function StepButtons({ onSkip, onContinue, continueLabel = COPY.buttons.continue }) {
   return (
     <div className="flex gap-3 pt-2">
       <button onClick={onSkip} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">
-        Skip
+        {COPY.buttons.skip}
       </button>
       <button onClick={onContinue} className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90">
         {continueLabel}
