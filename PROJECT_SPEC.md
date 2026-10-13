@@ -510,6 +510,35 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **1.0.0 (5) WAS TESTED ON A DEVICE, 2026-10-14.** Working, in the
+  author's words: the native tab bar ("10/10"), haptics, the anchor on
+  all four tabs, the read-only Budget, contributions with the right
+  noun, the whole account manager (add, rename, reorder, delete, loan
+  terms, asset kind, synced to the web), export, the six-screen setup
+  flow with Back ("excellent"), the keyboards, and **both Google and
+  Sign in with Apple on the device**. The fill/no-fill icon split
+  "reads fine on glass" — keep it.
+
+  Seven things came back, all fixed the same day and shipped over the
+  air (no native change in any of them):
+
+  1. **An ENGINE bug, so the web had it too**: deleting the newest
+     checking reading left the deleted number as the anchor until a
+     reload. Mutations now re-derive the anchor from the newest
+     snapshot, which is what `assembleState` has always done. Two more
+     paths had the same hole. A second bug fell out of it — a $0 seed
+     dated today outranking a real back-dated reading. Both in the
+     engine, both tested.
+  2. Apple's signing key had **no services enabled** (see mobile item
+     14), and a failed token exchange was invisible. Settings says so
+     now.
+  3. `apple_tokens` RLS confirmed, with the proving queries written
+     into the SQL file.
+  4. The web code box (ranked item 11).
+  5. The anchor strip opens the Update balance sheet, from any tab.
+  6. The accounts form asks for a balance on CREATE only.
+  7. Sparklines 68pt -> 170pt, range still fitted.
+
 - **1.0.0 (5) was built and submitted to App Store Connect 2026-10-13**,
   from this machine, non-interactively except for the one step that
   could not be. It is the first build with Sign in with Apple, the
@@ -1619,12 +1648,21 @@ what, not by size.
     claim — and it looks like a screen nobody has looked at. No entry
     beyond this one yet; the fault list comes from a second pass on the
     device.
-11. **A code box on the web sign-in**, low priority, raised 2026-10-11.
-    A magic link opens in whatever browser the mail app hands it to,
-    which is routinely not the one that asked for it — and there the
-    session lands in the wrong browser. The phone already takes a typed
-    code and the template already carries `{{ .Token }}`, so the web
-    needs the input and the `verifyOtp` call and nothing else.
+11. ~~**A code box on the web sign-in**, low priority, raised
+    2026-10-11.~~ **SHIPPED 2026-10-14, and it was not low priority by
+    then.** The reason it was promoted, from the device test: the
+    "Confirm signup" template hands a NEW web user six digits with
+    nowhere on the site to type them. The original reason stands too —
+    a magic link opens in whatever browser the mail app chooses, which
+    is routinely not the one that asked, and the session lands there.
+
+    It is the phone's two-step flow, and the logic moved to
+    `src/signin.ts` so there is one definition rather than two:
+    `codeReady`, `normalizeCode`, `resendIn`, `sendFailureMessage`,
+    `verifyFailureMessage`. The native message mappers stayed in
+    `mobile/lib/signin.ts`, which re-exports the rest so no caller
+    changed. `tests/mobile-signin.test.mjs` became
+    `tests/signin.test.mjs`.
 
 **D. Mobile feature gaps, in build order**
 
