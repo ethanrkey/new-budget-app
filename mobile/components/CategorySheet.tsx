@@ -27,10 +27,12 @@ import {
 // about terms — see the reasoning there. A form stricter than the data
 // model is unusable for the person whose paperwork is in another room.
 export default function CategorySheet({
-  title, draft: initial, busy, onSave, onClose,
+  title, draft: initial, creating, busy, onSave, onClose,
 }: {
   title: string;
   draft: CategoryDraft;
+  /** Adding, as opposed to editing. It changes one field's existence. */
+  creating: boolean;
   busy: boolean;
   onSave: (d: CategoryDraft) => void;
   onClose: () => void;
@@ -41,7 +43,7 @@ export default function CategorySheet({
   const set = <K extends keyof CategoryDraft>(k: K, v: CategoryDraft[K]) =>
     setD((prev) => ({ ...prev, [k]: v }));
 
-  const error = categoryDraftError(d);
+  const error = categoryDraftError(d, creating);
   const debt = d.kind === "debt";
 
   return (
@@ -136,31 +138,42 @@ export default function CategorySheet({
               </>
             )}
 
-            <Text style={styles.label}>{debt ? "What you owe now (optional)" : "What's in it (optional)"}</Text>
-            <TextInput
-              style={styles.field}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              placeholderTextColor={T.faint}
-              value={d.balance}
-              onChangeText={(v) => set("balance", v)}
-              accessibilityLabel={debt ? "What you owe now" : "What's in it"}
-            />
-
-            {/* The as-of date only exists once there is a number to
-                date. A date for nothing is how an empty reading gets
-                written. */}
-            {d.balance.trim() !== "" && (
+            {/* THE BALANCE EXISTS ONLY WHEN CREATING. On an edit it is
+                not optional, it is absent: balances change through Log,
+                which dates them. The old form offered "What's in it
+                (optional)" on both, so editing a name meant looking at
+                a balance box reading 0.00 for an account that holds
+                thousands — a question nobody asked whose obvious
+                answer would have written a $0 reading. */}
+            {creating && (
               <>
-                <Text style={styles.label}>As of</Text>
-                <Pressable
+                <Text style={styles.label}>Current balance</Text>
+                <TextInput
                   style={styles.field}
-                  onPress={() => setPicking("asOf")}
-                  accessibilityRole="button"
-                  accessibilityLabel={`As of ${d.asOf}. Change the date.`}
-                >
-                  <Text style={styles.fieldText}>{d.asOf}</Text>
-                </Pressable>
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor={T.faint}
+                  value={d.balance}
+                  onChangeText={(v) => set("balance", v)}
+                  accessibilityLabel="Current balance"
+                />
+
+                {/* The as-of date only exists once there is a number to
+                    date. A date for nothing is how an empty reading
+                    gets written. */}
+                {d.balance.trim() !== "" && (
+                  <>
+                    <Text style={styles.label}>As of</Text>
+                    <Pressable
+                      style={styles.field}
+                      onPress={() => setPicking("asOf")}
+                      accessibilityRole="button"
+                      accessibilityLabel={`As of ${d.asOf}. Change the date.`}
+                    >
+                      <Text style={styles.fieldText}>{d.asOf}</Text>
+                    </Pressable>
+                  </>
+                )}
               </>
             )}
 

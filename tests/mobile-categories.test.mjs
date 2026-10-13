@@ -85,7 +85,19 @@ const row = (s, name) => categoryRows(s).find((r) => r.name === name);
 {
   const base = blankCategoryDraft(TODAY);
   eq("a nameless category is refused", categoryDraftError({ ...base, name: "  " }), "Give it a name.");
-  eq("a name is all it really needs", categoryDraftError({ ...base, name: "Roth IRA" }), null);
+  eq("a name is all an EDIT really needs", categoryDraftError({ ...base, balance: "", name: "Roth IRA" }), null);
+
+  // CREATING is stricter by one field. An account that joins the
+  // Dashboard with no balance at all shows as nothing and reads as
+  // broken, which is what "(optional)" invited.
+  eq("a new account starts at zero rather than blank", blankCategoryDraft(TODAY).balance, "0");
+  eq("...and that zero is accepted as typed",
+    categoryDraftError({ ...blankCategoryDraft(TODAY), name: "Ally" }, true), null);
+  eq("...but a cleared balance is refused when creating",
+    categoryDraftError({ ...base, balance: "", name: "Ally" }, true),
+    "Enter what is in it now — 0 is fine.");
+  eq("...and not when editing, where there is no field to fill in",
+    categoryDraftError({ ...base, balance: "", name: "Ally" }, false), null);
 
   // A loan with no rate is a REAL loan and the app already handles it —
   // the card says what is missing and amortization withholds itself.
@@ -186,8 +198,11 @@ const row = (s, name) => categoryRows(s).find((r) => r.name === name);
   eq("...and logs the balance against it",
     renamedDebt.balanceSnapshots[cardId][0].amount, 820);
 
-  // Renaming, with no balance typed, must not log an empty reading.
-  const renamed = applyCategoryDraft(blank, { ...base, name: "Rainy day", assetKind: "savings" },
+  // Renaming must not log a reading. An EDIT has no balance field at
+  // all since 2026-10-14 — balances change through Log, which dates
+  // them — so `draftOfCategory` hands back an empty one and this is
+  // the shape the form actually submits.
+  const renamed = applyCategoryDraft(blank, { ...base, balance: "", name: "Rainy day", assetKind: "savings" },
     row(blank, "Savings").id);
   eq("a rename keeps the id", renamed.trackerCategories.find((c) => c.name === "Rainy day").id,
     row(blank, "Savings").id);

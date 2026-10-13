@@ -12,10 +12,10 @@ const TODAY = "2026-10-12";
 const blank = blankCategoryDraft(TODAY);
 
 test("a savings account asks for a balance, never for an APR", async () => {
-  await render(<CategorySheet title="Add an account" draft={blank} busy={false} onSave={() => {}} onClose={() => {}} />);
+  await render(<CategorySheet title="Add an account" draft={blank} creating busy={false} onSave={() => {}} onClose={() => {}} />);
 
   expect(screen.getByLabelText("Name")).toBeOnTheScreen();
-  expect(screen.getByLabelText("What's in it")).toBeOnTheScreen();
+  expect(screen.getByLabelText("Current balance")).toBeOnTheScreen();
   // Asking an asset for its interest rate is the compile error the
   // engine's types prevent; the form must not ask it either.
   expect(screen.queryByLabelText("Interest rate")).toBeNull();
@@ -23,17 +23,18 @@ test("a savings account asks for a balance, never for an APR", async () => {
 });
 
 test("picking Loan swaps the fields for a loan's", async () => {
-  await render(<CategorySheet title="Add an account" draft={blank} busy={false} onSave={() => {}} onClose={() => {}} />);
+  await render(<CategorySheet title="Add an account" draft={blank} creating busy={false} onSave={() => {}} onClose={() => {}} />);
   await userEvent.press(screen.getByLabelText("Loan or debt"));
 
   expect(screen.getByLabelText("Original amount")).toBeOnTheScreen();
   expect(screen.getByLabelText("Interest rate")).toBeOnTheScreen();
-  expect(screen.getByLabelText("What you owe now")).toBeOnTheScreen();
-  expect(screen.queryByLabelText("What's in it")).toBeNull();
+  // One label for both kinds. A loan has a current balance too, and
+  // two names for one field is two things to keep in step.
+  expect(screen.getByLabelText("Current balance")).toBeOnTheScreen();
 });
 
 test("the interest start date appears only once there is a principal to date", async () => {
-  await render(<CategorySheet title="Add an account" draft={blank} busy={false} onSave={() => {}} onClose={() => {}} />);
+  await render(<CategorySheet title="Add an account" draft={blank} creating busy={false} onSave={() => {}} onClose={() => {}} />);
   await userEvent.press(screen.getByLabelText("Loan or debt"));
 
   expect(screen.queryByLabelText(/Interest started/)).toBeNull();
@@ -43,19 +44,48 @@ test("the interest start date appears only once there is a principal to date", a
 
 test("the as-of date appears only once there is a number to date", async () => {
   // A date for nothing is how an empty reading gets written.
-  await render(<CategorySheet title="Add an account" draft={blank} busy={false} onSave={() => {}} onClose={() => {}} />);
+  const empty = { ...blank, balance: "" };
+  await render(<CategorySheet title="Add an account" draft={empty} creating busy={false} onSave={() => {}} onClose={() => {}} />);
   expect(screen.queryByLabelText(/As of/)).toBeNull();
 
-  await userEvent.type(screen.getByLabelText("What's in it"), "8200");
+  await userEvent.type(screen.getByLabelText("Current balance"), "8200");
   expect(await screen.findByLabelText(/As of/)).toBeOnTheScreen();
+});
+
+test("a new account starts at zero rather than blank, and cannot be saved empty", async () => {
+  // An account that joins the Dashboard with no balance shows as
+  // nothing and reads as broken. Zero is a real answer, pre-filled so
+  // it can be accepted as typed.
+  const saved: unknown[] = [];
+  await render(<CategorySheet title="Add an account" draft={blank} creating busy={false} onSave={(d) => saved.push(d)} onClose={() => {}} />);
+  expect(screen.getByLabelText("Current balance")).toHaveDisplayValue("0");
+
+  await userEvent.type(screen.getByLabelText("Name"), "Ally Savings");
+  await userEvent.clear(screen.getByLabelText("Current balance"));
+  await userEvent.press(screen.getByLabelText("Save"));
+  expect(await screen.findByText(/0 is fine/)).toBeOnTheScreen();
+  expect(saved).toHaveLength(0);
+});
+
+test("EDITING has no balance field at all — balances change through Log", async () => {
+  // It used to say "What's in it (optional)" and sit at 0.00 for an
+  // account holding thousands: a question nobody asked whose obvious
+  // answer would have written a $0 reading.
+  const existing = { ...blank, name: "Ally Savings", balance: "" };
+  await render(<CategorySheet title="Edit account" draft={existing} creating={false} busy={false} onSave={() => {}} onClose={() => {}} />);
+
+  expect(screen.getByLabelText("Name")).toBeOnTheScreen();
+  expect(screen.queryByLabelText("Current balance")).toBeNull();
+  expect(screen.queryByLabelText(/As of/)).toBeNull();
 });
 
 test("saving hands over exactly what was typed", async () => {
   const saved: unknown[] = [];
-  await render(<CategorySheet title="Add an account" draft={blank} busy={false} onSave={(d) => saved.push(d)} onClose={() => {}} />);
+  await render(<CategorySheet title="Add an account" draft={blank} creating busy={false} onSave={(d) => saved.push(d)} onClose={() => {}} />);
 
   await userEvent.type(screen.getByLabelText("Name"), "Ally Savings");
-  await userEvent.type(screen.getByLabelText("What's in it"), "8200");
+  await userEvent.clear(screen.getByLabelText("Current balance"));
+  await userEvent.type(screen.getByLabelText("Current balance"), "8200");
   await userEvent.press(screen.getByLabelText("Save"));
 
   await waitFor(() => expect(saved).toHaveLength(1));
@@ -64,7 +94,7 @@ test("saving hands over exactly what was typed", async () => {
 
 test("a refusal says why, and the button still responds", async () => {
   const saved: unknown[] = [];
-  await render(<CategorySheet title="Add an account" draft={blank} busy={false} onSave={(d) => saved.push(d)} onClose={() => {}} />);
+  await render(<CategorySheet title="Add an account" draft={blank} creating busy={false} onSave={(d) => saved.push(d)} onClose={() => {}} />);
 
   // Validated on press rather than by disabling: a disabled button with
   // no explanation is the thing people tap twice and then give up on.
@@ -75,7 +105,7 @@ test("a refusal says why, and the button still responds", async () => {
 
 test("a rate typed as a payment is caught before it is saved", async () => {
   const saved: unknown[] = [];
-  await render(<CategorySheet title="Add an account" draft={blank} busy={false} onSave={(d) => saved.push(d)} onClose={() => {}} />);
+  await render(<CategorySheet title="Add an account" draft={blank} creating busy={false} onSave={(d) => saved.push(d)} onClose={() => {}} />);
   await userEvent.press(screen.getByLabelText("Loan or debt"));
   await userEvent.type(screen.getByLabelText("Name"), "Car loan");
   await userEvent.type(screen.getByLabelText("Interest rate"), "700");

@@ -92,7 +92,11 @@ export function blankCategoryDraft(today: string): CategoryDraft {
   return {
     name: "", kind: "asset", assetKind: "savings",
     originalPrincipal: "", interestRate: "", interestStartDate: today,
-    balance: "", asOf: today,
+    // ZERO RATHER THAN BLANK, and required on create. An account that
+    // joins the Dashboard with no balance at all shows as nothing and
+    // reads as broken, and "optional" invited exactly that. Zero is a
+    // real answer and is pre-filled so it can be accepted as typed.
+    balance: "0", asOf: today,
   };
 }
 
@@ -105,9 +109,11 @@ export function draftOfCategory(c: TrackerCategory, today: string): CategoryDraf
     originalPrincipal: debt?.originalPrincipal != null ? String(debt.originalPrincipal) : "",
     interestRate: debt?.interestRate != null ? String(debt.interestRate) : "",
     interestStartDate: debt?.interestStartDate ?? today,
-    // Blank on an edit, on purpose: pre-filling the last reading invites
-    // re-logging a number that has not changed, which is a snapshot that
-    // says nothing.
+    // EMPTY ON AN EDIT, and the form does not show the field at all —
+    // balances change through Log, which dates them. A balance box on
+    // an edit form sitting at 0.00 was read as "this account holds
+    // zero", which is a question nobody asked and an answer that would
+    // have written a reading.
     balance: "",
     asOf: today,
   };
@@ -125,8 +131,10 @@ const num = (s: string) => (s.trim() === "" ? null : Number(s));
  * model, which is how a screen ends up unusable for the person whose
  * paperwork is in another room.
  */
-export function categoryDraftError(d: CategoryDraft): string | null {
+export function categoryDraftError(d: CategoryDraft, creating = false): string | null {
   if (!d.name.trim()) return "Give it a name.";
+  // Only on create, because an edit has no balance field to fill in.
+  if (creating && d.balance.trim() === "") return "Enter what is in it now — 0 is fine.";
   for (const [label, raw] of [
     ["Original amount", d.originalPrincipal],
     ["Interest rate", d.interestRate],

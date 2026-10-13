@@ -144,6 +144,7 @@ export default function Categories({ onClose }: { onClose: () => void }) {
         <CategorySheet
           title={editing.id ? "Edit account" : "Add an account"}
           draft={editing.draft}
+          creating={editing.id === null}
           busy={saving}
           onSave={save}
           onClose={() => setEditing(null)}
