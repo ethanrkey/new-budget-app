@@ -21,6 +21,27 @@ import { normalize } from "../../src/engine/stateShape.ts";
 // So these tests press things and assert what came out. Nothing here
 // re-checks arithmetic — that lives in the fast harness, where it belongs.
 
+// The contribution list reuses HistoryList with a different noun. The
+// shapes are identical and the SENTENCES are not: asking someone to
+// confirm deleting a "reading" when they tapped a contribution is
+// asking them to approve something other than what they touched.
+test("a contribution list says contribution, not reading", async () => {
+  const entries = [{ id: "k1", date: "2026-10-01", amount: 300 }];
+  await render(
+    <HistoryList entries={entries} online kind="contribution" onEdit={() => {}} onDelete={() => {}} />
+  );
+  expect(screen.getByText("Show contributions (1)")).toBeOnTheScreen();
+  expect(screen.queryByText(/Show history/)).toBeNull();
+});
+
+test("...and a reading still says reading", async () => {
+  const entries = [{ id: "s1", date: "2026-10-01", amount: 8200 }];
+  await render(
+    <HistoryList entries={entries} online onEdit={() => {}} onDelete={() => {}} />
+  );
+  expect(screen.getByText("Show history (1)")).toBeOnTheScreen();
+});
+
 const state = normalize({
   settings: { budgetHorizon: "2027-04-01", ledgerHorizon: "2027-02-01" },
   accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 4000, balanceAsOf: "2026-10-01", order: 0 }],

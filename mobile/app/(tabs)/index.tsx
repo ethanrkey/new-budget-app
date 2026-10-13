@@ -147,18 +147,14 @@ export default function LedgerScreen() {
           <Text style={styles.addText}>{online ? "+ Add" : "Offline"}</Text>
         </Pressable>
       </View>
-      {/* THE INPUT IS THE HEADLINE, NOT THE OUTPUT. This had it the wrong
-          way round: a big "Ending balance" at the top and the verified
-          checking balance — the one number every row below is computed
-          forward from — nowhere on the screen at all. A projection
-          printed larger than the fact it rests on teaches the wrong
-          thing about which of the two to trust. The web has always had
-          this hierarchy; the phone did not. */}
-      <View style={styles.anchorWrap}>
-        <Text style={styles.label}>{account.name}</Text>
-        <Text style={styles.anchor}>{money(account.balance)}</Text>
-        <Text style={styles.anchorAsOf}>verified {account.balanceAsOf}</Text>
-      </View>
+      {/* THE INPUT IS THE HEADLINE, NOT THE OUTPUT — and as of
+          2026-10-13 it is the headline on EVERY tab, not just this one.
+          This screen used to draw its own copy of the verified balance
+          because it was the only place that had one. Now AnchorStrip
+          sits above all four tabs, which is what "match the web's
+          hierarchy" actually meant: the web's AccountStrip has always
+          been on every screen. Two presentations of one number, one of
+          them bigger, would teach that they are two numbers. */}
 
       {/* The running balance is LIST-ONLY, same as the web: a month grid
           has nowhere honest to put it, and faking one would have the cell
@@ -306,10 +302,7 @@ const styles = StyleSheet.create({
   addOff: { backgroundColor: T.surfaceAlt },
   addText: { color: "#111827", fontSize: 13, fontWeight: "700" },
   rowPressed: { backgroundColor: T.surface },
-  anchorWrap: { paddingHorizontal: 16, paddingBottom: 8 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
-  anchor: { color: T.text, fontSize: 26, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  anchorAsOf: { color: T.faint, fontSize: 11 },
   endingLine: { color: T.faint, fontSize: 12, paddingHorizontal: 16, paddingBottom: 10 },
   endingValue: { color: T.dim, fontVariant: ["tabular-nums"] },
   listPad: { paddingBottom: 28 },

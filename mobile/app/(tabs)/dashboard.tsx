@@ -10,6 +10,7 @@ import BottomSheet from "../../components/BottomSheet";
 import LoanSheet from "../../components/LoanSheet";
 import {
   updateAccountBalance, addBalanceSnapshot, addContribution,
+  updateContribution, deleteContribution,
   updateAccountSnapshot, deleteAccountSnapshot,
   updateBalanceSnapshot, deleteBalanceSnapshot, setupLoan,
 } from "../../../src/engine/mutate.ts";
@@ -45,6 +46,12 @@ export default function DashboardScreen() {
   const [contributing, setContributing] = useState<string | null>(null);
   const [editingLoan, setEditingLoan] = useState<TrackerCategory | null>(null);
   const [editing, setEditing] = useState<{ catId: string | null; id: string; amount: number; date: string } | null>(null);
+  // Contributions are the same SHAPE as a reading and a different
+  // THING, so they get their own editing slot rather than a flag on
+  // the one above — a single slot would eventually update the wrong
+  // list for the right id.
+  const [editingContrib, setEditingContrib] =
+    useState<{ catId: string; id: string; amount: number; date: string } | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   useEffect(() => { supabase.auth.getSession().then(({ data }) => setSession(data.session)); }, []);
   const { width } = useWindowDimensions();
@@ -131,6 +138,10 @@ export default function DashboardScreen() {
           onLog={() => setLogging(cat.id)}
           onLogContribution={() => setContributing(cat.id)}
           onEditEntry={(e) => setEditing({ catId: cat.id, id: e.id, amount: e.amount, date: e.date })}
+          onEditContrib={(e) => setEditingContrib({ catId: cat.id, id: e.id, amount: e.amount, date: e.date })}
+          onDeleteContrib={(e) => void commit(
+            (st) => deleteContribution(st, cat.id, e.id),
+            `${cat.name} contribution of ${money(e.amount)} deleted`)}
           onDeleteEntry={(e) => void commit(
             (st) => deleteBalanceSnapshot(st, cat.id, e.id),
             `${cat.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
@@ -237,6 +248,24 @@ export default function DashboardScreen() {
         )}
       </BottomSheet>
 
+      {editingContrib && (
+        <LogBalance
+          title="Edit this contribution"
+          currentLabel={`Currently ${money(editingContrib.amount)}, logged ${editingContrib.date}`}
+          cta="Save"
+          busy={saving}
+          onClose={() => setEditingContrib(null)}
+          onSubmit={async (amount, date) => {
+            const e = editingContrib;
+            const ok = await commit(
+              (st) => updateContribution(st, e.catId, e.id, { amount, date }),
+              `Contribution of ${money(amount)} on ${date}`
+            );
+            if (ok) setEditingContrib(null);
+          }}
+        />
+      )}
+
       {editing && (
         <LogBalance
           title="Edit this reading"
@@ -304,10 +333,14 @@ function AccountCard({ name, balance, asOf, history, color, chartW, online, onLo
   );
 }
 
-function AssetCard({ cat, color, chartW, today, online, onLog, onLogContribution, onEditEntry, onDeleteEntry }: {
+function AssetCard({
+  cat, color, chartW, today, online, onLog, onLogContribution,
+  onEditEntry, onDeleteEntry, onEditContrib, onDeleteContrib,
+}: {
   cat: TrackerCategory; color: string; chartW: number; today: string; online: boolean;
   onLog: () => void; onLogContribution: () => void;
   onEditEntry: (e: BalanceSnapshot) => void; onDeleteEntry: (e: BalanceSnapshot) => void;
+  onEditContrib: (e: BalanceSnapshot) => void; onDeleteContrib: (e: BalanceSnapshot) => void;
 }) {
   const { state } = useBudget();
   const history = computeCategoryHistory(state!, cat.id);
@@ -360,6 +393,17 @@ function AssetCard({ cat, color, chartW, today, online, onLog, onLogContribution
         </Pressable>
       </View>
       <HistoryList entries={history} online={online} onEdit={onEditEntry} onDelete={onDeleteEntry} />
+      {/* A contribution you mistyped was permanent on the phone until
+          2026-10-13 — logged, and then uneditable, while every other
+          number in this app could be corrected. Same list component,
+          different noun: see HistoryList's COPY. */}
+      <HistoryList
+        entries={(state!.contributionLog?.[cat.id] ?? []) as unknown as BalanceSnapshot[]}
+        online={online}
+        kind="contribution"
+        onEdit={onEditContrib}
+        onDelete={onDeleteContrib}
+      />
     </View>
   );
 }

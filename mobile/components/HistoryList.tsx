@@ -9,27 +9,48 @@ const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.ease
 // correctable — the web has always allowed it. Tapping a row edits it;
 // the row's own ✕ deletes it behind a native destructive confirm, the
 // same treatment the scope sheet gives a delete.
+//
+// `kind` exists because this list now serves two things that are the
+// same shape and NOT the same sentence. A reading is what an account
+// was worth on a date; a contribution is money you put in on a date.
+// Calling a contribution a "reading" in the confirm would be asking
+// someone to approve deleting something other than what they tapped.
+const COPY = {
+  reading: {
+    show: "history",
+    confirmTitle: "Delete this reading?",
+    confirmBody: "The chart and every total built on it change.",
+  },
+  contribution: {
+    show: "contributions",
+    confirmTitle: "Delete this contribution?",
+    confirmBody: "What you put in this year changes. The account's balance does not — that is logged separately.",
+  },
+} as const;
+
 export default function HistoryList({
-  entries, online, onEdit, onDelete,
+  entries, online, onEdit, onDelete, kind = "reading",
 }: {
   entries: BalanceSnapshot[];
   online: boolean;
   onEdit: (e: BalanceSnapshot) => void;
   onDelete: (e: BalanceSnapshot) => void;
+  kind?: keyof typeof COPY;
 }) {
   const [open, setOpen] = useState(false);
+  const copy = COPY[kind];
   if (entries.length === 0) return null;
   const confirmDelete = (e: BalanceSnapshot) =>
     Alert.alert(
-      "Delete this reading?",
-      `${money(e.amount)} on ${e.date}. The chart and every total built on it change.`,
+      copy.confirmTitle,
+      `${money(e.amount)} on ${e.date}. ${copy.confirmBody}`,
       [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: () => onDelete(e) }]
     );
   return (
     <View>
       <Pressable onPress={() => { animate(); setOpen((v) => !v); }} style={styles.showBtn}>
         <Text style={styles.showText}>
-          {open ? "Hide history" : `Show history (${entries.length})`}
+          {open ? `Hide ${copy.show}` : `Show ${copy.show} (${entries.length})`}
         </Text>
       </Pressable>
       {open && (

@@ -9,7 +9,7 @@
 // original amount. Everything here is a decision about that form that
 // does not need the form to test.
 import { normalize } from "../src/engine/stateShape.ts";
-import { setupLoan, setupAsset, addBalanceSnapshot, upsertItem } from "../src/engine/mutate.ts";
+import { setupLoan, addBalanceSnapshot, upsertItem } from "../src/engine/mutate.ts";
 import {
   categoryRows, deleteWarning, blankCategoryDraft, draftOfCategory,
   categoryDraftError, applyCategoryDraft,
@@ -24,7 +24,6 @@ function eq(label, got, want) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}${ok ? "" : `\n        got  ${show(got)}\n        want ${show(want)}`}`);
 }
 const is = (label, c) => eq(label, !!c, true);
-const not = (label, c) => eq(label, !!c, false);
 
 const TODAY = "2026-10-12";
 const blank = normalize({});

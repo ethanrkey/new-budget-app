@@ -7,6 +7,7 @@ import { useBudget } from "./StateProvider";
 import Settings from "./Settings";
 import About from "./About";
 import Categories from "./Categories";
+import AnchorStrip from "./AnchorStrip";
 import ExportSheet from "./ExportSheet";
 import BottomSheet from "./BottomSheet";
 import Tour from "./Tour";
@@ -37,6 +38,11 @@ export function Chrome({ session, children }: { session: Session; children: Reac
 
   return (
     <ChromeCtx.Provider value={value}>
+      {/* Above everything, on every tab: the one number the rest are
+          computed forward from. See AnchorStrip. */}
+      <View style={{ paddingTop: insets.top + 10 }}>
+        <AnchorStrip />
+      </View>
       {children}
 
       {/* The one affordance. Floating over the content rather than in a
