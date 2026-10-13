@@ -3,6 +3,7 @@ import {
   Platform, Pressable, RefreshControl, SectionList, StyleSheet, Text, View,
 } from "react-native";
 import { useBudget } from "../../components/StateProvider";
+import { useChrome } from "../../components/Chrome";
 import SpendingMix from "../../components/SpendingMix";
 import CalendarView from "../../components/CalendarView";
 import BottomSheet from "../../components/BottomSheet";
@@ -10,11 +11,9 @@ import DatePicker from "../../components/DatePicker";
 import ScopeSheet from "../../components/ScopeSheet";
 import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
 import FirstRun from "../../components/FirstRun";
-import LogBalance, { currently } from "../../components/LogBalance";
 import { T, money } from "../../lib/theme";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
-import { ledgerHorizonOf, primaryAccount } from "../../../src/engine/model.ts";
-import { updateAccountBalance } from "../../../src/engine/mutate.ts";
+import { ledgerHorizonOf } from "../../../src/engine/model.ts";
 import { showFirstRun } from "../../lib/firstRun";
 import * as feel from "../../lib/haptics";
 import {
@@ -29,6 +28,10 @@ const prettyDate = (iso: string) =>
 
 export default function LedgerScreen() {
   const { state, pullToRefresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
+  // The checking log lives in Chrome now, because the control that
+  // opens it (AnchorStrip) is on every tab. Step one of the guide
+  // reaches the same modal rather than drawing a second one.
+  const { logChecking } = useChrome();
   const [horizon, setHorizon] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [calendar, setCalendar] = useState(false);
@@ -37,7 +40,6 @@ export default function LedgerScreen() {
   // whole and only split by the named helpers in lib/edit.
   const [scopeFor, setScopeFor] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetMode | null>(null);
-  const [logging, setLogging] = useState(false);
   // The new-account guide. Shown until the three steps are done or it
   // is put away — NOT until the first write, which is the bug the first
   // version shipped with: logging a balance made the whole thing vanish
@@ -51,7 +53,7 @@ export default function LedgerScreen() {
     <FirstRun
       state={state!}
       online={online}
-      onLogBalance={() => setLogging(true)}
+      onLogBalance={logChecking}
       onAddIncome={() => setSheet({ kind: "add" })}
       onAddBill={() => setSheet({ kind: "add" })}
       onDismiss={() => setPref("firstRunDismissed", true)}
@@ -59,7 +61,6 @@ export default function LedgerScreen() {
   );
 
   const effective = horizon ?? ledgerHorizonOf(state!);
-  const account = primaryAccount(state!);
   // ONE resolution of the tapped row, used for the heading, the button
   // labels AND the mutation — so a sheet can never name one item and act
   // on another. See rowTarget.
@@ -226,27 +227,6 @@ export default function LedgerScreen() {
           // With the guide up, "Nothing projected in this window." is
           // noise under a card that already explains the emptiness.
           ListEmptyComponent={guide ? null : <Text style={styles.empty}>Nothing projected in this window.</Text>}
-        />
-      )}
-
-      {/* The same balance modal the Dashboard uses, reachable from the
-          first-run block so step one does not mean "go and find another
-          tab". Same mutator, same warning copy, no second way to do it. */}
-      {logging && (
-        <LogBalance
-          title={`Update ${account.name} balance`}
-          currentLabel={currently(account.balance, account.balanceAsOf)}
-          cta="Confirm"
-          warn
-          busy={saving}
-          onClose={() => setLogging(false)}
-          onSubmit={async (amount, date) => {
-            const okSaved = await commit(
-              (st) => updateAccountBalance(st, primaryAccount(st).id, amount, date),
-              `${account.name} balance, as of ${date}`
-            );
-            if (okSaved) setLogging(false);
-          }}
         />
       )}
 

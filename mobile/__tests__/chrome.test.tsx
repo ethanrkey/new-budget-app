@@ -131,3 +131,31 @@ test("...and says nothing when there is nothing to say", async () => {
   await openSettings();
   expect(screen.queryByText("Apple sign-in isn't fully linked")).toBeNull();
 });
+
+
+// ---- the anchor is a door, on every tab ------------------------------
+
+test("tapping the balance at the top opens the one Update balance sheet", async () => {
+  mockLoaded.state = seen;
+  await mount();
+
+  // It is in Chrome, above the tabs, so this is true on all four —
+  // logging the number every screen counts forward from used to mean
+  // going to the Dashboard first.
+  await userEvent.press(await screen.findByLabelText(/Checking .*Update the balance/));
+  expect(await screen.findByText("Update Checking balance")).toBeOnTheScreen();
+  // The same modal the Dashboard card opens, warning and all — a
+  // second door, not a second way.
+  expect(screen.getByText(/Transactions dated before this will drop out/)).toBeOnTheScreen();
+});
+
+test("...and writes the balance it was given", async () => {
+  mockLoaded.state = seen;
+  await mount();
+  await userEvent.press(await screen.findByLabelText(/Checking .*Update the balance/));
+  await userEvent.type(screen.getByPlaceholderText("0.00"), "4210.55");
+  await userEvent.press(screen.getByLabelText("Confirm"));
+
+  await waitFor(() => expect(mockSaved).toHaveLength(1));
+  expect((mockSaved[0] as { accounts: { balance: number }[] }).accounts[0]!.balance).toBe(4210.55);
+});

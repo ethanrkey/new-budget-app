@@ -11,6 +11,9 @@ import AnchorStrip from "./AnchorStrip";
 import ExportSheet from "./ExportSheet";
 import BottomSheet from "./BottomSheet";
 import Tour from "./Tour";
+import LogBalance, { currently } from "./LogBalance";
+import { updateAccountBalance } from "../../src/engine/mutate.ts";
+import { primaryAccount } from "../../src/engine/model.ts";
 import Setup from "./Setup";
 import { shouldRunSetup } from "../lib/setup";
 import { applySetup, markSetupSeen, type SetupAnswers } from "../../src/engine/setup.ts";
@@ -32,7 +35,9 @@ import { applySetup, markSetupSeen, type SetupAnswers } from "../../src/engine/s
 // to be able to come back to it. Same flow either way.
 type Screen = "settings" | "about" | "categories" | null;
 
-const ChromeCtx = createContext<{ open: () => void }>({ open: () => {} });
+const ChromeCtx = createContext<{ open: () => void; logChecking: () => void }>({
+  open: () => {}, logChecking: () => {},
+});
 export const useChrome = () => useContext(ChromeCtx);
 
 export function Chrome({ session, children }: { session: Session; children: React.ReactNode }) {
@@ -41,9 +46,15 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   const [touring, setTouring] = useState(false);
   // Asked for from Settings, as opposed to met on arrival.
   const [setupAgain, setSetupAgain] = useState(false);
+  // The checking log, hosted HERE rather than on a tab, because the
+  // control that opens it is on every tab — see AnchorStrip.
+  const [logging, setLogging] = useState(false);
   const { state, commit, online, saving, prefs, setPref } = useBudget();
   const insets = useSafeAreaInsets();
-  const value = useMemo(() => ({ open: () => setScreen("settings") }), []);
+  const value = useMemo(() => ({
+    open: () => setScreen("settings"),
+    logChecking: () => setLogging(true),
+  }), []);
 
   // PHASE 3: who gets met with the flow. The three conditions and the
   // reason for each are in lib/setup.ts; the short version is that it
@@ -79,7 +90,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
       {/* Above everything, on every tab: the one number the rest are
           computed forward from. See AnchorStrip. */}
       <View style={{ paddingTop: insets.top + 10 }}>
-        <AnchorStrip />
+        <AnchorStrip onPress={() => setLogging(true)} />
       </View>
       {children}
 
@@ -134,6 +145,29 @@ export function Chrome({ session, children }: { session: Session; children: Reac
           already computes exactly what is still outstanding — so
           quitting partway has a resume state for free. */}
       {runSetup && <Setup busy={saving} onComplete={finishSetup} onSkip={leaveSetup} />}
+
+      {/* ONE host for the checking log, reached from the strip on any
+          tab, from the Dashboard's card and from the first-run guide.
+          It used to be written out on two screens with the same title,
+          the same warning and the same mutator — which is two places
+          for that warning to drift. */}
+      {logging && state && (
+        <LogBalance
+          title={`Update ${primaryAccount(state).name} balance`}
+          currentLabel={currently(primaryAccount(state).balance, primaryAccount(state).balanceAsOf)}
+          cta="Confirm"
+          warn
+          busy={saving}
+          onClose={() => setLogging(false)}
+          onSubmit={async (amount, date) => {
+            const ok = await commit(
+              (s) => updateAccountBalance(s, primaryAccount(s).id, amount, date),
+              `${primaryAccount(state).name} balance, as of ${date}`
+            );
+            if (ok) setLogging(false);
+          }}
+        />
+      )}
 
       {touring && <Tour onClose={() => setTouring(false)} />}
     </ChromeCtx.Provider>

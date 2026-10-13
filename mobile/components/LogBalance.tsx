@@ -68,13 +68,21 @@ export default function LogBalance({
           )}
 
           <View style={styles.row}>
-            <Pressable style={[styles.btn, styles.ghost]} onPress={onClose} disabled={busy}>
+            {/* Both buttons carry a role and a label. They did not, so
+                VoiceOver read the one that writes a balance as an
+                unlabeled button — and a test could not find it either,
+                which is how the gap surfaced. */}
+            <Pressable
+              style={[styles.btn, styles.ghost]} onPress={onClose} disabled={busy}
+              accessibilityRole="button" accessibilityLabel="Cancel"
+            >
               <Text style={styles.ghostText}>Cancel</Text>
             </Pressable>
             <Pressable
               style={[styles.btn, styles.primary, (!valid || busy) && styles.disabled]}
               disabled={!valid || busy}
               onPress={() => onSubmit(parsed!, date)}
+              accessibilityRole="button" accessibilityLabel={cta}
             >
               {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.primaryText}>{cta}</Text>}
             </Pressable>

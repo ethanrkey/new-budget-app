@@ -5,11 +5,12 @@ import {
   StyleSheet, Text, UIManager, View, useWindowDimensions,
 } from "react-native";
 import { useBudget } from "../../components/StateProvider";
-import LogBalance, { currently } from "../../components/LogBalance";
+import LogBalance from "../../components/LogBalance";
+import { useChrome } from "../../components/Chrome";
 import BottomSheet from "../../components/BottomSheet";
 import LoanSheet from "../../components/LoanSheet";
 import {
-  updateAccountBalance, addBalanceSnapshot, addContribution,
+  addBalanceSnapshot, addContribution,
   updateContribution, deleteContribution,
   updateAccountSnapshot, deleteAccountSnapshot,
   updateBalanceSnapshot, deleteBalanceSnapshot, setupLoan,
@@ -43,6 +44,7 @@ export default function DashboardScreen() {
   const { state, pullToRefresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
   // null = closed; "checking" = the account; otherwise a category id.
   const [logging, setLogging] = useState<string | null>(null);
+  const { logChecking } = useChrome();
   const [contributing, setContributing] = useState<string | null>(null);
   const [editingLoan, setEditingLoan] = useState<TrackerCategory | null>(null);
   const [editing, setEditing] = useState<{ catId: string | null; id: string; amount: number; date: string } | null>(null);
@@ -117,7 +119,11 @@ export default function DashboardScreen() {
         balance={account.balance}
         asOf={account.balanceAsOf}
         online={online}
-        onLog={() => setLogging("checking")}
+        // Same modal the strip at the top of every tab opens. One
+        // host, in Chrome: this screen used to draw its own with the
+        // same title, the same warning and the same mutator, which is
+        // two places for that warning to drift.
+        onLog={logChecking}
         history={state!.accountSnapshots?.[account.id] ?? []}
         color={T.text}
         chartW={chartW}
@@ -185,24 +191,19 @@ export default function DashboardScreen() {
       ))}
 
 
+      {/* Tracked accounts only. Checking is Chrome's, because its
+          control is on every tab. */}
       {logging && (
         <LogBalance
-          title={logging === "checking" ? `Update ${account.name} balance` : "Log a balance"}
-          currentLabel={logging === "checking" ? currently(account.balance, account.balanceAsOf) : undefined}
-          cta={logging === "checking" ? "Confirm" : "Log balance"}
-          warn={logging === "checking"}
+          title="Log a balance"
+          cta="Log balance"
           busy={saving}
           onClose={() => setLogging(null)}
           onSubmit={async (amount, date) => {
             const id = logging;
-            const label = id === "checking"
-              ? `${account.name} balance, as of ${date}`
-              : `${cats.find((c) => c.id === id)?.name ?? "Account"} balance, as of ${date}`;
-            const okSaved = await commit((s) =>
-              id === "checking"
-                ? updateAccountBalance(s, primaryAccount(s).id, amount, date)
-                : addBalanceSnapshot(s, id, amount, date),
-              label
+            const okSaved = await commit(
+              (s) => addBalanceSnapshot(s, id, amount, date),
+              `${cats.find((c) => c.id === id)?.name ?? "Account"} balance, as of ${date}`
             );
             if (okSaved) setLogging(null);
           }}
