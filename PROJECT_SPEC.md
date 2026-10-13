@@ -2172,10 +2172,81 @@ a port.
     - Loan TERMS stay out of setup on both clients. That is a decision
       already made and worth not quietly reversing on a bigger screen.
 
-Not built, and not yet decided either way: the native iOS 26 Liquid
-Glass tab bar via `expo-router/native-tabs`. It needs a `ThemeProvider` —
-the system derives the bar background from content and ignores a JS-only
-color scheme — which is a real change to a dark-only app, not a flag.
+16. **Native tabs — the ThemeProvider question is SETTLED, 2026-10-12,
+    from Expo's own page rather than from memory.** Decided to build;
+    scheduled after the setup flow.
+
+    - **The import path is `expo-router/unstable-native-tabs` on this
+      SDK.** The stable `expo-router/native-tabs` is SDK 58 and later;
+      54 through 57 use the unstable path. Getting this wrong is a
+      module-not-found, not a subtle bug, but it is the first thing to
+      get right.
+    - **`ThemeProvider` is a recommendation, not a requirement, and the
+      reason is narrow:** the default theme has a white background, so
+      switching tabs on iOS 26 flashes white. For a dark-only app the
+      fix is `DarkTheme`, and on SDK 56+ `ThemeProvider` comes from
+      `expo-router` itself. So: wrap the root, one import, no
+      architectural change. The spec previously implied something
+      larger.
+    - **Selected tint** is `tintColor` on `NativeTabs`. Expo recommends
+      `DynamicColorIOS` so it adapts between light and dark; this app
+      is dark only, so a flat brass is correct and the wrapper is not
+      needed.
+    - **Liquid Glass is automatic on iOS 26** and the background props
+      (`backgroundColor`, `blurEffect`, `shadowColor`) only affect iOS
+      18 and earlier. There is no callback for the glass recoloring
+      itself against content, so icon colors want `PlatformColor` or
+      `DynamicColorIOS` if this ever stops being dark-only.
+    - **Expo Go: the page does not say.** The only stated build
+      requirement is `getImageSourceSync` for vector icons, which the
+      SF Symbols path does not use, so native tabs with `sf` icons
+      plausibly render in Expo Go. Unverified — and worth verifying by
+      trying rather than by reasoning, which is the standing rule here.
+    - **Nothing can be SEEN until the OS catches up.** Liquid Glass is
+      iOS 26 and the installed simulators are iOS 17, so the first
+      honest look at this is after the macOS and Xcode updates.
+    - **Proposed SF Symbols**, one per tab, default and selected:
+      Ledger `list.bullet` / `list.bullet.indent`; Dashboard
+      `chart.pie` / `chart.pie.fill` — or `circle.circle` to echo the
+      current ◎; Budget `tablecells` / `tablecells.fill`; Spending
+      `chart.bar` / `chart.bar.fill`. Dashboard is the one worth
+      arguing about: the pie was removed from the app, and a pie icon
+      for the tab that no longer has one is a small lie.
+
+17. **Haptics (`expo-haptics`) — planned 2026-10-12, after native
+    tabs.** On outcomes, not touches. The rule that keeps it subtle is
+    that a haptic answers a question the screen cannot answer fast
+    enough: did that land?
+
+    - **Success** — any balance logged (checking, savings, investment,
+      loan), a transaction saved, a sign-in code accepted, setup
+      finished. The balance one is deliberate reward: filling the
+      Dashboard is the habit the whole app depends on.
+    - **Warning** — immediately BEFORE a destructive confirm appears:
+      delete a transaction, delete the account, wipe data. Before, not
+      after, so it is a hand on the arm rather than a commiseration.
+    - **Error** — a save that did not land, a wrong code.
+    - **Selection** — tab switch, and one tick per point while
+      scrubbing a chart.
+
+    **Three more worth adding, all the same shape.** A pull-to-refresh
+    that actually fetched (light, on completion — the one case where
+    nothing visibly changes when the data was already current); the
+    scope sheet opening on a ledger row, since that is a modal
+    appearing under your thumb; and reaching either END of a chart
+    scrub, which is how a slider tells you it has stopped without you
+    looking.
+
+    **Two to leave alone.** Every keystroke in the code field — the
+    system keyboard already does that and doubling it feels broken —
+    and the auto-submit on the sixth digit, which is immediately
+    followed by the success tick and would read as a stutter.
+
+    **One rule worth writing down:** haptics are silent for a user with
+    them switched off, so nothing may be ONLY a haptic. Every one of
+    these has to sit beside a visible change.
+
+Not built, and not yet decided either way:
 
 Deliberately NOT ported: drag-to-reorder (HTML5 drag never fires from
 touch, and the web already disables it on phones), and the Budget's
@@ -2370,7 +2441,26 @@ Further out:
 - Multi-account model (payment method per transaction, credit cards with
   limits, full initial setup wizard) — the account list is already shaped
   for it; this is the one deliberate architectural step still ahead.
-- Bank linking (Plaid-style) — much later.
+- Bank linking (Plaid-style) — much later. **Shaped 2026-10-12 as a
+  future IDEA, explicitly not planned and not in v1.** Worth writing
+  down because the shape is unusually good and would be easy to get
+  wrong later: **the primary checking account ONLY**, where the bank's
+  available balance and its date become the verified-balance snapshot
+  automatically. That is the whole integration. It fits principle 1
+  exactly as written — reality still enters the forecast at one point,
+  the verified balance and its as-of date — so nothing else in the app
+  changes, which is the opposite of how bank linking usually arrives.
+
+  Open questions for whenever it is picked up: aggregator cost per
+  connected account; Plaid production approval, which is a review with
+  its own timeline; the privacy policy, which would have to change
+  because a third party would hold read access to an account; and the
+  fact that "available balance" at some banks is inflated by overdraft
+  room, which would silently anchor the forecast above reality.
+
+  **Not to be mentioned in the App Store listing or anywhere in the
+  app.** Listing a feature that does not exist is a review problem and
+  a trust problem.
 - ~~iOS client sharing `src/engine`.~~ **DONE 2026-10-02**, and the phone
   has had a write path since 2026-10-08. What is left of it is the
   mobile backlog above, not this line.
