@@ -22,19 +22,7 @@ import { execSync } from "node:child_process";
 
 const MINIMUM_CHECKS = 10;
 
-/** Every plain-node suite, in the order they ran in the old chain. */
-const SUITES = [
-  "tests/engine.test.mjs",
-  "tests/migrations.test.mjs",
-  "tests/setup.test.mjs",
-  "tests/cvd-reference.test.mjs",
-  "tests/mobile-edit.test.mjs",
-  "tests/signin.test.mjs",
-  "tests/mobile-firstrun.test.mjs",
-  "tests/mobile-categories.test.mjs",
-  "tests/mobile-setup.test.mjs",
-  "tests/apple-secret.test.mjs",
-];
+import { SUITES } from "./suites.mjs";
 
 let broken = 0;
 let total = 0;
@@ -71,4 +59,12 @@ console.log(
     ? `\n${SUITES.length} suites, ${total} checks, all passing`
     : `\n${broken} SUITE(S) NOT OK`
 );
-process.exit(broken === 0 ? 0 : 1);
+// `process.exitCode`, NOT `process.exit()`. When stdout is a pipe —
+// which it is under `npm test`, and in CI — writes are asynchronous,
+// and `process.exit()` discards whatever has not been flushed. This
+// script had already printed a thousand PASS lines by here, so the
+// line that actually matters was the one being thrown away: the run
+// ended mid-sentence with no verdict and a zero exit code. Setting
+// exitCode lets node finish writing and then leave with the right
+// status.
+process.exitCode = broken === 0 ? 0 : 1;

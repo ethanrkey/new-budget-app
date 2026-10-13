@@ -16,7 +16,9 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-13: 94 mutations, and the run EARNED ITS KEEP — one
+// Measured 2026-10-14: 106 mutations, 106 killed. (2026-10-13: 94/86.)
+//
+// The 2026-10-13 note, kept because it is this file's whole argument: — one
 // survived and two new tests could not be killed by anything:
 //   - swapping a contribution's confirm back to "reading" killed
 //     nothing, because the test only read the list label. The confirm
@@ -38,15 +40,11 @@
 // break, but still wrong.
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { SUITES } from "../../scripts/suites.mjs";
 
-/** Plain-node suites that import mobile/lib directly, relative to mobile/. */
-const NODE_SUITES = [
-  "tests/mobile-categories.test.mjs",
-  "tests/signin.test.mjs",
-  "tests/mobile-edit.test.mjs",
-  "tests/mobile-firstrun.test.mjs",
-  "tests/mobile-setup.test.mjs",
-];
+// Every plain-node suite, from the one list — see scripts/suites.mjs
+// for what went wrong when there were two.
+const NODE_SUITES = SUITES;
 
 /** [what is broken, file, find, replace-with] */
 const MUTATIONS = [
@@ -120,20 +118,20 @@ const MUTATIONS = [
   // --- sign-in. Nine tests arrived 2026-10-09 and no mutation could
   // reach any of them, which is exactly the state this script exists to
   // make visible: a suite nothing can kill is decoration.
-  ["the address is sent raw, so an iOS capital letter matches nobody", "lib/signin.ts",
+  ["the address is sent raw, so an iOS capital letter matches nobody", "../src/signin.ts",
    "return raw.trim().toLowerCase();", "return raw;"],
-  ["a five-digit code counts as ready", "lib/signin.ts",
+  ["a five-digit code counts as ready", "../src/signin.ts",
    "return normalizeCode(code).length === CODE_LENGTH;", "return normalizeCode(code).length >= CODE_LENGTH - 1;"],
-  ["a pasted code keeps its spaces", "lib/signin.ts",
+  ["a pasted code keeps its spaces", "../src/signin.ts",
    'return raw.replace(/\\D/g, "").slice(0, CODE_LENGTH);', "return raw.slice(0, CODE_LENGTH);"],
-  ["the rate limit is swallowed like every other error", "lib/signin.ts",
+  ["the rate limit is swallowed like every other error", "../src/signin.ts",
    '  if (isRateLimited(error)) return "A code was just sent. Wait a minute before asking for another.";', "  // mutated"],
-  ["a failed send leaks which addresses have accounts", "lib/signin.ts",
+  ["a failed send leaks which addresses have accounts", "../src/signin.ts",
    "  if (isUnknownAccount(error)) return null;", '  if (isUnknownAccount(error)) return "No account for that address.";'],
-  ["a wrong code says nothing useful", "lib/signin.ts",
+  ["a wrong code says nothing useful", "../src/signin.ts",
    'return "That code is wrong or has expired. Check the latest email, or ask for a new code.";',
    'return "Error.";'],
-  ["the resend cooldown never elapses", "lib/signin.ts",
+  ["the resend cooldown never elapses", "../src/signin.ts",
    "return Math.max(0, RESEND_COOLDOWN_SECONDS - elapsed);", "return RESEND_COOLDOWN_SECONDS;"],
   ["the send never advances to the code step", "components/SignIn.tsx",
    'if (!resending) setStep("code");', "// mutated"],
@@ -152,9 +150,9 @@ const MUTATIONS = [
    "void verify(next);", "void verify();"],
   ["a rejected code is auto-submitted again on the next keystroke", "components/SignIn.tsx",
    "next !== attempted.current", "true"],
-  ["every send failure is hidden, so offline looks like success", "lib/signin.ts",
+  ["every send failure is hidden, so offline looks like success", "../src/signin.ts",
    "  if (isUnknownAccount(error)) return null;", "  return null;"],
-  ["a server error is swallowed instead of spoken", "lib/signin.ts",
+  ["a server error is swallowed instead of spoken", "../src/signin.ts",
    '  return "Something went wrong sending the code. Try again in a moment.";', "  return null;"],
   // --- About. Both faults shipped because nobody had pressed the screen,
   // and both are layout, which is the half a renderer test can reach.
@@ -199,8 +197,8 @@ const MUTATIONS = [
   // --- the first-run signpost, 2026-10-11.
   ["a new account is never recognized, so the signpost never shows", "lib/firstRun.ts",
    "  if ((state.recurring?.length ?? 0) > 0) return false;", "  return false;"],
-  ["a used account is called new, so the signpost never goes away", "lib/firstRun.ts",
-   "  s.id.startsWith(\"seed-\") && s.amount === 0;", "  true;"],
+  ["a used account is called new, so the signpost never goes away", "../src/engine/entities.ts",
+   'return s.id.startsWith("seed-") && s.amount === 0;', "return true;"],
   ["THE SHIPPED BUG: the guide dies on the first write again", "lib/firstRun.ts",
    "  return !dismissed && stepsRemaining(state) > 0;",
    "  return !dismissed && isNewAccount(state);"],
@@ -250,7 +248,7 @@ const MUTATIONS = [
   ["a device that cannot share fails silently", "components/ExportSheet.tsx",
    '        setFailed("This device cannot open a share sheet.");', "        // mutated"],
 
-  ["offline is reported as a server error", "lib/signin.ts",
+  ["offline is reported as a server error", "../src/signin.ts",
    '  if (isUnreachable(error)) return "Can\'t reach the server. Check your connection and try again.";',
    "  // mutated"],
 
@@ -298,6 +296,42 @@ const MUTATIONS = [
    'confirmTitle: "Delete this contribution?"', 'confirmTitle: "Delete this reading?"'],
   ["a reading is called a contribution in the list", "components/HistoryList.tsx",
    '    show: "history",', '    show: "contributions",'],
+  // ...and the other direction. Renaming BOTH to "contributions" left
+  // the contribution test green — it checks that "Show history" is
+  // absent, which it is when nothing says history at all. One mutation
+  // per claim, not one per string.
+  ["a contribution list is labeled history", "components/HistoryList.tsx",
+   '    show: "contributions",', '    show: "history",'],
+
+  // ---- the device-test fixes, 2026-10-14.
+  ["the anchor strip is not a control", "components/Chrome.tsx",
+   "<AnchorStrip onPress={() => setLogging(true)} />", "<AnchorStrip />"],
+  ["tapping the anchor opens a sheet that writes nothing", "components/LogBalance.tsx",
+   "onPress={() => onSubmit(parsed!, date)}", "onPress={() => {}}"],
+  ["a half-linked Apple sign-in is silent again", "components/Settings.tsx",
+   "{prefs.appleLinkFailed && (", "{false && ("],
+  ["...and a healthy one is told it is broken", "components/Settings.tsx",
+   "{prefs.appleLinkFailed && (", "{true && ("],
+  ["a failed token exchange is not recorded", "lib/apple.ts",
+   "await patchPrefs({ appleLinkFailed: failed });", "// mutated"],
+  ["...and a success never clears the notice", "lib/apple.ts",
+   "    else failed = false;", "    // mutated"],
+  ["the accounts form still offers a balance box on an edit", "components/CategorySheet.tsx",
+   "            {creating && (", "            {true && ("],
+  ["a new account can be created with no balance at all", "lib/categories.ts",
+   'if (creating && d.balance.trim() === "") return "Enter what is in it now — 0 is fine.";',
+   "// mutated"],
+  ["a new account's balance starts blank again", "lib/categories.ts",
+   '    balance: "0", asOf: today,', '    balance: "", asOf: today,'],
+
+  // ---- the engine's anchor rule, 2026-10-14. It is engine code, so
+  // the plain-node harness one directory up is what kills these.
+  ["deleting a reading leaves the anchor on the deleted number",
+   "../src/engine/mutate.ts",
+   "  return withAccountSnapshots(state, accountId, list.filter((s) => s.id !== snapshotId));",
+   "  return { ...state, accountSnapshots: { ...state.accountSnapshots, [accountId]: list.filter((s) => s.id !== snapshotId) } };"],
+  ["a seed at zero outranks a reading a person logged", "../src/engine/entities.ts",
+   "  const pool = logged.length > 0 ? logged : list;", "  const pool = list;"],
 ];
 
 const killedBy = new Map();
@@ -318,12 +352,28 @@ function runNodeHarness() {
   return [];
 }
 
+// PREFLIGHT: every mutation must still find its target, checked BEFORE
+// anything runs.
+//
+// A SKIP used to be one line in the middle of a hundred, and the
+// standing rule — treat a SKIP as a failure — depended on somebody
+// reading it. On 2026-10-14 eleven mutations went stale in one commit,
+// because the sign-in logic moved to src/ and the seed rule moved into
+// the engine, and the run still ended "every mutation was caught". It
+// had caught eleven fewer things than it said.
+//
+// So a moved target is fatal, and fatal up front: a run that cannot
+// break what it claims to break has nothing to report.
+const stale = MUTATIONS.filter(([, file, find]) => !readFileSync(file, "utf8").includes(find));
+if (stale.length) {
+  console.log(`${stale.length} MUTATION(S) POINT AT CODE THAT HAS MOVED — fix or drop each one:\n`);
+  for (const [label, file] of stale) console.log(`  ${label}  (${file})`);
+  console.log("\nNothing was run. A mutation that cannot break anything is not evidence.");
+  process.exit(1);
+}
+
 for (const [label, file, find, repl] of MUTATIONS) {
   const orig = readFileSync(file, "utf8");
-  if (!orig.includes(find)) {
-    console.log(`SKIP      ${label} — the code it breaks has moved; fix or drop this mutation`);
-    continue;
-  }
   writeFileSync(file, orig.replace(find, repl));
   let out = "";
   try { out = execSync("npx jest --verbose 2>&1", { encoding: "utf8" }); }
