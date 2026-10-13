@@ -131,5 +131,15 @@ is("a bare object is new, not a crash", isNewAccount({ recurring: [], oneoffs: [
   not("dismissing hides it even with steps left", showFirstRun(blank, true));
 }
 
+// A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a
+// bad edit truncated tests/signin.test.mjs to its header on 2026-10-14
+// and `npm test` stayed green through the whole run. The floor is
+// deliberately far below any real count — it is here to catch a file
+// that has been emptied, not to track how many checks it should have.
+if (checks < 10) {
+  console.log(`FAIL  this suite ran only ${checks} checks — truncated, or short-circuited before the end`);
+  failures++;
+}
+
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

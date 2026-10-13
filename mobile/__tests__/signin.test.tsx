@@ -4,7 +4,7 @@ import { authCalls, googleCalls, appleCalls } from "./setup";
 import { loadPrefs } from "../lib/prefs";
 
 // Sign-in, from the taps. The logic lives in lib/signin.ts and is tested
-// without a renderer in tests/mobile-signin.test.mjs; what is here is the
+// without a renderer in tests/signin.test.mjs; what is here is the
 // half that only exists once it is mounted — does pressing the button send
 // the address the field was showing, does the code step actually appear,
 // and does the sixth digit submit without anyone pressing anything.

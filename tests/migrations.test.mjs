@@ -53,8 +53,9 @@ let _seed = 123456789;
 Math.random = () => { _seed = (_seed * 1103515245 + 12345) & 0x7fffffff; return _seed / 0x7fffffff; };
 const reseed = () => { _seed = 123456789; };
 
-let failures = 0;
+let failures = 0, checks = 0;
 function ok(name, pass, detail = "") {
+  checks++;
   if (!pass) failures++;
   console.log(`${pass ? "PASS" : "FAIL"}  ${name}${detail ? "  " + detail : ""}`);
 }
@@ -451,5 +452,15 @@ ok("wiping nearly everything trips the alarm",
 ok("an ordinary single deletion does not", tombstoneAlarm(baseRows, d2) === false);
 ok("an empty history cannot trip it", tombstoneAlarm([], { upserts: [], tombstones: [] }) === false);
 
-console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
+// A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a
+// bad edit truncated tests/signin.test.mjs to its header on 2026-10-14
+// and `npm test` stayed green through the whole run. The floor is
+// deliberately far below any real count — it is here to catch a file
+// that has been emptied, not to track how many checks it should have.
+if (checks < 10) {
+  console.log(`FAIL  this suite ran only ${checks} checks — truncated, or short-circuited before the end`);
+  failures++;
+}
+
+console.log(`\n${failures === 0 ? `ALL PASS (${checks} checks)` : failures + " FAILURE(S)"}`);
 process.exit(failures === 0 ? 0 : 1);

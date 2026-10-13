@@ -16,13 +16,36 @@ export function signInWithGoogle() {
   });
 }
 
-// Emails a one-click sign-in link.
+// Emails a one-click sign-in link AND a six-digit code — one email,
+// both credentials, because the templates carry `{{ .ConfirmationURL }}`
+// and `{{ .Token }}` side by side. Which one gets used is the user's
+// choice, and until 2026-10-14 this screen only knew about the link.
 /** @param {string} email */
 export function signInWithMagicLink(email) {
   return supabase.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: APP_URL },
   });
+}
+
+/**
+ * Sign in with the code from that email instead of the link.
+ *
+ * WHY THE WEB NEEDS THIS AT ALL, when it has had a working link for a
+ * year: a link opens in whatever browser the mail app hands it to,
+ * which is routinely not the one that asked for it, and the session
+ * then lands in the wrong browser. And a brand-new web user gets the
+ * "Confirm signup" template, which carries the code — so until now
+ * they were handed six digits with nowhere on the site to type them.
+ *
+ * `type: "email"` covers both templates: signup confirmation and
+ * magic link issue the same kind of OTP.
+ *
+ * @param {string} email
+ * @param {string} token
+ */
+export function verifyEmailCode(email, token) {
+  return supabase.auth.verifyOtp({ email, token, type: "email" });
 }
 
 export function signOut() {

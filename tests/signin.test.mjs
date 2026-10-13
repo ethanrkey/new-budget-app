@@ -1,6 +1,12 @@
-// The phone's sign-in logic, with no renderer in it.
+// Sign-in logic, for BOTH clients, with no renderer in it.
 //
-//   node tests/mobile-signin.test.mjs     (runs in `npm test`, so in CI)
+//   node tests/signin.test.mjs     (runs in `npm test`, so in CI)
+//
+// It was tests/mobile-signin.test.mjs until 2026-10-14, when the web
+// grew a code box and the shared half moved to src/signin.ts. The old
+// name was a lie the moment the web started calling the same
+// functions, and a file named after one client is a file the other
+// client's author does not think to read.
 //
 // Everything here is a decision the screen makes before it talks to
 // Supabase, or a decision about what to SAY when Supabase refuses. Both
@@ -15,8 +21,10 @@
 import {
   CODE_LENGTH, RESEND_COOLDOWN_SECONDS, normalizeEmail, isPlausibleEmail,
   normalizeCode, codeReady, resendIn, sendFailureMessage, verifyFailureMessage,
-  googleFailureMessage, appleFailureMessage,
-} from "../mobile/lib/signin.ts";
+} from "../src/signin.ts";
+// The two that stayed on the phone, because they read error codes only
+// a native SDK produces.
+import { googleFailureMessage, appleFailureMessage } from "../mobile/lib/signin.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -185,6 +193,16 @@ const not = (label, cond) => eq(label, !!cond, false);
   is("every spoken Apple failure offers the way out that works",
     [{ message: "" }, null, { message: "Unacceptable audience" }]
       .map(appleFailureMessage).every((m) => /emailed code/i.test(m)));
+}
+
+// A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a
+// bad edit truncated tests/signin.test.mjs to its header on 2026-10-14
+// and `npm test` stayed green through the whole run. The floor is
+// deliberately far below any real count — it is here to catch a file
+// that has been emptied, not to track how many checks it should have.
+if (checks < 10) {
+  console.log(`FAIL  this suite ran only ${checks} checks — truncated, or short-circuited before the end`);
+  failures++;
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S)`);

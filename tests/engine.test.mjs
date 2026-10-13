@@ -18,8 +18,9 @@ import { assembleState } from "../src/engine/entities.ts";
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const money = (n) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
-let failures = 0;
+let failures = 0, checks = 0;
 function check(label, got, want) {
+  checks++;
   const ok = Math.abs(got - want) < 0.005;
   if (!ok) failures++;
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}  got=${money(got)} want=${money(want)}`);
@@ -103,6 +104,7 @@ check("saved cumulative after 3 months", savedSteps[2] ?? 0, 600);
 check("rent rows never step a tracker", ledgerC.rows.filter((r) => r.name === "Rent" && r.stepped).length, 0);
 
 function eq(label, got, want) {
+  checks++;
   const ok = JSON.stringify(got) === JSON.stringify(want);
   if (!ok) failures++;
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}  got=${JSON.stringify(got)} want=${JSON.stringify(want)}`);
@@ -2035,5 +2037,15 @@ console.log("\n== snapshot lists come back in date order ==");
   eq("newest last", snaps[snaps.length - 1].date, "2026-10-08");
 }
 
-console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
+// A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a
+// bad edit truncated tests/signin.test.mjs to its header on 2026-10-14
+// and `npm test` stayed green through the whole run. The floor is
+// deliberately far below any real count — it is here to catch a file
+// that has been emptied, not to track how many checks it should have.
+if (checks < 10) {
+  console.log(`FAIL  this suite ran only ${checks} checks — truncated, or short-circuited before the end`);
+  failures++;
+}
+
+console.log(`\n${failures === 0 ? `ALL PASS (${checks} checks)` : failures + " FAILURE(S)"}`);
 process.exit(failures === 0 ? 0 : 1);

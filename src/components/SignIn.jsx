@@ -1,12 +1,50 @@
-import { useState } from "react";
-import { signInWithGoogle, signInWithMagicLink } from "../auth.js";
+import { useEffect, useRef, useState } from "react";
+import { signInWithGoogle, signInWithMagicLink, verifyEmailCode } from "../auth.js";
+import {
+  CODE_LENGTH, codeReady, isPlausibleEmail, normalizeCode, normalizeEmail,
+  resendIn, sendFailureMessage, verifyFailureMessage,
+} from "../signin.ts";
+
+// THE EMAIL HAS ALWAYS CARRIED BOTH. `{{ .ConfirmationURL }}` and
+// `{{ .Token }}` sit side by side in the templates, and until
+// 2026-10-14 this screen knew only about the link — so a new user,
+// who gets the "Confirm signup" template, was handed six digits with
+// nowhere on the site to type them. The phone has taken the code
+// since October; this is the same two-step flow, from the same
+// functions in src/signin.ts, so neither client can drift on what
+// counts as a valid code or on what a failure says.
+//
+// The link still works and is still offered first. A code is the
+// answer to the case the link cannot fix: a link opens in whatever
+// browser the mail app hands it to, which is routinely not the one
+// that asked for it, and the session lands in the wrong browser.
 
 export default function SignIn() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sentAt, setSentAt] = useState(null);
+  const [cooldown, setCooldown] = useState(0);
+  // The last code this screen has already tried. Auto-submit fires once
+  // per distinct code and never again for the same one, so a rejected
+  // code is not re-sent forever while the user looks at it.
+  const attempted = useRef(null);
+
+  // A countdown rather than a dead button: the one-per-minute limit is
+  // Supabase's, and a control that does nothing for a reason it will
+  // not state is how people conclude a site is broken.
+  useEffect(() => {
+    if (sentAt == null) return;
+    const tick = () => setCooldown(resendIn(sentAt, Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [sentAt]);
+
+  const clean = normalizeEmail(email);
 
   function toggleTheme() {
     const next = !dark;
@@ -23,14 +61,47 @@ export default function SignIn() {
   }
 
   async function handleMagicLink(e) {
-    e.preventDefault();
-    if (!email.trim()) return;
+    e?.preventDefault();
+    if (!isPlausibleEmail(clean) || busy) return;
     setError("");
     setBusy(true);
-    const { error } = await signInWithMagicLink(email.trim());
+    const { error } = await signInWithMagicLink(clean);
     setBusy(false);
-    if (error) setError(error.message);
-    else setSent(true);
+    // Shared with the phone: a rate limit and a dead network are
+    // spoken, and "no account here" is NOT, because an error that
+    // distinguishes it is an account-enumeration oracle.
+    const blocked = sendFailureMessage(error);
+    if (blocked) { setError(blocked); return; }
+    // Cleared on every send, resend included: the previous code is dead
+    // the moment a new one is issued.
+    setCode("");
+    attempted.current = null;
+    setSentAt(Date.now());
+    setSent(true);
+  }
+
+  async function verify(entered) {
+    const token = normalizeCode(entered ?? code);
+    if (busy || !codeReady(token)) return;
+    attempted.current = token;
+    setError("");
+    setBusy(true);
+    const { error } = await verifyEmailCode(clean, token);
+    setBusy(false);
+    // On success onAuthChange swaps the screen; only failure needs saying.
+    if (error) setError(verifyFailureMessage(error));
+  }
+
+  // Submit on the sixth digit, however it arrived — typed, pasted, or
+  // dropped in by the browser's one-time-code autofill. Done in the
+  // change handler rather than an effect, exactly as on the phone: an
+  // effect would also run when `busy` flips back after a rejection, so
+  // every guard against resending a dead code would be a guard against
+  // an infinite loop.
+  function onCodeChange(raw) {
+    const next = normalizeCode(raw);
+    setCode(next);
+    if (next.length === CODE_LENGTH && !busy && next !== attempted.current) void verify(next);
   }
 
   return (
@@ -62,9 +133,44 @@ export default function SignIn() {
         </div>
 
         {sent ? (
-          <p className="text-sm text-center text-income">
-            Check <span className="font-medium">{email}</span> for a sign-in link.
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm text-center text-gray-500">
+              Check <span className="font-medium text-gray-900 dark:text-gray-100">{clean}</span>.
+              Click the link in the email, or type the {CODE_LENGTH}-digit code from it here.
+            </p>
+            <input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={CODE_LENGTH}
+              placeholder="000000"
+              value={code}
+              onChange={(e) => onCodeChange(e.target.value)}
+              autoFocus
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-2xl tracking-[0.5em] text-center tabular-nums"
+            />
+            <button
+              onClick={() => verify()}
+              disabled={busy || !codeReady(code)}
+              className="w-full py-2.5 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90 disabled:opacity-40 transition"
+            >
+              Sign in
+            </button>
+            <div className="flex items-center justify-between text-sm">
+              <button
+                onClick={() => { setSent(false); setError(""); attempted.current = null; }}
+                className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+              >
+                Use a different address
+              </button>
+              <button
+                onClick={() => handleMagicLink()}
+                disabled={busy || cooldown > 0}
+                className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 disabled:text-gray-300 dark:disabled:text-gray-700"
+              >
+                {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend"}
+              </button>
+            </div>
+          </div>
         ) : (
           <form onSubmit={handleMagicLink} className="space-y-3">
             <input
@@ -80,7 +186,7 @@ export default function SignIn() {
               disabled={busy}
               className="w-full py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition"
             >
-              Send magic link
+              Email me a link and a code
             </button>
           </form>
         )}

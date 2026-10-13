@@ -42,7 +42,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 /** Plain-node suites that import mobile/lib directly, relative to mobile/. */
 const NODE_SUITES = [
   "tests/mobile-categories.test.mjs",
-  "tests/mobile-signin.test.mjs",
+  "tests/signin.test.mjs",
   "tests/mobile-edit.test.mjs",
   "tests/mobile-firstrun.test.mjs",
   "tests/mobile-setup.test.mjs",
@@ -331,7 +331,7 @@ for (const [label, file, find, repl] of MUTATIONS) {
   // The OTHER suite. `lib/` is imported by the plain-node harness as well
   // as by the renderer, and a mutation this file can only reach through
   // logic would otherwise be reported as surviving while a test in
-  // tests/mobile-signin.test.mjs was failing loudly one directory up.
+  // tests/signin.test.mjs was failing loudly one directory up.
   // "Can anything kill these tests" has to mean anything.
   const node = runNodeHarness();
   writeFileSync(file, orig);          // always restore, pass or fail
