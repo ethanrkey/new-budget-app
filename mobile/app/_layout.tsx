@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { Stack } from "expo-router";
+import { Stack, ThemeProvider, DarkTheme } from "expo-router";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { StateProvider } from "../components/StateProvider";
@@ -27,7 +27,14 @@ export default function RootLayout() {
     // SafeAreaProvider at the root, not per screen: without it the notch
     // eats the header and the whole thing reads as broken before anyone
     // has looked at a single number.
+    // ThemeProvider with DarkTheme, and the reason is narrow rather
+    // than architectural: react-navigation's DEFAULT theme has a white
+    // background, so switching tabs on iOS 26 flashes white behind the
+    // transition. One import fixes it. On SDK 56+ the provider comes
+    // from expo-router itself, so there is no second navigation
+    // package to keep in step.
     <SafeAreaProvider>
+      <ThemeProvider value={DarkTheme}>
       <StatusBar style="light" />
       <View style={styles.root}>
         {!ready ? (
@@ -42,6 +49,7 @@ export default function RootLayout() {
           </StateProvider>
         )}
       </View>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

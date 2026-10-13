@@ -1,31 +1,68 @@
-import { Tabs } from "expo-router";
-import { Text } from "react-native";
-import type { ColorValue } from "react-native";
+import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { T } from "../../lib/theme";
 
-// A real bottom tab bar. The single biggest signal that this is an app and
-// not a web page in a frame — expo-router gives the native one, with the
-// platform's own blur, press states and safe-area inset for free.
-const icon = (glyph: string) => ({ color }: { color: ColorValue }) => (
-  <Text style={{ color, fontSize: 19 }}>{glyph}</Text>
-);
-
+// The real UIKit tab bar, not a JavaScript one drawn to look like it.
+//
+// WHAT CHANGES. The old bar was expo-router's JS `Tabs` with text
+// glyphs (☰ ◎ ▦ ◧) for icons, which is a row of characters in a font
+// doing an impression of a toolbar. This is `UITabBarController`: the
+// system's own blur, its own press feedback, its own safe-area
+// handling — and on iOS 26, Liquid Glass, which no JS bar can have
+// because the glass has to recolor itself against the content
+// scrolling underneath it.
+//
+// THE IMPORT PATH IS `expo-router/unstable-native-tabs` ON THIS SDK.
+// The stable `expo-router/native-tabs` arrives in SDK 58; 54 through
+// 57 use the unstable one. Getting this wrong is a module-not-found
+// rather than a subtle bug, which is the good kind of mistake.
+//
+// `tintColor` is the selected color and a flat brass is correct here.
+// Expo recommends `DynamicColorIOS` so a tint adapts between light and
+// dark; this app is dark only, so there is nothing to adapt to and the
+// wrapper would be ceremony. (The same note applies to `iconColor` if
+// this ever stops being dark-only.)
+//
+// `backgroundColor` and `blurEffect` only affect iOS 18 and earlier.
+// On 26 the glass is automatic and these are ignored — they are here
+// so the bar is not a pale rectangle in a dark app on an older phone.
+//
+// THE FILL VARIANTS ARE NOT UNIFORM, and that is the SF catalog rather
+// than a slip. `tablecells` and `chart.bar` have true `.fill` twins —
+// same shape, heavier. `list.bullet` and `chart.line.uptrend.xyaxis`
+// do not. The nearest candidates (`list.bullet.rectangle.fill`,
+// `chart.line.uptrend.xyaxis.circle.fill`) add a rectangle and a
+// circle, which reads as a DIFFERENT icon rather than a selected one —
+// worse than no fill. Those two are marked by the tint alone, which is
+// what iOS does by default anyway.
 export default function TabLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerStyle: { backgroundColor: T.bg },
-        headerTitleStyle: { color: T.text },
-        headerShadowVisible: false,
-        tabBarActiveTintColor: T.brass,
-        tabBarInactiveTintColor: T.faint,
-        tabBarStyle: { backgroundColor: T.surface, borderTopColor: T.border },
-      }}
+    <NativeTabs
+      tintColor={T.brass}
+      backgroundColor={T.surface}
+      blurEffect="systemChromeMaterialDark"
     >
-      <Tabs.Screen name="index" options={{ title: "Ledger", tabBarIcon: icon("☰") }} />
-      <Tabs.Screen name="dashboard" options={{ title: "Dashboard", tabBarIcon: icon("◎") }} />
-      <Tabs.Screen name="budget" options={{ title: "Budget", tabBarIcon: icon("▦") }} />
-      <Tabs.Screen name="spending" options={{ title: "Spending", tabBarIcon: icon("◧") }} />
-    </Tabs>
+      <NativeTabs.Trigger name="index">
+        <NativeTabs.Trigger.Label>Ledger</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="list.bullet" />
+      </NativeTabs.Trigger>
+
+      {/* The pie is gone from this app, so a pie icon for the tab that
+          no longer has one would be a small lie. A rising line is what
+          the Dashboard actually shows. */}
+      <NativeTabs.Trigger name="dashboard">
+        <NativeTabs.Trigger.Label>Dashboard</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="chart.line.uptrend.xyaxis" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="budget">
+        <NativeTabs.Trigger.Label>Budget</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "tablecells", selected: "tablecells.fill" }} />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="spending">
+        <NativeTabs.Trigger.Label>Spending</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }
