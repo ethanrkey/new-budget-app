@@ -3,6 +3,13 @@
     "name": "Key Budget",
     "slug": "key-budget",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b1d6b66c-3cf8-4316-a200-201891c947ce",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "keybudget",
@@ -34,11 +41,11 @@
       "expo-apple-authentication",
       "expo-sharing",
       [
-      "@react-native-google-signin/google-signin",
-      {
-        "iosUrlScheme": "com.googleusercontent.apps.225819918731-h8uii8j71melja4strfhfvvnlcc4pnsf"
-      }
-    ]
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.225819918731-h8uii8j71melja4strfhfvvnlcc4pnsf"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

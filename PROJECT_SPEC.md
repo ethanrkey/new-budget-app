@@ -2427,6 +2427,39 @@ a port.
       arguing about: the pie was removed from the app, and a pie icon
       for the tab that no longer has one is a small lie.
 
+18. **EAS Update (over-the-air JS) — DONE 2026-10-13, and the runtime
+    version is PROVEN rather than configured and hoped for.**
+
+    `app.json` now carries `runtimeVersion: { policy: "fingerprint" }`
+    and the update URL; `eas.json` puts `simulator` and `preview` on
+    the `preview` channel and `production` on `production`.
+
+    **The gate was tested by moving things and looking**, because
+    "a native change bumps it" is the entire safety property and a
+    policy name is not evidence:
+
+    | change | runtime version |
+    |---|---|
+    | baseline | `cf6120cc…` |
+    | a line added to `components/HistoryList.tsx` | `cf6120cc…` — unmoved |
+    | `ios.supportsTablet` flipped in `app.json` | `a435666a…` — moved |
+    | reverted | `cf6120cc…` |
+
+    So JS ships over the air to the builds it was written against, and
+    a native change makes a runtime version that no installed build
+    has — which means those builds are never offered it. That is the
+    trap below, closed: an OTA update is JS running against a binary
+    that may be older than it, and JS calling a native module the
+    binary does not have crashes on launch, with no way to push a fix
+    to a device that cannot start.
+
+    Build 1.0.0 (2) does not contain `expo-updates`, so the first
+    OTA-capable build is a new one. There is no way to add OTA over
+    the air.
+
+    *The planning entry, kept for the lists of what can and cannot go
+    this way:*
+
 18. **EAS Update (over-the-air JS) — planned 2026-10-12, folds into
     the next native batch.** Build 1.0.0 (2) does not contain
     `expo-updates`, so the first OTA-capable build has to be a new one
