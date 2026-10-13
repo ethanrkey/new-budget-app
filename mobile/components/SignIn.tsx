@@ -11,6 +11,7 @@ import {
   resendIn, sendFailureMessage, verifyFailureMessage,
 } from "../lib/signin";
 import { GOOGLE_AVAILABLE, signInWithGoogle } from "../lib/google";
+import { APPLE_POSSIBLE, appleAvailable, signInWithApple } from "../lib/apple";
 
 // Sign in by emailed code. Two steps, because a code you have not been
 // sent yet is not a field you should be looking at.
@@ -22,15 +23,22 @@ import { GOOGLE_AVAILABLE, signInWithGoogle } from "../lib/google";
 // them — it authenticates the address, which is the one thing every
 // account here has.
 //
-// GOOGLE IS HERE IN A REAL BUILD AND ABSENT IN EXPO GO, which is a fact
-// about the binary rather than a feature flag: the native module is not
-// in Expo Go, so the button is not drawn there. SIGN IN WITH APPLE is
-// still out, and waits on the paid Apple Developer account for its
-// Service ID and key. Apple's guideline 4.8 ties the two together —
-// offering Google obliges an equivalent option, and this app's own email
-// login cannot be it, because it cannot keep an address private — so
-// Google must not reach the App Store before Apple does. It can reach a
-// simulator and a dev build, which is what this is for.
+// GOOGLE AND APPLE ARE BOTH HERE IN A REAL BUILD AND ABSENT IN EXPO GO,
+// which is a fact about the binary rather than a feature flag: neither
+// native module is in Expo Go, and Expo Go's bundle id is
+// host.exp.Exponent, so an Apple token issued there would have the
+// wrong audience and be rightly refused.
+//
+// APPLE IS NOT OPTIONAL NEXT TO GOOGLE. Guideline 4.8 requires an
+// equivalent login that keeps the user's email private, and this app's
+// own emailed-code login cannot be it — it authenticates an address,
+// which means it has one. So the two ship together or Google does not
+// ship.
+//
+// APPLE'S BUTTON IS APPLE'S BUTTON — `AppleAuthenticationButton`, the
+// real native one, not a black rectangle with a glyph on it. Apple's
+// Human Interface Guidelines are specific about its appearance and a
+// hand-drawn copy is a review risk for no gain.
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<"email" | "code">("email");
@@ -46,6 +54,11 @@ export default function SignIn() {
   // keeps a rejected code from being re-sent forever while the user looks
   // at it.
   const attempted = useRef<string | null>(null);
+  // Asked of the OS rather than assumed: `isAvailableAsync` is the only
+  // honest answer on a device, and it is async, so it lands after the
+  // first render and the button appears when it does.
+  const [appleReady, setAppleReady] = useState(false);
+  useEffect(() => { let dead = false; void appleAvailable().then((v) => { if (!dead) setAppleReady(v); }); return () => { dead = true; }; }, []);
 
   // A countdown rather than a disabled button with no explanation: the
   // one-per-minute limit is Supabase's, and a button that does nothing
@@ -98,6 +111,16 @@ export default function SignIn() {
     setBusy(false);
     // null means the sheet was dismissed, which is not a failure and is
     // not worth a line of red under the button.
+    if (message) setError(message);
+  }
+
+  async function apple() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const { message } = await signInWithApple(supabase);
+    setBusy(false);
+    // null means the sheet was dismissed. Not a failure, not a message.
     if (message) setError(message);
   }
 
@@ -178,23 +201,27 @@ export default function SignIn() {
           >
             {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.ctaText}>Email me a code</Text>}
           </Pressable>
+          {(GOOGLE_AVAILABLE || appleReady) && (
+            <View style={styles.orRow}>
+              <View style={styles.rule} />
+              <Text style={styles.or}>or</Text>
+              <View style={styles.rule} />
+            </View>
+          )}
+          {/* Apple first, and above Google rather than below it.
+              Guideline 4.8 asks for an equivalent option, and an
+              option listed last reads as the lesser one. */}
+          {appleReady && <AppleButton onPress={apple} busy={busy} />}
           {GOOGLE_AVAILABLE && (
-            <>
-              <View style={styles.orRow}>
-                <View style={styles.rule} />
-                <Text style={styles.or}>or</Text>
-                <View style={styles.rule} />
-              </View>
-              <Pressable
-                style={({ pressed }) => [styles.google, pressed && styles.ctaPressed, busy && styles.disabled]}
-                onPress={google}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityLabel="Continue with Google"
-              >
-                <Text style={styles.googleText}>Continue with Google</Text>
-              </Pressable>
-            </>
+            <Pressable
+              style={({ pressed }) => [styles.google, pressed && styles.ctaPressed, busy && styles.disabled]}
+              onPress={google}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Google"
+            >
+              <Text style={styles.googleText}>Continue with Google</Text>
+            </Pressable>
           )}
 
           <Text style={styles.note}>
@@ -248,12 +275,38 @@ export default function SignIn() {
               be reachable by email code, and if that is what happened the
               screen must not just sit there looking patient. */}
           <Text style={styles.note}>
-            Nothing arriving? Check spam first. If you signed up with Google, sign in on the web at
-            keybudget.app — the phone cannot do Google yet.
+            Nothing arriving? Check spam first. If you signed up with Google or Apple, go back and use
+            that button instead — both work here.
           </Text>
         </>
       )}
     </KeyboardAvoidingView>
+  );
+}
+
+/**
+ * Apple's own button, required lazily.
+ *
+ * A top-level import of expo-apple-authentication is evaluated in Expo
+ * Go, where the native view does not exist — and the import, not the
+ * press, is what fails. `appleReady` is false there, so this component
+ * is never rendered and the require never runs.
+ */
+function AppleButton({ onPress, busy }: { onPress: () => void; busy: boolean }) {
+  const AppleAuthentication = require("expo-apple-authentication");
+  return (
+    <View style={[styles.appleWrap, busy && styles.disabled]} pointerEvents={busy ? "none" : "auto"}>
+      <AppleAuthentication.AppleAuthenticationButton
+        buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+        // WHITE on a dark app, because the app is dark. Apple allows
+        // black, white and white-with-outline; black on #030712 is a
+        // button you cannot see.
+        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+        cornerRadius={12}
+        style={styles.apple}
+        onPress={onPress}
+      />
+    </View>
   );
 }
 
@@ -282,6 +335,10 @@ const styles = StyleSheet.create({
   orRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 18 },
   rule: { flex: 1, height: 1, backgroundColor: T.border },
   or: { color: T.faint, fontSize: 12 },
+  appleWrap: { marginTop: 12 },
+  // 50pt to match the other two buttons exactly. Apple's button draws
+  // itself; only its box is ours.
+  apple: { height: 50, width: "100%" },
   google: {
     marginTop: 12, minHeight: 50, borderRadius: 12, alignItems: "center", justifyContent: "center",
     borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,

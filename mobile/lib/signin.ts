@@ -177,3 +177,31 @@ export function googleFailureMessage(error: unknown): string | null {
   }
   return message || "Google sign-in didn't work. Try the emailed code instead.";
 }
+
+/**
+ * The same treatment for Apple, and the same reason: the branches are
+ * failures that cannot be produced on demand from a real Apple sheet,
+ * so they are a pure function and are tested as one.
+ *
+ * A CANCEL IS NOT A FAILURE and returns null — say nothing. Apple's
+ * sheet is dismissed far more often than Google's, because it appears
+ * over the app without a tap on an account, and a line of red under
+ * the button for "I changed my mind" is wrong every time.
+ */
+export function appleFailureMessage(error: unknown): string | null {
+  const e = error as { code?: string; message?: string } | null | undefined;
+  const code = e?.code ?? "";
+  const message = e?.message ?? "";
+
+  if (code === "ERR_REQUEST_CANCELED" || code === "ERR_CANCELED" || /cancel/i.test(message)) return null;
+  if (/network|offline|connection/i.test(message)) {
+    return "Can't reach Apple. Check your connection and try again.";
+  }
+  // Misconfiguration, which the user can do nothing about: the wrong
+  // Client ID on the Supabase provider, or a nonce it wanted and did
+  // not get. Worth its own sentence so a support reply can be useful.
+  if (/audience|aud |invalid.*token|nonce|client/i.test(message)) {
+    return "Apple signed you in, but this app's setup rejected it. That's on us — try the emailed code instead.";
+  }
+  return message || "Sign in with Apple didn't work. Try the emailed code instead.";
+}

@@ -38,7 +38,15 @@ export const authCalls: {
   // exactly what the offline branch keys on.
   nextOtpError: { message: string; status?: number; code?: string } | null;
   nextVerifyError: { message: string; status?: number; code?: string } | null;
-} = { otp: [], verify: [], nextOtpError: null, nextVerifyError: null };
+  /** Tokens handed to signInWithIdToken: {provider, token}. */
+  idTokens: { provider: string; token: string }[];
+  nextIdTokenError: { message: string; code?: string } | null;
+  /** Edge-function calls: the Apple authorization code goes through here. */
+  functions: { name: string; body: unknown }[];
+} = {
+  otp: [], verify: [], nextOtpError: null, nextVerifyError: null,
+  idTokens: [], nextIdTokenError: null, functions: [],
+};
 
 jest.mock("../lib/supabase", () => {
   const { authCalls: calls } = require("./setup");
@@ -58,6 +66,18 @@ jest.mock("../lib/supabase", () => {
           return { data: {}, error };
         },
         signInWithPassword: async () => ({ data: {}, error: null }),
+        signInWithIdToken: async (args: { provider: string; token: string }) => {
+          calls.idTokens.push(args);
+          const error = calls.nextIdTokenError;
+          calls.nextIdTokenError = null;
+          return { data: {}, error };
+        },
+      },
+      functions: {
+        invoke: async (name: string, opts: { body: unknown }) => {
+          calls.functions.push({ name, body: opts.body });
+          return { data: {}, error: null };
+        },
       },
     },
     BACKEND: "production",
@@ -133,5 +153,53 @@ jest.mock("../lib/google", () => {
     GOOGLE_AVAILABLE: true,
     IOS_CLIENT_ID: "test.apps.googleusercontent.com",
     signInWithGoogle: async () => { g.count++; return g.next; },
+  };
+});
+
+// Sign in with Apple, recorded. Same reasoning as the Google mock: the
+// OS sheet cannot be driven under jest, so what is tested is the
+// wiring either side of it — is Apple's own button drawn, does
+// pressing it call through, is the authorization code handed to the
+// server immediately, and does a dismissal say nothing.
+//
+// `isAvailableAsync` is a function rather than a constant because the
+// screen ASKS the OS and renders the button when the answer lands,
+// which is a thing a test needs to be able to answer no to.
+export const appleCalls: {
+  available: boolean;
+  signIns: number;
+  next: {
+    identityToken: string | null;
+    authorizationCode: string | null;
+    error: { code?: string; message?: string } | null;
+  };
+} = {
+  available: true,
+  signIns: 0,
+  next: { identityToken: "apple.id.token", authorizationCode: "apple-auth-code", error: null },
+};
+
+jest.mock("expo-apple-authentication", () => {
+  const React = require("react");
+  const { Pressable, Text } = require("react-native");
+  const { appleCalls: a } = require("./setup");
+  return {
+    isAvailableAsync: async () => a.available,
+    AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+    AppleAuthenticationButtonType: { CONTINUE: 1 },
+    AppleAuthenticationButtonStyle: { WHITE: 1 },
+    signInAsync: async () => {
+      a.signIns++;
+      if (a.next.error) throw a.next.error;
+      return { identityToken: a.next.identityToken, authorizationCode: a.next.authorizationCode };
+    },
+    // Apple's own view, stood in for by something pressable that
+    // carries the same label the real one exposes to VoiceOver.
+    AppleAuthenticationButton: (props: Record<string, unknown>) =>
+      React.createElement(
+        Pressable,
+        { onPress: props.onPress, accessibilityRole: "button", accessibilityLabel: "Continue with Apple" },
+        React.createElement(Text, null, "Continue with Apple")
+      ),
   };
 });

@@ -10,6 +10,9 @@ import { applyTheme } from "../theme.js";
 //
 // One thing it asserts that the code has to keep true: "If you delete your
 // account, your data is deleted with it." That is supabase/account_deletion.sql
+// — and, since Sign in with Apple landed, supabase/apple_tokens.sql and
+// supabase/functions/apple-revoke, which are what makes the sentence
+// about Apple's token true rather than aspirational.
 // plus Settings -> Delete my account, and it shipped BEFORE this page did,
 // deliberately — a privacy page that claims a feature which does not exist
 // is the worst kind of wrong.
@@ -59,7 +62,14 @@ export default function Privacy() {
             <li>
               The financial information you enter yourself — transactions, balances, categories.
             </li>
-            <li>Nothing else. No analytics, no tracking, no third-party services.</li>
+            <li>
+              If you sign in with Apple or Google, the sign-in happens with them and they tell me your
+              email address and nothing else. Signing in with Apple also leaves one token here, kept
+              for a single purpose: Apple requires that deleting your account ends Apple&apos;s side of
+              the sign-in too, and that token is what does it. It is used for that and nothing else,
+              and it is destroyed when your account is.
+            </li>
+            <li>Nothing else. No analytics, no tracking, no advertising, nothing sold to anyone.</li>
           </ul>
 
           <p className="pt-2">

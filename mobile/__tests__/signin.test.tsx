@@ -1,6 +1,6 @@
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import SignIn from "../components/SignIn";
-import { authCalls, googleCalls } from "./setup";
+import { authCalls, googleCalls, appleCalls } from "./setup";
 
 // Sign-in, from the taps. The logic lives in lib/signin.ts and is tested
 // without a renderer in tests/mobile-signin.test.mjs; what is here is the
@@ -34,6 +34,11 @@ beforeEach(() => {
   authCalls.nextVerifyError = null;
   googleCalls.count = 0;
   googleCalls.next = { ok: true, message: null };
+  authCalls.idTokens.length = 0;
+  authCalls.functions.length = 0;
+  appleCalls.available = true;
+  appleCalls.signIns = 0;
+  appleCalls.next = { identityToken: "apple.id.token", authorizationCode: "apple-auth-code", error: null };
 });
 
 /**
@@ -265,4 +270,64 @@ test("resend is held shut for the minute Supabase enforces", async () => {
   expect(screen.getByText(/Resend in \d+s/)).toBeOnTheScreen();
   await userEvent.press(screen.getByLabelText("Resend the code"));
   expect(authCalls.otp).toHaveLength(1);
+});
+
+
+// ---- Sign in with Apple ----------------------------------------------
+//
+// Required by guideline 4.8 next to Google, so these are not nice-to-
+// haves: a build that offers Google and not this is a rejection.
+
+test("Apple's button is drawn once the OS says it is available", async () => {
+  await render(<SignIn />);
+  expect(await screen.findByLabelText("Continue with Apple")).toBeOnTheScreen();
+  // And above Google, because an option listed last reads as the lesser
+  // one and 4.8 asks for an equivalent.
+  const order = screen.getAllByRole("button").map((b) => b.props.accessibilityLabel);
+  expect(order.indexOf("Continue with Apple")).toBeLessThan(order.indexOf("Continue with Google"));
+});
+
+test("a device that cannot do it is not shown a button that cannot work", async () => {
+  appleCalls.available = false;
+  await render(<SignIn />);
+  await screen.findByLabelText("Email me a code");
+  expect(screen.queryByLabelText("Continue with Apple")).toBeNull();
+});
+
+test("the identity token reaches Supabase, and the authorization code reaches the server", async () => {
+  await render(<SignIn />);
+  await userEvent.press(await screen.findByLabelText("Continue with Apple"));
+
+  await waitFor(() => expect(authCalls.idTokens).toHaveLength(1));
+  expect(authCalls.idTokens[0]).toEqual({ provider: "apple", token: "apple.id.token" });
+
+  // THE PART THAT IS EASY TO LEAVE OUT. The authorization code expires
+  // in five minutes and works once, so it has to go to the server at
+  // sign-in — storing it for a deletion months later exchanges nothing.
+  await waitFor(() => expect(authCalls.functions).toHaveLength(1));
+  expect(authCalls.functions[0]).toEqual({ name: "apple-link", body: { code: "apple-auth-code" } });
+});
+
+test("a dismissed Apple sheet says nothing", async () => {
+  appleCalls.next = { identityToken: null, authorizationCode: null, error: { code: "ERR_REQUEST_CANCELED", message: "The user canceled the authorization attempt." } };
+  await render(<SignIn />);
+  await userEvent.press(await screen.findByLabelText("Continue with Apple"));
+
+  await waitFor(() => expect(appleCalls.signIns).toBe(1));
+  expect(authCalls.idTokens).toHaveLength(0);
+  // Changing your mind is not an error, and a line of red under the
+  // button would say it was.
+  expect(screen.queryByText(/didn't work/)).toBeNull();
+  expect(screen.queryByText(/Apple/i)).not.toBeNull();   // the button is still there
+});
+
+test("Supabase refusing the token is said out loud, and nothing is sent to the server", async () => {
+  authCalls.nextIdTokenError = { message: "Unacceptable audience in id_token" };
+  await render(<SignIn />);
+  await userEvent.press(await screen.findByLabelText("Continue with Apple"));
+
+  expect(await screen.findByText(/this app's setup rejected it/)).toBeOnTheScreen();
+  // No session, so no code to link — sending one would be a call with
+  // no user attached to it.
+  expect(authCalls.functions).toHaveLength(0);
 });

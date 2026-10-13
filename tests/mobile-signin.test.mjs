@@ -15,7 +15,7 @@
 import {
   CODE_LENGTH, RESEND_COOLDOWN_SECONDS, normalizeEmail, isPlausibleEmail,
   normalizeCode, codeReady, resendIn, sendFailureMessage, verifyFailureMessage,
-  googleFailureMessage,
+  googleFailureMessage, appleFailureMessage,
 } from "../mobile/lib/signin.ts";
 
 let failures = 0, checks = 0;
@@ -164,6 +164,27 @@ const not = (label, cond) => eq(label, !!cond, false);
   is("every spoken Google failure offers the way out that works",
     [{ message: "" }, null, { message: "Invalid audience" }]
       .map(googleFailureMessage).every((m) => /emailed code/i.test(m)));
+}
+
+// ---- Sign in with Apple ---------------------------------------------
+{
+  // Apple's sheet is dismissed far more often than Google's, because it
+  // appears over the app without a tap on an account first. A line of
+  // red for "I changed my mind" would be wrong most of the time.
+  eq("a cancel says nothing", appleFailureMessage({ code: "ERR_REQUEST_CANCELED" }), null);
+  eq("...by either spelling of the code", appleFailureMessage({ code: "ERR_CANCELED" }), null);
+  eq("...and by wording", appleFailureMessage({ message: "The user canceled the authorization attempt." }), null);
+
+  is("offline is spoken", /check your connection/i.test(appleFailureMessage({ message: "Network request failed" })));
+  is("a rejected audience blames us, not the user",
+    /on us/i.test(appleFailureMessage({ message: "Unacceptable audience in id_token" })));
+  is("a wrong Client ID lands in the same bucket",
+    /on us/i.test(appleFailureMessage({ message: "Invalid client id" })));
+  is("an unknown failure still says something", appleFailureMessage({ message: "" }).length > 0);
+  is("a null error still says something", appleFailureMessage(null).length > 0);
+  is("every spoken Apple failure offers the way out that works",
+    [{ message: "" }, null, { message: "Unacceptable audience" }]
+      .map(appleFailureMessage).every((m) => /emailed code/i.test(m)));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S)`);

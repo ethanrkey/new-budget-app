@@ -2112,9 +2112,88 @@ a port.
     is paid by every user on every sign-in, and the risk avoided is a
     narrow one.
 
-14. **Sign in with Apple — the plan, ready to execute the moment Apple
-    approves.** Enrollment was paid 2026-10-11 (Individual); everything
-    below is blocked only on the approval email.
+14. **Sign in with Apple — BUILT 2026-10-13. The sign-in half is
+    finished and in the build; the revocation half is written and waits
+    on one thing only, the `.p8` going into Supabase secrets.** What
+    follows the next two paragraphs is the plan as it stood before it
+    was executed, kept because the two corrections in it are the
+    expensive part and they are still what someone needs to read.
+
+    **What shipped:**
+
+    - `mobile/lib/apple.ts` — `APPLE_POSSIBLE` (iOS, not Expo Go),
+      `appleAvailable()` which ASKS the OS rather than assuming, and
+      `signInWithApple`, mirroring `lib/google.ts`. Scopes FULL_NAME
+      and EMAIL, because they come back only on the very first
+      authorization ever and there is no second chance to ask. No
+      nonce, same as Google, same reason.
+    - `appleFailureMessage` in `lib/signin.ts`, pure and tested, with
+      a cancel mapping to **null** — say nothing. Apple's sheet is
+      dismissed far more often than Google's, because it appears
+      without a tap on an account first.
+    - `SignIn.tsx` draws Apple's OWN `AppleAuthenticationButton`, white
+      on the dark app, ABOVE Google. An option listed last reads as the
+      lesser one, and 4.8 asks for an equivalent. Nine renderer tests
+      and nine more node checks.
+    - `app.json`: `ios.usesAppleSignIn: true` and the
+      `expo-apple-authentication` plugin. **Both are native, so this
+      needs a new build — it cannot go out over the air.**
+    - The deletion half: `supabase/apple_tokens.sql` (two tables and a
+      rewritten `purge_due_accounts`), `supabase/functions/apple-link`
+      (exchange the authorization code at sign-in) and
+      `supabase/functions/apple-revoke` (drain the queue). The client
+      secret JWT is hand-rolled over Web Crypto, with no dependency
+      anywhere near a signing key, and `tests/apple-secret.test.mjs`
+      signs with a generated P-256 key and VERIFIES the result — the
+      half a hand-rolled JWS gets wrong, since a DER signature would
+      pass every other assertion.
+    - `Privacy.jsx` now says that signing in with Apple leaves a token,
+      what it is for, and that it dies with the account. It did not
+      before, and "no third-party services" was no longer true.
+
+    **THE ONE THING THAT NEEDS THE AUTHOR — the `.p8`.** Nothing above
+    writes the key anywhere; it is set once, by hand, in the Supabase
+    dashboard, and never lands on this disk or in this repo.
+
+    Supabase Dashboard -> Project `kjcvtpmorftjyejjskwm` -> Edge
+    Functions -> Secrets -> Add new secret, four times:
+
+    | Name | Value |
+    |---|---|
+    | `APPLE_TEAM_ID` | `9WJSHTF3EB` |
+    | `APPLE_KEY_ID` | `B58KDZ42WV` |
+    | `APPLE_BUNDLE_ID` | `app.keybudget` |
+    | `APPLE_PRIVATE_KEY` | the whole contents of `AuthKey_B58KDZ42WV.p8`, `-----BEGIN PRIVATE KEY-----` line and all |
+
+    Paste the key as it is. If the form flattens the newlines into
+    literal `\n`, that is handled — `readConfig` repairs it, and there
+    is a test for exactly that, because the failure otherwise is an
+    ASN.1 error that says nothing about newlines.
+
+    Then, from the repo root:
+
+        npx supabase login
+        npx supabase functions deploy apple-link   --project-ref kjcvtpmorftjyejjskwm
+        npx supabase functions deploy apple-revoke --project-ref kjcvtpmorftjyejjskwm
+
+    and run `supabase/apple_tokens.sql` in the SQL editor. It replaces
+    `purge_due_accounts()` with a version that queues the token before
+    deleting the user — the order matters, because the delete cascades
+    the token away.
+
+    Verify, without needing a deletion:
+
+        select count(*) from apple_tokens;          -- 1 after one Apple sign-in
+        select * from apple_revocations;            -- empty until a purge
+
+    **Until the secrets are set, Apple sign-in still works.** The
+    `apple-link` call is deliberately not awaited and its failure is
+    not shown; the only consequence is that nothing is stored to revoke
+    later. Every Apple sign-in sends a fresh code, so the moment the
+    secrets exist it heals itself on the next sign-in.
+
+    Enrollment was paid 2026-10-11 (Individual); approval arrived
+    2026-10-11. The plan as written before the build:
 
     **A correction to what this spec said twice before: the native flow
     does NOT need a Services ID or a signing key.** Those belong to
