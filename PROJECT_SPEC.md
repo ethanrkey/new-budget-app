@@ -537,16 +537,26 @@ written here in the same sitting** — there is no other record of it.
   URL and Privacy Policy URL: `https://keybudget.app` and
   `https://keybudget.app/privacy`.
 
-  **Review notes, which are the part that prevents a rejection.** Do
-  NOT name Sign in with Apple until it actually ships — a review note
-  describing a sign-in method the build does not have is a rejection
-  of its own, and the note gets one more sentence the day it lands:
-  "No demo account is needed. Sign in with Google, or with a six-digit
-  code emailed to any address you choose — both create or reach an
-  account directly on the device. A new account lands on a
-  three-step guide that logs a checking balance and adds income and a
-  bill, so the app's full function is available on the phone without
-  visiting the website."
+  **Review notes, which are the part that prevents a rejection.**
+  UPDATED 2026-10-13, because Sign in with Apple now actually ships
+  and the setup flow replaced the guide as what a new account meets.
+  Paste as is for build 3 and later:
+
+  > No demo account is needed. Sign in with Apple, with Google, or
+  > with a six-digit code emailed to any address you choose — all
+  > three create or reach an account directly on the device. A new
+  > account is taken through a six-step setup (pay, rent, bills,
+  > groceries, checking balance, other accounts) and can skip it for a
+  > three-step guide that does the same work one control at a time, so
+  > the app's full function is available on the phone without visiting
+  > the website. Account deletion is in Settings, at the root rather
+  > than behind a submenu.
+
+  The standing rule that produced the old version still applies and is
+  worth keeping: do not name a sign-in method before the build has it.
+  A review note describing something the binary cannot do is a
+  rejection of its own. Up to and including build 2 this note named
+  only Google and the emailed code, correctly.
 
 **Cloudflare**
 
@@ -2386,6 +2396,38 @@ a port.
       bigger screen: the accounts step still asks for a name and what
       is owed now, and the Dashboard card still prompts for the rate.
 
+16. **Native tabs — BUILT 2026-10-13.** `app/(tabs)/_layout.tsx` is
+    `NativeTabs` from `expo-router/unstable-native-tabs`, with
+    `ThemeProvider value={DarkTheme}` at the root. Verified as far as
+    it can be here: `expo export --platform ios` bundles, and swapping
+    in the SDK 58 import path fails to resolve, so the bundle is a
+    real check rather than a ritual.
+
+    Two things the plan below did not anticipate:
+
+    - **The per-tab header is gone.** expo-router's JS `Tabs` drew one
+      with the screen's title; native tabs do not, and giving them one
+      means a `Stack` inside every tab. The bar already names the tab
+      you are on, so the header was saying it twice and charging 44
+      points for it. Chrome owns the top of the screen anyway — the
+      safe-area inset, the anchor strip, the settings button — so
+      nothing moved under the notch.
+    - **The fill variants are not uniform, and the SF catalog is why.**
+      `tablecells`/`tablecells.fill` and `chart.bar`/`chart.bar.fill`
+      are true pairs. `list.bullet` and `chart.line.uptrend.xyaxis`
+      have no `.fill`; the nearest candidates add a rectangle and a
+      circle, which reads as a different icon rather than a selected
+      one. Those two are marked by the tint alone, which is iOS's own
+      default. Worth overruling if it looks wrong on the device — it
+      cannot be judged from here.
+
+    Dashboard's icon is `chart.line.uptrend.xyaxis`, resolving the one
+    the plan said was worth arguing about: the pie was removed from
+    this app, so a pie icon for the tab that no longer has one would
+    be a small lie.
+
+    *The plan, which is still the reference for the API:*
+
 16. **Native tabs — the ThemeProvider question is SETTLED, 2026-10-12,
     from Expo's own page rather than from memory.** Decided to build;
     scheduled after the setup flow.
@@ -2485,6 +2527,26 @@ a port.
     `expo-updates` has a runtime version for exactly this, and it has
     to be set up so that a native change bumps it rather than being
     allowed to land OTA.
+
+17. **Haptics — BUILT 2026-10-13, exactly to the list below.**
+    `mobile/lib/haptics.ts` is five named feelings; success and
+    failure live in `StateProvider.commit` so there is one place
+    rather than twenty-three call sites, and the reorder arrows pass
+    `"selection"` because a control you can press five times must not
+    thump five times.
+
+    **Three tests record the calls**, which is the only way to check
+    the one thing in this app that leaves no trace on a screen: the
+    warning lands BEFORE the alert, six typed digits produce one buzz
+    rather than six, and one write is felt once however many screens
+    it took. Removing the warning fails the first.
+
+    Account deletion has no alert to precede — the confirmation is a
+    field you type DELETE into — so the moment marked is the one where
+    the button goes live. That case was not in the list and had to be
+    decided.
+
+    *The list, as agreed:*
 
 17. **Haptics (`expo-haptics`) — planned 2026-10-12, after native
     tabs.** On outcomes, not touches. The rule that keeps it subtle is

@@ -38,9 +38,15 @@ export type SetupAccount = {
  *
  * It lives in `settings`, which means it is account data and syncs, and
  * that is the behavior wanted: somebody who set up their budget on the
- * web must not be asked again the first time they open the phone. It is
- * deliberately not touched by Wipe Data either — a wipe is "start my
- * numbers over", not "ask me the six questions again".
+ * web must not be asked again the first time they open the phone.
+ *
+ * WIPE DATA CLEARS IT, and that is on purpose rather than by accident
+ * — `wipeToNewAccount` is `blankState()` precisely so the flags that
+ * make an account feel used do not survive a wipe. A wiped account is
+ * greeted as a new one on both clients. The phone has a per-device
+ * `setupDismissed` alongside this, so Settings clears that too; a
+ * preference saying "I closed the wizard" must not outlive the data
+ * it was closed over.
  */
 export function markSetupSeen(state: BudgetState): BudgetState {
   return { ...state, settings: { ...state.settings, hasSeenOnboarding: true } };

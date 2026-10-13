@@ -31,7 +31,7 @@ export default function Settings({
   onOpenSetup: () => void;
   onClose: () => void;
 }) {
-  const { state, commit, online, saving } = useBudget();
+  const { state, commit, online, saving, setPref } = useBudget();
   const [deletion, setDeletion] = useState<{ purge_after: string } | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -59,7 +59,20 @@ export default function Settings({
       "Every rule, one-off and per-date edit; your savings, investment and loan categories and their terms; every logged balance and contribution; and your verified checking balance, back to $0.00. Export a backup first — this cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Wipe everything", style: "destructive", onPress: () => void commit(() => wipeToNewAccount(), "Wiped all data") },
+        {
+          text: "Wipe everything", style: "destructive",
+          onPress: () => {
+            // The two device preferences that say "I have already been
+            // shown this" go with the data. `wipeToNewAccount` is
+            // `blankState()` for the same reason — a wipe has to mean a
+            // new account, or the flags that make one feel used outlive
+            // the account they described, and a wiped phone sits on an
+            // empty Ledger with nothing offering to set it up.
+            setPref("setupDismissed", false);
+            setPref("firstRunDismissed", false);
+            void commit(() => wipeToNewAccount(), "Wiped all data");
+          },
+        },
       ]
     );
   };

@@ -13,8 +13,9 @@ app never quietly blends the two.
 
 Built for myself, in the open. **Work in progress** — the web app is live and in
 daily use, and an Expo/React Native iOS client in `mobile/` shares the same
-calculation engine verbatim — it reads everything and can log a balance, with
-the rest of the write path still to come.
+calculation engine verbatim. The phone does the whole job now: setup, every
+kind of entry and edit, the accounts you track, export and account deletion.
+It is in TestFlight and headed for the App Store.
 
 ---
 
@@ -106,14 +107,18 @@ separate columns, here as everywhere else.
 
 ## Also in here
 
-- **Google sign-in or a magic link**; your data is per-account and private.
+- **Sign in with Apple, with Google, or with a six-digit emailed code** on the
+  phone; Google or a magic link on the web. Your data is per-account and private.
 - **Per-device theme** — light on the laptop, dark on the phone, from one account.
 - **Drag the tabs** into your own order (desktop); the app opens on the first one.
 - **A setup wizard** that gets you from nothing to a working forecast —
   paycheck, rent, bills, groceries, your checking balance, and one screen
   for the savings, investments and debt you want on the Dashboard. Then a
-  short guided tour of the four tabs. Quick entry is the other half of it:
-  add a batch of items without the modal closing between each one.
+  short guided tour of the four tabs — the same six questions on the phone,
+  from the same strings and the same functions. Quick entry is the web's other
+  half of it: add a batch of items without the modal closing between each one.
+  The phone has no quick entry and does not need one, because its editor is a
+  full-screen sheet rather than a modal to keep open.
 - **A built-in About page** covering every feature, kept in sync with the code by
   the same rule as this README.
 - **Import** a budget-grid CSV, a per-transaction CSV (it detects recurrence),
@@ -210,9 +215,10 @@ from the UI.
 
 ## Status and what's next
 
-In daily use and actively built on. Near-term: finishing the iOS client's
-write path and shipping it, then goal-based savings targets. Later: multiple
-accounts and payment methods, credit cards, and bank linking.
+In daily use and actively built on. The iOS client's write path is finished and
+the near-term work is the App Store itself — the listing, the privacy answers
+and review. Then goal-based savings targets. Later: multiple accounts and
+payment methods, credit cards, and bank linking.
 
 Design decisions, the full data model, and the roadmap live in
 [PROJECT_SPEC.md](PROJECT_SPEC.md), which is kept in sync with the code by rule.
