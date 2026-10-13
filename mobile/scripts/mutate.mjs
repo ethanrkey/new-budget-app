@@ -16,7 +16,7 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-11: 65 mutations, 65 killed, and every one of the 56
+// Measured 2026-10-12: 76 mutations, 76 killed, and every one of the 63
 // renderer tests dies to at least one. The twelve added that day were written
 // BECAUSE the run before them reported nine new sign-in tests that no
 // mutation could reach — the list only covers what someone thought to
@@ -32,6 +32,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 /** Plain-node suites that import mobile/lib directly, relative to mobile/. */
 const NODE_SUITES = [
+  "tests/mobile-categories.test.mjs",
   "tests/mobile-signin.test.mjs",
   "tests/mobile-edit.test.mjs",
   "tests/mobile-firstrun.test.mjs",
@@ -157,6 +158,33 @@ const MUTATIONS = [
    "onPress={() => setActive(s.id)}", "onPress={() => {}}"],
   ["the tour button inside About is inert", "components/About.tsx",
    'onPress={onStartTour} accessibilityRole="button"', 'onPress={() => {}} accessibilityRole="button"'],
+
+  // --- the account manager, 2026-10-12.
+  ["the form asks an asset for its APR", "components/CategorySheet.tsx",
+   "            {debt && (", "            {true && ("],
+  ["the kind picker does nothing", "components/CategorySheet.tsx",
+   "onPress={() => setD((p) => ({ ...p, kind, assetKind }))}", "onPress={() => {}}"],
+  ["saving skips validation", "components/CategorySheet.tsx",
+   "onPress={() => { setShowError(true); if (!error) onSave(d); }}",
+   "onPress={() => { setShowError(true); onSave(d); }}"],
+  ["a refusal is silent", "components/CategorySheet.tsx",
+   "{showError && error ? <Text style={styles.err}>{error}</Text> : null}", "{null}"],
+  ["an as-of date is offered with nothing to date", "components/CategorySheet.tsx",
+   '            {d.balance.trim() !== "" && (', "            {true && ("],
+  ["a debt with no principal is silently made an asset", "lib/categories.ts",
+   "  const principal = num(d.originalPrincipal);", "  const principal = 1;"],
+  ["a loan with terms loses them", "lib/categories.ts",
+   "      originalPrincipal: principal,", "      originalPrincipal: 0,"],
+  ["editing answers the prompt on a NEW category instead", "lib/categories.ts",
+   "  if (!id || !next.trackerCategories.some((c) => c.id === id)) {", "  if (true) {"],
+  ["typing a name is dropped", "components/CategorySheet.tsx",
+   'onChangeText={(v) => set("name", v)}', "onChangeText={() => {}}"],
+  ["the delete warning stops counting what is at stake", "lib/categories.ts",
+   '  if (row.tagged > 0) parts.push(`${row.tagged} ${row.tagged === 1 ? "transaction" : "transactions"}`);',
+   "  // mutated"],
+  ["a loan with no terms stops saying so", "lib/categories.ts",
+   '? (terms ? "Loan · terms set" : "Loan · no rate or original amount yet")',
+   '? "Loan · terms set"'],
 
   // --- the first-run signpost, 2026-10-11.
   ["a new account is never recognized, so the signpost never shows", "lib/firstRun.ts",

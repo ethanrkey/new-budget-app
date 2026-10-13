@@ -6,6 +6,7 @@ import { T } from "../lib/theme";
 import { useBudget } from "./StateProvider";
 import Settings from "./Settings";
 import About from "./About";
+import Categories from "./Categories";
 import ExportSheet from "./ExportSheet";
 import BottomSheet from "./BottomSheet";
 import Tour from "./Tour";
@@ -21,7 +22,7 @@ import Tour from "./Tour";
 // Import is deliberately absent — picking a CSV on a phone is awkward
 // and import is where the duplicate-snapshot bug lived. Setup folds into
 // onboarding, which is its own backlog item.
-type Screen = "settings" | "about" | null;
+type Screen = "settings" | "about" | "categories" | null;
 
 const ChromeCtx = createContext<{ open: () => void }>({ open: () => {} });
 export const useChrome = () => useContext(ChromeCtx);
@@ -57,6 +58,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
             <Settings
               session={session}
               onOpenAbout={() => setScreen("about")}
+              onOpenCategories={() => setScreen("categories")}
               onOpenExport={() => setExporting(true)}
               onClose={() => setScreen(null)}
             />
@@ -65,6 +67,11 @@ export function Chrome({ session, children }: { session: Session; children: Reac
               onStartTour={() => { setScreen(null); setTouring(true); }}
               onClose={() => setScreen("settings")}
             />
+          ) : screen === "categories" ? (
+            // Back to Settings rather than out, matching About: these
+            // are rooms off one hallway, and closing the hallway from
+            // inside a room is disorienting.
+            <Categories onClose={() => setScreen("settings")} />
           ) : null}
         </View>
 

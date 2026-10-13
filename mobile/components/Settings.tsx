@@ -21,11 +21,12 @@ import type { Session } from "@supabase/supabase-js";
 const PROVIDER_LABEL: Record<string, string> = { google: "Google", email: "Email", apple: "Apple", github: "GitHub" };
 
 export default function Settings({
-  session, onOpenAbout, onOpenExport, onClose,
+  session, onOpenAbout, onOpenExport, onOpenCategories, onClose,
 }: {
   session: Session;
   onOpenAbout: () => void;
   onOpenExport: () => void;
+  onOpenCategories: () => void;
   onClose: () => void;
 }) {
   const { state, commit, online, saving } = useBudget();
@@ -107,6 +108,11 @@ export default function Settings({
 
         <Text style={styles.sectionLabel}>App</Text>
         <View style={styles.card}>
+          <Row
+            label="Accounts you track"
+            sub="Savings, investments and loans — add, rename, reorder, or set a loan's terms."
+            onPress={onOpenCategories}
+          />
           <Row label="About & tour" sub="What every screen does, and a walk through the four tabs." onPress={onOpenAbout} />
           <Row label="Export" sub="Ledger or Budget as CSV, or the whole account as a JSON backup." onPress={onOpenExport} />
           <View style={styles.row}>

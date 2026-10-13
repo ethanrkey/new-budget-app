@@ -1795,9 +1795,32 @@ a port.
    or a single-shot sheet.
 4. ~~**Spending tab** [P].~~ **SHIPPED 2026-10-08.** The fourth tab, with
    the dead-month filter and the untrack nudge.
-5. **Loan and asset setup / edit terms** [P]. Without it the loan card's
-   "Add the rate and original amount" prompt has nowhere to go, and
-   `assetKind` cannot be changed on the phone.
+5. ~~**Loan and asset setup / edit terms** [P].~~ **SHIPPED
+   2026-10-12 as a full account manager.** Settings -> Accounts you
+   track: add, rename, reorder, delete, set a loan's terms, change an
+   asset's kind. Same engine functions as the web — `setupAsset`,
+   `setupLoan`, `addCategory`, `updateCategory`, `deleteCategory`,
+   `moveCategory` — none of which the phone called before.
+
+   **One form for all three kinds**, where the web has two modals and
+   a third screen. The fields follow the kind picker, so an asset is
+   never asked for an APR.
+
+   **Three engine paths behind one form, and the reason is a type that
+   was telling the truth.** `SetupLoanInput.originalPrincipal` is
+   REQUIRED, correctly: `setupLoan` means set up a loan and a loan
+   without a principal cannot amortize. But a debt with only a name
+   and a balance is a real supported state — `applySetup` creates
+   exactly that from the wizard's last step, and `isLoanConfigured`
+   exists to gate the terms. So the form stays permissive and the
+   branch lives in `lib/categories.ts` where a test can reach it:
+   asset -> `setupAsset`; debt with a principal -> `setupLoan`; debt
+   without -> `addCategory`/`updateCategory` plus the reading. A screen
+   deciding what an engine call means is what the engine boundary
+   exists to prevent.
+
+   **No drag-to-reorder**, same reason the web disables it on touch:
+   arrows move one row and cannot be ambiguous.
 6. ~~**Log a contribution** [P].~~ **SHIPPED 2026-10-08** — the
    "Contributed" figure had implied a control that did not exist.
 7. **Onboarding + guided tour** [D] — **DECIDED AND PARTLY SHIPPED

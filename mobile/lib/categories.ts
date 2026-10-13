@@ -1,5 +1,7 @@
 import type { BudgetState, TrackerCategory } from "../../src/engine/types.ts";
-import { countTaggedItems } from "../../src/engine/mutate.ts";
+import {
+  countTaggedItems, setupAsset, setupLoan, addCategory, updateCategory, addBalanceSnapshot,
+} from "../../src/engine/mutate.ts";
 
 // The phone's account manager, minus the React.
 //
@@ -38,12 +40,12 @@ export function categoryRows(state: BudgetState): CategoryRow[] {
     .sort((a, b) => a.order - b.order)
     .map((c) => {
       const readings = (state.balanceSnapshots?.[c.id] ?? []).length;
-      const terms = c.originalPrincipal != null || c.interestRate != null;
+      const terms = c.kind === "debt" && (c.originalPrincipal != null || c.interestRate != null);
       return {
         id: c.id,
         name: c.name,
         kind: c.kind === "debt" ? "debt" : "asset",
-        assetKind: (c.assetKind as "savings" | "investment" | null) ?? null,
+        assetKind: c.kind === "asset" ? (c.assetKind ?? null) : null,
         sub: c.kind === "debt"
           // The loan card's own prompt, echoed here so the answer to it
           // is visibly in this screen rather than somewhere unstated.
@@ -95,13 +97,17 @@ export function blankCategoryDraft(today: string): CategoryDraft {
 }
 
 export function draftOfCategory(c: TrackerCategory, today: string): CategoryDraft {
+  const debt = c.kind === "debt" ? c : null;
   return {
     name: c.name,
-    kind: c.kind === "debt" ? "debt" : "asset",
-    assetKind: (c.assetKind as "savings" | "investment") ?? "investment",
-    originalPrincipal: c.originalPrincipal != null ? String(c.originalPrincipal) : "",
-    interestRate: c.interestRate != null ? String(c.interestRate) : "",
-    interestStartDate: c.interestStartDate ?? today,
+    kind: debt ? "debt" : "asset",
+    assetKind: (c.kind === "asset" ? c.assetKind : null) ?? "investment",
+    originalPrincipal: debt?.originalPrincipal != null ? String(debt.originalPrincipal) : "",
+    interestRate: debt?.interestRate != null ? String(debt.interestRate) : "",
+    interestStartDate: debt?.interestStartDate ?? today,
+    // Blank on an edit, on purpose: pre-filling the last reading invites
+    // re-logging a number that has not changed, which is a snapshot that
+    // says nothing.
     balance: "",
     asOf: today,
   };
@@ -139,31 +145,64 @@ export function categoryDraftError(d: CategoryDraft): string | null {
   return null;
 }
 
-/** The arguments `setupLoan` / `setupAsset` want, from a filled-in draft. */
-export function setupPayload(d: CategoryDraft, categoryId: string | null) {
+/**
+ * Apply a filled-in draft. Returns the next state.
+ *
+ * THREE ENGINE PATHS, not one, and the reason is a type that turned out
+ * to be telling the truth: `SetupLoanInput.originalPrincipal` is
+ * REQUIRED, because `setupLoan` means "set up a loan" and a loan
+ * without a principal cannot amortize. But a debt category with only a
+ * name and a balance is a real, supported state — `applySetup` creates
+ * exactly that from the web wizard's last step, and `isLoanConfigured`
+ * exists precisely to gate the terms.
+ *
+ * So the form stays permissive and the branch lives here:
+ *
+ *   asset            -> setupAsset
+ *   debt WITH a principal   -> setupLoan, terms and all
+ *   debt WITHOUT one -> addCategory / updateCategory, plus the reading
+ *
+ * Doing this in the component would have meant a screen deciding what
+ * an engine call means, which is the thing the engine boundary exists
+ * to prevent.
+ */
+export function applyCategoryDraft(
+  state: BudgetState, d: CategoryDraft, categoryId: string | null,
+): BudgetState {
+  const name = d.name.trim();
   const balance = num(d.balance);
-  if (d.kind === "debt") {
-    return {
-      kind: "debt" as const,
-      payload: {
-        categoryId,
-        name: d.name.trim(),
-        originalPrincipal: num(d.originalPrincipal),
-        interestRate: num(d.interestRate),
-        interestStartDate: num(d.originalPrincipal) != null ? d.interestStartDate : null,
-        outstanding: balance,
-        asOf: balance != null ? d.asOf : null,
-      },
-    };
+  const asOf = balance != null ? d.asOf : null;
+
+  if (d.kind === "asset") {
+    return setupAsset(state, { categoryId, name, balance, asOf, assetKind: d.assetKind });
   }
-  return {
-    kind: "asset" as const,
-    payload: {
-      categoryId,
-      name: d.name.trim(),
-      balance,
-      asOf: balance != null ? d.asOf : null,
-      assetKind: d.assetKind,
-    },
-  };
+
+  const principal = num(d.originalPrincipal);
+  if (principal != null) {
+    return setupLoan(state, {
+      categoryId, name,
+      originalPrincipal: principal,
+      interestRate: num(d.interestRate),
+      interestStartDate: d.interestStartDate,
+      outstanding: balance,
+      asOf,
+    });
+  }
+
+  // A debt with no terms yet. The card will prompt for them, and this
+  // screen is where that prompt gets answered later.
+  let next = state;
+  let id = categoryId;
+  if (!id || !next.trackerCategories.some((c) => c.id === id)) {
+    next = addCategory(next, name, "debt");
+    id = next.trackerCategories[next.trackerCategories.length - 1]!.id;
+  }
+  next = updateCategory(next, id, {
+    kind: "debt", name,
+    // A rate without a principal is still worth keeping — it is half an
+    // answer, and discarding it would make the form lose typing.
+    interestRate: num(d.interestRate),
+  });
+  if (balance != null && asOf) next = addBalanceSnapshot(next, id, Math.abs(balance), asOf);
+  return next;
 }

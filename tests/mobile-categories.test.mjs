@@ -12,7 +12,7 @@ import { normalize } from "../src/engine/stateShape.ts";
 import { setupLoan, setupAsset, addBalanceSnapshot, upsertItem } from "../src/engine/mutate.ts";
 import {
   categoryRows, deleteWarning, blankCategoryDraft, draftOfCategory,
-  categoryDraftError, setupPayload,
+  categoryDraftError, applyCategoryDraft,
 } from "../mobile/lib/categories.ts";
 
 let failures = 0, checks = 0;
@@ -106,39 +106,93 @@ const row = (s, name) => categoryRows(s).find((r) => r.name === name);
     categoryDraftError({ ...base, name: "x", kind: "debt", interestRate: "6.4" }), null);
 }
 
-// ---- the payload the engine actually takes ---------------------------
+// ---- the THREE engine paths ------------------------------------------
+//
+// `SetupLoanInput.originalPrincipal` is required, and it is right to
+// be: setupLoan means "set up a loan", and a loan with no principal
+// cannot amortize. But a debt with only a name and a balance is a real
+// supported state — applySetup creates exactly that from the wizard's
+// last step. So the form stays permissive and the branch lives in the
+// lib, where this can reach it.
 {
   const base = blankCategoryDraft(TODAY);
-  const asset = setupPayload({ ...base, name: " Roth IRA ", assetKind: "investment", balance: "15400" }, null);
-  eq("an asset payload is trimmed and typed", [asset.kind, asset.payload.name, asset.payload.assetKind],
-    ["asset", "Roth IRA", "investment"]);
-  eq("...and carries its reading with a date", [asset.payload.balance, asset.payload.asOf], [15400, TODAY]);
 
-  // No balance typed means no snapshot. An as-of date with nothing to
-  // date is how an empty reading gets written.
-  const noBalance = setupPayload({ ...base, name: "Roth IRA" }, null);
-  eq("no balance means no date either", [noBalance.payload.balance, noBalance.payload.asOf], [null, null]);
+  // 1. An asset.
+  const asset = applyCategoryDraft(blank,
+    { ...base, name: " Roth IRA ", assetKind: "investment", balance: "15400" }, null);
+  const made = asset.trackerCategories.find((c) => c.name === "Roth IRA");
+  is("an asset is created, trimmed", !!made);
+  eq("...as an investment", made.assetKind, "investment");
+  eq("...with its reading logged", asset.balanceSnapshots[made.id][0].amount, 15400);
+  eq("...dated the day given", asset.balanceSnapshots[made.id][0].date, TODAY);
 
-  const loan = setupPayload({ ...base, name: "Car loan", kind: "debt",
-    originalPrincipal: "14200", interestRate: "6.4", balance: "9100" }, "c-1");
-  eq("a loan payload keeps the id it is editing", loan.payload.categoryId, "c-1");
-  eq("...its terms", [loan.payload.originalPrincipal, loan.payload.interestRate], [14200, 6.4]);
-  eq("...and what is owed now", [loan.payload.outstanding, loan.payload.asOf], [9100, TODAY]);
+  // 2. A debt WITH a principal goes through setupLoan, terms and all.
+  const loan = applyCategoryDraft(blank, {
+    ...base, name: "Car loan", kind: "debt",
+    originalPrincipal: "14200", interestRate: "6.4", interestStartDate: "2024-01-01", balance: "9100",
+  }, null);
+  const car = loan.trackerCategories.find((c) => c.name === "Car loan");
+  eq("a loan with terms is a debt", car.kind, "debt");
+  eq("...and keeps them", [car.originalPrincipal, car.interestRate, car.interestStartDate],
+    [14200, 6.4, "2024-01-01"]);
+  eq("...and what is owed", loan.balanceSnapshots[car.id][0].amount, 9100);
 
-  // interestStartDate without a principal is a date for nothing.
-  const noPrincipal = setupPayload({ ...base, name: "Card", kind: "debt", interestRate: "22" }, null);
-  eq("no original amount means no interest start date", noPrincipal.payload.interestStartDate, null);
+  // 3. A debt WITHOUT one must still be creatable. This is the path
+  // that a required-principal type would have made impossible, and
+  // the state the loan card's prompt exists to describe.
+  const bare = applyCategoryDraft(blank,
+    { ...base, name: "Credit card", kind: "debt", balance: "820" }, null);
+  const card = bare.trackerCategories.find((c) => c.name === "Credit card");
+  eq("a debt with no terms is still a debt", card.kind, "debt");
+  eq("...with no principal invented", card.originalPrincipal, undefined);
+  eq("...but the balance logged", bare.balanceSnapshots[card.id][0].amount, 820);
+  eq("...and the manager says what is missing",
+    categoryRows(bare).find((r) => r.name === "Credit card").sub,
+    "Loan · no rate or original amount yet");
+
+  // Half an answer is kept rather than discarded: a rate typed without
+  // a principal would otherwise make the form lose what was typed.
+  const halfAnswer = applyCategoryDraft(blank,
+    { ...base, name: "Card", kind: "debt", interestRate: "22" }, null);
+  eq("a rate with no principal survives",
+    halfAnswer.trackerCategories.find((c) => c.name === "Card").interestRate, 22);
 }
 
-// ---- and it actually works through the engine ------------------------
+// ---- editing an existing one -----------------------------------------
 {
-  const { payload } = setupPayload(
-    { ...blankCategoryDraft(TODAY), name: "Roth IRA", assetKind: "investment", balance: "15400" }, null);
-  const out = setupAsset(blank, payload);
-  const made = out.trackerCategories.find((c) => c.name === "Roth IRA");
-  is("setupAsset creates the category", !!made);
-  eq("...as an investment", made.assetKind, "investment");
-  eq("...with the reading logged", out.balanceSnapshots[made.id][0].amount, 15400);
+  const base = blankCategoryDraft(TODAY);
+  const id = row(blank, "Debt").id;
+
+  // Answering the loan card's prompt: the SAME category gains terms
+  // rather than a second one appearing beside it.
+  const answered = applyCategoryDraft(blank,
+    { ...base, name: "Debt", kind: "debt", originalPrincipal: "14200", interestRate: "6.4" }, id);
+  eq("answering the prompt does not make a second category",
+    answered.trackerCategories.filter((c) => c.name === "Debt").length, 1);
+  eq("...it sets the terms on the one that asked",
+    answered.trackerCategories.find((c) => c.id === id).originalPrincipal, 14200);
+
+  // The same thing for a debt that has NO terms yet, which is the path
+  // the loan card's prompt actually lands on and a different branch in
+  // the lib. Editing it by id must change that category, not make a
+  // second one beside it.
+  const bare = applyCategoryDraft(blank, { ...base, name: "Credit card", kind: "debt" }, null);
+  const cardId = bare.trackerCategories.find((c) => c.name === "Credit card").id;
+  const renamedDebt = applyCategoryDraft(bare,
+    { ...base, name: "Visa", kind: "debt", balance: "820" }, cardId);
+  eq("editing a termless debt does not make a second one",
+    renamedDebt.trackerCategories.filter((c) => c.kind === "debt" && c.name !== "Debt").length, 1);
+  eq("...it renames the one being edited",
+    renamedDebt.trackerCategories.find((c) => c.id === cardId).name, "Visa");
+  eq("...and logs the balance against it",
+    renamedDebt.balanceSnapshots[cardId][0].amount, 820);
+
+  // Renaming, with no balance typed, must not log an empty reading.
+  const renamed = applyCategoryDraft(blank, { ...base, name: "Rainy day", assetKind: "savings" },
+    row(blank, "Savings").id);
+  eq("a rename keeps the id", renamed.trackerCategories.find((c) => c.name === "Rainy day").id,
+    row(blank, "Savings").id);
+  eq("...and logs nothing", (renamed.balanceSnapshots?.[row(blank, "Savings").id] ?? []).length, 0);
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S)`);
