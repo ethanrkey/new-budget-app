@@ -1,0 +1,439 @@
+import { useState } from "react";
+import {
+  ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ScrollView, StyleSheet, Text, TextInput, View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { T } from "../lib/theme";
+import {
+  STEPS, blankSetupDraft, rulesForStep, canAdvance, accountRowErrors, setupAnswers,
+  type SetupDraft, type SetupStepKey,
+} from "../lib/setup";
+import {
+  SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS,
+} from "../../src/content/setup.ts";
+import type { SetupAnswers, SetupCadence } from "../../src/engine/setup.ts";
+import type { BudgetItem } from "../../src/engine/types.ts";
+
+// The phone's setup, at parity with the web's — six questions, same
+// order, same output.
+//
+// WHY THIS EXISTS, given that the phone already has the three-step
+// guide. Most App Store users will never open the web app, so the
+// phone's setup cannot be the lesser version; that is the user's
+// reasoning and it overrides an earlier call for a signpost instead of
+// a wizard. The guide is still right for someone who skips this, and
+// it is what Skip lands on — see lib/setup.ts and the Ledger screen.
+//
+// THE ANSWER TO DRIFT IS SHARED LOGIC, NOT A SHARED SCREEN. Every word
+// comes from src/content/setup.ts and every rule from
+// src/engine/setup.ts, both of which the web calls too. What is below
+// is arrangement: a phone-shaped sequence of the same six questions,
+// with a footer you can reach with a thumb and a keyboard that does
+// not cover the field being typed into.
+//
+// WHAT A PHONE FLOW HAS THAT THE WEB'S DOES NOT: Back. A wizard on a
+// 390pt screen shows one question at a time, so a typo two steps ago
+// is unreachable without it — which is why the whole draft is held at
+// once rather than committed step by step.
+export default function Setup({
+  busy, onComplete, onSkip,
+}: {
+  busy: boolean;
+  /** Finished: everything typed, in the shape applySetup takes. */
+  onComplete: (answers: SetupAnswers) => void;
+  /** Left early. The guide picks up from wherever this stopped. */
+  onSkip: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const today = new Date();
+  const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const [i, setI] = useState(0);
+  const [d, setD] = useState<SetupDraft>(() => blankSetupDraft(todayISO));
+  // Rules collected by the steps already passed. Keyed by step so going
+  // BACK and forward again replaces that step's rules instead of
+  // adding a second paycheck — the bug a Back button creates for free.
+  const [collected, setCollected] = useState<Partial<Record<SetupStepKey, BudgetItem[]>>>({});
+  const [done, setDone] = useState(false);
+
+  const step = STEPS[i]!;
+  const set = <K extends keyof SetupDraft>(k: K, v: SetupDraft[K]) => setD((p) => ({ ...p, [k]: v }));
+  const rules = STEPS.flatMap((s) => collected[s] ?? []);
+  const rowErrors = accountRowErrors(d);
+
+  function advance(keep: boolean) {
+    // Continue keeps what this step built; Skip keeps nothing. One
+    // line, because the builders already decided what a blank field
+    // means — see src/engine/setup.ts.
+    setCollected((c) => ({ ...c, [step]: keep ? rulesForStep(step, d, todayISO) : [] }));
+    if (i === STEPS.length - 1) setDone(true);
+    else setI(i + 1);
+  }
+
+  return (
+    <Modal visible animationType="slide" onRequestClose={onSkip} transparent={false}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={[styles.wrap, { paddingTop: insets.top + 8 }]}
+      >
+        {done ? (
+          <Done count={rules.length} busy={busy} onGo={() => onComplete(setupAnswers(rules, d))} />
+        ) : (
+          <>
+            {/* The progress bar is a count AND a bar. A bar alone on a
+                phone reads as "loading"; the number says how much of
+                somebody's evening this is going to be. */}
+            <View style={styles.head}>
+              <View style={styles.track}>
+                <View style={[styles.fill, { width: `${((i + 1) / STEPS.length) * 100}%` }]} />
+              </View>
+              <Pressable onPress={onSkip} hitSlop={10} accessibilityRole="button" accessibilityLabel={COPY.buttons.skipAll}>
+                <Text style={styles.skipAll}>{COPY.buttons.skipAll}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.count}>Step {i + 1} of {STEPS.length}</Text>
+
+            <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+              {step === "paycheck" && (
+                <Question title={COPY.paycheck.title} sub={COPY.paycheck.sub}>
+                  <Money label={COPY.labels.amount} value={d.payAmount} onChange={(v) => set("payAmount", v)} autoFocus />
+                  <Cadence label={COPY.labels.cadence} value={d.payCadence} onChange={(v) => set("payCadence", v)} />
+                  {/* The one string that differs between clients, and it
+                      differs because the control it names does. */}
+                  <Text style={styles.note}>{COPY.paycheck.note.mobile}</Text>
+                </Question>
+              )}
+
+              {step === "rent" && (
+                <Question title={COPY.rent.title} sub={COPY.rent.sub}>
+                  <Money label={COPY.labels.amount} value={d.rentAmount} onChange={(v) => set("rentAmount", v)} autoFocus />
+                  <Day label={COPY.labels.dueDay} value={d.rentDay} onChange={(v) => set("rentDay", v)} />
+                </Question>
+              )}
+
+              {step === "bills" && (
+                <Question title={COPY.bills.title} sub={COPY.bills.sub}>
+                  {d.bills.map((b, idx) => (
+                    <View key={idx} style={styles.billRow}>
+                      <View style={styles.grow}>
+                        <Field
+                          label={COPY.labels.name}
+                          placeholder="e.g. Spotify"
+                          value={b.name}
+                          onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, name: v } : r)))}
+                          accessibilityLabel={`Bill ${idx + 1} name`}
+                        />
+                      </View>
+                      <View style={styles.amountCol}>
+                        <Money
+                          label={COPY.labels.amount}
+                          value={b.amount}
+                          onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, amount: v } : r)))}
+                          accessibilityLabel={`Bill ${idx + 1} amount`}
+                        />
+                      </View>
+                      <View style={styles.dayCol}>
+                        <Day
+                          label={COPY.labels.dueDayShort}
+                          value={b.day}
+                          onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, day: v } : r)))}
+                          accessibilityLabel={`Bill ${idx + 1} due day`}
+                        />
+                      </View>
+                    </View>
+                  ))}
+                  <Pressable
+                    onPress={() => set("bills", [...d.bills, { name: "", amount: "", day: d.bills[0]?.day ?? "1" }])}
+                    accessibilityRole="button" accessibilityLabel={COPY.bills.add} hitSlop={8}
+                  >
+                    <Text style={styles.addMore}>{COPY.bills.add}</Text>
+                  </Pressable>
+                </Question>
+              )}
+
+              {step === "groceries" && (
+                <Question title={COPY.groceries.title} sub={COPY.groceries.sub}>
+                  <Money label={COPY.labels.amount} value={d.groceryAmount} onChange={(v) => set("groceryAmount", v)} autoFocus />
+                  <Cadence label={COPY.labels.cadence} value={d.groceryCadence} onChange={(v) => set("groceryCadence", v)} />
+                </Question>
+              )}
+
+              {step === "balance" && (
+                <Question title={COPY.balance.title} sub={COPY.balance.sub}>
+                  <Money label={COPY.labels.currentBalance} value={d.balance} onChange={(v) => set("balance", v)} autoFocus />
+                  {/* No Skip on this step, so the reason is on screen
+                      rather than implied by a dead button. */}
+                  {!canAdvance("balance", d) && <Text style={styles.why}>{COPY.balance.why}</Text>}
+                </Question>
+              )}
+
+              {step === "accounts" && (
+                <Question title={COPY.accounts.title} sub={COPY.accounts.sub}>
+                  {ACCOUNT_GROUPS.map((g) => (
+                    <View key={g.key} style={styles.group}>
+                      <Text style={styles.groupLabel}>{g.label}</Text>
+                      <Text style={styles.groupNote}>{g.kindNote}</Text>
+                      {d.accounts[g.key].map((row, idx) => {
+                        const err = rowErrors[`${g.key}:${idx}`];
+                        const setRow = (field: "name" | "amount", v: string) =>
+                          set("accounts", {
+                            ...d.accounts,
+                            [g.key]: d.accounts[g.key].map((r, j) => (j === idx ? { ...r, [field]: v } : r)),
+                          });
+                        return (
+                          <View key={idx} style={styles.acctRow}>
+                            <View style={styles.row}>
+                              {/* BOTH fields are labeled. Two anonymous
+                                  boxes under a heading is what made a
+                                  real user type the amount and leave
+                                  the name blank. */}
+                              <View style={styles.grow}>
+                                <Field
+                                  label={COPY.labels.name}
+                                  placeholder={g.placeholder}
+                                  value={row.name}
+                                  onChange={(v) => setRow("name", v)}
+                                  bad={err === "name"}
+                                  accessibilityLabel={`${g.label} ${idx + 1} name`}
+                                />
+                              </View>
+                              <View style={styles.amountCol}>
+                                <Money
+                                  label={g.key === "debt" ? COPY.labels.owedNow : COPY.labels.balance}
+                                  value={row.amount}
+                                  onChange={(v) => setRow("amount", v)}
+                                  bad={err === "amount"}
+                                  accessibilityLabel={`${g.label} ${idx + 1} amount`}
+                                />
+                              </View>
+                            </View>
+                            {err && (
+                              <Text style={styles.rowErr}>
+                                {err === "name" ? COPY.accounts.needsName : COPY.accounts.needsAmount}
+                              </Text>
+                            )}
+                          </View>
+                        );
+                      })}
+                      <Pressable
+                        onPress={() => set("accounts", { ...d.accounts, [g.key]: [...d.accounts[g.key], { name: "", amount: "" }] })}
+                        accessibilityRole="button" accessibilityLabel={`${COPY.accounts.add} ${g.label.toLowerCase()}`} hitSlop={8}
+                      >
+                        <Text style={styles.addMore}>{COPY.accounts.add}</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </Question>
+              )}
+            </ScrollView>
+
+            {/* The footer is fixed and inside the safe area, so the
+                thing you press is never under the home indicator and
+                never scrolls away under a long accounts step. */}
+            <View style={[styles.footer, { paddingBottom: insets.bottom + 10 }]}>
+              {i > 0 && (
+                <Pressable
+                  style={[styles.btn, styles.ghost]}
+                  onPress={() => setI(i - 1)}
+                  accessibilityRole="button" accessibilityLabel="Back"
+                >
+                  <Text style={styles.ghostText}>Back</Text>
+                </Pressable>
+              )}
+              {/* The balance step has no Skip, deliberately: every other
+                  question is optional and this one cannot be. */}
+              {step !== "balance" && (
+                <Pressable
+                  style={[styles.btn, styles.ghost]}
+                  onPress={() => advance(false)}
+                  accessibilityRole="button" accessibilityLabel={COPY.buttons.skip}
+                >
+                  <Text style={styles.ghostText}>{COPY.buttons.skip}</Text>
+                </Pressable>
+              )}
+              <Pressable
+                style={[styles.btn, styles.primary, !canAdvance(step, d) && styles.off]}
+                disabled={!canAdvance(step, d)}
+                onPress={() => advance(true)}
+                accessibilityRole="button"
+                accessibilityLabel={step === "accounts" ? COPY.buttons.finish : COPY.buttons.continue}
+              >
+                <Text style={styles.primaryText}>
+                  {step === "accounts" ? COPY.buttons.finish : COPY.buttons.continue}
+                </Text>
+              </Pressable>
+            </View>
+          </>
+        )}
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function Done({ count, busy, onGo }: { count: number; busy: boolean; onGo: () => void }) {
+  return (
+    <View style={styles.done}>
+      <Text style={styles.doneTitle}>{COPY.done.title}</Text>
+      <Text style={styles.doneBody}>
+        {count > 0 ? COPY.done.withRules(count) : COPY.done.withoutRules}
+      </Text>
+      <Pressable
+        style={[styles.btn, styles.primary, styles.wide, busy && styles.off]}
+        disabled={busy}
+        onPress={onGo}
+        accessibilityRole="button" accessibilityLabel={COPY.done.cta}
+      >
+        {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.primaryText}>{COPY.done.cta}</Text>}
+      </Pressable>
+    </View>
+  );
+}
+
+function Question({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.q}>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.sub}>{sub}</Text>
+      {children}
+    </View>
+  );
+}
+
+function Field({
+  label, value, onChange, placeholder, bad, accessibilityLabel, autoFocus,
+}: {
+  label: string; value: string; onChange: (v: string) => void;
+  placeholder?: string; bad?: boolean; accessibilityLabel?: string; autoFocus?: boolean;
+}) {
+  return (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={[styles.input, bad && styles.inputBad]}
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={T.faint}
+        accessibilityLabel={accessibilityLabel ?? label}
+        autoFocus={autoFocus}
+      />
+    </>
+  );
+}
+
+const Money = (p: Omit<Parameters<typeof Field>[0], "placeholder">) => (
+  <>
+    <Text style={styles.label}>{p.label}</Text>
+    <TextInput
+      style={[styles.input, p.bad && styles.inputBad]}
+      value={p.value}
+      onChangeText={p.onChange}
+      keyboardType="decimal-pad"
+      placeholder="0.00"
+      placeholderTextColor={T.faint}
+      accessibilityLabel={p.accessibilityLabel ?? p.label}
+      autoFocus={p.autoFocus}
+    />
+  </>
+);
+
+const Day = (p: Omit<Parameters<typeof Field>[0], "placeholder">) => (
+  <>
+    <Text style={styles.label}>{p.label}</Text>
+    <TextInput
+      style={styles.input}
+      value={p.value}
+      onChangeText={p.onChange}
+      keyboardType="number-pad"
+      maxLength={2}
+      placeholderTextColor={T.faint}
+      accessibilityLabel={p.accessibilityLabel ?? p.label}
+    />
+  </>
+);
+
+// Three chips, not a picker. A three-option iOS picker is two taps and
+// a spinner to see what a row of chips says at a glance — the same call
+// CategorySheet made for its kind picker.
+function Cadence({
+  label, value, onChange,
+}: { label: string; value: SetupCadence; onChange: (v: SetupCadence) => void }) {
+  return (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.chips}>
+        {CADENCE_OPTIONS.map((c) => {
+          const on = c.value === value;
+          return (
+            <Pressable
+              key={c.value}
+              style={[styles.chip, on && styles.chipOn]}
+              onPress={() => onChange(c.value)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={c.label}
+            >
+              <Text style={[styles.chipText, on && styles.chipTextOn]}>{c.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { flex: 1, backgroundColor: T.bg },
+  head: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 20 },
+  track: { flex: 1, height: 4, borderRadius: 2, backgroundColor: T.surfaceAlt, overflow: "hidden" },
+  fill: { height: 4, backgroundColor: T.brass },
+  skipAll: { color: T.faint, fontSize: 13 },
+  count: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.7, paddingHorizontal: 20, paddingTop: 10 },
+  body: { padding: 20, paddingBottom: 40 },
+  q: { gap: 2 },
+  title: { color: T.text, fontSize: 22, fontWeight: "700", lineHeight: 29 },
+  sub: { color: T.dim, fontSize: 14, lineHeight: 20, marginTop: 8, marginBottom: 6 },
+  note: { color: T.faint, fontSize: 12, lineHeight: 17, marginTop: 14 },
+  why: { color: T.faint, fontSize: 12, lineHeight: 17, marginTop: 12 },
+  label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 14 },
+  input: {
+    backgroundColor: T.surface, borderColor: T.border, borderWidth: 1, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16,
+    minHeight: 48, marginTop: 6,
+  },
+  inputBad: { borderColor: T.expense },
+  chips: { flexDirection: "row", gap: 6, marginTop: 6 },
+  chip: {
+    flex: 1, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    borderRadius: 10, minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 4,
+  },
+  chipOn: { backgroundColor: T.text, borderColor: T.text },
+  chipText: { color: T.dim, fontSize: 12, textAlign: "center" },
+  chipTextOn: { color: T.bg, fontWeight: "700" },
+  row: { flexDirection: "row", gap: 8, alignItems: "flex-end" },
+  billRow: { flexDirection: "row", gap: 8, alignItems: "flex-end" },
+  grow: { flex: 1 },
+  amountCol: { width: 104 },
+  dayCol: { width: 62 },
+  acctRow: { marginTop: 2 },
+  rowErr: { color: T.expense, fontSize: 12, marginTop: 6 },
+  group: { marginTop: 22 },
+  groupLabel: { color: T.text, fontSize: 15, fontWeight: "700" },
+  groupNote: { color: T.faint, fontSize: 12, marginTop: 2 },
+  addMore: { color: T.brass, fontSize: 13, marginTop: 12, minHeight: 32, lineHeight: 30 },
+  footer: {
+    flexDirection: "row", gap: 10, paddingHorizontal: 20, paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: T.border, backgroundColor: T.bg,
+  },
+  btn: { flex: 1, minHeight: 50, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  wide: { alignSelf: "stretch", flex: 0 },
+  ghost: { borderWidth: 1, borderColor: T.border },
+  ghostText: { color: T.dim, fontSize: 15 },
+  primary: { backgroundColor: T.brass },
+  primaryText: { color: "#111827", fontSize: 15, fontWeight: "700" },
+  off: { opacity: 0.4 },
+  done: { flex: 1, justifyContent: "center", padding: 28, gap: 14 },
+  doneTitle: { color: T.text, fontSize: 24, fontWeight: "700", textAlign: "center" },
+  doneBody: { color: T.dim, fontSize: 15, lineHeight: 22, textAlign: "center", marginBottom: 10 },
+});

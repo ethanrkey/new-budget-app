@@ -36,6 +36,7 @@ const NODE_SUITES = [
   "tests/mobile-signin.test.mjs",
   "tests/mobile-edit.test.mjs",
   "tests/mobile-firstrun.test.mjs",
+  "tests/mobile-setup.test.mjs",
 ];
 
 /** [what is broken, file, find, replace-with] */
