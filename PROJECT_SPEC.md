@@ -551,11 +551,26 @@ written here in the same sitting** — there is no other record of it.
   App ID capability, above) and 4 was canceled once it was clear it
   would fail the same way. `autoIncrement` with `appVersionSource:
   remote` counts attempts, not successes.
-- **`ascAppId` is now pinned in `eas.json`: `6822133130`.** Without it
-  `eas submit --non-interactive` refuses — it wants to "ensure your
-  app exists on App Store Connect", which needs an Apple login. With
-  it, submission is one command and no prompts. It was resolved by
-  letting the interactive flow find it once.
+- **The ASC App ID is `6822133130`, and it is deliberately NOT in
+  `eas.json`.** Pinning it there makes `eas submit --non-interactive`
+  work in one command — and it also **breaks over-the-air updates for
+  every build that already exists**, which is a trap worth the space
+  it takes to explain.
+
+  The fingerprint runtime version hashes `eas.json` as a whole, submit
+  profile included. Adding one bookkeeping field no native build has
+  ever read moved the runtime version from `cf6120cc…` to
+  `017b46f3…`, and build 5 — the only build in TestFlight — stopped
+  being eligible for its own updates. Measured, by reverting the file
+  and watching the hash come back.
+
+  So the rule is: **submit config goes in at the same moment as a
+  native change, never on its own.** A commit that already moves the
+  fingerprint can carry it for free; a commit that does not, must not.
+  Next submission, try `EXPO_ASC_APP_ID=6822133130 eas submit
+  --platform ios --profile production --non-interactive --id <build>`
+  first — untested, and if the CLI ignores it, add the field to
+  `eas.json` in whatever commit is already making a build.
 - **1.0.0 (2) was installed on a real iPhone via TestFlight**, internal
   group "Team (Expo)", 2026-10-12. Google sign-in verified on the
   device with the native account sheet, and the emailed code verified
