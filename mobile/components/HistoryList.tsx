@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, LayoutAnimation, Pressable, StyleSheet, Text, View } from "react-native";
 import { T, money } from "../lib/theme";
+import * as feel from "../lib/haptics";
 import type { BalanceSnapshot } from "../../src/engine/types.ts";
 
 const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -40,12 +41,17 @@ export default function HistoryList({
   const [open, setOpen] = useState(false);
   const copy = COPY[kind];
   if (entries.length === 0) return null;
-  const confirmDelete = (e: BalanceSnapshot) =>
-    Alert.alert(
+  const confirmDelete = (e: BalanceSnapshot) => {
+    // Before the alert, not after the delete. By the time something is
+    // gone the warning is late; the moment worth marking is the one
+    // where the phone is asking you to stop and read.
+    feel.warning();
+    return Alert.alert(
       copy.confirmTitle,
       `${money(e.amount)} on ${e.date}. ${copy.confirmBody}`,
       [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: () => onDelete(e) }]
     );
+  };
   return (
     <View>
       <Pressable onPress={() => { animate(); setOpen((v) => !v); }} style={styles.showBtn}>

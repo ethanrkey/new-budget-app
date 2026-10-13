@@ -12,6 +12,7 @@ import {
 } from "../lib/signin";
 import { GOOGLE_AVAILABLE, signInWithGoogle } from "../lib/google";
 import { APPLE_POSSIBLE, appleAvailable, signInWithApple } from "../lib/apple";
+import * as feel from "../lib/haptics";
 
 // Sign in by emailed code. Two steps, because a code you have not been
 // sent yet is not a field you should be looking at.
@@ -138,7 +139,18 @@ export default function SignIn() {
     setBusy(false);
     // On success there is nothing to do: the auth listener swaps this
     // screen for the app. Only the failure needs saying.
-    if (err) setError(verifyFailureMessage(err));
+    //
+    // The haptics here are the one case where the phone is faster than
+    // the eye: the code auto-submits on the sixth digit, so the first
+    // sign that anything happened can arrive while you are still
+    // looking at the keyboard. The screen change and the error line
+    // still carry it; this just arrives first.
+    //
+    // DELIBERATELY NOT on each keystroke, and not on the auto-submit
+    // itself — six buzzes to type a code is a phone having an opinion
+    // about every digit.
+    if (err) { feel.failure(); setError(verifyFailureMessage(err)); }
+    else feel.success();
   }
 
   // Submit on the sixth digit, however it arrived — typed, pasted, or

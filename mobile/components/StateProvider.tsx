@@ -8,25 +8,37 @@ import SaveFailure from "./SaveFailure";
 import UnsavedNotice from "./UnsavedNotice";
 import { writeStash, clearStash, readStash, type Stash } from "../lib/stash";
 import { loadPrefs, savePrefs, DEFAULT_PREFS, type Prefs } from "../lib/prefs";
+import * as feel from "../lib/haptics";
 import type { BudgetState } from "../../src/engine/types.ts";
 
 type Reason = "conflict" | "offline" | "error";
+export type CommitFeel = "success" | "selection" | "none";
 type Ctx = {
   state: BudgetState | null;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<boolean>;
   refreshing: boolean;
+  /** The PULL gesture, as opposed to a reload the app decided to do.
+   *  Separate because only one of the two should be felt: a buzz on
+   *  launch, or after a conflict reload, would be the phone reacting
+   *  to itself. */
+  pullToRefresh: () => Promise<void>;
+  /** How the write should feel. Writes are mostly `success`; a control
+   *  you can press five times in a row (the reorder arrows) is
+   *  `selection`, because five thumps is not confirmation, it is
+   *  noise. */
   /** Apply a pure mutation and persist it. Rolls the screen back if the
    *  write fails, so what you see is never something the server rejected.
    *  `label` describes the change in the user's words ("Rent on Oct 12")
    *  and is what a recovery notice shows if the app dies mid-write. */
-  commit: (fn: (s: BudgetState) => BudgetState, label: string) => Promise<boolean>;
+  commit: (fn: (s: BudgetState) => BudgetState, label: string, how?: CommitFeel) => Promise<boolean>;
   online: boolean;
   saving: boolean;
   prefs: Prefs;
   setPref: <K extends keyof Prefs>(k: K, v: Prefs[K]) => void;
 };
 const StateCtx = createContext<Ctx>({
-  state: null, refresh: async () => {}, refreshing: false,
+  state: null, refresh: async () => false, refreshing: false,
+  pullToRefresh: async () => {},
   commit: async () => false, online: true, saving: false,
   prefs: DEFAULT_PREFS, setPref: () => {},
 });
@@ -52,10 +64,16 @@ export function StateProvider({ userId, children }: { userId: string; children: 
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    try { setState(await loadState(userId)); setError(null); }
-    catch (e) { setError((e as Error).message); }   // never fall back to a blank state
+    try { setState(await loadState(userId)); setError(null); return true; }
+    catch (e) { setError((e as Error).message); return false; }   // never fall back to a blank state
     finally { setRefreshing(false); }
   }, [userId]);
+
+  // Felt only when it actually fetched. A pull that came back empty
+  // handed because the network is down has nothing to confirm.
+  const pullToRefresh = useCallback(async () => {
+    if (await refresh()) feel.light();
+  }, [refresh]);
 
   useEffect(() => { resetStore(); refresh(); }, [refresh]);
   useEffect(() => { loadPrefs().then(setPrefs); }, []);
@@ -78,7 +96,7 @@ export function StateProvider({ userId, children }: { userId: string; children: 
     return () => { canceled = true; };
   }, [userId]);
 
-  const commit = useCallback(async (fn: (s: BudgetState) => BudgetState, label: string) => {
+  const commit = useCallback(async (fn: (s: BudgetState) => BudgetState, label: string, how: CommitFeel = "success") => {
     if (!state) return false;
     const before = state;
     const next = fn(state);
@@ -101,11 +119,18 @@ export function StateProvider({ userId, children }: { userId: string; children: 
     if (res.ok) {
       pending.current = null;
       await clearStash();
+      // Beside the toast and the changed number, never instead of
+      // them — see lib/haptics.ts.
+      if (how === "success") feel.success();
+      else if (how === "selection") feel.selection();
       return true;
     }
     setState(before);
     pending.current = { fn, label };
     setFailure(res.reason);
+    // The rollback is visible and the modal explains it. This marks
+    // the moment the screen changed under them.
+    feel.failure();
     return false;
   }, [state, userId]);
 
@@ -121,7 +146,7 @@ export function StateProvider({ userId, children }: { userId: string; children: 
   if (!state || !prefs) return <View style={styles.center}><ActivityIndicator color={T.brass} /></View>;
 
   return (
-    <StateCtx.Provider value={{ state, refresh, refreshing, commit, online, saving, prefs, setPref }}>
+    <StateCtx.Provider value={{ state, refresh, pullToRefresh, refreshing, commit, online, saving, prefs, setPref }}>
       {/* A harness left running is otherwise indistinguishable from the
           app being broken. Two different messages, because a local
           Supabase stack holds REAL data over plain http and must not be

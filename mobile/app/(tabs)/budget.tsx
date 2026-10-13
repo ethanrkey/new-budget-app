@@ -35,7 +35,7 @@ type Cell = {
 };
 
 export default function BudgetScreen() {
-  const { state, refresh, refreshing } = useBudget();
+  const { state, pullToRefresh, refreshing } = useBudget();
   // THE BUDGET IS READ-ONLY ON THE PHONE, decided 2026-10-13 after
   // fat-fingering into the transaction editor while scrolling.
   //
@@ -97,7 +97,7 @@ export default function BudgetScreen() {
     <>
     <ScrollView
       style={styles.wrap}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
     >
       {/* Said once, and now it says the opposite of what it used to.
           A screen that is read-only has to admit it, or the first

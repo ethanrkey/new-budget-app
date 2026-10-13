@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { T } from "../lib/theme";
+import * as feel from "../lib/haptics";
 import CategorySheet from "./CategorySheet";
 import { useBudget } from "./StateProvider";
 import {
@@ -51,6 +52,7 @@ export default function Categories({ onClose }: { onClose: () => void }) {
     // The engine does not refuse and does not cascade: tagged items
     // survive as uncategorized. Surprising and correct, so it is said
     // before the tap, with the counts.
+    feel.warning();
     Alert.alert("Delete this account?", deleteWarning(row), [
       { text: "Keep it", style: "cancel" },
       {
@@ -79,14 +81,14 @@ export default function Categories({ onClose }: { onClose: () => void }) {
           <View key={r.id} style={styles.row}>
             <View style={styles.arrows}>
               <Pressable
-                onPress={() => void commit((s) => moveCategory(s, r.id, -1), `${r.name} moved up`)}
+                onPress={() => void commit((s) => moveCategory(s, r.id, -1), `${r.name} moved up`, "selection")}
                 disabled={i === 0 || !online} hitSlop={6}
                 accessibilityRole="button" accessibilityLabel={`Move ${r.name} up`}
               >
                 <Text style={[styles.arrow, (i === 0 || !online) && styles.arrowOff]}>▲</Text>
               </Pressable>
               <Pressable
-                onPress={() => void commit((s) => moveCategory(s, r.id, 1), `${r.name} moved down`)}
+                onPress={() => void commit((s) => moveCategory(s, r.id, 1), `${r.name} moved down`, "selection")}
                 disabled={i === rows.length - 1 || !online} hitSlop={6}
                 accessibilityRole="button" accessibilityLabel={`Move ${r.name} down`}
               >

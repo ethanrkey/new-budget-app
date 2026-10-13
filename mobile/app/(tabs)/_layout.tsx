@@ -1,5 +1,6 @@
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { T } from "../../lib/theme";
+import * as feel from "../../lib/haptics";
 
 // The real UIKit tab bar, not a JavaScript one drawn to look like it.
 //
@@ -37,6 +38,11 @@ import { T } from "../../lib/theme";
 export default function TabLayout() {
   return (
     <NativeTabs
+      // One place for all four, rather than a listener per trigger
+      // that three of them would eventually be missing. The tab you
+      // land on is plainly visible, so this is confirmation of a
+      // choice rather than the report of one.
+      screenListeners={{ tabPress: () => feel.selection() }}
       tintColor={T.brass}
       backgroundColor={T.surface}
       blurEffect="systemChromeMaterialDark"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { T, money } from "../lib/theme";
+import * as feel from "../lib/haptics";
 import { supabase } from "../lib/supabase";
 import { useBudget } from "./StateProvider";
 import { wipeToNewAccount } from "../../src/engine/mutate.ts";
@@ -51,8 +52,9 @@ export default function Settings({
     return () => { dead = true; };
   }, [session.user.id]);
 
-  const wipe = () =>
-    Alert.alert(
+  const wipe = () => {
+    feel.warning();
+    return Alert.alert(
       "Wipe all data?",
       "Every rule, one-off and per-date edit; your savings, investment and loan categories and their terms; every logged balance and contribution; and your verified checking balance, back to $0.00. Export a backup first — this cannot be undone.",
       [
@@ -60,6 +62,7 @@ export default function Settings({
         { text: "Wipe everything", style: "destructive", onPress: () => void commit(() => wipeToNewAccount(), "Wiped all data") },
       ]
     );
+  };
 
   const requestDeletion = async () => {
     setDeleting(true);
@@ -173,7 +176,10 @@ export default function Settings({
               <TextInput
                 style={styles.field}
                 value={confirmText}
-                onChangeText={setConfirmText}
+                // Account deletion has no alert to warn before — the
+                // confirmation IS this field. So the moment marked is
+                // the one where the button goes live.
+                onChangeText={(v) => { if (v === "DELETE" && confirmText !== "DELETE") feel.warning(); setConfirmText(v); }}
                 autoCapitalize="characters"
                 placeholder="DELETE"
                 placeholderTextColor={T.faint}

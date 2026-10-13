@@ -40,7 +40,7 @@ const providerNames = (p?: string[]) =>
   (p ?? []).map((x) => PROVIDER_LABEL[x] ?? x).join(" and ") || "—";
 
 export default function DashboardScreen() {
-  const { state, refresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
+  const { state, pullToRefresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
   // null = closed; "checking" = the account; otherwise a category id.
   const [logging, setLogging] = useState<string | null>(null);
   const [contributing, setContributing] = useState<string | null>(null);
@@ -75,7 +75,7 @@ export default function DashboardScreen() {
     <ScrollView
       style={styles.wrap}
       contentContainerStyle={styles.pad}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
     >
       {/* FOLDING AWAY HIDES THE NUMBER, which is the whole point of the
           control — someone who would rather not be met by a big red figure

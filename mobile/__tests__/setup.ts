@@ -203,3 +203,20 @@ jest.mock("expo-apple-authentication", () => {
       ),
   };
 });
+
+// Haptics, recorded. A buzz is the one thing in this app that leaves
+// no trace on the screen and cannot be looked at on a simulator, so
+// the only way to know the wiring is right — and that nothing fires
+// twice, or on every keystroke — is to record the calls.
+export const haptics: { calls: string[] } = { calls: [] };
+
+jest.mock("expo-haptics", () => {
+  const { haptics: h } = require("./setup");
+  return {
+    NotificationFeedbackType: { Success: "success", Warning: "warning", Error: "error" },
+    ImpactFeedbackStyle: { Light: "light" },
+    notificationAsync: async (t: string) => { h.calls.push(t); },
+    impactAsync: async (t: string) => { h.calls.push(`impact:${t}`); },
+    selectionAsync: async () => { h.calls.push("selection"); },
+  };
+});

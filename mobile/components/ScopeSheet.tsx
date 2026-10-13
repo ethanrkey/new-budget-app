@@ -1,6 +1,7 @@
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { T } from "../lib/theme";
 import type { ScopeAction } from "../lib/edit";
+import * as feel from "../lib/haptics";
 
 // WHAT DO YOU MEAN, asked before the editor opens.
 //
@@ -55,6 +56,7 @@ export default function ScopeSheet({
   // "this one is different".
   const choose = (a: ScopeAction) => {
     if (a.kind !== "delete-rule") { onPick(a); return; }
+    feel.warning();
     Alert.alert(
       `Delete ${name}?`,
       "This removes the rule and every date it generates, including any dates you gave their own amount.",

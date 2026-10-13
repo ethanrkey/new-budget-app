@@ -16,6 +16,7 @@ import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../..
 import { ledgerHorizonOf, primaryAccount } from "../../../src/engine/model.ts";
 import { updateAccountBalance } from "../../../src/engine/mutate.ts";
 import { showFirstRun } from "../../lib/firstRun";
+import * as feel from "../../lib/haptics";
 import {
   rowTarget, overrideAt, scopeActions, orphansIfSaved,
   saveItem, saveOccurrence, resetOccurrence, removeItem,
@@ -27,7 +28,7 @@ const prettyDate = (iso: string) =>
   new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 export default function LedgerScreen() {
-  const { state, refresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
+  const { state, pullToRefresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
   const [horizon, setHorizon] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [calendar, setCalendar] = useState(false);
@@ -187,7 +188,7 @@ export default function LedgerScreen() {
           keyExtractor={() => "cal"}
           ListHeaderComponent={header}
           renderSectionHeader={() => null}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
           renderItem={() => <CalendarView rows={rows} categories={state!.trackerCategories} />}
         />
       ) : (
@@ -197,13 +198,17 @@ export default function LedgerScreen() {
           stickySectionHeadersEnabled
           ListHeaderComponent={header}
           contentContainerStyle={styles.listPad}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
           renderSectionHeader={({ section }) => <Text style={styles.month}>{section.title}</Text>}
           renderItem={({ item }) => (
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               disabled={!online}
-              onPress={() => setScopeFor(item.id)}
+              // Opening the scope sheet is a row committing to being
+              // the one you meant. The sheet names it in words
+              // immediately above the options, so the tap is confirmed
+              // twice over and only one of them is a buzz.
+              onPress={() => { feel.selection(); setScopeFor(item.id); }}
               accessibilityRole="button"
               accessibilityLabel={`${item.name}, ${prettyDate(item.date)}, ${money(item.amount)}`}
             >

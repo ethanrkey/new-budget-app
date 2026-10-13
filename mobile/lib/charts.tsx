@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { PanResponder, Text, View } from "react-native";
+import * as feel from "./haptics";
 import Svg, { Circle, Path, Polyline, Rect } from "react-native-svg";
 import { T, money } from "./theme";
 
@@ -82,15 +83,41 @@ export function Sparkline({
     return best;
   }, [geom, points]);
 
+  // The last point the finger was over. A ref rather than state
+  // because the comparison has to be made inside the gesture handler,
+  // where a re-render has not happened yet — reading `active` here
+  // would compare against the previous frame and tick twice on some
+  // points and not at all on others.
+  const lastTick = useRef<number | null>(null);
+  const tickTo = (i: number) => {
+    if (lastTick.current === i) return;
+    lastTick.current = i;
+    // THE ONE PLACE IN THIS APP WHERE A HAPTIC CARRIES INFORMATION a
+    // glance does not: the ticks are the series' granularity. Five
+    // readings over a month feel different from thirty, before the
+    // numbers have been read. The readout above still says everything
+    // out loud, so nothing here is only a haptic.
+    feel.selection();
+  };
+
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => points.length > 1,
     // Claim the gesture only when it is clearly horizontal, so the page
     // still scrolls under a vertical flick that happens to start here.
     onMoveShouldSetPanResponder: (_e, g) => points.length > 1 && Math.abs(g.dx) > Math.abs(g.dy),
-    onPanResponderGrant: (e) => { setTouching(true); setActive(nearest(e.nativeEvent.locationX)); },
-    onPanResponderMove: (e) => setActive(nearest(e.nativeEvent.locationX)),
-    onPanResponderRelease: () => setTouching(false),
-    onPanResponderTerminate: () => setTouching(false),
+    onPanResponderGrant: (e) => {
+      const i = nearest(e.nativeEvent.locationX);
+      setTouching(true); setActive(i);
+      lastTick.current = null; tickTo(i);
+    },
+    onPanResponderMove: (e) => {
+      const i = nearest(e.nativeEvent.locationX);
+      setActive(i); tickTo(i);
+    },
+    // Both ends of the scrub are marked. Letting go of a chart that
+    // was following your finger is a state change worth feeling.
+    onPanResponderRelease: () => { setTouching(false); feel.selection(); },
+    onPanResponderTerminate: () => { setTouching(false); feel.selection(); },
   }), [nearest, points.length]);
 
   if (points.length < 2 || !geom) {

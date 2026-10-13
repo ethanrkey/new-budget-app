@@ -28,7 +28,7 @@ const monthLabel = (key: string) => {
 };
 
 export default function SpendingScreen() {
-  const { state, refresh, refreshing, commit, online } = useBudget();
+  const { state, pullToRefresh, refreshing, commit, online } = useBudget();
   const items = state!.recurring.filter((r) => r.variable);
   const months = lastMonthKeys(todayISO(), 6);
 
@@ -36,7 +36,7 @@ export default function SpendingScreen() {
     <ScrollView
       style={styles.wrap}
       contentContainerStyle={styles.pad}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
     >
       <Text style={styles.intro}>
         Items flagged &quot;Track actual vs. budgeted&quot; in their editor. Log the real monthly total once
