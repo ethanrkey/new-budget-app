@@ -510,7 +510,24 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
-- **1.0.0 (2) is installed on a real iPhone via TestFlight**, internal
+- **1.0.0 (5) was built and submitted to App Store Connect 2026-10-13**,
+  from this machine, non-interactively except for the one step that
+  could not be. It is the first build with Sign in with Apple, the
+  six-step setup flow, native tabs, haptics and `expo-updates`.
+  Processing at Apple takes five to ten minutes; after that it appears
+  in TestFlight for the internal group and **nothing about it has been
+  seen on a device yet** — Liquid Glass, the tab icons, the setup flow
+  on a real keyboard and the Apple sheet are all first looks.
+- **Build numbers 3 and 4 are burned.** 3 failed at code signing (the
+  App ID capability, above) and 4 was canceled once it was clear it
+  would fail the same way. `autoIncrement` with `appVersionSource:
+  remote` counts attempts, not successes.
+- **`ascAppId` is now pinned in `eas.json`: `6822133130`.** Without it
+  `eas submit --non-interactive` refuses — it wants to "ensure your
+  app exists on App Store Connect", which needs an Apple login. With
+  it, submission is one command and no prompts. It was resolved by
+  letting the interactive flow find it once.
+- **1.0.0 (2) was installed on a real iPhone via TestFlight**, internal
   group "Team (Expo)", 2026-10-12. Google sign-in verified on the
   device with the native account sheet, and the emailed code verified
   on the same build.
@@ -518,7 +535,18 @@ written here in the same sitting** — there is no other record of it.
   provisioning profile from the first interactive build, plus an App
   Store Connect API key named "[Expo] EAS Submit", Key ID
   **H69S428989**. So `eas build` and `eas submit` run non-interactively
-  from here on.
+  — with one exception, learned the hard way 2026-10-13.
+
+  **An entitlement change needs an Apple login, once.** `eas build
+  --non-interactive` does NOT sync capabilities: it printed "All
+  credentials are ready" and built against a profile that predated
+  Sign in with Apple, and Xcode rejected it. The fix is
+  `eas credentials:configure-build -p ios -e production`, which logs
+  into the Apple account (the cached session in `~/.app-store` was
+  still good, so no password and no 2FA), syncs the capability onto
+  the App ID and regenerates the profile. After that the build is
+  non-interactive again. Budget one interactive step per native
+  entitlement, not per build.
 - **That key has Admin access and App Manager would do.** Low priority,
   and worth a note rather than a fix: the key can do considerably more
   than submit builds, and the blast radius of a leaked Admin key is the
@@ -2215,6 +2243,23 @@ a port.
 
     1. **Apple Developer portal:** register the App ID `app.keybudget`
        and enable the *Sign in with Apple* capability on it.
+       **CORRECTION, 2026-10-13: this had NOT been done, despite being
+       recorded as done.** Build 3 failed at code signing —
+       "Provisioning profile … doesn't include the Sign In with Apple
+       capability" — and `eas credentials:configure-build` then
+       printed `Synced capabilities: Enabled: Sign In with Apple`,
+       which is EAS turning it on for the first time. It also
+       regenerated the profile, which the capability change
+       invalidated. Two things worth keeping from that:
+
+       - **EAS does not sync capabilities during a `--non-interactive`
+         build.** It prints "All credentials are ready" and builds
+         against the stale profile. The sync happens in
+         `credentials:configure-build`, which needs an Apple login —
+         so the first build after any entitlement change is the one
+         that cannot be fully automated.
+       - A configuration fact nobody has watched a machine confirm is
+         a claim, not a fact. This one sat in the spec for two days.
     2. **Supabase -> Authentication -> Providers -> Apple:** enable, and
        add **`app.keybudget`** to Client IDs. Nothing else. If anyone
        ever tests this in Expo Go, `host.exp.Exponent` has to go in that
