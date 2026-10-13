@@ -105,6 +105,15 @@ export const ABOUT_SECTIONS: AboutSection[] = [
         ["Monthly net / cumulative net", "What the month does to you, and where that leaves you."],
       ]],
       ["p", "Rows can be dragged or arrow-moved within their section. Click a row name to edit that item."],
+      // PLATFORM DIFFERENCE, 2026-10-13. The phone's Budget is
+      // read-only: the grid is two scrollers, so a finger crossing it
+      // starts gestures on row labels, and an accidental hit opened an
+      // editor over a RULE — one mistaken save changing every month it
+      // generates. A mouse does not scroll by touching what it points
+      // at, so the web keeps the tap. Until the per-block platform
+      // variants land with the voice pass, this sentence is the whole
+      // correction.
+      ["note", "On a phone the Budget is a view only — tap nothing here, and make every change on the Ledger. A grid you scroll with your thumb is too easy to edit by accident, and an accidental edit to a rule changes every month it generates."],
     ],
   },
   {

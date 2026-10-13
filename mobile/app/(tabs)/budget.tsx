@@ -1,14 +1,10 @@
-import { useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useBudget } from "../../components/StateProvider";
 import { T, money } from "../../lib/theme";
 import { computeBudget } from "../../../src/engine/compute.ts";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../../../src/engine/budgetLayout.ts";
 import { roleOfCategory, isRetainedOutflow } from "../../../src/engine/palette.ts";
-import BottomSheet from "../../components/BottomSheet";
-import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
-import { saveItem, orphansIfSaved, type Draft } from "../../lib/edit";
-import { ledgerHorizonOf } from "../../../src/engine/model.ts";
 import type { BudgetColumn } from "../../../src/engine/types.ts";
 
 // THE PINNED COLUMN, the RN way.
@@ -39,24 +35,23 @@ type Cell = {
 };
 
 export default function BudgetScreen() {
-  const { state, refresh, refreshing, commit, online, saving } = useBudget();
-  const [sheet, setSheet] = useState<SheetMode | null>(null);
-
-  // Tapping a row name opens that item's editor, same as the web. A budget
-  // row is a NAME, not an occurrence, so there is no date to scope to and
-  // no scope sheet — it edits the rule, which is the only thing the row
-  // stands for.
-  const openItem = (name: string) => {
-    const item = state!.recurring.find((r) => r.name === name)
-      ?? state!.oneoffs.find((o) => o.name === name);
-    if (item) setSheet({ kind: "rule", item });
-  };
-
-  async function submitDraft(d: Draft) {
-    const existing = sheet && sheet.kind !== "add" ? sheet.item : null;
-    const ok = await commit(saveItem(d, existing), d.name.trim() || "Transaction");
-    if (ok) setSheet(null);
-  }
+  const { state, refresh, refreshing } = useBudget();
+  // THE BUDGET IS READ-ONLY ON THE PHONE, decided 2026-10-13 after
+  // fat-fingering into the transaction editor while scrolling.
+  //
+  // The grid is two scrollers — a pinned label column beside a
+  // horizontal run of months — so a finger moving across it is
+  // constantly starting gestures on row labels. A tap target inside a
+  // surface whose whole purpose is scrolling will be hit by accident,
+  // and an accidental hit here opens an editor over a RULE: one
+  // mistaken save changes every month the rule generates, which is the
+  // most expensive accident available in this app.
+  //
+  // The web keeps the tap, correctly — a mouse does not scroll by
+  // touching what it points at. This is a deliberate difference, not a
+  // missing port, and all editing goes through the Ledger, where a row
+  // is one dated occurrence and the scope sheet makes you say what you
+  // meant before anything changes.
 
   const { columns, rows } = useMemo(() => {
     const columns = computeBudget(state!, state!.settings.budgetHorizon);
@@ -104,10 +99,11 @@ export default function BudgetScreen() {
       style={styles.wrap}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={T.brass} />}
     >
-      {/* The affordance, said ONCE. It was a dotted underline on every
-          tappable row, which at this density reads as noise rather than
-          as a hint — N marks for one fact. A line of text costs one. */}
-      <Text style={styles.hint}>Tap a row name to edit it.</Text>
+      {/* Said once, and now it says the opposite of what it used to.
+          A screen that is read-only has to admit it, or the first
+          thing someone does is tap a row and conclude the app is
+          broken. */}
+      <Text style={styles.hint}>A view of the plan. Edit anything on the Ledger.</Text>
 
       <View style={styles.sheet}>
         {/* (a) the pinned column */}
@@ -121,16 +117,9 @@ export default function BudgetScreen() {
                 <Text style={styles.sectionText}>{r.section}</Text>
               </View>
             ) : (
-              <Pressable
+              <View
                 key={r.key}
-                style={({ pressed }) => [
-                  styles.cell, { width: LABEL_W, alignItems: "flex-start" },
-                  r.head && styles.cumRow, pressed && r.itemName && styles.rowPressed,
-                ]}
-                disabled={!r.itemName || !online}
-                onPress={() => r.itemName && openItem(r.itemName)}
-                accessibilityRole={r.itemName ? "button" : undefined}
-                accessibilityLabel={r.itemName ? `Edit ${r.itemName}` : undefined}
+                style={[styles.cell, { width: LABEL_W, alignItems: "flex-start" }, r.head && styles.cumRow]}
               >
                 <Text
                   style={[styles.labelText, r.bold && styles.boldText]}
@@ -138,7 +127,7 @@ export default function BudgetScreen() {
                 >
                   {r.label}
                 </Text>
-              </Pressable>
+              </View>
             )
           )}
         </View>
@@ -187,21 +176,6 @@ export default function BudgetScreen() {
       </View>
       <Text style={styles.foot}>Swipe the months sideways. The row names stay put.</Text>
     </ScrollView>
-      {/* One host, one modal — see components/BottomSheet.tsx. */}
-      <BottomSheet visible={!!sheet} onClose={() => setSheet(null)}>
-        {sheet && (
-          <TransactionSheet
-            mode={sheet}
-            state={state!}
-            busy={saving}
-            orphanCount={(d) =>
-              orphansIfSaved(state!, d, sheet.kind === "add" ? null : sheet.item, ledgerHorizonOf(state!)).length}
-            onSaveDraft={submitDraft}
-            onSaveOccurrence={() => {}}
-            onClose={() => setSheet(null)}
-          />
-        )}
-      </BottomSheet>
     </>
   );
 }
@@ -219,7 +193,6 @@ const styles = StyleSheet.create({
   section: { height: SECTION_H, justifyContent: "center", backgroundColor: T.surface },
   sectionText: { color: T.brass, fontSize: 9, fontWeight: "700", letterSpacing: 0.7, paddingHorizontal: 8 },
   labelText: { color: T.text, fontSize: 12 },
-  rowPressed: { backgroundColor: T.surfaceAlt },
   hint: { color: T.faint, fontSize: 11, paddingHorizontal: 16, paddingBottom: 8 },
   boldText: { fontWeight: "700" },
   num: { color: T.dim, fontSize: 12, fontVariant: ["tabular-nums"] },

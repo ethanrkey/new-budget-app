@@ -537,10 +537,13 @@ written here in the same sitting** — there is no other record of it.
   URL and Privacy Policy URL: `https://keybudget.app` and
   `https://keybudget.app/privacy`.
 
-  **Review notes, which are the part that prevents a rejection:**
-  "No demo account is needed. Sign in with Apple, with Google, or with
-  a six-digit code emailed to any address you choose — all three create
-  or reach an account directly on the device. A new account lands on a
+  **Review notes, which are the part that prevents a rejection.** Do
+  NOT name Sign in with Apple until it actually ships — a review note
+  describing a sign-in method the build does not have is a rejection
+  of its own, and the note gets one more sentence the day it lands:
+  "No demo account is needed. Sign in with Google, or with a six-digit
+  code emailed to any address you choose — both create or reach an
+  account directly on the device. A new account lands on a
   three-step guide that logs a checking balance and adds income and a
   bill, so the app's full function is available on the phone without
   visiting the website."
@@ -2341,6 +2344,26 @@ a port.
 
 Not built, and not yet decided either way:
 
+**Deliberate differences, decided 2026-10-13 and revisitable.**
+
+- **The Budget is READ-ONLY on the phone.** The grid is two scrollers —
+  a pinned label column beside a horizontal run of months — so a finger
+  crossing it constantly starts gestures on row labels. An accidental
+  hit opened an editor over a RULE, and one mistaken save there changes
+  every month the rule generates: the most expensive accident available
+  in this app. Reported from the phone after exactly that. The web keeps
+  the tap, correctly, because a mouse does not scroll by touching what
+  it points at. All editing goes through the Ledger, where a row is one
+  dated occurrence and the scope sheet makes you say what you meant.
+  The screen says so rather than going quiet: "A view of the plan. Edit
+  anything on the Ledger." A read-only screen that does not admit it is
+  how someone taps twice and concludes the app is broken.
+- **The Ledger's "Cumulative columns" picker stays off the phone.** A
+  column picker at 390pt is a design problem rather than a port, and
+  the Budget already carries cumulative net. Revisitable.
+- **Multi-select delete stays web-only.** A laptop gesture; the phone's
+  per-row confirm is the safer answer to the same question.
+
 Deliberately NOT ported: drag-to-reorder (HTML5 drag never fires from
 touch, and the web already disables it on phones), and the Budget's
 pinned-column grid, which is already reshaped to one card per month.
@@ -2619,24 +2642,25 @@ decision already made and recorded.
 
 #### The four real gaps, with a view on each
 
-1. **Edit or delete a contribution.** The phone logs one and cannot
+1. ~~**Edit or delete a contribution.**~~ **BUILT 2026-10-13.** The phone logs one and cannot
    correct it. A mistyped contribution is then permanent on the device
    that made it, which is the shape of bug this project treats as
    serious — every other logged number here is correctable. The history
    list already has edit and delete for snapshots; this is the same
    affordance pointed at a different list. **Smallest and most clearly
    wrong. Recommended first.**
-2. **The Ledger's "Cumulative columns" picker.** On the web you can
+2. ~~**The Ledger's "Cumulative columns" picker.**~~ **SKIPPED
+   2026-10-13**, recorded as a deliberate difference. On the web you can
    show a running total per tracked account beside the rows. On a 390pt
    screen a column picker is a real design question rather than a port,
    and the Budget already carries cumulative net. **Worth deciding, not
    assuming.**
-3. **Multi-select delete.** Web has checkboxes and a bulk delete. The
+3. ~~**Multi-select delete.**~~ **WEB-ONLY, confirmed 2026-10-13.** Web has checkboxes and a bulk delete. The
    phone deletes one at a time through the scope sheet. Honest
    assessment: this is a laptop gesture, and the phone's per-row
    confirm is arguably safer for the same job. **A candidate for
    WEB-ONLY rather than a gap, if that is the call.**
-4. **The balance on every tab.** The web keeps the anchor visible
+4. ~~**The balance on every tab.**~~ **BUILT 2026-10-13.** The web keeps the anchor visible
    everywhere because every number is built from it. The phone shows it
    on two tabs of four. **Cheap to fix, and it is the number the whole
    forecast rests on.**
