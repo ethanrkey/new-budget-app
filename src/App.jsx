@@ -17,7 +17,8 @@ import {
   updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab,
   addContribution, updateContribution, deleteContribution, countTaggedItems,
 } from "./engine/mutate.ts";
-import { primaryAccount, sanitizeTabOrder, ledgerHorizonOf, todayISO } from "./engine/model.ts";
+import { primaryAccount, sanitizeTabOrder, ledgerHorizonOf } from "./engine/model.ts";
+import { applySetup } from "./engine/setup.ts";
 import LedgerView from "./components/LedgerView.jsx";
 import BudgetView from "./components/BudgetView.jsx";
 import Dashboard from "./components/Dashboard.jsx";
@@ -274,61 +275,12 @@ export default function App() {
   // not an import: the user is sitting in front of the app typing the
   // number, so today IS the verification date and principle 1 is satisfied
   // — the balance and its as-of date both come from them.
-  function completeOnboarding({ recurring = [], oneoffs = [], checkInBalance, accounts = [] }) {
-    setState((s) => {
-      let next = s;
-      for (const item of [...recurring, ...oneoffs]) next = upsertItem(next, item);
-      if (checkInBalance != null && !Number.isNaN(Number(checkInBalance))) {
-        next = updateAccountBalance(next, primaryAccount(next).id, Number(checkInBalance), todayISO());
-      }
-      // Savings, investments and debt from the wizard's last step. Debt is
-      // created WITHOUT terms on purpose — name and what you owe now is
-      // enough for the category, the card and the net position, and asking
-      // for principal, APR and a start date during setup is where someone
-      // gives up. The card prompts for terms later, when there is
-      // something to point at.
-      for (const a of accounts) {
-        // A brand-new account is SEEDED with categories called Savings,
-        // Investments and Debt (defaultTrackerCategories). Without this, a
-        // wizard row called "Savings" makes a second one and the Dashboard
-        // shows two, one of them permanently empty. Reuse an existing
-        // same-named category when it has nothing logged against it —
-        // never one that does, because that would be writing into
-        // somebody's real history on a name collision.
-        const existing = next.trackerCategories.find(
-          (c) => c.name.trim().toLowerCase() === a.name.toLowerCase()
-            && (next.balanceSnapshots?.[c.id] ?? []).length === 0
-        );
-        if (a.group === "debt") {
-          let id = existing?.kind === "debt" ? existing.id : null;
-          if (!id) {
-            next = addCategory(next, a.name, "debt");
-            id = next.trackerCategories[next.trackerCategories.length - 1].id;
-          }
-          next = addBalanceSnapshot(next, id, Math.abs(a.amount), todayISO());
-        } else {
-          next = setupAsset(next, {
-            categoryId: existing?.kind === "asset" ? existing.id : null,
-            name: a.name, balance: a.amount, asOf: todayISO(), assetKind: a.group,
-          });
-        }
-      }
-      // The seeded defaults that were never used go. A brand-new account
-      // gets Savings / Investments / Debt from defaultTrackerCategories as
-      // a hint; once the wizard has actually ASKED about all three, an
-      // untouched one is just clutter on the Dashboard — and worse, it
-      // looks like something the wizard created, which is exactly how a
-      // real user read it. Only ones with nothing logged and nothing
-      // tagged: never a category carrying data.
-      for (const c of [...next.trackerCategories]) {
-        const seeded = ["savings", "investments", "debt"].includes(c.name.trim().toLowerCase());
-        const empty = (next.balanceSnapshots?.[c.id] ?? []).length === 0
-          && countTaggedItems(next, c.id) === 0
-          && (next.contributionLog?.[c.id] ?? []).length === 0;
-        if (seeded && empty) next = deleteCategory(next, c.id);
-      }
-      return next;
-    });
+  // WHAT setup creates now lives in engine/setup.ts, so the phone can
+  // call the same function instead of reimplementing fifty lines of
+  // decisions. This is the wiring; the decisions are there, with their
+  // reasons. Moved 2026-10-12.
+  function completeOnboarding(answers) {
+    setState((s) => applySetup(s, answers));
     setSettings({ hasSeenOnboarding: true });
     setShowOnboarding(false);
     setTourOpen(true);

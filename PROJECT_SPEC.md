@@ -2109,6 +2109,17 @@ a port.
 
     **The answer to drift is to share the logic, not the screens.**
 
+    **Phase 1 — DONE 2026-10-12.** `src/engine/setup.ts` holds
+    `applySetup(state, answers, today)`, pure, and `App.jsx`'s
+    `completeOnboarding` is now four lines that call it. `today` is a
+    parameter rather than a `todayISO()` call so the harness can pin
+    it. 29 checks in `tests/setup.test.mjs` — the first time this logic
+    has been reachable by a test at all, which is half the point of the
+    move. They cover each of the three decisions, the forecast actually
+    running afterward, and the junk-anchor cases. One assertion found a
+    mistake in the test rather than the code: `computeLedger` returns
+    `{ rows, endingBalance }`, not an array.
+
     **Phase 1 — extract what setup CREATES (half a day).** The web's
     wizard is 460 lines of questions over about fifty lines of real
     logic, and that logic lives in `completeOnboarding` inside
