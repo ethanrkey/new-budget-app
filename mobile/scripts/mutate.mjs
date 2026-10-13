@@ -16,8 +16,17 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-12: 76 mutations, 76 killed, and every one of the 63
-// renderer tests dies to at least one. The twelve added that day were written
+// Measured 2026-10-13: 94 mutations, and the run EARNED ITS KEEP — one
+// survived and two new tests could not be killed by anything:
+//   - swapping a contribution's confirm back to "reading" killed
+//     nothing, because the test only read the list label. The confirm
+//     is where that noun matters most;
+//   - "a dismissed Apple sheet says nothing" checked for the phrase
+//     "didn't work" and would have passed while the screen showed
+//     Apple's own "The user canceled the authorization attempt."
+// Both tests were rewritten to assert the thing rather than a phrase,
+// and both mutations are killed now. 94/94, 86 renderer tests, every
+// one of them dies to at least one. (2026-10-12: 76 and 63.) The twelve added that day were written
 // BECAUSE the run before them reported nine new sign-in tests that no
 // mutation could reach — the list only covers what someone thought to
 // break, so a new test file means new entries here or the suite is
@@ -244,6 +253,51 @@ const MUTATIONS = [
   ["offline is reported as a server error", "lib/signin.ts",
    '  if (isUnreachable(error)) return "Can\'t reach the server. Check your connection and try again.";',
    "  // mutated"],
+
+  // ---- the setup flow, Sign in with Apple and the two list nouns.
+  // Added 2026-10-13 with the features, because the run before them
+  // reported fifteen new renderer tests that no mutation could reach.
+  // Same lesson as the twelve added on the 12th: a new test file means
+  // new entries here, or the suite is trusted for no reason.
+  ["the step counter is off by one", "components/Setup.tsx",
+   "Step {i + 1} of {STEPS.length}", "Step {i} of {STEPS.length}"],
+  ["the phone shows the web's note, naming a control it does not have",
+   "components/Setup.tsx", "{COPY.paycheck.note.mobile}", "{COPY.paycheck.note.web}"],
+  ["Skip keeps what was typed, same as Continue", "components/Setup.tsx",
+   "[step]: keep ? rulesForStep(step, d, todayISO) : []",
+   "[step]: rulesForStep(step, d, todayISO)"],
+  ["Back throws away the draft instead of returning to it", "components/Setup.tsx",
+   "onPress={() => setI(i - 1)}",
+   "onPress={() => { setD(blankSetupDraft(todayISO)); setI(i - 1); }}"],
+  ["Skip setup does nothing at all", "components/Setup.tsx",
+   "<Pressable onPress={onSkip} hitSlop={10}", "<Pressable onPress={() => {}} hitSlop={10}"],
+  ["the balance step can be passed empty", "lib/setup.ts",
+   'if (step === "balance") return balanceAnswer(d.balance) != null;',
+   'if (step === "balance") return true;'],
+  ["a half-filled account row no longer blocks Finish", "lib/setup.ts",
+   'if (step === "accounts") return incompleteAccountRows(d.accounts).length === 0;',
+   'if (step === "accounts") return true;'],
+  ["the balance never reaches applySetup", "lib/setup.ts",
+   "checkInBalance: balanceAnswer(d.balance),", "checkInBalance: null,"],
+  ["setup is offered again to an account that already did it", "lib/setup.ts",
+   "if (state.settings?.hasSeenOnboarding) return false;", "// mutated"],
+
+  ["Apple's button is drawn on a device that cannot use it", "components/SignIn.tsx",
+   "{appleReady && <AppleButton onPress={apple} busy={busy} />}",
+   "{<AppleButton onPress={apple} busy={busy} />}"],
+  ["the Apple authorization code is never sent to the server", "lib/apple.ts",
+   "void linkAppleAuthorization(supabase, credential.authorizationCode);", "// mutated"],
+  ["a dismissed Apple sheet is reported as a failure", "lib/signin.ts",
+   'if (code === "ERR_REQUEST_CANCELED" || code === "ERR_CANCELED" || /cancel/i.test(message)) return null;',
+   "// mutated"],
+  ["Supabase refusing the Apple token is treated as a sign-in", "lib/apple.ts",
+   "if (error) return { ok: false, message: appleFailureMessage(error) };",
+   "if (error) return { ok: true, message: null };"],
+
+  ["a contribution is called a reading in the confirm", "components/HistoryList.tsx",
+   'confirmTitle: "Delete this contribution?"', 'confirmTitle: "Delete this reading?"'],
+  ["a reading is called a contribution in the list", "components/HistoryList.tsx",
+   '    show: "history",', '    show: "contributions",'],
 ];
 
 const killedBy = new Map();

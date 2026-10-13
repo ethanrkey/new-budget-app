@@ -34,6 +34,29 @@ test("a contribution list says contribution, not reading", async () => {
   expect(screen.queryByText(/Show history/)).toBeNull();
 });
 
+test("...and the confirm says it too, which is the point of `kind`", async () => {
+  // The list label was the only thing asserted until the mutation
+  // audit pointed out that swapping the confirm's title back to
+  // "reading" killed nothing. The confirm is where it matters most:
+  // asking someone to approve deleting a "reading" when they tapped a
+  // contribution is asking them to approve something else.
+  const alerts: string[] = [];
+  const spy = jest.spyOn(Alert, "alert").mockImplementation((title, body) => {
+    alerts.push(`${title} ${body}`);
+  });
+  const entries = [{ id: "k1", date: "2026-10-01", amount: 300 }];
+  await render(
+    <HistoryList entries={entries} online kind="contribution" onEdit={() => {}} onDelete={() => {}} />
+  );
+  await userEvent.press(screen.getByText("Show contributions (1)"));
+  await userEvent.press(screen.getByLabelText(/Delete the reading of/));
+
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0]).toMatch(/Delete this contribution\?/);
+  expect(alerts[0]).not.toMatch(/reading/);
+  spy.mockRestore();
+});
+
 test("...and a reading still says reading", async () => {
   const entries = [{ id: "s1", date: "2026-10-01", amount: 8200 }];
   await render(

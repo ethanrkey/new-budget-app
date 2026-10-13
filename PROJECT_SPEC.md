@@ -1927,15 +1927,28 @@ a port.
    arrows move one row and cannot be ambiguous.
 6. ~~**Log a contribution** [P].~~ **SHIPPED 2026-10-08** — the
    "Contributed" figure had implied a control that did not exist.
-7. **Onboarding + guided tour** [D] — **DECIDED AND PARTLY SHIPPED
-   2026-10-11.** The decision was "port the wizard, or say setup is a
-   web task", and the answer turned out to be neither: the phone can
-   already do the setup, so it now says so and hands you the controls
-   it has (`components/FirstRun.tsx`). What remains unported is the
-   wizard itself — the guided multi-step flow with its own validation —
-   and it stays unported on purpose, because a second way to create a
-   rule is a second thing to keep correct. The tour already ships
-   inside About.
+7. ~~**Onboarding + guided tour** [D].~~ **COMPLETE 2026-10-13, both
+   halves.** It shipped twice, and the second time reversed the first:
+
+   - 2026-10-11, the signpost. "Port the wizard, or say setup is a web
+     task" was answered with neither — the phone already had every
+     control, so `components/FirstRun.tsx` said so and handed you to
+     them. The wizard stayed unported on the grounds that a second way
+     to create a rule is a second thing to keep correct.
+   - 2026-10-13, the wizard, because that reasoning was answering the
+     wrong question. Most App Store users will never open the web, so
+     the phone's setup cannot be the lesser version — and the drift
+     the first decision was avoiding is avoidable without crippling
+     the phone, by sharing the LOGIC rather than the screen. Nothing
+     in `components/Setup.tsx` decides what a setup answer means; the
+     words are `src/content/setup.ts` and the rules are
+     `src/engine/setup.ts`, both of which the web calls too.
+
+   Both survive, and they answer different questions: the flow says
+   "set me up", the guide says "here is what is still missing". A new
+   account gets the flow and Skip lands on the guide. The tour ships
+   inside About and now also opens straight after setup, as it does on
+   the web. Mobile item 15 has the detail.
 8. ~~**The recovery copy** [D].~~ **SHIPPED 2026-10-08** alongside
    transaction editing, which is what "ships with item 1" meant.
    `lib/stash.ts`, awaited before the optimistic apply, reported and

@@ -203,7 +203,7 @@ export default function SignIn() {
             returnKeyType="go"
             autoFocus
           />
-          {error && <Text style={styles.err}>{error}</Text>}
+          {error && <Text style={styles.err} accessibilityRole="alert">{error}</Text>}
           <Pressable
             style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed, (busy || !isPlausibleEmail(clean)) && styles.disabled]}
             onPress={() => send()}
@@ -261,7 +261,7 @@ export default function SignIn() {
             onSubmitEditing={() => verify()}
             returnKeyType="go"
           />
-          {error && <Text style={styles.err}>{error}</Text>}
+          {error && <Text style={styles.err} accessibilityRole="alert">{error}</Text>}
           <Pressable
             style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed, (busy || !codeReady(code)) && styles.disabled]}
             onPress={() => verify()}

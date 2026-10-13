@@ -316,9 +316,13 @@ test("a dismissed Apple sheet says nothing", async () => {
   await waitFor(() => expect(appleCalls.signIns).toBe(1));
   expect(authCalls.idTokens).toHaveLength(0);
   // Changing your mind is not an error, and a line of red under the
-  // button would say it was.
-  expect(screen.queryByText(/didn't work/)).toBeNull();
-  expect(screen.queryByText(/Apple/i)).not.toBeNull();   // the button is still there
+  // button would say it was. Asserted on the ERROR LINE ITSELF rather
+  // than on one phrase it might contain: the first version of this
+  // checked for "didn't work" and would have passed while the screen
+  // showed Apple's own "The user canceled the authorization attempt."
+  // The mutation audit found that, not a person.
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByLabelText("Continue with Apple")).toBeOnTheScreen();
 });
 
 test("Supabase refusing the token is said out loud, and nothing is sent to the server", async () => {
@@ -327,6 +331,7 @@ test("Supabase refusing the token is said out loud, and nothing is sent to the s
   await userEvent.press(await screen.findByLabelText("Continue with Apple"));
 
   expect(await screen.findByText(/this app's setup rejected it/)).toBeOnTheScreen();
+  expect(screen.getByRole("alert")).toBeOnTheScreen();
   // No session, so no code to link — sending one would be a call with
   // no user attached to it.
   expect(authCalls.functions).toHaveLength(0);
