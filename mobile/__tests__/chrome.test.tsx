@@ -101,3 +101,33 @@ test("finishing writes the rules, the anchor and the flag in ONE save", async ()
   expect(out.accounts[0]!.balance).toBe(4000);
   expect(out.settings.hasSeenOnboarding).toBe(true);
 });
+
+
+// ---- the one thing about sign-in that can fail quietly ----------------
+
+async function openSettings() {
+  await userEvent.press(screen.getByLabelText("Settings, about and export"));
+  return screen.findByText("Signed in as");
+}
+
+test("a half-linked Apple sign-in says so in Settings, in words", async () => {
+  mockLoaded.state = seen;          // no setup flow over the top of it
+  const AsyncStorage = require("@react-native-async-storage/async-storage");
+  await AsyncStorage.setItem("budget-app-prefs-v1", JSON.stringify({ appleLinkFailed: true }));
+
+  await mount();
+  await openSettings();
+
+  expect(screen.getByText("Apple sign-in isn't fully linked")).toBeOnTheScreen();
+  // It must not read as "you are not signed in", because they are.
+  expect(screen.getByText(/You are signed in and everything works/)).toBeOnTheScreen();
+  // And it must say what to do, not just that something is wrong.
+  expect(screen.getByText(/Sign out and sign in with Apple again/)).toBeOnTheScreen();
+});
+
+test("...and says nothing when there is nothing to say", async () => {
+  mockLoaded.state = seen;
+  await mount();
+  await openSettings();
+  expect(screen.queryByText("Apple sign-in isn't fully linked")).toBeNull();
+});

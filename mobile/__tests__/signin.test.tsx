@@ -1,6 +1,7 @@
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import SignIn from "../components/SignIn";
 import { authCalls, googleCalls, appleCalls } from "./setup";
+import { loadPrefs } from "../lib/prefs";
 
 // Sign-in, from the taps. The logic lives in lib/signin.ts and is tested
 // without a renderer in tests/mobile-signin.test.mjs; what is here is the
@@ -27,7 +28,7 @@ import { authCalls, googleCalls, appleCalls } from "./setup";
 // 2026-10-10 — recorded in the spec under Verification.
 // ───────────────────────────────────────────────────────────────────────
 
-beforeEach(() => {
+beforeEach(async () => {
   authCalls.otp.length = 0;
   authCalls.verify.length = 0;
   authCalls.nextOtpError = null;
@@ -39,6 +40,9 @@ beforeEach(() => {
   appleCalls.available = true;
   appleCalls.signIns = 0;
   appleCalls.next = { identityToken: "apple.id.token", authorizationCode: "apple-auth-code", error: null };
+  authCalls.nextFunctionError = null;
+  const AsyncStorage = require("@react-native-async-storage/async-storage");
+  await AsyncStorage.clear();
 });
 
 /**
@@ -335,4 +339,23 @@ test("Supabase refusing the token is said out loud, and nothing is sent to the s
   // No session, so no code to link — sending one would be a call with
   // no user attached to it.
   expect(authCalls.functions).toHaveLength(0);
+});
+
+
+test("a token exchange that fails is recorded, and one that works clears it", async () => {
+  // It was silent for days: the exchange failed with invalid_client and
+  // the only record was an edge function log. The flag is what Settings
+  // reads to say so out loud.
+  authCalls.nextFunctionError = { message: "apple refused the authorization code" };
+  await render(<SignIn />);
+  await userEvent.press(await screen.findByLabelText("Continue with Apple"));
+  await waitFor(async () => expect((await loadPrefs()).appleLinkFailed).toBe(true));
+
+  // A SUCCESS HAS TO CLEAR IT, or the notice outlives the problem and
+  // becomes furniture. Signing in again is the repair, because every
+  // Apple sign-in brings a fresh authorization code.
+  screen.unmount();
+  await render(<SignIn />);
+  await userEvent.press(await screen.findByLabelText("Continue with Apple"));
+  await waitFor(async () => expect((await loadPrefs()).appleLinkFailed).toBe(false));
 });

@@ -2202,6 +2202,48 @@ a port.
       what it is for, and that it dies with the account. It did not
       before, and "no third-party services" was no longer true.
 
+    **A THIRD CORRECTION, 2026-10-14, and it cost an afternoon: a
+    signing key can exist and be enabled for NOTHING.** The token
+    exchange failed with `invalid_client` for days. The cause was not
+    the code, the secrets, the bundle id or the JWT — it was that key
+    `B58KDZ42WV` had **no services enabled**, because it was created
+    before the App ID's Sign in with Apple capability existed (which
+    itself had not been enabled; see the correction above — the two
+    failures are the same root). Fixed in the portal by editing the
+    key: *Sign In with Apple*, configured to
+    `9WJSHTF3EB.app.keybudget`.
+
+    **Confirmed working after that**: re-signing in with Apple put a
+    row in `apple_tokens` (count 1), and **Key Budget now appears in
+    the iPhone's Passwords app and on account.apple.com → Sign in with
+    Apple**, which is the user-visible proof that the grant exists and
+    is ours to revoke.
+
+    Worth generalizing: *three* separate pieces of Apple configuration
+    were recorded in this spec as done, and all three were partly or
+    wholly undone — the App ID capability, the key's services, and
+    (earlier) the provisioning profile. None of them fails loudly. A
+    configuration fact nobody has watched a machine confirm is a
+    claim.
+
+    **A FAILED EXCHANGE IS NO LONGER SILENT**, which is the other half
+    of why this took an afternoon: the only record was the edge
+    function's log. `linkAppleAuthorization` now writes an
+    `appleLinkFailed` device preference either way, and Settings says
+    so under the account facts — that the user IS signed in, that what
+    did not finish is the deletion link, and that signing in with
+    Apple again retries it. A success clears the flag, so the notice
+    cannot outlive the problem.
+
+    **RLS on `apple_tokens` is proven, not assumed.**
+    `supabase/apple_tokens.sql` enables RLS, creates **no policies at
+    all** and revokes every grant from `anon` and `authenticated`, so
+    the service role is the only thing that can read a refresh token —
+    the owner of the row included. The file ends with the two queries
+    that check it (`pg_policies` count must be 0, grants must be
+    empty), because "no policies I remember writing" is not the same
+    statement as "no policies".
+
     **THE ONE THING THAT NEEDS THE AUTHOR — the `.p8`.** Nothing above
     writes the key anywhere; it is set once, by hand, in the Supabase
     dashboard, and never lands on this disk or in this repo.
@@ -2215,6 +2257,12 @@ a port.
     | `APPLE_KEY_ID` | `B58KDZ42WV` |
     | `APPLE_BUNDLE_ID` | `app.keybudget` |
     | `APPLE_PRIVATE_KEY` | the whole contents of `AuthKey_B58KDZ42WV.p8`, `-----BEGIN PRIVATE KEY-----` line and all |
+
+    **Before any of that, check the KEY ITSELF has services enabled**
+    (Certificates, Identifiers & Profiles -> Keys -> the key -> Sign In
+    with Apple -> Configure -> primary App ID). A key with no services
+    signs a JWT that Apple rejects as `invalid_client`, and nothing
+    about the error says so. Done 2026-10-14 for `B58KDZ42WV`.
 
     Paste the key as it is. If the form flattens the newlines into
     literal `\n`, that is handled — `readConfig` repairs it, and there

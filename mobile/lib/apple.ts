@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { appleFailureMessage } from "./signin";
+import { patchPrefs } from "./prefs";
 
 // Sign in with Apple, natively.
 //
@@ -63,10 +64,16 @@ type AuthClient = {
  * IT IS DELIBERATELY NOT AWAITED INTO THE SIGN-IN RESULT. A user who
  * has just authenticated is signed in; a failure to store a token for
  * a deletion that may never happen is not their problem and must not
- * be their error message. It self-heals, too — every Apple sign-in
- * returns a fresh code and re-links — and the consequence of it never
- * succeeding is bounded and documented: that account's purge revokes
- * nothing.
+ * be their error message, and the screen is gone a moment later
+ * anyway — the auth listener swaps it for the app.
+ *
+ * BUT IT IS NO LONGER SILENT. It was, and that cost an afternoon:
+ * the exchange was failing with `invalid_client` for days and the
+ * only place it showed was the edge function's log. A failure now
+ * sets a device preference and Settings says so in words, under the
+ * account facts, where somebody looking for the state of their
+ * sign-in would look. A success clears it, which is also the repair:
+ * every Apple sign-in brings a fresh code and re-links.
  */
 export async function signInWithApple(supabase: AuthClient): Promise<{ ok: boolean; message: string | null }> {
   // Required lazily: a top-level import is evaluated in Expo Go too,
@@ -111,10 +118,15 @@ export async function signInWithApple(supabase: AuthClient): Promise<{ ok: boole
  * was made with the code that came back.
  */
 export async function linkAppleAuthorization(supabase: AuthClient, code: string): Promise<void> {
+  let failed = true;
   try {
     const { error } = await supabase.functions.invoke("apple-link", { body: { code } });
     if (error) console.warn("[apple] authorization code not stored:", error);
+    else failed = false;
   } catch (e) {
     console.warn("[apple] authorization code not stored:", e);
   }
+  // Written either way: a success has to CLEAR a previous failure, or
+  // the notice outlives the problem and becomes furniture.
+  await patchPrefs({ appleLinkFailed: failed });
 }

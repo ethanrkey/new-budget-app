@@ -32,8 +32,13 @@ export type Prefs = {
    *  land. Nobody should be stuck in a wizard they already closed
    *  because their train went into a tunnel. */
   setupDismissed: boolean;
+  /** The last Sign in with Apple could not file its token with the
+   *  server. Kept per device because it describes THIS sign-in on THIS
+   *  phone, and cleared the moment one succeeds. See lib/apple.ts for
+   *  why the failure is not shown at the moment it happens. */
+  appleLinkFailed: boolean;
 };
-export const DEFAULT_PREFS: Prefs = { heroCollapsed: false, debtsExpanded: false, firstRunDismissed: false, setupDismissed: false };
+export const DEFAULT_PREFS: Prefs = { heroCollapsed: false, debtsExpanded: false, firstRunDismissed: false, setupDismissed: false, appleLinkFailed: false };
 
 export async function loadPrefs(): Promise<Prefs> {
   try {
@@ -48,4 +53,17 @@ export async function loadPrefs(): Promise<Prefs> {
 
 export async function savePrefs(prefs: Prefs): Promise<void> {
   try { await AsyncStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
+}
+
+/**
+ * Change one preference from OUTSIDE React.
+ *
+ * `setPref` needs the provider, and the one caller here runs before
+ * there is one: Sign in with Apple finishes on the sign-in screen,
+ * which is rendered instead of StateProvider, not inside it. Reads
+ * the current file rather than assuming, so this cannot clobber a
+ * preference it does not know about.
+ */
+export async function patchPrefs(patch: Partial<Prefs>): Promise<void> {
+  await savePrefs({ ...(await loadPrefs()), ...patch });
 }

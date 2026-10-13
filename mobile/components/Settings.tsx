@@ -31,7 +31,7 @@ export default function Settings({
   onOpenSetup: () => void;
   onClose: () => void;
 }) {
-  const { state, commit, online, saving, setPref } = useBudget();
+  const { state, commit, online, saving, prefs, setPref } = useBudget();
   const [deletion, setDeletion] = useState<{ purge_after: string } | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -113,6 +113,25 @@ export default function Settings({
           <Fact term="Signed in as" value={email} />
           <Fact term="Signed in via" value={via} />
           <Fact term="Member since" value={since} />
+          {/* THE ONE THING ABOUT SIGN-IN THAT CAN FAIL QUIETLY.
+              Apple requires that deleting an account also ends Apple's
+              side of it, which needs a token filed with the server at
+              sign-in. That call is deliberately not awaited — a user
+              who just authenticated is signed in — so when it fails
+              there is nothing on screen at all. For several days it
+              was failing with `invalid_client` and the only record was
+              an edge function log. Now it says so, here, where the
+              other facts about this sign-in live. */}
+          {prefs.appleLinkFailed && (
+            <View style={styles.notice}>
+              <Text style={styles.noticeTitle}>Apple sign-in isn&apos;t fully linked</Text>
+              <Text style={styles.rowSub}>
+                You are signed in and everything works. What did not finish is the part that lets
+                deleting your account also end Apple&apos;s side of it. Sign out and sign in with
+                Apple again to retry; if it keeps happening, email support@keybudget.app.
+              </Text>
+            </View>
+          )}
           <Pressable
             style={styles.action}
             onPress={() => supabase.auth.signOut()}
@@ -252,6 +271,11 @@ const styles = StyleSheet.create({
   factValue: { color: T.text, fontSize: 14, flex: 1 },
   action: { paddingVertical: 12, gap: 2 },
   actionText: { color: T.text, fontSize: 15, fontWeight: "600" },
+  notice: {
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: T.border,
+    paddingTop: 12, marginTop: 4, gap: 4,
+  },
+  noticeTitle: { color: T.brass, fontSize: 14, fontWeight: "700" },
   danger: { color: T.expense },
   sep: { height: StyleSheet.hairlineWidth, backgroundColor: T.border },
   field: { marginTop: 10, backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, minHeight: 44, color: T.text, fontSize: 15 },

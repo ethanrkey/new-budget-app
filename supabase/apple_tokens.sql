@@ -123,3 +123,31 @@ grant execute on function purge_due_accounts() to authenticated;
 -- What is still pending, at any time:
 --
 --   select count(*) from apple_revocations where revoked_at is null;
+
+-- ---------------------------------------------------------------------------
+-- PROVE THE LOCK RATHER THAN TRUSTING IT. Run this after the tables
+-- exist; it is the answer to "can any app user ever read an Apple
+-- refresh token". Both tables must come back with rls_enabled = true
+-- and policies = 0 — policies, not "no policies I remember writing".
+--
+-- RLS with no policies denies everything to anon and authenticated.
+-- RLS with ONE permissive policy allows whatever that policy says, so
+-- the count is the number that matters and 0 is the only right answer:
+-- the service role bypasses RLS and is the only thing that touches
+-- these tables.
+--
+--   select c.relname                                   as table_name,
+--          c.relrowsecurity                            as rls_enabled,
+--          (select count(*) from pg_policies p
+--             where p.schemaname = 'public' and p.tablename = c.relname) as policies
+--     from pg_class c join pg_namespace n on n.oid = c.relnamespace
+--    where n.nspname = 'public'
+--      and c.relname in ('apple_tokens', 'apple_revocations');
+--
+-- And the grants, which are the other half — a grant without a policy
+-- still cannot read a row, but there is no reason for one to exist:
+--
+--   select grantee, table_name, privilege_type
+--     from information_schema.role_table_grants
+--    where table_name in ('apple_tokens', 'apple_revocations')
+--      and grantee in ('anon', 'authenticated');   -- expect zero rows

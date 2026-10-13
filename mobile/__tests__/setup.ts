@@ -43,9 +43,10 @@ export const authCalls: {
   nextIdTokenError: { message: string; code?: string } | null;
   /** Edge-function calls: the Apple authorization code goes through here. */
   functions: { name: string; body: unknown }[];
+  nextFunctionError: { message: string } | null;
 } = {
   otp: [], verify: [], nextOtpError: null, nextVerifyError: null,
-  idTokens: [], nextIdTokenError: null, functions: [],
+  idTokens: [], nextIdTokenError: null, functions: [], nextFunctionError: null,
 };
 
 jest.mock("../lib/supabase", () => {
@@ -76,7 +77,9 @@ jest.mock("../lib/supabase", () => {
       functions: {
         invoke: async (name: string, opts: { body: unknown }) => {
           calls.functions.push({ name, body: opts.body });
-          return { data: {}, error: null };
+          const error = calls.nextFunctionError;
+          calls.nextFunctionError = null;
+          return { data: {}, error };
         },
       },
     },
