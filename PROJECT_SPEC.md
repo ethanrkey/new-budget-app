@@ -2658,6 +2658,27 @@ a port.
     OTA-capable build is a new one. There is no way to add OTA over
     the air.
 
+    **THE PUBLISH COMMAND, with the two things that bite:**
+
+        cd mobile && npx eas-cli update \
+          --channel production --environment production --platform ios \
+          --message "..." --non-interactive
+
+    - **`--platform ios` is not optional.** `eas update` defaults to
+      exporting EVERY platform, and the web export fails outright:
+      `expo-router`'s native-tabs has a web variant that imports
+      `@radix-ui/react-tabs`, which is not installed and should not
+      be. The app is iOS only. Without the flag the whole publish
+      aborts after a full bundle.
+    - **`--environment` is required in `--non-interactive`.** It picks
+      which EAS environment's variables are baked in, and the CLI
+      refuses to guess.
+
+    **First update published 2026-10-14**: group
+    `bc3f32ef-35cf-4b50-b6c5-5c3ebbd8dc15`, runtime version
+    `cf6120cc…`, which is build 5's — the seven device-test fixes,
+    none of them native.
+
     *The planning entry, kept for the lists of what can and cannot go
     this way:*
 
