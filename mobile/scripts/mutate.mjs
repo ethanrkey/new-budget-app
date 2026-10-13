@@ -118,20 +118,20 @@ const MUTATIONS = [
   // --- sign-in. Nine tests arrived 2026-10-09 and no mutation could
   // reach any of them, which is exactly the state this script exists to
   // make visible: a suite nothing can kill is decoration.
-  ["the address is sent raw, so an iOS capital letter matches nobody", "../src/signin.ts",
+  ["the address is sent raw, so an iOS capital letter matches nobody", "../src/shared/signin.ts",
    "return raw.trim().toLowerCase();", "return raw;"],
-  ["a five-digit code counts as ready", "../src/signin.ts",
+  ["a five-digit code counts as ready", "../src/shared/signin.ts",
    "return normalizeCode(code).length === CODE_LENGTH;", "return normalizeCode(code).length >= CODE_LENGTH - 1;"],
-  ["a pasted code keeps its spaces", "../src/signin.ts",
+  ["a pasted code keeps its spaces", "../src/shared/signin.ts",
    'return raw.replace(/\\D/g, "").slice(0, CODE_LENGTH);', "return raw.slice(0, CODE_LENGTH);"],
-  ["the rate limit is swallowed like every other error", "../src/signin.ts",
+  ["the rate limit is swallowed like every other error", "../src/shared/signin.ts",
    '  if (isRateLimited(error)) return "A code was just sent. Wait a minute before asking for another.";', "  // mutated"],
-  ["a failed send leaks which addresses have accounts", "../src/signin.ts",
+  ["a failed send leaks which addresses have accounts", "../src/shared/signin.ts",
    "  if (isUnknownAccount(error)) return null;", '  if (isUnknownAccount(error)) return "No account for that address.";'],
-  ["a wrong code says nothing useful", "../src/signin.ts",
+  ["a wrong code says nothing useful", "../src/shared/signin.ts",
    'return "That code is wrong or has expired. Check the latest email, or ask for a new code.";',
    'return "Error.";'],
-  ["the resend cooldown never elapses", "../src/signin.ts",
+  ["the resend cooldown never elapses", "../src/shared/signin.ts",
    "return Math.max(0, RESEND_COOLDOWN_SECONDS - elapsed);", "return RESEND_COOLDOWN_SECONDS;"],
   ["the send never advances to the code step", "components/SignIn.tsx",
    'if (!resending) setStep("code");', "// mutated"],
@@ -150,9 +150,9 @@ const MUTATIONS = [
    "void verify(next);", "void verify();"],
   ["a rejected code is auto-submitted again on the next keystroke", "components/SignIn.tsx",
    "next !== attempted.current", "true"],
-  ["every send failure is hidden, so offline looks like success", "../src/signin.ts",
+  ["every send failure is hidden, so offline looks like success", "../src/shared/signin.ts",
    "  if (isUnknownAccount(error)) return null;", "  return null;"],
-  ["a server error is swallowed instead of spoken", "../src/signin.ts",
+  ["a server error is swallowed instead of spoken", "../src/shared/signin.ts",
    '  return "Something went wrong sending the code. Try again in a moment.";', "  return null;"],
   // --- About. Both faults shipped because nobody had pressed the screen,
   // and both are layout, which is the half a renderer test can reach.
@@ -248,7 +248,7 @@ const MUTATIONS = [
   ["a device that cannot share fails silently", "components/ExportSheet.tsx",
    '        setFailed("This device cannot open a share sheet.");', "        // mutated"],
 
-  ["offline is reported as a server error", "../src/signin.ts",
+  ["offline is reported as a server error", "../src/shared/signin.ts",
    '  if (isUnreachable(error)) return "Can\'t reach the server. Check your connection and try again.";',
    "  // mutated"],
 

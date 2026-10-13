@@ -16,8 +16,8 @@ export {
   resendIn,
   sendFailureMessage,
   verifyFailureMessage,
-} from "../../src/signin.ts";
-import type { AuthError } from "../../src/signin.ts";
+} from "../../src/shared/signin.ts";
+import type { AuthError } from "../../src/shared/signin.ts";
 
 /**
  * What to tell the user when GOOGLE sign-in fails.

@@ -3,7 +3,7 @@ import { signInWithGoogle, signInWithMagicLink, verifyEmailCode } from "../auth.
 import {
   CODE_LENGTH, codeReady, isPlausibleEmail, normalizeCode, normalizeEmail,
   resendIn, sendFailureMessage, verifyFailureMessage,
-} from "../signin.ts";
+} from "../shared/signin.ts";
 
 // THE EMAIL HAS ALWAYS CARRIED BOTH. `{{ .ConfirmationURL }}` and
 // `{{ .Token }}` sit side by side in the templates, and until

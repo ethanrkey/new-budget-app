@@ -21,7 +21,7 @@
 import {
   CODE_LENGTH, RESEND_COOLDOWN_SECONDS, normalizeEmail, isPlausibleEmail,
   normalizeCode, codeReady, resendIn, sendFailureMessage, verifyFailureMessage,
-} from "../src/signin.ts";
+} from "../src/shared/signin.ts";
 // The two that stayed on the phone, because they read error codes only
 // a native SDK produces.
 import { googleFailureMessage, appleFailureMessage } from "../mobile/lib/signin.ts";

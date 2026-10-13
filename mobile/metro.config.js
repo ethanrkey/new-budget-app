@@ -35,6 +35,15 @@ const projectRoot = __dirname;
 const sharedRoots = [
   path.resolve(projectRoot, "../src/engine"),
   path.resolve(projectRoot, "../src/content"),
+  // Everything both clients share that is neither money math nor copy.
+  // Today that is sign-in: the web grew a code box on 2026-10-14 and
+  // the two clients now read the same six digits. It is a DIRECTORY
+  // rather than a file at ../src because this list is explicit on
+  // purpose — a loose file at the src root is invisible here, which is
+  // exactly how this broke: tsc passed, jest passed, and `eas update`
+  // failed at bundle time with "unable to resolve module". Third time
+  // that has happened; the list is the thing to update.
+  path.resolve(projectRoot, "../src/shared"),
 ];
 
 const config = getDefaultConfig(projectRoot);
