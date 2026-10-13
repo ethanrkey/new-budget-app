@@ -4,6 +4,7 @@
 import { uid, primaryAccount, sanitizeTabOrder, blankState } from "./model.ts";
 import { occurrenceDates } from "./generate.ts";
 import { nextFreeHue } from "./palette.ts";
+import { newestSnapshot } from "./entities.ts";
 import type {
   AssetCategory, BalanceSnapshot, BudgetItem, BudgetState, Contribution, DebtCategory,
   AssetKind, ISODate, MonthKey, RecurringItem, TabId,
@@ -378,19 +379,50 @@ function upsertSnapshotByDate(list: BalanceSnapshot[], date: ISODate, amount: nu
   return list.map((s, i) => (i === at ? { ...s, amount } : s));
 }
 
+/**
+ * Write an account's snapshot list and RE-DERIVE the anchor from it.
+ *
+ * THE ONE RULE, and the reason this function exists: an account's
+ * `balance` and `balanceAsOf` are not independent facts, they ARE the
+ * newest snapshot. `assembleState` has always known that — it rebuilds
+ * the anchor from the snapshots on every load — and the mutations did
+ * not, so three of them could leave the two disagreeing until the app
+ * was restarted.
+ *
+ * The bug that found it, on a device: deleting the newest checking
+ * reading updated the history and the chart and left the deleted
+ * number in the top bar, on the Dashboard, and as the figure the whole
+ * forecast counts forward from. A reload fixed it, which is the tell —
+ * reassembly was right and the in-memory path was wrong.
+ *
+ * Two more paths had the same hole and neither had been noticed:
+ * editing the newest reading, and logging a BACK-DATED balance, which
+ * used to drag the anchor backwards to a date that is not the newest.
+ *
+ * WHEN NOTHING IS LEFT the anchor is deliberately untouched, because
+ * that is what a reload does: `assembleState` keeps the stored values
+ * when there is no snapshot, and `normalize` re-seeds a snapshot from
+ * them. Zeroing the balance here would invent a $0 reading nobody
+ * logged.
+ */
+function withAccountSnapshots(state: BudgetState, accountId: string, list: BalanceSnapshot[]): BudgetState {
+  const newest = newestSnapshot(list);
+  return {
+    ...state,
+    accounts: newest
+      ? state.accounts.map((a) =>
+          a.id === accountId ? { ...a, balance: newest.amount, balanceAsOf: newest.date } : a)
+      : state.accounts,
+    accountSnapshots: { ...state.accountSnapshots, [accountId]: list },
+  };
+}
+
 export function updateAccountBalance(state: BudgetState, accountId: string, amount: number, date: ISODate): BudgetState {
-  const accounts = state.accounts.map((a) =>
-    a.id === accountId ? { ...a, balance: amount, balanceAsOf: date } : a
-  );
   const list = state.accountSnapshots?.[accountId] || [];
   // (Phase 1 also wrote a settings.checkInBalance/checkInDate mirror here as
   // a rollback safety net — retired in Phase 2; accounts[0] is the only
   // source of truth, see stateShape.ts.)
-  return {
-    ...state,
-    accounts,
-    accountSnapshots: { ...state.accountSnapshots, [accountId]: upsertSnapshotByDate(list, date, amount) },
-  };
+  return withAccountSnapshots(state, accountId, upsertSnapshotByDate(list, date, amount));
 }
 
 // Account history is editable/deletable like every other logged value. The
@@ -398,21 +430,13 @@ export function updateAccountBalance(state: BudgetState, accountId: string, amou
 // snapshot corrects the record, it doesn't retroactively move the anchor.
 export function updateAccountSnapshot(state: BudgetState, accountId: string, snapshotId: string, patch: Partial<BalanceSnapshot>): BudgetState {
   const list = state.accountSnapshots?.[accountId] || [];
-  return {
-    ...state,
-    accountSnapshots: {
-      ...state.accountSnapshots,
-      [accountId]: list.map((s) => (s.id === snapshotId ? { ...s, ...patch } : s)),
-    },
-  };
+  return withAccountSnapshots(state, accountId,
+    list.map((s) => (s.id === snapshotId ? { ...s, ...patch } : s)));
 }
 
 export function deleteAccountSnapshot(state: BudgetState, accountId: string, snapshotId: string): BudgetState {
   const list = state.accountSnapshots?.[accountId] || [];
-  return {
-    ...state,
-    accountSnapshots: { ...state.accountSnapshots, [accountId]: list.filter((s) => s.id !== snapshotId) },
-  };
+  return withAccountSnapshots(state, accountId, list.filter((s) => s.id !== snapshotId));
 }
 
 // ---- Loan setup (the Dashboard's "Set up loan" / "+ Add loan" flow) ----

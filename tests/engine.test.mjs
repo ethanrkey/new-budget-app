@@ -6,6 +6,7 @@ import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDe
 import { buildAllEvents } from "../src/engine/generate.ts";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID, LEDGER_MAX_MONTHS, ledgerHorizonOf, blankState } from "../src/engine/model.ts";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.ts";
+import { anchorMatchesNewestSnapshot } from "../src/engine/entities.ts";
 import { computeBudgetLayout } from "../src/engine/budgetLayout.ts";
 import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.ts";
 import { parseBudgetCSV } from "../src/engine/csvImport.ts";
@@ -1007,6 +1008,90 @@ eq("moving the anchor date forward drops the now-already-counted Sep 4 paycheck 
 const acctSnapId = afterUpdate.accountSnapshots.checking[1].id;
 check("updateAccountSnapshot corrects an amount in place", updateAccountSnapshot(afterUpdate, "checking", acctSnapId, { amount: 4000 }).accountSnapshots.checking[1].amount, 4000);
 check("deleteAccountSnapshot removes exactly that entry", deleteAccountSnapshot(afterUpdate, "checking", acctSnapId).accountSnapshots.checking.length, 1);
+
+// ---- THE ANCHOR IS THE NEWEST SNAPSHOT, on every path -----------------
+//
+// Found on a device 2026-10-14: deleting the newest checking reading
+// updated the history and the chart and left the DELETED number in the
+// top bar, on the Dashboard, and as the figure the whole forecast
+// counts forward from. A reload fixed it, which is the tell —
+// `assembleState` rebuilds the anchor from the snapshots and the
+// in-memory mutations did not.
+//
+// `anchorMatchesNewestSnapshot` is the same question `assembleState`
+// asks, so asserting it is asserting "a reload would change nothing".
+{
+  const twoReadings = updateAccountBalance(afterUpdate, "checking", 4500, "2026-09-20");
+  eq("three readings now", twoReadings.accountSnapshots.checking.length, 3);
+  const newestId = twoReadings.accountSnapshots.checking.find((x) => x.date === "2026-09-20").id;
+
+  // DELETE THE NEWEST. The anchor must fall back to the one before it.
+  const afterDelete = deleteAccountSnapshot(twoReadings, "checking", newestId);
+  eq("deleting the newest reading moves the balance back to the one before it",
+    [afterDelete.accounts[0].balance, afterDelete.accounts[0].balanceAsOf], [3990.1, "2026-09-12"]);
+  check("...and a reload would change nothing", anchorMatchesNewestSnapshot(afterDelete) ? 1 : 0, 1);
+
+  // EDIT THE NEWEST. Both halves of the patch have to land on the anchor.
+  const afterEdit = updateAccountSnapshot(twoReadings, "checking", newestId, { amount: 4777 });
+  eq("editing the newest reading moves the balance with it", afterEdit.accounts[0].balance, 4777);
+  check("...and a reload would change nothing", anchorMatchesNewestSnapshot(afterEdit) ? 1 : 0, 1);
+  const redated = updateAccountSnapshot(twoReadings, "checking", newestId, { date: "2026-09-01" });
+  eq("re-dating the newest reading into the past hands the anchor to whatever is now newest",
+    [redated.accounts[0].balance, redated.accounts[0].balanceAsOf], [3990.1, "2026-09-12"]);
+
+  // Deleting an OLDER one must not touch the anchor at all.
+  const oldestId = twoReadings.accountSnapshots.checking.find((x) => x.date === "2026-09-08").id;
+  eq("deleting an older reading leaves the anchor alone",
+    [deleteAccountSnapshot(twoReadings, "checking", oldestId).accounts[0].balance,
+     deleteAccountSnapshot(twoReadings, "checking", oldestId).accounts[0].balanceAsOf], [4500, "2026-09-20"]);
+
+  // THE LAST ONE. Deliberately leaves the anchor standing, because that
+  // is what a reload does: assembleState keeps the stored values when
+  // there is no snapshot and normalize re-seeds one from them. Zeroing
+  // it would invent a $0 reading nobody logged.
+  let stripped = twoReadings;
+  for (const snap of [...twoReadings.accountSnapshots.checking])
+    stripped = deleteAccountSnapshot(stripped, "checking", snap.id);
+  eq("no readings left", stripped.accountSnapshots.checking.length, 0);
+  eq("deleting the only reading leaves the anchor standing rather than inventing a zero",
+    [stripped.accounts[0].balance, stripped.accounts[0].balanceAsOf], [4500, "2026-09-20"]);
+  eq("...and normalize re-seeds a snapshot from it, so the two agree again",
+    normalize(JSON.parse(JSON.stringify(stripped))).accountSnapshots.checking,
+    [{ id: "seed-checking", date: "2026-09-20", amount: 4500 }]);
+
+  // The third path with the same hole, which nobody had noticed: a
+  // BACK-DATED log used to drag the anchor backwards to a date that is
+  // not the newest, and a reload would have put it back.
+  const backdated = updateAccountBalance(twoReadings, "checking", 100, "2026-08-01");
+  eq("logging a back-dated balance records it", backdated.accountSnapshots.checking.length, 4);
+  eq("...but does not move the anchor off the newest reading",
+    [backdated.accounts[0].balance, backdated.accounts[0].balanceAsOf], [4500, "2026-09-20"]);
+  check("...and a reload would change nothing", anchorMatchesNewestSnapshot(backdated) ? 1 : 0, 1);
+}
+
+// ---- A SEED NEVER OUTRANKS A READING A PERSON LOGGED ------------------
+//
+// normalize() seeds a new account with one snapshot dated TODAY at $0.
+// Without this rule, a brand-new user who logs "as of yesterday" — which
+// both setup and the Log sheet allow — is anchored to the seed's zero,
+// and the entire forecast counts forward from a number nobody entered.
+{
+  const fresh = normalize({});
+  eq("a new account has exactly one snapshot, and it is the seed",
+    [fresh.accountSnapshots.checking.length, fresh.accountSnapshots.checking[0].id, fresh.accountSnapshots.checking[0].amount],
+    [1, "seed-checking", 0]);
+
+  const backdatedFirst = updateAccountBalance(fresh, "checking", 4000, "2000-01-01");
+  eq("a back-dated FIRST reading wins over the seed, however old it is",
+    [backdatedFirst.accounts[0].balance, backdatedFirst.accounts[0].balanceAsOf], [4000, "2000-01-01"]);
+  check("...and a reload would change nothing", anchorMatchesNewestSnapshot(backdatedFirst) ? 1 : 0, 1);
+
+  // Once there is a real reading, dates decide again — the seed stops
+  // mattering rather than inverting the ordering.
+  const later = updateAccountBalance(backdatedFirst, "checking", 50, "2010-01-01");
+  eq("between two logged readings the newer one wins",
+    [later.accounts[0].balance, later.accounts[0].balanceAsOf], [50, "2010-01-01"]);
+}
 
 // New items get the account silently (no picker with a single account).
 const stamped = upsertItem(migratedAA, { id: "new1", name: "Spotify", amount: 12, category: "bill", cadence: "monthly", startDate: "2026-09-10" });

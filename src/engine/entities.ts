@@ -222,9 +222,45 @@ export function assembleState(entities: Entity[]): RawState {
 }
 
 /** Latest by date. Ties cannot happen — the date IS the key. */
-function newestSnapshot(list: BalanceSnapshot[] | undefined): BalanceSnapshot | null {
+/**
+ * The snapshot an account's anchor comes from: the latest DATE, not the
+ * last written.
+ *
+ * Exported because `assembleState` is not the only place that has to
+ * obey it. Every mutation that touches an account's snapshot list
+ * re-derives the anchor through this (see mutate.ts), so what the
+ * screen shows after an edit is what a reload would show. Two
+ * implementations of "newest" is how those two drift apart, and they
+ * did: deleting the newest reading used to leave the old number in
+ * the top bar until the app was restarted.
+ */
+/**
+ * A snapshot `normalize()` minted, as opposed to one somebody logged.
+ *
+ * `normalize` seeds a brand-new account with one snapshot dated today
+ * at $0, so that the history chart and the anchor have a common
+ * origin. The id alone is not enough to spot it: `updateAccountBalance`
+ * upserts BY DATE, so the first balance logged on the seed's own date
+ * keeps the seed's id and is a real reading wearing it. A seed is a
+ * seed id AT ZERO.
+ */
+export function isSeedSnapshot(s: BalanceSnapshot): boolean {
+  return s.id.startsWith("seed-") && s.amount === 0;
+}
+
+export function newestSnapshot(list: BalanceSnapshot[] | undefined): BalanceSnapshot | null {
   if (!list || list.length === 0) return null;
-  return list.reduce((best, s) => (s.date > best.date ? s : best));
+  // A SEED NEVER OUTRANKS A READING A PERSON LOGGED, whatever the
+  // dates say. The seed is dated TODAY, so without this a brand-new
+  // user who logs "$4,000, as of yesterday" — which setup and the Log
+  // sheet both allow — is anchored to the seed's $0 instead, and the
+  // whole forecast counts forward from a number nobody entered. Found
+  // 2026-10-14 by a pinned-date test failing for the right reason
+  // while the real-world path (setup on the same day, same date, so
+  // the seed is replaced rather than beaten) kept working.
+  const logged = list.filter((s) => !isSeedSnapshot(s));
+  const pool = logged.length > 0 ? logged : list;
+  return pool.reduce((best, s) => (s.date > best.date ? s : best));
 }
 
 /**

@@ -1,5 +1,9 @@
 import type { BudgetState } from "../../src/engine/types.ts";
 import { CATEGORIES } from "../../src/engine/model.ts";
+// The same rule the engine anchors on. It was written twice — here and,
+// from 2026-10-14, inside newestSnapshot, which has to know the same
+// thing so a seed never outranks a logged reading. One definition.
+import { isSeedSnapshot } from "../../src/engine/entities.ts";
 
 // Has this account been used yet?
 //
@@ -40,8 +44,7 @@ import { CATEGORIES } from "../../src/engine/model.ts";
  * checking has nothing to project, so the first-run screen is still
  * what it should be showing.
  */
-const isSeed = (s: { id: string; amount: number }) =>
-  s.id.startsWith("seed-") && s.amount === 0;
+const isSeed = isSeedSnapshot;
 
 /**
  * True when nothing in this account came from a person.
