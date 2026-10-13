@@ -21,12 +21,13 @@ import type { Session } from "@supabase/supabase-js";
 const PROVIDER_LABEL: Record<string, string> = { google: "Google", email: "Email", apple: "Apple", github: "GitHub" };
 
 export default function Settings({
-  session, onOpenAbout, onOpenExport, onOpenCategories, onClose,
+  session, onOpenAbout, onOpenExport, onOpenCategories, onOpenSetup, onClose,
 }: {
   session: Session;
   onOpenAbout: () => void;
   onOpenExport: () => void;
   onOpenCategories: () => void;
+  onOpenSetup: () => void;
   onClose: () => void;
 }) {
   const { state, commit, online, saving } = useBudget();
@@ -112,6 +113,17 @@ export default function Settings({
             label="Accounts you track"
             sub="Savings, investments and loans — add, rename, reorder, or set a loan's terms."
             onPress={onOpenCategories}
+          />
+          {/* The web keeps a Setup button in its header for the same
+              reason: somebody who skipped the six questions, or who
+              wiped their data, needs a way back to them. It adds what
+              you answer — it does not replace what is already there —
+              so it is described as adding rather than as starting
+              over. */}
+          <Row
+            label="Set up your budget"
+            sub="The six questions a new account is asked. Answers are added to what you already have."
+            onPress={onOpenSetup}
           />
           <Row label="About & tour" sub="What every screen does, and a walk through the four tabs." onPress={onOpenAbout} />
           <Row label="Export" sub="Ledger or Budget as CSV, or the whole account as a JSON backup." onPress={onOpenExport} />

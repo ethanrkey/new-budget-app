@@ -24,7 +24,11 @@ module.exports = {
   moduleNameMapper: {
     "^@babel/runtime/(.*)$": "<rootDir>/node_modules/@babel/runtime/$1",
   },
+  // `standard-navigation` ships ESM and is pulled in by expo-router,
+  // which Chrome reaches through Tour. Without it here, mounting the
+  // app's own shell fails to PARSE — which reads as a broken test
+  // rather than as a missing transform.
   transformIgnorePatterns: [
-    "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg))",
+    "node_modules/(?!(standard-navigation|(jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg))",
   ],
 };

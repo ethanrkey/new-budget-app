@@ -175,7 +175,8 @@ test("what reaches applySetup is what was on the screen", async () => {
 
   const answers = got[0]!;
   expect(answers.recurring!.map((r) => r.name)).toEqual(["Paycheck", "Rent", "Spotify", "Groceries"]);
-  expect(answers.recurring![1]!.dayOfMonth).toBe(5);
+  const rent = answers.recurring![1]!;
+  expect("cadence" in rent && rent.dayOfMonth).toBe(5);
 
   // And the end of the chain: the same function the web calls.
   const out = applySetup(normalize({}), answers, "2026-10-13");

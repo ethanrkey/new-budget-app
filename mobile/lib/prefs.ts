@@ -26,8 +26,14 @@ export type Prefs = {
    *  the budget. It also re-appears on a new device, which is correct —
    *  the steps it names are still the steps that matter. */
   firstRunDismissed: boolean;
+  /** The six-step setup flow, finished or left. Per device like the
+   *  rest, and here for one reason the account flag cannot cover:
+   *  Skip writes `hasSeenOnboarding`, and offline that write cannot
+   *  land. Nobody should be stuck in a wizard they already closed
+   *  because their train went into a tunnel. */
+  setupDismissed: boolean;
 };
-export const DEFAULT_PREFS: Prefs = { heroCollapsed: false, debtsExpanded: false, firstRunDismissed: false };
+export const DEFAULT_PREFS: Prefs = { heroCollapsed: false, debtsExpanded: false, firstRunDismissed: false, setupDismissed: false };
 
 export async function loadPrefs(): Promise<Prefs> {
   try {

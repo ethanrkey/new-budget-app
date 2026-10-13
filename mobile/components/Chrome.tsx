@@ -11,6 +11,9 @@ import AnchorStrip from "./AnchorStrip";
 import ExportSheet from "./ExportSheet";
 import BottomSheet from "./BottomSheet";
 import Tour from "./Tour";
+import Setup from "./Setup";
+import { shouldRunSetup } from "../lib/setup";
+import { applySetup, markSetupSeen, type SetupAnswers } from "../../src/engine/setup.ts";
 
 // WHERE THE WEB'S FIVE HEADER ITEMS LIVE ON A PHONE.
 //
@@ -21,8 +24,12 @@ import Tour from "./Tour";
 // tabs for navigation rather than for administration.
 //
 // Import is deliberately absent — picking a CSV on a phone is awkward
-// and import is where the duplicate-snapshot bug lived. Setup folds into
-// onboarding, which is its own backlog item.
+// and import is where the duplicate-snapshot bug lived.
+//
+// SETUP IS NOT BEHIND THE BUTTON FOR A NEW ACCOUNT, it is in front of
+// one — see the Setup block below. It is also IN the list, because the
+// web keeps a Setup button in its header and somebody who skipped has
+// to be able to come back to it. Same flow either way.
 type Screen = "settings" | "about" | "categories" | null;
 
 const ChromeCtx = createContext<{ open: () => void }>({ open: () => {} });
@@ -32,9 +39,40 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   const [screen, setScreen] = useState<Screen>(null);
   const [exporting, setExporting] = useState(false);
   const [touring, setTouring] = useState(false);
-  const { state } = useBudget();
+  // Asked for from Settings, as opposed to met on arrival.
+  const [setupAgain, setSetupAgain] = useState(false);
+  const { state, commit, online, saving, prefs, setPref } = useBudget();
   const insets = useSafeAreaInsets();
   const value = useMemo(() => ({ open: () => setScreen("settings") }), []);
+
+  // PHASE 3: who gets met with the flow. The three conditions and the
+  // reason for each are in lib/setup.ts; the short version is that it
+  // is a brand-new account that has not already done this on the web.
+  const runSetup = setupAgain || (!!state && shouldRunSetup(state, prefs.setupDismissed));
+
+  async function finishSetup(answers: SetupAnswers) {
+    // One commit, so a half-applied setup cannot exist: the rules, the
+    // anchor, the accounts and the flag land together or not at all.
+    const ok = await commit((s) => markSetupSeen(applySetup(s, answers)), "Setup");
+    if (!ok) return;          // the Done screen stays up; the failure modal explains
+    setPref("setupDismissed", true);
+    setSetupAgain(false);
+    // The web shows the tour straight after setup, and the phone has
+    // the same four stops in the same words (src/content/tour.ts).
+    setTouring(true);
+  }
+
+  function leaveSetup() {
+    // The device pref first, because it always works. Somebody who
+    // closed this must not meet it again on the next launch even if
+    // the account write cannot land.
+    setPref("setupDismissed", true);
+    setSetupAgain(false);
+    // The account flag only when there is a network to write it on. A
+    // Skip is not worth a failure modal, and the device pref has
+    // already done the job that matters on this phone.
+    if (online) void commit(markSetupSeen, "Setup skipped");
+  }
 
   return (
     <ChromeCtx.Provider value={value}>
@@ -65,6 +103,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
               session={session}
               onOpenAbout={() => setScreen("about")}
               onOpenCategories={() => setScreen("categories")}
+              onOpenSetup={() => { setScreen(null); setSetupAgain(true); }}
               onOpenExport={() => setExporting(true)}
               onClose={() => setScreen(null)}
             />
@@ -87,6 +126,14 @@ export function Chrome({ session, children }: { session: Session; children: Reac
           {exporting && state && <ExportSheet state={state} onClose={() => setExporting(false)} />}
         </BottomSheet>
       </Modal>
+
+      {/* Over everything, including the tab bar and the settings
+          button: a new account has nothing to look at behind it, and a
+          half-visible app underneath would read as a thing to dismiss.
+          Skipping lands on the Ledger's three-step guide, which
+          already computes exactly what is still outstanding — so
+          quitting partway has a resume state for free. */}
+      {runSetup && <Setup busy={saving} onComplete={finishSetup} onSkip={leaveSetup} />}
 
       {touring && <Tour onClose={() => setTouring(false)} />}
     </ChromeCtx.Provider>

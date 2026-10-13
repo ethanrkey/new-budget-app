@@ -1552,8 +1552,19 @@ what, not by size.
 7. ~~Capability parity audit, enumerate without fixing.~~ **RUN
    2026-10-12**, in its own section below the roadmap. Four real gaps,
    two of them arguably decisions. Nothing built from it until picked.
-8. ~~Onboarding that works cold on a phone.~~ **SHIPPED 2026-10-11 as a
-   signpost, not a wizard.** Google sign-in made it urgent rather than
+8. ~~Onboarding that works cold on a phone.~~ **CLOSED 2026-10-13. The
+   phone now has BOTH** — the full six-step flow in front of a new
+   account, and the three-step guide behind it for anyone who skips.
+   The entry below records the state on 2026-10-11, when the guide was
+   all there was and the wizard was deliberately unported; the decision
+   that overrode it ("most App Store users will never touch the web, so
+   the phone's setup cannot be the lesser version") and what was built
+   from it are in mobile item 15. The one sentence below that is now
+   wrong is kept rather than edited, because the reasoning it records
+   is why the answer to drift ended up being shared logic instead of no
+   wizard.
+
+   **SHIPPED 2026-10-11 as a signpost, not a wizard.** Google sign-in made it urgent rather than
    eventual: OAuth provisions a user on first sign-in, so an account
    can now be born on the phone. The scope collapsed once it was clear
    the phone ALREADY had every control — `+ Add` opens the editor in
@@ -1579,7 +1590,15 @@ what, not by size.
 
 **D. Mobile feature gaps, in build order**
 
-10. Quick entry — mobile item 3.
+10. ~~Quick entry — mobile item 3.~~ **DECIDED AGAINST on the phone,
+    2026-10-12, and now load-bearing.** `+ Add` on the Ledger already
+    opens the editor in add mode, and Quick Entry's whole point on the
+    web is not closing the modal between entries — which a full-screen
+    sheet on a phone does not have to solve. The decision has a visible
+    consequence as of 2026-10-13: the setup wizard's paycheck note
+    named Quick Entry, so that string is the one platform variant in
+    `src/content/setup.ts` and the phone's version names `+ Add` on the
+    Ledger instead.
 11. Loan and asset setup / edit terms — mobile item 5. Without it the
     loan card's own prompt has nowhere to go.
 12. Horizon control: device-local chip or synced setting — mobile item 10.
@@ -2214,33 +2233,79 @@ a port.
     over real fixtures, and this is a move, so the output must be
     byte-identical.
 
-    **Phase 2 — the phone's six steps (2 to 3 days).** Paycheck, rent,
-    other bills, groceries, balance, accounts. Same questions, same
-    order, same output. Built from the primitives already here
-    (BottomSheet, DatePicker, the editor's fields), with renderer tests
-    and mutations to match. Parity is by construction, because the
-    output is `applySetup`.
+    **Phase 2 — DONE 2026-10-13.** `mobile/components/Setup.tsx`, six
+    steps, same questions and same order as the web. It was built in
+    two commits because the first one had nothing to do with the
+    phone:
 
-    **Phase 3 — reconcile with the three-step guide (half a day).**
-    They answer different questions: the flow says "set me up", the
-    guide says "here is what is still missing". Recommendation: a new
-    account gets the flow, with a skip that lands on the guide, and the
-    guide keeps working for anyone who quit partway — it already
-    computes exactly what is outstanding, which is the resume state for
-    free.
+    - `src/content/setup.ts` now holds every string, the way
+      `about.ts` and `tour.ts` already hold theirs, and
+      `src/engine/setup.ts` gained the other half of the shared
+      definition — `paycheckRule`, `rentRule`, `billRules`,
+      `groceryRule`, `balanceAnswer`, `blankAccountRows`,
+      `startedAccountRows`, `incompleteAccountRows`,
+      `collectAccounts`. The WEB CALLS ALL OF IT, so this is a move,
+      not a second implementation. 87 checks in
+      `tests/setup.test.mjs`, up from 29.
+    - Each builder returns `null` for "nothing to add", which is what
+      makes a client's Continue and its Skip differ by one line.
+      "Skip discards what was typed" is therefore true on both
+      clients without either having to remember it.
 
-    **Three things to settle before Phase 2, none of them blocking
-    Phase 1:**
+    **What the phone has that the web does not: Back.** A 390pt screen
+    shows one question at a time, so a typo two steps ago is
+    unreachable without it — which is why the phone holds the whole
+    draft at once instead of committing step by step, and why
+    collected rules are keyed BY STEP. A list would have added a
+    second paycheck to anyone who walked back and forward, and there
+    is a test that does exactly that.
 
-    - The wizard's copy says "add the rest afterward with Quick Entry",
-      and the phone has no Quick Entry (mobile item 3). Either that
-      sentence gets a platform variant or Quick Entry gets built.
-    - The web copy is marked "Draft copy — expected to be edited" at
-      the top of `Onboarding.jsx` and the voice pass is coming. Put the
-      strings in `src/content/` when the flow is built, so the pass
-      touches one file and not two.
-    - Loan TERMS stay out of setup on both clients. That is a decision
-      already made and worth not quietly reversing on a bigger screen.
+    **The two steps that gate, for opposite reasons.** The balance step
+    has no Skip at all and says why on screen; zero is an answer and an
+    empty field is not. The accounts step can be empty but not
+    half-filled — an amount with no name blocks Finish and names the
+    missing half, which is the bug a real user found.
+
+    40 checks in `tests/mobile-setup.test.mjs` (in `npm test` and in the
+    mutation runner's `NODE_SUITES`), 8 renderer tests in
+    `mobile/__tests__/setupflow.test.tsx`, 4 more in `chrome.test.tsx`.
+
+    **Phase 3 — DONE 2026-10-13, as recommended.** A new account gets
+    the flow; Skip lands on the three-step guide, which already
+    computes exactly what is outstanding and is therefore the resume
+    state for free. Finishing every step leaves the guide with nothing
+    to say, so it hides itself.
+
+    Who is met with it, from `mobile/lib/setup.ts`:
+
+    - `settings.hasSeenOnboarding` is ACCOUNT data, so setup done on
+      the WEB counts on the phone. It is the web's own gate and it
+      already means "completed or skipped".
+    - `isNewAccount` as well, for an account predating the flag.
+      Asking a two-year user to set up their budget would be worse
+      than not asking a new one.
+    - a per-device `setupDismissed` pref, for the offline case: Skip
+      writes the account flag, and a write that cannot land must not
+      leave somebody stuck in a wizard they already closed.
+
+    Finishing is ONE commit — `markSetupSeen(applySetup(state, answers))`
+    — so a half-applied setup is not a state this app can be in, and
+    the tour opens afterward exactly as it does on the web. Settings
+    gained a "Set up your budget" row, matching the web's header
+    button, for someone who skipped or who wiped their data.
+
+    **The three things to settle first, all settled:**
+
+    - Quick Entry: not built on the phone (ranked item 10), so the
+      paycheck note is a `{web, mobile}` pair in `src/content/setup.ts`
+      and the phone's version names `+ Add` on the Ledger. It is the
+      only platform variant in the file.
+    - The strings are in `src/content/`, so the voice pass touches one
+      file rather than two. `Onboarding.jsx`'s "Draft copy — expected
+      to be edited" banner went with them.
+    - Loan TERMS stay out of setup on both clients. Not reversed on the
+      bigger screen: the accounts step still asks for a name and what
+      is owed now, and the Dashboard card still prompts for the rate.
 
 16. **Native tabs — the ThemeProvider question is SETTLED, 2026-10-12,
     from Expo's own page rather than from memory.** Decided to build;

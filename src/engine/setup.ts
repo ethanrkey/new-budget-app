@@ -33,6 +33,19 @@ export type SetupAccount = {
   group: "savings" | "investment" | "debt";
 };
 
+/**
+ * Setup has been completed OR skipped — the flag both clients gate on.
+ *
+ * It lives in `settings`, which means it is account data and syncs, and
+ * that is the behavior wanted: somebody who set up their budget on the
+ * web must not be asked again the first time they open the phone. It is
+ * deliberately not touched by Wipe Data either — a wipe is "start my
+ * numbers over", not "ask me the six questions again".
+ */
+export function markSetupSeen(state: BudgetState): BudgetState {
+  return { ...state, settings: { ...state.settings, hasSeenOnboarding: true } };
+}
+
 export type SetupAnswers = {
   recurring?: BudgetItem[];
   oneoffs?: BudgetItem[];
