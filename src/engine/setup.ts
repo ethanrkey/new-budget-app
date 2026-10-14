@@ -172,6 +172,41 @@ function positive(raw: string): number | null {
 const clampDay = (raw: string, fallback: number) =>
   Math.min(31, Math.max(1, Number(raw) || fallback));
 
+/**
+ * The first date a monthly rule due on `dom` should actually charge.
+ *
+ * THE BUG THIS EXISTS FOR, found on a device and on a fresh web
+ * account the same day (2026-10-15). `occurrenceDates` emits a rule's
+ * `startDate` VERBATIM as the first occurrence and only applies
+ * `dayOfMonth` from the second one onward. `billRules` was setting
+ * `startDate: today`, so every bill entered during setup charged on
+ * the day setup was run and only found its real day the month after.
+ *
+ * Entering Spotify (due 10th), HBO (14th) and Gym (20th) on October
+ * 14th put all three on October 14th. Spotify was then counted twice —
+ * its real October charge is already inside the balance setup just
+ * asked for — and Gym was simply on the wrong day.
+ *
+ * So the first occurrence is the next time that day of the month comes
+ * around, today included. A bill due the 10th entered on the 14th
+ * starts in November; one due the 20th starts this month.
+ *
+ * MONTH-END CLAMPS DOWN, never over: "the 31st" in a 30-day month is
+ * the 30th, not the 1st of the next one. A rule keeps `dayOfMonth: 31`
+ * either way, so the long months still charge on the 31st — the clamp
+ * is about where it LANDS, not about what it means.
+ */
+export function firstMonthlyOn(dom: number, today: ISODate): ISODate {
+  const t = new Date(today + "T00:00:00");
+  for (const monthsAhead of [0, 1]) {
+    const d = new Date(t.getFullYear(), t.getMonth() + monthsAhead, 1);
+    d.setDate(Math.min(dom, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+    if (toISODate(d) >= today) return toISODate(d);
+  }
+  // Unreachable: next month's clamped day is always after today.
+  return today;
+}
+
 // THE `as BudgetItem` CASTS BELOW ARE LOAD-BEARING, not laziness.
 // `order` is required on the type and is deliberately NOT set here:
 // `upsertItem` assigns it from the state the rule is being inserted
@@ -206,12 +241,16 @@ export function rentRule(
   const amt = positive(amount);
   if (amt == null) return null;
   const dom = clampDay(day, 1);
-  const d = new Date(today + "T00:00:00");
-  const lastOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  d.setDate(Math.min(dom, lastOfMonth));
+  // RENT HAD A QUIETER VERSION OF THE SAME BUG. It clamped into the
+  // CURRENT month unconditionally, so rent due on the 1st, entered on
+  // the 14th, started on a date that had already passed. It looked
+  // right because setup also sets the checking balance as of today and
+  // `buildEvents` drops everything before the anchor — so the stray
+  // occurrence was swallowed rather than fixed, and would have
+  // reappeared the moment anyone back-dated their balance.
   return {
     id: uid(), name: "Rent", amount: amt, category: "bill",
-    cadence: "monthly", startDate: toISODate(d), dayOfMonth: dom,
+    cadence: "monthly", startDate: firstMonthlyOn(dom, today), dayOfMonth: dom,
   } as BudgetItem;
 }
 
@@ -227,9 +266,10 @@ export function billRules(rows: BillRow[], today: ISODate = todayISO()): BudgetI
   for (const b of rows) {
     const amt = positive(b.amount);
     if (!b.name.trim() || amt == null) continue;
+    const dom = clampDay(b.day, dayOf(today));
     out.push({
       id: uid(), name: b.name.trim(), amount: amt, category: "bill",
-      cadence: "monthly", startDate: today, dayOfMonth: clampDay(b.day, dayOf(today)),
+      cadence: "monthly", startDate: firstMonthlyOn(dom, today), dayOfMonth: dom,
     } as BudgetItem);
   }
   return out;

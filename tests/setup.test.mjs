@@ -12,6 +12,7 @@ import { normalize } from "../src/engine/stateShape.ts";
 import {
   applySetup, paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
   blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
+  firstMonthlyOn,
 } from "../src/engine/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
 import { computeLedger } from "../src/engine/compute.ts";
@@ -203,6 +204,69 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   eq("...but the rule still remembers the 31st", rentRule("1450", "31", "2026-11-05").dayOfMonth, 31);
   eq("a nonsense day falls back to the 1st", rentRule("1450", "", TODAY).dayOfMonth, 1);
   eq("...and 99 is clamped, not stored", rentRule("1450", "99", TODAY).dayOfMonth, 31);
+}
+
+// ---- THE DUE DAY IS THE FIRST CHARGE, not the day setup was run -----
+//
+// Reported from a device and from a fresh web account on the same day:
+// Spotify (due 10th), HBO (14th) and Gym (20th) entered on October
+// 14th all charged on October 14th. `occurrenceDates` emits a rule's
+// startDate verbatim and only applies dayOfMonth from the SECOND
+// occurrence, and billRules was passing today as the start.
+{
+  const rows = [
+    { name: "Spotify", amount: "11.99", day: "10" },   // before today
+    { name: "HBO", amount: "16", day: "14" },          // today
+    { name: "Gym", amount: "40", day: "20" },          // after today
+  ];
+  // TODAY here is 2026-10-12, so the 14th and the 20th are both still
+  // ahead and the 10th has gone.
+  const out = billRules(rows, TODAY);
+  eq("a bill due later this month starts this month",
+    [out.find((r) => r.name === "HBO").startDate, out.find((r) => r.name === "Gym").startDate],
+    ["2026-10-14", "2026-10-20"]);
+  // The one that was double-counted: its October charge is already
+  // inside the balance setup just asked for.
+  eq("a bill whose day has passed starts NEXT month",
+    out.find((r) => r.name === "Spotify").startDate, "2026-11-10");
+  eq("...and every one of them keeps the day it was given",
+    out.map((r) => r.dayOfMonth), [10, 14, 20]);
+  // THE REPORTED SYMPTOM, as an assertion: three bills, three
+  // different dates, none of them the day setup was run.
+  eq("nothing piles up on the day setup was run",
+    out.filter((r) => r.startDate === TODAY).length, 0);
+  eq("...and no two of them share a date",
+    new Set(out.map((r) => r.startDate)).size, 3);
+
+  // A bill due on the very day setup runs starts that day — it has not
+  // been charged yet as far as anyone here knows.
+  eq("a bill due today starts today",
+    billRules([{ name: "HBO", amount: "16", day: "14" }], "2026-10-14")[0].startDate, "2026-10-14");
+}
+{
+  // Month-end clamps DOWN, never over into the next month.
+  eq("the 31st of a 30-day month lands on the 30th",
+    firstMonthlyOn(31, "2026-11-05"), "2026-11-30");
+  eq("...and the 31st in February lands on the 28th",
+    firstMonthlyOn(31, "2027-02-01"), "2027-02-28");
+  // A clamped day that equals today still counts as today, not next month.
+  eq("the 31st on the last day of a 30-day month is today",
+    firstMonthlyOn(31, "2026-11-30"), "2026-11-30");
+  eq("the day after that rolls to next month's clamp",
+    firstMonthlyOn(31, "2026-12-01"), "2026-12-31");
+  // Crossing a year boundary.
+  eq("a passed day in December starts in January",
+    firstMonthlyOn(5, "2026-12-20"), "2027-01-05");
+}
+{
+  // Rent had the quieter version: it clamped into the CURRENT month
+  // unconditionally, so rent due on the 1st and entered on the 12th
+  // started on a date that had already gone.
+  eq("rent due before today starts next month",
+    rentRule("1450", "1", TODAY).startDate, "2026-11-01");
+  eq("...and keeps the 1st as its day", rentRule("1450", "1", TODAY).dayOfMonth, 1);
+  eq("rent due later this month still starts this month",
+    rentRule("1450", "28", TODAY).startDate, "2026-10-28");
 }
 
 // ---- the bills step's defaulted day is TODAY, shown not guessed ------
