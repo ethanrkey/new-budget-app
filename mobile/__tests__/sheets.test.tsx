@@ -376,7 +376,7 @@ describe("the dashboard", () => {
     expect(screen.getByTestId("sparkline-upto")).toBeTruthy();
   });
 
-  test("scrubbing splits the line at the finger and keeps the split after release", async () => {
+  test("scrubbing splits the line at the finger, and release snaps back to the present", async () => {
     await render(<Sparkline points={snaps} color="#8bd4ff" width={240} />);
     const surface = scrubSurface();
 
@@ -392,14 +392,16 @@ describe("the dashboard", () => {
     expect(screen.getByTestId("sparkline-past")).toBeTruthy();
     expect(screen.getByTestId("sparkline-guide")).toBeTruthy();
 
-    // LETTING GO IS "THAT ONE", NOT "NEVER MIND". The readout, the
-    // split and the guide line all stay — the guide line especially,
-    // because a number with nothing pointing at where it came from is
-    // worse than no number.
+    // LETTING GO RETURNS TO THE PRESENT. The card's headline number is
+    // the current balance, and a readout left showing some date in
+    // March quietly disagrees with it — every glance afterwards has to
+    // work out which of the two is today's. The reading is a second's
+    // drag away, so the chart tells one story when nobody is touching
+    // it.
     await act(async () => { surface.props.onResponderRelease(touch(0)); });
-    expect(screen.getByTestId("sparkline-readout")).toHaveTextContent("$100.00");
-    expect(screen.getByTestId("sparkline-past")).toBeTruthy();
-    expect(screen.getByTestId("sparkline-guide")).toBeTruthy();
+    expect(screen.getByTestId("sparkline-readout")).toHaveTextContent("$300.00");
+    expect(screen.queryByTestId("sparkline-guide")).toBeNull();
+    expect(screen.queryByTestId("sparkline-past")).toBeNull();
   });
 
   test("one haptic tick per point, not per touch event", async () => {

@@ -70,12 +70,20 @@ const PAST_DIM = 0.22;
 export function Sparkline({
   points, color, width, height = SPARKLINE_HEIGHT,
 }: { points: { date: string; amount: number }[]; color: string; width: number; height?: number }) {
-  // WHERE YOU LEFT IT. `active` survives the release: lifting a finger
-  // is not "never mind", it is "that one". Snapping back to the newest
-  // reading meant the chart forgot the answer the moment you stopped
-  // asking, which made it feel like it had not heard you. `touching`
-  // is separate, because the crosshair belongs to the gesture and the
-  // selection does not.
+  // SNAP BACK TO THE PRESENT on release, reversed 2026-10-15 after
+  // living with the other way on a device.
+  //
+  // The old reasoning was that lifting a finger means "that one" and
+  // not "never mind", so the selection survived. On a real chart it
+  // reads differently: the card's headline number is the CURRENT
+  // balance, and a readout left showing some date in March quietly
+  // disagrees with it. Every glance afterwards has to work out which
+  // of the two numbers is today's. Snapping back costs nothing —
+  // the reading is a second's drag away — and keeps the card telling
+  // one story when nobody is touching it.
+  //
+  // `touching` stays separate from `active` because the crosshair
+  // belongs to the gesture; they simply now end together.
   const [active, setActive] = useState<number | null>(null);
   const [touching, setTouching] = useState(false);
   const PAD = 8;
@@ -157,12 +165,11 @@ export function Sparkline({
     // Both ends of the scrub are marked. Letting go of a chart that
     // was following your finger is a state change worth feeling.
     //
-    // `active` SURVIVES THE RELEASE on purpose — lifting a finger is
-    // "that one", not "never mind". Only `touching` ends, and all it
-    // controls is emphasis: the crosshair and the readout stay put,
-    // quieter.
-    onPanResponderRelease: () => { setTouching(false); feel.selection(); },
-    onPanResponderTerminate: () => { setTouching(false); feel.selection(); },
+    // RELEASE CLEARS THE SELECTION, so the readout returns to the
+    // current value and the guide line goes with it. See the note on
+    // `active` above for why this is the way round it is.
+    onPanResponderRelease: () => { setTouching(false); setActive(null); lastTick.current = null; feel.selection(); },
+    onPanResponderTerminate: () => { setTouching(false); setActive(null); lastTick.current = null; feel.selection(); },
   }), [nearest, points.length]);
 
   if (points.length < 2 || !geom) {
