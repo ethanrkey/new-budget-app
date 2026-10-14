@@ -16,6 +16,7 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "bundleIdentifier": "app.keybudget",
+      "icon": "./assets/images/KeyBudget.icon",
       "supportsTablet": false,
       "usesAppleSignIn": true,
       "infoPlist": {

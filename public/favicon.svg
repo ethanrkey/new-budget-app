@@ -1,8 +1,43 @@
 <svg role="img" aria-label="Key Budget" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  
+  <!-- THE ONE DEFINITION OF THE MARK. The web uses this file directly;
+       mobile/assets/images/icon.png, the splash mark and the iOS
+       KeyBudget.icon are all generated from it by
+       scripts/make_app_icon.mjs, which READS the geometry below rather
+       than restating it. Edit the key here and everywhere follows. -->
+  <defs>
+    <!-- Metal, not paint. A flat fill reads as a sticker at icon size;
+         a warm highlight at the top-left falling to a deeper gold at
+         the bottom-right reads as a struck object catching light from
+         where light usually comes from. Three stops rather than two:
+         the midpoint is where the base gold stays itself, so the mark
+         is still the same color it has always been and only its edges
+         move. On iOS 26 the system adds its own specular pass on top
+         of this, so the gradient is deliberately subtle — two of them
+         fighting looks like plastic. -->
+    <!-- userSpaceOnUse, AND THAT IS NOT A STYLE CHOICE. The default,
+         objectBoundingBox, resolves against each shape's own box — and
+         two of the three shapes below are straight lines, whose
+         bounding boxes have zero height or zero width. SVG says an
+         element with a degenerate bounding box and objectBoundingBox
+         units is NOT RENDERED, so the first version of this gradient
+         silently deleted the key's shaft and tooth and left the ring
+         floating on its own. Caught by sampling the rendered pixels
+         rather than by looking at it.
+         The coordinates span the whole mark's box (x 77..429,
+         y 157..363), which is also the right answer for its own sake:
+         a struck piece of metal is lit as one object, not as three
+         strokes each with their own little highlight. -->
+    <linearGradient id="keyGold" gradientUnits="userSpaceOnUse"
+                    x1="77" y1="157" x2="429" y2="363">
+      <stop offset="0" stop-color="#f7d184"/>
+      <stop offset="0.45" stop-color="#eebb4d"/>
+      <stop offset="1" stop-color="#c8902a"/>
+    </linearGradient>
+  </defs>
   <rect width="512" height="512" rx="96" fill="#111827"/>
-  <g transform="translate(0 0) scale(1)">
-    <circle cx="176" cy="256" r="74" fill="none" stroke="#eebb4d" stroke-width="50"/>
-    <path d="M250 256 H 404" fill="none" stroke="#eebb4d" stroke-width="50" stroke-linecap="round"/>
-    <path d="M372 256 V 340" fill="none" stroke="#eebb4d" stroke-width="46" stroke-linecap="round"/></g>
+  <g id="mark">
+    <circle cx="176" cy="256" r="74" fill="none" stroke="url(#keyGold)" stroke-width="50"/>
+    <path d="M250 256 H 404" fill="none" stroke="url(#keyGold)" stroke-width="50" stroke-linecap="round"/>
+    <path d="M372 256 V 340" fill="none" stroke="url(#keyGold)" stroke-width="46" stroke-linecap="round"/>
+  </g>
 </svg>
