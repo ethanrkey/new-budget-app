@@ -130,4 +130,12 @@ test("adding a loan from the collapsed card expands the section too", async () =
   expect(await screen.findByText("Add a loan")).toBeOnTheScreen();
   // The form opens on the debt kind, so it asks a loan's questions.
   expect(screen.getByLabelText("Original amount")).toBeOnTheScreen();
+
+  // AND THE SECTION IS OPEN BEHIND IT, which is what this test is
+  // named for and did not actually check until the mutation audit
+  // pointed out that nothing could kill it. The new loan lands at the
+  // end of the list, and a collapsed card that silently grew by one
+  // is worse than useless.
+  expect(screen.getByLabelText("Minimize")).toBeOnTheScreen();
+  expect(screen.queryByText("Debt")).toBeNull();
 });

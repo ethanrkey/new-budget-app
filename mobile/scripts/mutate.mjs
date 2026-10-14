@@ -16,7 +16,7 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-14: 106 mutations, 106 killed. (2026-10-13: 94/86.)
+// Measured 2026-10-15: 113 mutations, 113 killed. (2026-10-13: 94/86.)
 //
 // The 2026-10-13 note, kept because it is this file's whole argument: — one
 // survived and two new tests could not be killed by anything:
@@ -332,6 +332,28 @@ const MUTATIONS = [
    "  return { ...state, accountSnapshots: { ...state.accountSnapshots, [accountId]: list.filter((s) => s.id !== snapshotId) } };"],
   ["a seed at zero outranks a reading a person logged", "../src/engine/entities.ts",
    "  const pool = logged.length > 0 ? logged : list;", "  const pool = list;"],
+
+  // ---- the Dashboard's sections and the scrub's tick, 2026-10-15.
+  // The run before this reported seven renderer tests that nothing
+  // could reach — five of them the Dashboard work from the day
+  // before, which went in without entries here.
+  ["the savings section is labeled as the loans one", "app/(tabs)/dashboard.tsx",
+   "        label={COPY.addAsset.label}\n        body={COPY.addAsset.body}\n        cta={COPY.addAsset.cta}",
+   "        label={COPY.addLoan.label}\n        body={COPY.addLoan.body}\n        cta={COPY.addLoan.cta}"],
+  ["an empty debt section shows an overview of nothing", "app/(tabs)/dashboard.tsx",
+   "      {debts.length === 0 ? (", "      {false ? ("],
+  ["the collapsed debt card stops naming the loans", "app/(tabs)/dashboard.tsx",
+   "        {summary.loans.map((loan) => (", "        {[].map((loan) => (" ],
+  ["expanding drops the add card, so the loans shuffle up", "app/(tabs)/dashboard.tsx",
+   "      ) : (\n        <AddCard\n          label={COPY.addLoan.label}", "      ) : (\n        <AddCardOff\n          label={COPY.addLoan.label}"],
+  ["adding a loan from the collapsed card leaves it collapsed", "app/(tabs)/dashboard.tsx",
+   'onAddLoan={() => { animate(); setPref("debtsExpanded", true); setAdding("debt"); }}',
+   'onAddLoan={() => { animate(); setAdding("debt"); }}'],
+
+  ["the scrub ticks on every touch event, not every point", "lib/charts.tsx",
+   "    if (lastTick.current === i) return;", "    // mutated"],
+  ["setup ignores the payday it just asked for", "../src/engine/setup.ts",
+   "  const start = payday >= today ? payday : today;", "  const start = today;"],
 ];
 
 const killedBy = new Map();

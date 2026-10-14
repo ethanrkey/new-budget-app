@@ -510,6 +510,32 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **1.0.0 (7) was built and submitted 2026-10-15.** The Sunday-priority
+  setup fixes plus the ledger, form and Budget-order work, and two
+  things from testing build 6 on a device: the icon's key back to
+  build 5's size, and the scrub snapping back to the present on
+  release.
+
+  **THE SETUP BUGS ARE THE ones that mattered**, because every tester
+  meets them first and two of them corrupted the forecast rather than
+  just annoying somebody:
+
+  1. Monthly bills from setup all charged on the day setup was run.
+     `occurrenceDates` emits a rule's `startDate` verbatim as its
+     first occurrence and only applies `dayOfMonth` from the second
+     one, and `billRules` passed today. A bill whose day had already
+     passed was therefore counted twice — once inside the balance
+     setup asks for, once as a fresh charge. Rent had a quieter
+     version of the same bug, hidden only because the anchor swallowed
+     it.
+  2. The first paycheck was assumed to be today. Paid this morning and
+     the money is already in the balance, so the forecast runs a whole
+     paycheck high; paid next week and every date is wrong. Setup asks
+     now.
+  3. Groceries were saved as a fixed bill despite the step asking for
+     "a rough estimate". They carry `variable: true` now, which is
+     what the Spending tab's whole comparison needs.
+
 - **1.0.0 (6) was built and submitted 2026-10-14**, runtime version
   `957dfd71…`. It is the first build with the layered iOS 26 icon, and
   it carries every JS change from the same day in the binary — the
