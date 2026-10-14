@@ -510,6 +510,16 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **1.0.0 (6) was built and submitted 2026-10-14**, runtime version
+  `957dfd71…`. It is the first build with the layered iOS 26 icon, and
+  it carries every JS change from the same day in the binary — the
+  rebuilt chart scrub, the Dashboard's three debt states and its add
+  cards — so **no over-the-air update was published for it**: an
+  update would have been byte-for-byte what is already inside.
+  Build 5 stays on `cf6120cc…` and is superseded rather than updated,
+  because the icon is a native change and native changes are exactly
+  what the runtime version exists to keep apart.
+
 - **1.0.0 (5) WAS TESTED ON A DEVICE, 2026-10-14.** Working, in the
   author's words: the native tab bar ("10/10"), haptics, the anchor on
   all four tabs, the read-only Budget, contributions with the right
@@ -567,10 +577,20 @@ written here in the same sitting** — there is no other record of it.
   So the rule is: **submit config goes in at the same moment as a
   native change, never on its own.** A commit that already moves the
   fingerprint can carry it for free; a commit that does not, must not.
-  Next submission, try `EXPO_ASC_APP_ID=6822133130 eas submit
-  --platform ios --profile production --non-interactive --id <build>`
-  first — untested, and if the CLI ignores it, add the field to
-  `eas.json` in whatever commit is already making a build.
+
+  **`EXPO_ASC_APP_ID` DOES NOT WORK — tested 2026-10-14.** With it
+  set, `eas submit --non-interactive` still answers "Set ascAppId in
+  the submit profile (eas.json) or re-run this command in interactive
+  mode." So there are exactly two ways to submit:
+
+  - **a pty with the cached Apple session**, which is what has been
+    used for builds 5 and 6 and keeps `eas.json` clean. The only
+    prompt is "Apple ID:", prefilled; one Enter, and the session in
+    `~/.app-store` answers the rest with no password and no 2FA; or
+  - **`ascAppId: "6822133130"` in `eas.json`**, which makes it one
+    non-interactive command and moves the fingerprint — so it may
+    only be added in a commit that is already producing a build, and
+    the build produced must be the one that goes out.
 - **1.0.0 (2) was installed on a real iPhone via TestFlight**, internal
   group "Team (Expo)", 2026-10-12. Google sign-in verified on the
   device with the native account sheet, and the emailed code verified
