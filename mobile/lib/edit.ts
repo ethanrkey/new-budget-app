@@ -9,6 +9,7 @@
 //
 // Everything returns a `(state) => state` so the caller hands it straight
 // to `commit()` and nothing in a component ever touches engine internals.
+import { defaultCategoryFor } from "../../src/shared/entryDefaults.ts";
 import { upsertItem, deleteItem, setOverride, clearOverride, orphanedOverrideDates } from "../../src/engine/mutate.ts";
 import { uid, todayISO } from "../../src/engine/model.ts";
 import type { BudgetState, BudgetItem, RecurringItem, ISODate, Cadence } from "../../src/engine/types.ts";
@@ -42,7 +43,10 @@ export type Draft = {
 
 export function blankDraft(today: ISODate = todayISO()): Draft {
   return {
-    name: "", amount: "", category: "bill", recurring: false,
+    // A new draft opens on "Just once", so it opens on One-off. The
+    // rule lives in src/shared/entryDefaults.ts because three forms
+    // across two clients had each hard-coded "bill".
+    name: "", amount: "", category: defaultCategoryFor("oneoff"), recurring: false,
     date: today, cadence: "monthly", startDate: today, endDate: "", variable: false,
   };
 }

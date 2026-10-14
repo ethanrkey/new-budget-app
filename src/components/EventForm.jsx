@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
+import { initialCategory, categoryOnModeChange } from "../shared/entryDefaults.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
 const money = (n) =>
@@ -20,7 +21,17 @@ export default function EventForm({
   const [mode, setMode] = useState(initial?.cadence || presetCategory ? "recurring" : "oneoff");
   const [name, setName] = useState(initial?.name ?? "");
   const [amount, setAmount] = useState(initial?.amount ?? "");
-  const [category, setCategory] = useState(initial?.category ?? presetCategory ?? "bill");
+  // The default follows the tab until the user disagrees once. See
+  // src/shared/entryDefaults.ts for why it then stops following.
+  const [category, setCategory] = useState(
+    initialCategory(initial?.cadence || presetCategory ? "recurring" : "oneoff",
+      { saved: initial?.category ?? null, presetCategory })
+  );
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const switchMode = (next) => {
+    setMode(next);
+    setCategory((c) => categoryOnModeChange(next, c, { touched: categoryTouched, presetCategory }));
+  };
   const [date, setDate] = useState(initial?.date ?? todayISO());
   const [cadence, setCadence] = useState(initial?.cadence ?? "monthly");
   const [startDate, setStartDate] = useState(initial?.startDate ?? todayISO());
@@ -190,7 +201,7 @@ export default function EventForm({
           {["oneoff", "recurring"].map((m) => (
             <button
               key={m}
-              onClick={() => setMode(m)}
+              onClick={() => switchMode(m)}
               className={`flex-1 py-2 rounded-lg text-sm font-medium capitalize transition ${
                 mode === m
                   ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
@@ -215,7 +226,7 @@ export default function EventForm({
             </div>
             <div className="flex-1">
               <label className={label}>Category</label>
-              <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
+              <select className={field} value={category} onChange={(e) => { setCategoryTouched(true); setCategory(e.target.value); }}>
                 {isOrphan && <option value={category}>Uncategorized (deleted)</option>}
                 {Object.entries(CATEGORIES).map(([k, v]) => (
                   <option key={k} value={k}>{v.label}</option>

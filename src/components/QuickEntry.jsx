@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
+import { defaultCategoryFor, categoryOnModeChange } from "../shared/entryDefaults.ts";
 
 const money = (n) =>
   Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -20,7 +21,13 @@ export default function QuickEntry({ onAdd, onRemove, onClose, trackerCategories
   const [mode, setMode] = useState("oneoff");
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("bill");
+  // Same rule as the full editor: the tab chooses until the user does.
+  const [category, setCategory] = useState(defaultCategoryFor("oneoff"));
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const switchMode = (next) => {
+    setMode(next);
+    setCategory((c) => categoryOnModeChange(next, c, { touched: categoryTouched }));
+  };
   const [date, setDate] = useState(todayISO());
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
   const categoryLabel = (id) => CATEGORIES[id]?.label ?? trackerCategories.find((c) => c.id === id)?.name ?? id;
@@ -95,7 +102,7 @@ export default function QuickEntry({ onAdd, onRemove, onClose, trackerCategories
             <button
               type="button"
               key={m}
-              onClick={() => setMode(m)}
+              onClick={() => switchMode(m)}
               className={`px-2.5 py-2 sm:py-1.5 rounded-lg text-xs font-medium capitalize transition ${
                 mode === m
                   ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
@@ -123,7 +130,7 @@ export default function QuickEntry({ onAdd, onRemove, onClose, trackerCategories
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
-        <select className={field} value={category} onChange={(e) => setCategory(e.target.value)}>
+        <select className={field} value={category} onChange={(e) => { setCategoryTouched(true); setCategory(e.target.value); }}>
           {Object.entries(CATEGORIES).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}

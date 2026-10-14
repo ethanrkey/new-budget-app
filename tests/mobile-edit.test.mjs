@@ -17,6 +17,7 @@ import {
   saveItem, saveOccurrence, resetOccurrence, removeItem,
   blankDraft, draftOf, draftError, overrideError, itemFrom, canTrackActuals,
 } from "../mobile/lib/edit.ts";
+import { defaultCategoryFor, categoryOnModeChange, initialCategory } from "../src/shared/entryDefaults.ts";
 import { backendKind, backendNotice } from "../mobile/lib/backend.ts";
 import { normalize } from "../src/engine/stateShape.ts";
 import { computeLedger } from "../src/engine/compute.ts";
@@ -235,6 +236,45 @@ console.log("\n== the harness itself ==");
 if (checks < 10) {
   console.log(`FAIL  this suite ran only ${checks} checks — truncated, or short-circuited before the end`);
   failures++;
+}
+
+// ---- THE DEFAULT CATEGORY FOLLOWS THE TAB ---------------------------
+//
+// Three forms — the web's EventForm and QuickEntry, the phone's
+// TransactionSheet — each hard-coded "bill". On the One-Time tab that
+// is wrong in the most ordinary case there is, so somebody adding a
+// one-off changed the category every single time and whoever forgot
+// got a recurring-shaped category on a single-dated item.
+{
+  eq("One-Time opens on One-off", defaultCategoryFor("oneoff"), "oneoff");
+  eq("Recurring opens on Fixed bill", defaultCategoryFor("recurring"), "bill");
+  eq("a blank draft starts on One-off, because it starts on Just once",
+    blankDraft("2026-10-14").category, "oneoff");
+
+  // Switching tabs moves it, while nobody has disagreed.
+  eq("switching to Recurring moves an untouched category",
+    categoryOnModeChange("recurring", "oneoff", { touched: false }), "bill");
+  eq("...and back again", categoryOnModeChange("oneoff", "bill", { touched: false }), "oneoff");
+
+  // AND STOPS THE MOMENT THEY DO. A default that keeps reasserting
+  // itself is an argument, not a default.
+  eq("a category the user picked survives a tab switch",
+    categoryOnModeChange("recurring", "income", { touched: true }), "income");
+  eq("...even when it happens to equal the other tab's default",
+    categoryOnModeChange("recurring", "oneoff", { touched: true }), "oneoff");
+
+  // The Dashboard's "+ Add a loan" shortcut has already chosen on the
+  // user's behalf — it is the reason the form was opened at all.
+  eq("a preset category outranks the tab",
+    categoryOnModeChange("oneoff", "sl", { touched: false, presetCategory: "sl" }), "sl");
+
+  // Editing keeps what was saved. The saved category is a fact about
+  // the item, not a default to be reconsidered.
+  eq("editing keeps the saved category", initialCategory("oneoff", { saved: "bill" }), "bill");
+  eq("...even against a preset", initialCategory("recurring", { saved: "income", presetCategory: "sl" }), "income");
+  eq("a preset wins when there is nothing saved",
+    initialCategory("oneoff", { presetCategory: "sl" }), "sl");
+  eq("and with neither, the tab decides", initialCategory("recurring"), "bill");
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S)`);

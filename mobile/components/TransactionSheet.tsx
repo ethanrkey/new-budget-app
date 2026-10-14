@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
+import { categoryOnModeChange } from "../../src/shared/entryDefaults.ts";
 import { CADENCES } from "../../src/engine/model.ts";
 import { blankDraft, draftOf, draftError, overrideError, canTrackActuals, type Draft } from "../lib/edit";
 import type { BudgetItem, BudgetState, ISODate, Cadence } from "../../src/engine/types.ts";
@@ -54,6 +55,22 @@ export default function TransactionSheet({
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setDraft((d) => ({ ...d, [k]: v }));
+
+  // THE CATEGORY FOLLOWS THE REPEATS CHIPS UNTIL THE USER DISAGREES.
+  // "Just once" means One-off and a cadence means Fixed bill, which
+  // is what the chips already say in words — but only while nobody
+  // has picked a category themselves. A default that keeps
+  // reasserting itself is an argument, not a default. The rule is
+  // shared with the web's two forms: src/shared/entryDefaults.ts.
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const pickCategory = (id: string) => { setCategoryTouched(true); set("category", id); };
+  const setRepeats = (recurring: boolean, cadence?: Draft["cadence"]) =>
+    setDraft((d) => ({
+      ...d,
+      recurring,
+      ...(cadence ? { cadence } : {}),
+      category: categoryOnModeChange(recurring ? "recurring" : "oneoff", d.category, { touched: categoryTouched }),
+    }));
 
   // ---- Occurrence scope: one field, and nothing else is editable -------
   if (mode.kind === "occurrence") {
@@ -111,21 +128,21 @@ export default function TransactionSheet({
       <Field label="Category">
         <View style={styles.chips}>
           {[["income", "Income"], ["bill", "Fixed bill"], ["oneoff", "One-off"]].map(([id, label]) => (
-            <Chip key={id} on={draft.category === id} label={label} onPress={() => set("category", id)} />
+            <Chip key={id} on={draft.category === id} label={label} onPress={() => pickCategory(id!)} />
           ))}
           {cats.map((c) => (
-            <Chip key={c.id} on={draft.category === c.id} label={c.name} onPress={() => set("category", c.id)} />
+            <Chip key={c.id} on={draft.category === c.id} label={c.name} onPress={() => pickCategory(c.id)} />
           ))}
         </View>
       </Field>
 
       <Field label="Repeats">
         <View style={styles.chips}>
-          <Chip on={!draft.recurring} label="Just once" onPress={() => set("recurring", false)} />
+          <Chip on={!draft.recurring} label="Just once" onPress={() => setRepeats(false)} />
           {CADENCES.map((c) => (
             <Chip
               key={c} on={draft.recurring && draft.cadence === c} label={CADENCE_LABEL[c]}
-              onPress={() => setDraft((d) => ({ ...d, recurring: true, cadence: c }))}
+              onPress={() => setRepeats(true, c)}
             />
           ))}
         </View>
