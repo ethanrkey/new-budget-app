@@ -58,11 +58,55 @@ create table if not exists apple_revocations (
   -- anybody by; the row is the token and when it was dealt with.
   last_error    text
 );
+
+-- Retry bookkeeping. A failed revocation is retried rather than
+-- dropped — Apple still believes the grant is live, and dropping the
+-- row would make that permanent and invisible — but "retry" without a
+-- clock means hammering Apple once a minute for ever. The edge
+-- function waits an hour between attempts on the same row.
+alter table apple_revocations add column if not exists attempts        integer not null default 0;
+alter table apple_revocations add column if not exists last_attempt_at timestamptz;
 alter table apple_revocations enable row level security;
 revoke all on table apple_revocations from anon, authenticated;
 
 create index if not exists apple_revocations_pending
   on apple_revocations (queued_at) where revoked_at is null;
+
+-- ---------------------------------------------------------------------------
+-- ONE PENDING ROW PER TOKEN. Added 2026-10-14 after the queue held two
+-- rows for a single deleted account, and the timestamps said exactly
+-- what happened:
+--
+--   id=1  queued 2026-10-13T20:02:48.969148Z
+--   id=2  queued 2026-10-13T20:02:48.966760Z
+--
+-- 2.4 milliseconds apart — and `now()` in Postgres is TRANSACTION
+-- START time, so one statement inserting two rows would have given
+-- two identical timestamps. Two timestamps means two transactions.
+--
+-- The second caller is ours: `purgeDueAccounts()` runs from an effect
+-- in App.jsx on every load, as the backstop for pg_cron. Two of those
+-- landing milliseconds apart — a session refresh, two tabs, React
+-- running an effect twice — both see the same due row and the same
+-- token under the same snapshot, both queue it, and one of them wins
+-- the delete. Nothing is wrong with calling the purge twice; it is
+-- supposed to be safe to call from anywhere. So the queue is what has
+-- to be idempotent.
+--
+-- PARTIAL, on `revoked_at is null`, for two reasons. A token that has
+-- already been revoked and somehow comes back is harmless to queue
+-- again (Apple answers invalid_grant, which this treats as done), and
+-- the function BLANKS the token on success — so a plain unique index
+-- would collide on the second empty string.
+delete from apple_revocations a
+ using apple_revocations b
+ where a.revoked_at is null
+   and b.revoked_at is null
+   and a.refresh_token = b.refresh_token
+   and a.id > b.id;
+
+create unique index if not exists apple_revocations_one_pending_per_token
+  on apple_revocations (refresh_token) where revoked_at is null;
 
 -- ---------------------------------------------------------------------------
 -- The purge, with the queue write in front of the delete.
@@ -84,6 +128,10 @@ begin
   ), queued as (
     insert into apple_revocations (refresh_token)
     select t.refresh_token from apple_tokens t join due on t.user_id = due.user_id
+    -- Two concurrent purges see the same snapshot and queue the same
+    -- token twice. This is the whole fix; see the index above for the
+    -- evidence that it happened.
+    on conflict (refresh_token) where revoked_at is null do nothing
     returning 1
   ), gone as (
     delete from auth.users u using due where u.id = due.user_id returning u.id
@@ -97,32 +145,85 @@ revoke all on function purge_due_accounts() from public;
 grant execute on function purge_due_accounts() to authenticated;
 
 -- ---------------------------------------------------------------------------
--- DRAINING THE QUEUE. The edge function does the HTTP; something has to
--- call it. Two options, in order of preference:
+-- DRAINING THE QUEUE — RUN THIS, it is the half that was missing.
 --
--- 1. pg_cron + pg_net, so it runs whether or not anybody opens the app:
+-- Until 2026-10-14 the only scheduled job was `purge-due-accounts`, so
+-- rows went into this queue and nothing ever took them out. The purge
+-- worked; the revocation never ran once.
 --
---      select cron.schedule('drain-apple-revocations', '37 3 * * *', $$
---        select net.http_post(
---          url     := 'https://<project-ref>.supabase.co/functions/v1/apple-revoke',
---          headers := jsonb_build_object(
---            'Content-Type', 'application/json',
---            'Authorization', 'Bearer ' || '<service role key>')
---        );
---      $$);
+-- HOURLY, not daily. The queue is empty almost all the time, so the
+-- cost is a no-op HTTP call an hour, and the payoff is that a
+-- revocation queued by the client-side sweep at four in the afternoon
+-- does not wait until the small hours. It also lines up with the edge
+-- function's one-hour retry backoff: a row that failed is eligible
+-- again on the next tick, and not before.
 --
---    Scheduled twenty minutes after the purge, so the queue it drains
---    is the one that purge just filled.
+--   create extension if not exists pg_cron;
+--   create extension if not exists pg_net;
 --
--- 2. By hand, which is honest for a queue that is usually empty:
+-- THE KEY MUST BE THE LEGACY `eyJ...` service_role JWT, not the newer
+-- `sb_secret_...` one. Measured 2026-10-14: the functions gateway
+-- answers an `sb_secret_` bearer with 401 "Invalid API key" and never
+-- reaches the function. Store it in Vault rather than inlining it, so
+-- it is not sitting in `cron.job` in plain text:
 --
---      curl -s -X POST \
---        -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
---        https://<project-ref>.supabase.co/functions/v1/apple-revoke
+--   select vault.create_secret(
+--     '<legacy service_role JWT>', 'service_role_key',
+--     'Bearer token for cron-triggered edge functions');
 --
--- What is still pending, at any time:
+--   select cron.schedule('drain-apple-revocations', '37 * * * *', $$
+--     select net.http_post(
+--       url     := 'https://kjcvtpmorftjyejjskwm.supabase.co/functions/v1/apple-revoke',
+--       headers := jsonb_build_object(
+--         'Content-Type', 'application/json',
+--         'Authorization', 'Bearer ' ||
+--           (select decrypted_secret from vault.decrypted_secrets
+--             where name = 'service_role_key')),
+--       body    := '{}'::jsonb
+--     );
+--   $$);
 --
---   select count(*) from apple_revocations where revoked_at is null;
+-- By hand, any time — the same call the cron job makes:
+--
+--   curl -s -X POST \
+--     -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+--     https://kjcvtpmorftjyejjskwm.supabase.co/functions/v1/apple-revoke
+--
+-- ---------------------------------------------------------------------------
+-- CONFIRMING IT, which is three questions and not one.
+--
+-- 1. Is the queue empty?
+--
+--      select count(*) filter (where revoked_at is null) as pending,
+--             count(*) filter (where revoked_at is not null) as done
+--        from apple_revocations;
+--
+-- 2. Did each row actually get a revocation, and how hard was it?
+--
+--      select id, queued_at, revoked_at, attempts, last_error
+--        from apple_revocations order by queued_at;
+--
+--    `revoked_at` set and `last_error` null is the clean outcome. The
+--    token column is blanked on success on purpose — it has done its
+--    only job.
+--
+-- 3. Is the job actually scheduled, and did it run?
+--
+--      select jobname, schedule, active from cron.job;
+--      select jobname, status, start_time, return_message
+--        from cron.job_run_details d join cron.job j using (jobid)
+--       where jobname = 'drain-apple-revocations'
+--       order by start_time desc limit 5;
+--
+-- 4. And the question none of the above answers, because it lives at
+--    Apple rather than here: open account.apple.com -> Sign in with
+--    Apple, and look for Key Budget. A revoked grant disappears from
+--    that list and from the iPhone Passwords app. That is the only
+--    end-to-end proof; everything above is our side of it.
+--
+-- Two rows were queued and both were revoked by hand on 2026-10-14
+-- (`{"queued":2,"attempted":2,"revoked":2,"failed":[],"waiting":0}`),
+-- which is also the first time the revoke path had ever run.
 
 -- ---------------------------------------------------------------------------
 -- PROVE THE LOCK RATHER THAN TRUSTING IT. Run this after the tables
