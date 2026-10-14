@@ -13,7 +13,8 @@ import BottomSheet from "./BottomSheet";
 import Tour from "./Tour";
 import LogBalance, { currently } from "./LogBalance";
 import { updateAccountBalance } from "../../src/engine/mutate.ts";
-import { primaryAccount } from "../../src/engine/model.ts";
+import { primaryAccount, ledgerHorizonOf } from "../../src/engine/model.ts";
+import { rowsHiddenByAnchor } from "../../src/engine/compute.ts";
 import Setup from "./Setup";
 import { shouldRunSetup } from "../lib/setup";
 import { applySetup, markSetupSeen, type SetupAnswers } from "../../src/engine/setup.ts";
@@ -158,6 +159,10 @@ export function Chrome({ session, children }: { session: Session; children: Reac
           cta="Confirm"
           warn
           busy={saving}
+          // Only the CHECKING balance moves the forecast's starting
+          // point, so only this one asks. A tracked account's reading
+          // hides nothing.
+          hiddenRows={(date) => rowsHiddenByAnchor(state, date, ledgerHorizonOf(state))}
           onClose={() => setLogging(false)}
           onSubmit={async (amount, date) => {
             const ok = await commit(

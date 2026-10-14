@@ -1,5 +1,5 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
-import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay } from "../src/engine/compute.ts";
+import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay, rowsHiddenByAnchor } from "../src/engine/compute.ts";
 import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys, activeMonthKeys, fixedSoFar } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
@@ -1093,6 +1093,55 @@ check("deleteAccountSnapshot removes exactly that entry", deleteAccountSnapshot(
   const later = updateAccountBalance(backdatedFirst, "checking", 50, "2010-01-01");
   eq("between two logged readings the newer one wins",
     [later.accounts[0].balance, later.accounts[0].balanceAsOf], [50, "2010-01-01"]);
+}
+
+// ---- WHAT A NEW BALANCE WOULD HIDE -----------------------------------
+//
+// `buildEvents` drops every event strictly before the verified
+// balance's date, because that balance already contains them. Correct,
+// and silent: the list just gets shorter. The case that costs money is
+// a bill dated the 3rd that has NOT gone out — hiding it does not pay
+// it, and the forecast stays too high for ever.
+{
+  const horizon = "2026-12-31";
+  const base = normalize({
+    settings: { ledgerHorizon: horizon, budgetHorizon: horizon },
+    accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 1000, balanceAsOf: "2026-10-01", order: 0 }],
+    trackerCategories: [],
+    recurring: [],
+    oneoffs: [
+      { id: "o1", name: "Electric", amount: 120, category: "oneoff", date: "2026-10-03", order: 0 },
+      { id: "o2", name: "Rent", amount: 1450, category: "oneoff", date: "2026-10-14", order: 1 },
+      { id: "o3", name: "Gym", amount: 40, category: "oneoff", date: "2026-10-20", order: 2 },
+    ],
+  });
+
+  eq("moving the anchor past one row names exactly that row",
+    rowsHiddenByAnchor(base, "2026-10-10", horizon).map((r) => r.name), ["Electric"]);
+  eq("...and past two names both, in the order the Ledger shows them",
+    rowsHiddenByAnchor(base, "2026-10-15", horizon).map((r) => r.name), ["Electric", "Rent"]);
+
+  // `<`, not `<=`, for the same reason buildEvents keeps same-day
+  // events: a row dated exactly on the new as-of date survives.
+  eq("a row dated ON the new as-of date is not hidden",
+    rowsHiddenByAnchor(base, "2026-10-14", horizon).map((r) => r.name), ["Electric"]);
+
+  // THE NO-PROMPT CASES. A warning shown when nothing would happen is
+  // noise, and noise is how a warning stops being read.
+  eq("moving the anchor backwards hides nothing",
+    rowsHiddenByAnchor(base, "2026-09-01", horizon).length, 0);
+  eq("re-logging on the same date hides nothing",
+    rowsHiddenByAnchor(base, "2026-10-01", horizon).length, 0);
+
+  // And the preview must match what actually happens. Log the balance
+  // and count what is left.
+  const after = updateAccountBalance(base, "checking", 2000, "2026-10-15");
+  const before = computeLedger(base, horizon).rows.length;
+  eq("the preview's count is exactly what the Ledger loses",
+    before - computeLedger(after, horizon).rows.length,
+    rowsHiddenByAnchor(base, "2026-10-15", horizon).length);
+  eq("...and the rows it named are the ones gone",
+    computeLedger(after, horizon).rows.map((r) => r.name), ["Gym"]);
 }
 
 // New items get the account silently (no picker with a single account).

@@ -8,7 +8,7 @@ import { downloadFile } from "./downloadFile.js";
 import { isStale } from "./engine/syncGuard.ts";
 import { getSession, onAuthChange, signOut } from "./auth.js";
 import { getDeviceTheme, setDeviceTheme } from "./theme.js";
-import { computeLedger, computeBudget } from "./engine/compute.ts";
+import { computeLedger, computeBudget, rowsHiddenByAnchor } from "./engine/compute.ts";
 import {
   upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList,
   setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount,
@@ -743,7 +743,16 @@ export default function App() {
       )}
 
       {updateBalanceOpen && (
-        <UpdateBalanceModal account={account} onConfirm={confirmBalance} onClose={() => setUpdateBalanceOpen(false)} />
+        <UpdateBalanceModal
+          account={account}
+          onConfirm={confirmBalance}
+          onClose={() => setUpdateBalanceOpen(false)}
+          // Only the CHECKING balance moves the forecast's starting
+          // point, so only this one previews what it hides. The
+          // contribution modal below reuses this component and passes
+          // nothing, which is correct — a contribution hides nothing.
+          hiddenRows={(asOf) => rowsHiddenByAnchor(state, asOf, ledgerHorizonOf(state))}
+        />
       )}
 
       {categoryManagerFrom && (

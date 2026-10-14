@@ -1,4 +1,5 @@
-import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { pickerProps } from "./setup";
 import { normalize } from "../../src/engine/stateShape.ts";
 
 // PHASE 3: who is met with the six questions, and what happens to the
@@ -158,4 +159,83 @@ test("...and writes the balance it was given", async () => {
 
   await waitFor(() => expect(mockSaved).toHaveLength(1));
   expect((mockSaved[0] as { accounts: { balance: number }[] }).accounts[0]!.balance).toBe(4210.55);
+});
+
+
+// ---- logging a balance that would hide rows --------------------------
+
+/** A state with one row before Oct 10 and one after. */
+function withRows() {
+  const base = normalize({
+    settings: { ledgerHorizon: "2026-12-31", budgetHorizon: "2026-12-31" },
+    accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 1000, balanceAsOf: "2026-10-01", order: 0 }],
+    trackerCategories: [],
+    recurring: [],
+    oneoffs: [
+      { id: "o1", name: "Electric", amount: 120, category: "oneoff", date: "2026-10-03", order: 0 },
+      { id: "o2", name: "Gym", amount: 40, category: "oneoff", date: "2026-12-20", order: 1 },
+    ],
+  });
+  return { ...base, settings: { ...base.settings, hasSeenOnboarding: true } };
+}
+
+async function openLog() {
+  await userEvent.press(await screen.findByLabelText(/Checking .*Update the balance/));
+  await screen.findByText("Update Checking balance");
+}
+
+test("a balance that would hide rows names them before writing anything", async () => {
+  mockLoaded.state = withRows();
+  await mount();
+  await openLog();
+
+  await userEvent.type(screen.getByPlaceholderText("0.00"), "900");
+  await userEvent.press(screen.getByLabelText("Confirm"));
+
+  // Nothing is written yet — this is a question, not a report.
+  expect(mockSaved).toHaveLength(0);
+  expect(await screen.findByText("This will hide rows already in your ledger")).toBeOnTheScreen();
+  // The row by name, date and amount, so it can be recognized.
+  expect(screen.getByText("Electric")).toBeOnTheScreen();
+  expect(screen.getByText("2026-10-03")).toBeOnTheScreen();
+  // The row that survives is not listed.
+  expect(screen.queryByText("Gym")).toBeNull();
+  // And the way out for the case that costs money.
+  expect(screen.getByText(/hiding it does not pay it/)).toBeOnTheScreen();
+
+  await userEvent.press(screen.getByLabelText("Log balance"));
+  await waitFor(() => expect(mockSaved).toHaveLength(1));
+  expect((mockSaved[0] as { accounts: { balance: number }[] }).accounts[0]!.balance).toBe(900);
+});
+
+test("...and canceling writes nothing at all", async () => {
+  mockLoaded.state = withRows();
+  await mount();
+  await openLog();
+  await userEvent.type(screen.getByPlaceholderText("0.00"), "900");
+  await userEvent.press(screen.getByLabelText("Confirm"));
+  await screen.findByText("This will hide rows already in your ledger");
+
+  await userEvent.press(screen.getByLabelText("Cancel"));
+  expect(mockSaved).toHaveLength(0);
+});
+
+test("a log that hides nothing is not interrupted", async () => {
+  // A warning shown when nothing would happen is noise, and noise is
+  // how a warning stops being read. Today's date is after every row
+  // here, so log AS OF the existing anchor date — nothing drops.
+  mockLoaded.state = withRows();
+  await mount();
+  await openLog();
+
+  // The sheet defaults to today; move it back to the current anchor.
+  await userEvent.press(screen.getByLabelText(/As of .*Change the date/));
+  await act(async () => {
+    (pickerProps.current!.onChange as (e: unknown, d: Date) => void)({}, new Date("2026-10-01T00:00:00Z"));
+  });
+  await userEvent.type(screen.getByPlaceholderText("0.00"), "900");
+  await userEvent.press(screen.getByLabelText("Confirm"));
+
+  await waitFor(() => expect(mockSaved).toHaveLength(1));
+  expect(screen.queryByText("This will hide rows already in your ledger")).toBeNull();
 });

@@ -321,3 +321,32 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
 }
 
 
+
+/**
+ * Which rows on screen right now would vanish if the anchor moved to
+ * `newAsOf` — the preview behind the "log balance" confirmation.
+ *
+ * WHY THIS NEEDS SAYING OUT LOUD. `buildEvents` drops every event
+ * strictly before the verified balance's date, because that balance
+ * already contains them and counting them again would double them.
+ * That is correct and it is invisible: logging today's balance silently
+ * removes the bills and paychecks still sitting in the ledger from
+ * earlier in the month, and the only clue is that the list got shorter.
+ *
+ * The dangerous case is the honest mistake — a bill dated the 3rd that
+ * has NOT actually gone out yet. Moving the anchor past it does not
+ * make it paid, it makes it invisible, and the forecast is then too
+ * high by that amount for ever.
+ *
+ * The comparison is `< newAsOf`, and it is `<` for the same reason
+ * `buildEvents` keeps same-day events: a row dated exactly on the new
+ * as-of date survives.
+ *
+ * Returns rows in the order the ledger shows them, so the confirmation
+ * reads in the same order as the screen behind it.
+ */
+export function rowsHiddenByAnchor(
+  state: BudgetState, newAsOf: ISODate, horizonISO: ISODate,
+): LedgerRow[] {
+  return computeLedger(state, horizonISO).rows.filter((r) => r.date < newAsOf);
+}

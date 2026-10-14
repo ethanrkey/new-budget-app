@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { todayISO } from "../engine/model.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
+import { HIDDEN_ROWS_COPY as HIDDEN } from "../content/logBalance.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -27,16 +28,27 @@ const money = (n) =>
 // Also used, with copy overrides, to log a contribution — it is already
 // exactly amount + date + Confirm, and a near-identical second modal would
 // be two places to fix every future change to this interaction.
-export default function UpdateBalanceModal({ account, onConfirm, onClose, title, blurb, amountLabel, cta }) {
+export default function UpdateBalanceModal({ account, onConfirm, onClose, title, blurb, amountLabel, cta, hiddenRows }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayISO());
+  // The rows about to disappear, once Confirm has been pressed and
+  // there turned out to be some. Null means "not asked yet".
+  const [confirming, setConfirming] = useState(null);
   const valid = amount !== "" && !isNaN(Number(amount)) && !!date;
 
   // The validity check sits OUTSIDE the guard on purpose: useSubmitOnce
   // burns its one shot the moment it is called, so checking inside it meant
   // one Enter on an empty field disabled the modal for good.
   const [submit, submitted] = useSubmitOnce(() => onConfirm(Number(amount), date));
-  const confirm = () => { if (valid) submit(); };
+  // A BACK-DATED LOG THAT HIDES NOTHING GETS NO PROMPT. The warning
+  // earns its interruption by naming specific rows; shown when there
+  // are none it is noise, and noise is how a warning stops being read.
+  const confirm = () => {
+    if (!valid) return;
+    const dropping = hiddenRows?.(date) ?? [];
+    if (dropping.length > 0 && confirming == null) { setConfirming(dropping); return; }
+    submit();
+  };
 
   const field = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
   const label = "block text-xs font-medium text-gray-500 mb-1";
@@ -47,6 +59,36 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-sm shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
+        {confirming ? (
+          <>
+            <h2 className="text-lg font-semibold mb-1">{HIDDEN.title}</h2>
+            <p className="text-xs text-gray-500 mb-3">{HIDDEN.lede(confirming.length, date)}</p>
+            <ul className="max-h-52 overflow-y-auto border-y border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+              {confirming.map((r) => (
+                <li key={r.id} className="flex items-baseline gap-3 py-1.5 text-sm">
+                  <span className="w-24 shrink-0 tabular-nums text-gray-500">{r.date}</span>
+                  <span className="grow truncate">{r.name}</span>
+                  <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">{money(r.amount)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-gray-500 mt-3">{HIDDEN.why}</p>
+            <p className="text-xs text-brass mt-2">{HIDDEN.escape}</p>
+            <div className="flex gap-3 mt-6">
+              <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">
+                {HIDDEN.cancel}
+              </button>
+              <button
+                onClick={submit}
+                disabled={submitted}
+                className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40"
+              >
+                {HIDDEN.confirm}
+              </button>
+            </div>
+          </>
+        ) : (
+        <>
         <h2 className="text-lg font-semibold mb-1">{title ?? `Update ${account.name} balance`}</h2>
         <p className="text-xs text-gray-500 mb-4">
           {blurb ?? (
@@ -91,6 +133,8 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
             {cta ?? "Confirm"}
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
