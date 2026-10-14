@@ -7,7 +7,7 @@ import { buildAllEvents } from "../src/engine/generate.ts";
 import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID, LEDGER_MAX_MONTHS, ledgerHorizonOf, blankState } from "../src/engine/model.ts";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.ts";
 import { anchorMatchesNewestSnapshot } from "../src/engine/entities.ts";
-import { computeBudgetLayout } from "../src/engine/budgetLayout.ts";
+import { computeBudgetLayout, BUDGET_SECTIONS } from "../src/engine/budgetLayout.ts";
 import { ledgerToCSV, budgetToCSV } from "../src/engine/csv.ts";
 import { parseBudgetCSV } from "../src/engine/csvImport.ts";
 import { parseLedgerCSV } from "../src/engine/ledgerCsvImport.ts";
@@ -319,6 +319,24 @@ const budgetLines = budgetCSV.split("\r\n");
 eq("budget CSV header row = blank + month labels", budgetLines[0], "," + budgetK.map((c) => c.label).join(","));
 eq("budget CSV has an INCOME section marker", budgetLines.includes("INCOME"), true);
 eq("budget CSV has a SAVING / DEBT section marker", budgetLines.includes("SAVING / DEBT"), true);
+
+// ---- ONE ORDER, read by everything that draws the grid ---------------
+//
+// There were three. The web rendered BUDGET_SECTIONS[0] then [2] and
+// hand-rolled saving last; the phone iterated the array and so put
+// saving second; the CSV hard-coded a third sequence under a comment
+// promising to "match exactly what's on screen". Reported from a
+// device: the two clients disagreed about where savings goes.
+{
+  eq("the list is the display order",
+    BUDGET_SECTIONS.map((x) => x.key), ["bill", "oneoff", "saving"]);
+  // The CSV is the one of the three that can be read from here, so it
+  // is the one that gets asserted: its section markers must appear in
+  // the array's order, which is what both grids now iterate.
+  const markers = budgetLines.filter((l) => BUDGET_SECTIONS.some((x) => l === x.label));
+  eq("...and the CSV emits its sections in exactly that order",
+    markers, BUDGET_SECTIONS.map((x) => x.label));
+}
 eq("budget CSV includes the Rent row with its September value", budgetCSV.includes("Rent, Utilities"), true);
 
 // ---------- Scenario L: CSV import (round-trip a real budget through export+parse) ----------

@@ -1,7 +1,7 @@
 // ---- CSV export: pure string builders, no DOM/File APIs here ----
 // (those live in the component that triggers the actual download)
 import { CATEGORIES } from "./model.ts";
-import { computeBudgetLayout } from "./budgetLayout.ts";
+import { computeBudgetLayout, BUDGET_SECTIONS } from "./budgetLayout.ts";
 import type { BudgetColumn, CategoryRef, Ledger, TrackerCategory } from "./types.ts";
 
 function csvCell(v: unknown): string {
@@ -63,14 +63,13 @@ export function budgetToCSV(budget: BudgetColumn[], trackerCategories: TrackerCa
   for (const name of layout.otherIncomeNames) row(name, (c) => c.otherInItems?.[name]?.val || 0);
   row("TOTAL IN", (c) => c.totalIn);
 
-  lines.push(csvRow(["FIXED / RECURRING"]));
-  for (const name of layout.sectionItems.bill) row(name, (c) => c.expenseItems[name]?.val || 0);
-
-  lines.push(csvRow(["SAVING / DEBT"]));
-  for (const name of layout.sectionItems.saving) row(name, (c) => c.expenseItems[name]?.val || 0);
-
-  lines.push(csvRow(["ONE-OFF / SEASONAL"]));
-  for (const name of layout.sectionItems.oneoff) row(name, (c) => c.expenseItems[name]?.val || 0);
+  // Straight through BUDGET_SECTIONS, which IS the display order. This
+  // used to be three hard-coded blocks in a fourth sequence, under a
+  // comment promising to match the screen.
+  for (const section of BUDGET_SECTIONS) {
+    lines.push(csvRow([section.label]));
+    for (const name of layout.sectionItems[section.key]) row(name, (c) => c.expenseItems[name]?.val || 0);
+  }
 
   row("TOTAL OUT", (c) => c.totalOut);
   row("MONTHLY NET", (c) => c.net);

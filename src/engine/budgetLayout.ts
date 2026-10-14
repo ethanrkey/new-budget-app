@@ -7,10 +7,29 @@ import type { BudgetColumn, CategoryRef, TrackerCategory } from "./types.ts";
 
 export type SectionKey = "bill" | "saving" | "oneoff";
 
+/**
+ * The sections, IN DISPLAY ORDER. Everything that draws them reads
+ * this array straight through — the web grid, the phone's grid and
+ * the CSV export.
+ *
+ * It did not use to be the order, and the result was three different
+ * answers to the same question: the web rendered BUDGET_SECTIONS[0]
+ * then [2] and hand-rolled saving last, the phone iterated the array
+ * and so put saving second, and the CSV hard-coded a third sequence
+ * while its own comment claimed to "match exactly what's on screen".
+ * Reported from a device: the two clients disagreed about where
+ * savings goes.
+ *
+ * The order itself is money leaving in descending certainty. Fixed
+ * bills are what you owe whatever happens. One-offs are real but
+ * occasional. Saving and debt payments are the part you can move when
+ * the first two squeeze — so they sit nearest the totals they are
+ * competing for.
+ */
 export const BUDGET_SECTIONS: ReadonlyArray<{ key: SectionKey; label: string }> = [
   { key: "bill", label: "FIXED / RECURRING" },
-  { key: "saving", label: "SAVING / DEBT" },
   { key: "oneoff", label: "ONE-OFF / SEASONAL" },
+  { key: "saving", label: "SAVING / DEBT" },
 ];
 
 export interface BudgetLayout {

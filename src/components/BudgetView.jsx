@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import HorizonSlider from "./HorizonSlider.jsx";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../engine/budgetLayout.ts";
 import { todayISO } from "../engine/model.ts";
@@ -170,27 +170,35 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
           ))}
           <TotalRow label="TOTAL IN" cols={budget} pick={(c) => c.totalIn} tone="income" fill="income" />
 
-          {/* FIXED / RECURRING, ONE-OFF / SEASONAL */}
-          {renderSection(BUDGET_SECTIONS[0])}
-          {renderSection(BUDGET_SECTIONS[2])}
+          {/* STRAIGHT THROUGH BUDGET_SECTIONS, which IS the display
+              order. This used to index [0] and [2] and then hand-roll
+              saving at the end, which is how the phone — iterating the
+              same array — ended up showing savings in a different
+              place. The order now lives in one list and neither client
+              can have an opinion about it.
 
-          {/* SAVING / DEBT: one header, rows clustered by category, reorder
-              — arrows or drag — never crosses a category cluster. No dot:
-              color stopped encoding role on 2026-10-06, and the section
-              header already says what these rows are. */}
-          {sectionItems.saving.length ? (
-            <>
-              <SectionHeader label="SAVING / DEBT" span={budget.length + 1} />
-              {savingGroups.map((names) =>
-                rowMeta(names).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
-                  <DataRow key={name} label={name} cols={budget}
-                    pick={(c) => c.expenseItems[name]?.val || 0} hideZero
-                    onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
-                    dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
-                ))
-              )}
-            </>
-          ) : null}
+              SAVING / DEBT still renders differently, because its rows
+              are clustered by category and a reorder must never cross
+              a cluster. Different rendering, same position in the
+              sequence. No dot: color stopped encoding role on
+              2026-10-06, and the header already says what these are. */}
+          {BUDGET_SECTIONS.map((section) =>
+            section.key !== "saving" ? (
+              <Fragment key={section.key}>{renderSection(section)}</Fragment>
+            ) : sectionItems.saving.length ? (
+              <Fragment key={section.key}>
+                <SectionHeader label={section.label} span={budget.length + 1} />
+                {savingGroups.map((names) =>
+                  rowMeta(names).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
+                    <DataRow key={name} label={name} cols={budget}
+                      pick={(c) => c.expenseItems[name]?.val || 0} hideZero
+                      onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
+                      dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
+                  ))
+                )}
+              </Fragment>
+            ) : null
+          )}
 
           {/* TOTALS */}
           <TotalRow label="TOTAL OUT" cols={budget} pick={(c) => c.totalOut} tone="expense" fill="expense" />
