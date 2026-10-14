@@ -13,8 +13,8 @@
 // "cancellation" which is correct in both. Generated files are excluded —
 // a stem replacement once rewrote `@babel/helper-optimise-call-expression`
 // inside a lockfile and would have broken the install.
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execSync, execFileSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
 import { extname } from "node:path";
 
 const WORDS = {
@@ -89,7 +89,30 @@ function buildPattern() {
   return new RegExp(`\\b(${Object.keys(WORDS).join("|")})\\b`, "gi");
 }
 const pattern = buildPattern();
-const files = execSync("git ls-files", { encoding: "utf8" }).split("\n").filter(Boolean);
+// WHICH `git`, and why this is not paranoia. This machine carries a
+// dead Intel Homebrew in /usr/local from a Migration Assistant copy,
+// and /usr/local/bin/git — a symlink into an x86_64 Cellar — comes
+// FIRST on the PATH that `/bin/sh` hands a child process. The shell
+// this script is launched from resolves the working system git; the
+// subprocess it spawns resolves the broken one and dies with "Bad CPU
+// type in executable", taking the whole `npm test` chain with it.
+//
+// So: try PATH, and fall back to the system git rather than letting a
+// stale binary somewhere else on the machine decide whether the
+// spelling gate runs. Loud about it, because the right fix is to
+// remove that Homebrew and nobody will do that if this stays silent.
+function gitFiles() {
+  try {
+    return execSync("git ls-files", { encoding: "utf8" });
+  } catch (err) {
+    const fallback = "/usr/bin/git";
+    if (!existsSync(fallback)) throw err;
+    console.warn(`note: \`git\` on PATH did not run (${String(err.message).trim().split("\n").pop()}); using ${fallback}`);
+    return execFileSync(fallback, ["ls-files"], { encoding: "utf8" });
+  }
+}
+
+const files = gitFiles().split("\n").filter(Boolean);
 
 let hits = 0;
 for (const file of files) {
