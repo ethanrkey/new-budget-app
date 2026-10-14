@@ -292,7 +292,17 @@ export function billRules(rows: BillRow[], today: ISODate = todayISO()): BudgetI
   return out;
 }
 
-/** The groceries step. Null when nothing usable was typed. */
+/**
+ * The groceries step. Null when nothing usable was typed.
+ *
+ * `variable: true`, which is the flag the Ledger's own form offers as
+ * "Track actual vs. budgeted". Groceries is the example the whole
+ * feature exists for: the step asks for a rough estimate and says so,
+ * and an estimate is precisely what wants comparing against what was
+ * really spent. Without the flag the Spending tab has nothing to put
+ * in its variance column for the one rule most likely to move, and
+ * the forecast treats a guess with the same certainty as rent.
+ */
 export function groceryRule(
   amount: string, cadence: SetupCadence, today: ISODate = todayISO(),
 ): BudgetItem | null {
@@ -300,7 +310,7 @@ export function groceryRule(
   if (amt == null) return null;
   return {
     id: uid(), name: "Groceries", amount: amt, category: "bill",
-    cadence, startDate: today, dayOfMonth: dayOf(today),
+    cadence, startDate: today, dayOfMonth: dayOf(today), variable: true,
   } as BudgetItem;
 }
 

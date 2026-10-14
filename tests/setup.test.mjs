@@ -206,6 +206,14 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   const groc = groceryRule("150", "weekly", TODAY);
   eq("groceries are a bill, not a category of their own", groc.category, "bill");
   eq("...on the cadence chosen", groc.cadence, "weekly");
+  // The step asks for "a rough estimate" in those words, and an
+  // estimate is exactly what the Spending tab exists to compare
+  // against reality. Without this the one rule most likely to move
+  // has nothing in its variance column.
+  eq("...and are marked variable, like the Ledger form's own flag", groc.variable, true);
+  eq("rent is NOT variable — the whole point is that it does not move",
+    rentRule("1450", "1", TODAY).variable, undefined);
+  eq("...nor is a named bill", billRules([{ name: "Spotify", amount: "12", day: "4" }], TODAY)[0].variable, undefined);
 }
 
 // ---- rent's day, which the ledger's ordering turns on -----------------
