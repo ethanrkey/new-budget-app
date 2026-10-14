@@ -25,7 +25,9 @@
 // Expo's asset pipeline downsamples every other slot from. Generating at
 // 1024 from vector geometry is also why this is not an upscale of the
 // 512 PNG: there is no 512 in the path at all.
-import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, readFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import puppeteer from "puppeteer-core";
 
@@ -116,9 +118,23 @@ const ICON_DIR = new URL("../mobile/assets/images/KeyBudget.icon/", import.meta.
 const ICON_ASSETS = new URL("Assets/", ICON_DIR);
 mkdirSync(ICON_ASSETS, { recursive: true });
 
-// The key alone, transparent, full-bleed in its own square. No
-// background plate: the plate is `fill` below.
-writeFileSync(new URL("key.svg", ICON_ASSETS), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="33 40 440 440">
+// The key alone, transparent. No background plate: the plate is
+// `fill` below.
+//
+// WIDTH AND HEIGHT ARE NOT OPTIONAL, and leaving them off is what
+// made build 6's key a third of the tile. An SVG with only a viewBox
+// has no intrinsic size, so whatever rasterizes the layer picks its
+// own — and the artwork lands tiny inside a 1024 canvas. Measured:
+// the same drawing renders at 33.3% of the tile without them and
+// 78.3% with them, and neither the viewBox nor the layer's `scale`
+// property moves it at all while they are missing.
+//
+// THE FRAME IS 0 0 512 512 — exactly the flat icon's. The key then
+// occupies the same fraction of the layer that it occupies of
+// icon.png, so "the layered icon matches the flat one's proportions"
+// is true by construction rather than by a tuned number someone has
+// to re-tune.
+writeFileSync(new URL("key.svg", ICON_ASSETS), `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512">
   ${defs}
   ${mark}
 </svg>
@@ -275,6 +291,45 @@ await tab.setContent(`<!doctype html><meta charset="utf-8">
 </svg>`, { waitUntil: "load" });
 writeFileSync(new URL("../public/icon-maskable-512.png", import.meta.url), await tab.screenshot({ type: "png", omitBackground: false }));
 console.log(`wrote ${WEB.length + 1} web rasters from the same source`);
+
+// ---------------------------------------------------------------------
+// THE LAYERED ICON IS COMPARED AGAINST THE FLAT ONE, not eyeballed.
+//
+// Build 6 shipped a key that filled a third of the tile and nobody
+// caught it until it was on a phone, because the .icon cannot be
+// previewed from here — the only way to see it is to compile it.
+// `actool` can, so it does: compile the bundle, measure the slot it
+// renders, and compare against icon.png, which is the composition
+// that was right in build 5.
+//
+// Skipped loudly rather than silently when Xcode is not installed,
+// because a check that quietly does nothing is worse than no check.
+const ICON_SLOT_TOLERANCE = 4;   // percentage points, at a 120px render
+try {
+  const tmp = mkdtempSync(join(tmpdir(), "keybudget-icon-"));
+  execFileSync("xcrun", [
+    "actool", "--compile", tmp, "--app-icon", "KeyBudget",
+    "--output-partial-info-plist", join(tmp, "partial.plist"),
+    "--platform", "iphoneos", "--minimum-deployment-target", "18.0",
+    "--target-device", "iphone",
+    new URL("../mobile/assets/images/KeyBudget.icon", import.meta.url).pathname,
+  ], { stdio: "pipe" });
+
+  const slot = readFileSync(join(tmp, "KeyBudget60x60@2x.png"));
+  const layered = await inspect(slot);
+  const flatPct = shape.spanX * 100, layeredPct = layered.spanX * 100;
+  console.log(`  layered icon: key spans ${layeredPct.toFixed(1)}% of the tile, flat icon ${flatPct.toFixed(1)}%`);
+  if (Math.abs(layeredPct - flatPct) > ICON_SLOT_TOLERANCE) {
+    console.error(`FAIL: the layered icon's key is ${layeredPct.toFixed(1)}% of the tile but the flat one is ${flatPct.toFixed(1)}% — they are the same drawing and should be the same size`);
+    process.exit(1);
+  }
+} catch (err) {
+  if (/xcrun|actool|ENOENT/i.test(String(err.message))) {
+    console.warn("  note: skipping the layered-icon comparison — actool needs Xcode, and this machine has none");
+  } else {
+    throw err;
+  }
+}
 
 await browser.close();
 console.log("ICON OK");
