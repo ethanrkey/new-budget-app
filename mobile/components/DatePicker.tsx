@@ -17,19 +17,23 @@ import { T } from "../lib/theme";
 // create a surface with no exit, which is the only kind of fix that
 // stops the bug coming back in the next picker someone adds.
 export default function DatePicker({
-  value, onPick, onClose, label = "Done",
+  value, onPick, onClose, label = "Done", minimum,
 }: {
   /** ISO date, "YYYY-MM-DD". */
   value: string;
   onPick: (iso: string) => void;
   onClose: () => void;
   label?: string;
+  /** Earliest selectable date, ISO. Used by the payday question,
+   *  where a date that has already gone is never the answer. */
+  minimum?: string;
 }) {
   return (
     <View style={styles.wrap}>
       <DateTimePicker
         value={new Date(value + "T00:00:00")}
         mode="date"
+        minimumDate={minimum ? new Date(minimum + "T00:00:00") : undefined}
         display={Platform.OS === "ios" ? "inline" : "default"}
         themeVariant="dark"
         onChange={(event, d) => {

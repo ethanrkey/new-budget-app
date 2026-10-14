@@ -32,6 +32,10 @@ export default function Onboarding({ initialBalance, onComplete }) {
 
   const [payAmount, setPayAmount] = useState("");
   const [payCadence, setPayCadence] = useState("biweekly");
+  // Defaults to today and cannot go backwards — the input's `min` says
+  // so to the browser, and paycheckRule clamps anyway, because a date
+  // input is a text box underneath.
+  const [payday, setPayday] = useState(todayISO());
 
   const [rentAmount, setRentAmount] = useState("");
   const [rentDay, setRentDay] = useState("1");
@@ -71,7 +75,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
   // without either client having to remember it.
   const addIf = (rule) => { if (rule) addRule(rule); };
   function submitPaycheck() {
-    addIf(paycheckRule(payAmount, payCadence, todayISO()));
+    addIf(paycheckRule(payAmount, payCadence, todayISO(), payday));
     goNext();
   }
   function submitRent() {
@@ -146,6 +150,17 @@ export default function Onboarding({ initialBalance, onComplete }) {
               <select className={field} value={payCadence} onChange={(e) => setPayCadence(e.target.value)}>
                 {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
+            </div>
+            <div>
+              <label className={label}>{COPY.paycheck.paydayLabel}</label>
+              <input
+                className={field}
+                type="date"
+                min={todayISO()}
+                value={payday}
+                onChange={(e) => setPayday(e.target.value || todayISO())}
+              />
+              <p className="text-xs text-gray-400 mt-1">{COPY.paycheck.paydayHelp}</p>
             </div>
             <p className="text-xs text-gray-400">{COPY.paycheck.note.web}</p>
             <StepButtons onSkip={goNext} onContinue={submitPaycheck} />

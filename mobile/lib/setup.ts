@@ -32,6 +32,8 @@ export const STEPS = SETUP_STEPS;
 export type SetupDraft = {
   payAmount: string;
   payCadence: SetupCadence;
+  /** The NEXT payday, which setup used to assume was today. */
+  payday: string;
   rentAmount: string;
   rentDay: string;
   bills: BillRow[];
@@ -46,7 +48,7 @@ const dayOf = (iso: string) => String(Number(iso.slice(8, 10)));
 
 export function blankSetupDraft(today: string): SetupDraft {
   return {
-    payAmount: "", payCadence: "biweekly",
+    payAmount: "", payCadence: "biweekly", payday: today,
     // The 1st, like the web: it is right more often than today is, and
     // the ledger's ordering turns on it.
     rentAmount: "", rentDay: "1",
@@ -68,7 +70,7 @@ export function blankSetupDraft(today: string): SetupDraft {
 export function rulesForStep(step: SetupStepKey, d: SetupDraft, today: string): BudgetItem[] {
   const one = (r: BudgetItem | null) => (r ? [r] : []);
   switch (step) {
-    case "paycheck": return one(paycheckRule(d.payAmount, d.payCadence, today));
+    case "paycheck": return one(paycheckRule(d.payAmount, d.payCadence, today, d.payday));
     case "rent": return one(rentRule(d.rentAmount, d.rentDay, today));
     case "bills": return billRules(d.bills, today);
     case "groceries": return one(groceryRule(d.groceryAmount, d.groceryCadence, today));

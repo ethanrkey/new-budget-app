@@ -190,6 +190,19 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   eq("...on today's day of the month", pay.dayOfMonth, 12);
   eq("...and carries no order — upsertItem assigns it", pay.order, undefined);
 
+  // THE PAYDAY IS ASKED FOR NOW, not assumed to be today.
+  eq("a future payday is where the rule starts",
+    paycheckRule("2100", "biweekly", TODAY, "2026-10-23").startDate, "2026-10-23");
+  eq("...and the day-of-month follows it, not today",
+    paycheckRule("2100", "monthly", TODAY, "2026-10-23").dayOfMonth, 23);
+  eq("no payday given still means today, so nothing changes for a skipper",
+    paycheckRule("2100", "biweekly", TODAY).startDate, TODAY);
+  // Clamped rather than refused: a rule that starts before the balance
+  // it is counted forward from is never what anybody meant, and this
+  // function is the definition even where no form guards it.
+  eq("a payday in the past is clamped to today",
+    paycheckRule("2100", "biweekly", TODAY, "2026-09-01").startDate, TODAY);
+
   const groc = groceryRule("150", "weekly", TODAY);
   eq("groceries are a bill, not a category of their own", groc.category, "bill");
   eq("...on the cadence chosen", groc.cadence, "weekly");

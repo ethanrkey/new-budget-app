@@ -1,4 +1,5 @@
-import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { pickerProps } from "./setup";
 import Setup from "../components/Setup";
 import { applySetup } from "../../src/engine/setup.ts";
 import { normalize } from "../../src/engine/stateShape.ts";
@@ -59,6 +60,43 @@ test("the phone's paycheck note points at a control the phone has", async () => 
   // second string: src/content/setup.ts.
   expect(screen.getByText(/\+ Add on the Ledger/)).toBeOnTheScreen();
   expect(screen.queryByText(/Quick Entry/)).toBeNull();
+});
+
+test("the paycheck step asks when the next payday is, and uses it", async () => {
+  // Setup used to assume today, which is wrong in both directions:
+  // paid this morning and the money is already inside the balance on
+  // a later step, so it gets counted twice; paid next Friday and
+  // every projected date is off by a week.
+  const got: SetupAnswers[] = [];
+  await mount((a) => got.push(a));
+
+  const today = new Date();
+  const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  expect(screen.getByLabelText(new RegExp(`next payday\\?* ${iso}`))).toBeOnTheScreen();
+
+  await userEvent.type(screen.getByLabelText("Amount"), "2100");
+  await userEvent.press(screen.getByLabelText(new RegExp(`next payday`)));
+  // The native picker cannot be driven here, so the change it would
+  // have fired is fired directly — see pickerProps in setup.ts.
+  const future = new Date(Date.now() + 9 * 86400000);
+  await act(async () => {
+    (pickerProps.current!.onChange as (e: unknown, d: Date) => void)({}, future);
+  });
+
+  // Continue, not Skip — skipping this step throws the paycheck away,
+  // which is the whole point of Skip.
+  await press("Continue");
+  await skip(3);                            // rent, bills, groceries
+  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
+  await press("Continue");
+  await press("Finish");
+  await press("Go to my budget");
+
+  const futureISO = future.toISOString().slice(0, 10);
+  const pay = got[0]!.recurring![0]!;
+  expect("cadence" in pay && pay.startDate).toBe(futureISO);
+  // And the picker will not offer a date that has already gone.
+  expect(pickerProps.current!.minimumDate).toBeInstanceOf(Date);
 });
 
 test("Continue keeps what was typed; Skip discards it", async () => {

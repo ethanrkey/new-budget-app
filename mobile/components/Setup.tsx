@@ -4,6 +4,7 @@ import {
   ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import DatePicker from "./DatePicker";
 import { T } from "../lib/theme";
 import {
   STEPS, blankSetupDraft, rulesForStep, canAdvance, accountRowErrors, setupAnswers,
@@ -50,6 +51,7 @@ export default function Setup({
   const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
   const [i, setI] = useState(0);
+  const [pickingPayday, setPickingPayday] = useState(false);
   const [d, setD] = useState<SetupDraft>(() => blankSetupDraft(todayISO));
   // Rules collected by the steps already passed. Keyed by step so going
   // BACK and forward again replaces that step's rules instead of
@@ -99,6 +101,30 @@ export default function Setup({
                 <Question title={COPY.paycheck.title} sub={COPY.paycheck.sub}>
                   <Money label={COPY.labels.amount} value={d.payAmount} onChange={(v) => set("payAmount", v)} autoFocus />
                   <Cadence label={COPY.labels.cadence} value={d.payCadence} onChange={(v) => set("payCadence", v)} />
+
+                  {/* ASKED, NOT ASSUMED — see src/content/setup.ts.
+                      A date that has gone cannot be chosen: the picker
+                      is clamped to today and paycheckRule clamps
+                      again, because two guards on the one number the
+                      whole forecast counts forward from is cheap. */}
+                  <Text style={styles.label}>{COPY.paycheck.paydayLabel}</Text>
+                  <Pressable
+                    style={styles.input}
+                    onPress={() => setPickingPayday(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${COPY.paycheck.paydayLabel} ${d.payday}. Change the date.`}
+                  >
+                    <Text style={styles.inputText}>{d.payday}</Text>
+                  </Pressable>
+                  <Text style={styles.note}>{COPY.paycheck.paydayHelp}</Text>
+                  {pickingPayday && (
+                    <DatePicker
+                      value={d.payday}
+                      minimum={todayISO}
+                      onPick={(v) => set("payday", v < todayISO ? todayISO : v)}
+                      onClose={() => setPickingPayday(false)}
+                    />
+                  )}
                   {/* The one string that differs between clients, and it
                       differs because the control it names does. */}
                   <Text style={styles.note}>{COPY.paycheck.note.mobile}</Text>
@@ -403,6 +429,7 @@ const styles = StyleSheet.create({
     minHeight: 48, marginTop: 6,
   },
   inputBad: { borderColor: T.expense },
+  inputText: { color: T.text, fontSize: 16 },
   chips: { flexDirection: "row", gap: 6, marginTop: 6 },
   chip: {
     flex: 1, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,

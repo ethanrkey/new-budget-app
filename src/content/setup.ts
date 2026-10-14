@@ -28,6 +28,13 @@ export const SETUP_COPY = {
   paycheck: {
     title: "What's your take-home pay?",
     sub: "We'll set this up as a recurring paycheck so your Ledger and Budget stay current on their own.",
+    // ASKED, NOT ASSUMED. Setup used to start the paycheck today,
+    // which is wrong in both directions: paid this morning and the
+    // money is already in the balance on the next step, so it gets
+    // counted twice; paid next Friday and every projected date is off
+    // by a week.
+    paydayLabel: "When's your next payday?",
+    paydayHelp: "Not the last one — the next one. If you were paid today, say today.",
     note: {
       web: "Have more than one income source (a second job, side income, a partner's paycheck)? Add just one here — you can add the rest afterward with Quick Entry or the + Add button.",
       mobile: "Have more than one income source (a second job, side income, a partner's paycheck)? Add just one here — you can add the rest afterward with + Add on the Ledger.",

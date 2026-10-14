@@ -213,15 +213,32 @@ export function firstMonthlyOn(dom: number, today: ISODate): ISODate {
 // into, which is the only place that knows what the next one is.
 // Inventing a number here would make two rules fight over position 0.
 
-/** The paycheck step. Null when nothing usable was typed. */
+/**
+ * The paycheck step. Null when nothing usable was typed.
+ *
+ * `payday` IS THE WHOLE REASON THIS TAKES A FOURTH ARGUMENT. Setup
+ * used to assume the first paycheck was today, and a cadence makes
+ * that assumption expensive: every later date is wrong by however far
+ * off payday actually was. Worse in the other direction — someone paid
+ * THIS MORNING has that money inside the balance setup just asked
+ * for, so starting the rule today counts it twice and the forecast
+ * runs a whole paycheck high from day one.
+ *
+ * A payday in the past is clamped to today rather than refused. The
+ * forms do not offer one, but this function is the definition and a
+ * rule that starts before the balance it is counted forward from is
+ * never what anybody meant.
+ */
 export function paycheckRule(
   amount: string, cadence: SetupCadence, today: ISODate = todayISO(),
+  payday: ISODate = today,
 ): BudgetItem | null {
   const amt = positive(amount);
   if (amt == null) return null;
+  const start = payday >= today ? payday : today;
   return {
     id: uid(), name: "Paycheck", amount: amt, category: "income",
-    cadence, startDate: today, dayOfMonth: dayOf(today),
+    cadence, startDate: start, dayOfMonth: dayOf(start),
   } as BudgetItem;
 }
 
