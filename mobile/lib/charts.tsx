@@ -51,6 +51,22 @@ import { T, money } from "./theme";
  */
 export const SPARKLINE_HEIGHT = 170;
 
+/** Room above the plot for the readout. Two tiers of type, so 26. */
+const READOUT_H = 26;
+
+/**
+ * How much of the series AFTER the scrub point is dimmed to.
+ *
+ * This is the move that makes a scrub legible, and it is borrowed
+ * knowingly: the part of the line you have not reached yet goes
+ * quiet, so "where am I" is answered by the shape rather than by
+ * hunting for a dot. 0.22 is low enough to read as background and
+ * high enough that the rest of the series is still THERE — dropping
+ * it to zero would turn a scrub into a reveal, which says something
+ * false about data that already exists.
+ */
+const PAST_DIM = 0.22;
+
 export function Sparkline({
   points, color, width, height = SPARKLINE_HEIGHT,
 }: { points: { date: string; amount: number }[]; color: string; width: number; height?: number }) {
@@ -63,7 +79,7 @@ export function Sparkline({
   const [active, setActive] = useState<number | null>(null);
   const [touching, setTouching] = useState(false);
   const PAD = 8;
-  const plotH = height - 18;            // room for the readout line above
+  const plotH = height - READOUT_H;     // room for the readout above
 
   const geom = useMemo(() => {
     if (points.length === 0) return null;
@@ -122,6 +138,13 @@ export function Sparkline({
     // Claim the gesture only when it is clearly horizontal, so the page
     // still scrolls under a vertical flick that happens to start here.
     onMoveShouldSetPanResponder: (_e, g) => points.length > 1 && Math.abs(g.dx) > Math.abs(g.dy),
+    // ONCE THE SCRUB HAS STARTED IT IS OURS. Without this the
+    // ScrollView the Dashboard is built from can take the gesture back
+    // mid-drag on any vertical wobble, and the readout freezes under a
+    // finger that is still moving. The horizontal test above is what
+    // decides whether we claim it in the first place; this only
+    // refuses to hand back something already claimed.
+    onPanResponderTerminationRequest: () => false,
     onPanResponderGrant: (e) => {
       const i = nearest(e.nativeEvent.locationX);
       setTouching(true); setActive(i);
@@ -133,6 +156,11 @@ export function Sparkline({
     },
     // Both ends of the scrub are marked. Letting go of a chart that
     // was following your finger is a state change worth feeling.
+    //
+    // `active` SURVIVES THE RELEASE on purpose — lifting a finger is
+    // "that one", not "never mind". Only `touching` ends, and all it
+    // controls is emphasis: the crosshair and the readout stay put,
+    // quieter.
     onPanResponderRelease: () => { setTouching(false); feel.selection(); },
     onPanResponderTerminate: () => { setTouching(false); feel.selection(); },
   }), [nearest, points.length]);
@@ -151,39 +179,79 @@ export function Sparkline({
   const coords = points.map((p, i) => `${geom.x(i)},${geom.y(p.amount)}`);
   const shown = active ?? points.length - 1;
   const sx = geom.x(shown), sy = geom.y(points[shown]!.amount);
-  // The readout is clamped inside the chart, so the first and last points
-  // do not push their own label off the edge.
-  const readoutW = 132;
+
+  // THE SERIES IS DRAWN IN TWO HALVES, split at the scrub point: up to
+  // it at full strength, past it at PAST_DIM. The halves overlap by
+  // one coordinate so the line joins instead of showing a seam.
+  //
+  // With nothing selected `shown` is the last point, so the dim half
+  // is empty and this costs nothing — the dimming only ever says
+  // "there is a selection, and it is here".
+  const upTo = coords.slice(0, shown + 1).join(" ");
+  const past = coords.slice(shown).join(" ");
+  const areaFor = (pts: string[]) =>
+    pts.length < 2 ? null
+      : `M${pts[0]!.split(",")[0]},${plotH} L${pts.join(" L")} L${pts[pts.length - 1]!.split(",")[0]},${plotH} Z`;
+
+  // The readout is clamped inside the chart, so the first and last
+  // points do not push their own label off the edge.
+  const readoutW = 150;
   const left = Math.max(0, Math.min(width - readoutW, sx - readoutW / 2));
+  const scrubbed = active != null;
 
   return (
-    <View style={{ height }} {...pan.panHandlers}>
-      <View style={{ height: 16, justifyContent: "center" }}>
-        <Text
-          style={{
-            position: "absolute", left, width: readoutW, textAlign: "center",
-            color: active == null ? T.faint : T.text, fontSize: 11,
-            fontVariant: ["tabular-nums"],
-          }}
-          numberOfLines={1}
-        >
-          {prettyDay(points[shown]!.date)}  {money(points[shown]!.amount)}
-        </Text>
+    <View testID="sparkline-surface" style={{ height }} {...pan.panHandlers}>
+      {/* THE READOUT IS THE POINT OF THE GESTURE, so it is typed like
+          it: the amount at reading size, the date under it. It used to
+          be eleven-point grey on one line, which is a footnote about
+          the thing you are actively doing. It tracks the finger
+          horizontally — that is what ties it to the point — and gets
+          brighter while the finger is down. */}
+      <View style={{ height: READOUT_H }}>
+        <View style={{ position: "absolute", left, width: readoutW, alignItems: "center" }}>
+          <Text
+            testID="sparkline-readout"
+            style={{
+              color: touching ? T.text : scrubbed ? T.dim : T.faint,
+              fontSize: 15, fontWeight: touching ? "700" : "600",
+              fontVariant: ["tabular-nums"], lineHeight: 17,
+            }}
+            numberOfLines={1}
+          >
+            {money(points[shown]!.amount)}
+          </Text>
+          <Text style={{ color: T.faint, fontSize: 10, lineHeight: 12 }} numberOfLines={1}>
+            {prettyDay(points[shown]!.date)}
+          </Text>
+        </View>
       </View>
       <Svg width={width} height={plotH}>
         {/* An area under the line gives the series weight without a grid,
             which at this size would be more ink than data. */}
-        <Path
-          d={`M${geom.x(0)},${plotH} L${coords.join(" L")} L${geom.x(points.length - 1)},${plotH} Z`}
-          fill={color}
-          opacity={0.12}
-        />
-        <Polyline points={coords.join(" ")} fill="none" stroke={color} strokeWidth={2}
+        {areaFor(coords.slice(shown)) && (
+          <Path d={areaFor(coords.slice(shown))!} fill={color} opacity={0.12 * PAST_DIM} />
+        )}
+        {areaFor(coords.slice(0, shown + 1)) && (
+          <Path d={areaFor(coords.slice(0, shown + 1))!} fill={color} opacity={0.12} />
+        )}
+        {past.includes(" ") && (
+          <Polyline testID="sparkline-past" points={past} fill="none" stroke={color} strokeWidth={2}
+            strokeLinejoin="round" strokeLinecap="round" opacity={PAST_DIM} />
+        )}
+        <Polyline testID="sparkline-upto" points={upTo} fill="none" stroke={color} strokeWidth={2}
           strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
-          <Circle key={`${p.date}-${i}`} cx={geom.x(i)} cy={geom.y(p.amount)} r={2.5} fill={color} opacity={0.65} />
+          <Circle key={`${p.date}-${i}`} cx={geom.x(i)} cy={geom.y(p.amount)} r={2.5} fill={color}
+            opacity={i > shown ? 0.65 * PAST_DIM : 0.65} />
         ))}
-        {touching && <Rect x={sx - 0.5} y={0} width={1} height={plotH} fill={T.dim} opacity={0.5} />}
+        {/* THE GUIDE LINE STAYS AFTER THE RELEASE, quieter. A readout
+            that persists while the line that placed it disappears
+            leaves a number with nothing pointing at where it came
+            from. */}
+        {scrubbed && (
+          <Rect testID="sparkline-guide" x={sx - 0.5} y={0} width={1} height={plotH}
+            fill={T.dim} opacity={touching ? 0.55 : 0.28} />
+        )}
         {/* The point being read is drawn with a surface ring so it stays
             legible where the line crosses it. */}
         <Circle cx={sx} cy={sy} r={touching ? 5.5 : 4} fill={color} stroke={T.surface} strokeWidth={2} />

@@ -1,4 +1,5 @@
-import { render, screen, userEvent } from "@testing-library/react-native";
+import { act, render, screen, userEvent } from "@testing-library/react-native";
+import { haptics } from "./setup";
 import { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import BottomSheet from "../components/BottomSheet";
@@ -310,10 +311,114 @@ describe("the dashboard", () => {
     expect(screen.getByLabelText("Edit the reading of $200.00 on 2026-08-01")).toBeDisabled();
   });
 
+  /**
+   * The View the PanResponder is attached to.
+   *
+   * There is no gesture to fire in this harness — RNTL cannot
+   * synthesize a touch stream — so the scrub is driven through the
+   * responder props PanResponder installs, which is what the native
+   * side would call.
+   */
+  const scrubSurface = () => screen.getByTestId("sparkline-surface");
+
+  /**
+   * A touch event complete enough for PanResponder.
+   *
+   * PanResponder keeps its own gesture state and reads
+   * `event.touchHistory.touchBank` to do it, so the bare
+   * `{ nativeEvent: { locationX } }` the component itself uses is not
+   * enough to drive it from a test — it throws on `touchBank` of
+   * undefined. Only `locationX` reaches our code; the rest is the
+   * shape PanResponder insists on.
+   */
+  let clock = 0;
+  const touch = (locationX: number) => (clock += 16, {
+    nativeEvent: {
+      locationX, pageX: locationX, pageY: 0, identifier: 1, timestamp: clock,
+      touches: [{ identifier: 1, pageX: locationX, pageY: 0, locationX, locationY: 0, timestamp: clock }],
+      changedTouches: [],
+      target: 1,
+    },
+    touchHistory: {
+      touchBank: [
+        undefined,
+        { touchActive: true, startPageX: locationX, startPageY: 0, startTimeStamp: 0,
+          currentPageX: locationX, currentPageY: 0, currentTimeStamp: clock,
+          previousPageX: locationX, previousPageY: 0, previousTimeStamp: clock - 16 },
+      ],
+      numberActiveTouches: 1,
+      indexOfSingleActiveTouch: 1,
+      // MONOTONIC, and that is load-bearing. PanResponder ignores a
+      // move whose `mostRecentTimeStamp` it has already accounted
+      // for, so a fixed zero made every move after the grant a no-op
+      // — and the first version of the tick test passed because
+      // nothing moved at all.
+      mostRecentTimeStamp: clock,
+    },
+  });
+
   test("the sparkline scrubs to a reading and names it", async () => {
     await render(<Sparkline points={snaps} color="#8bd4ff" width={240} />);
-    // At rest it shows the NEWEST reading, which is the figure on the card.
-    expect(screen.getByText(/Sep 1\s+\$300\.00/)).toBeTruthy();
+    // At rest it shows the NEWEST reading, which is the figure on the
+    // card. Two tiers since 2026-10-14: the amount at reading size,
+    // the date under it.
+    expect(screen.getByTestId("sparkline-readout")).toHaveTextContent("$300.00");
+    expect(screen.getByText("Sep 1")).toBeTruthy();
+  });
+
+  test("at rest nothing is dimmed and there is no guide line", async () => {
+    // Dimming means "there is a selection, and it is here". With no
+    // selection the whole series is the subject, so dimming any of it
+    // would be saying something untrue about data that exists.
+    await render(<Sparkline points={snaps} color="#8bd4ff" width={240} />);
+    expect(screen.queryByTestId("sparkline-guide")).toBeNull();
+    expect(screen.queryByTestId("sparkline-past")).toBeNull();
+    expect(screen.getByTestId("sparkline-upto")).toBeTruthy();
+  });
+
+  test("scrubbing splits the line at the finger and keeps the split after release", async () => {
+    await render(<Sparkline points={snaps} color="#8bd4ff" width={240} />);
+    const surface = scrubSurface();
+
+    // Land on the first of three readings. PanResponder is driven
+    // through the responder props, because there is no gesture to
+    // fire in this harness.
+    await act(async () => {
+      surface.props.onResponderGrant(touch(0));
+    });
+
+    expect(screen.getByTestId("sparkline-readout")).toHaveTextContent("$100.00");
+    // Everything after the finger goes quiet; everything up to it does not.
+    expect(screen.getByTestId("sparkline-past")).toBeTruthy();
+    expect(screen.getByTestId("sparkline-guide")).toBeTruthy();
+
+    // LETTING GO IS "THAT ONE", NOT "NEVER MIND". The readout, the
+    // split and the guide line all stay — the guide line especially,
+    // because a number with nothing pointing at where it came from is
+    // worse than no number.
+    await act(async () => { surface.props.onResponderRelease(touch(0)); });
+    expect(screen.getByTestId("sparkline-readout")).toHaveTextContent("$100.00");
+    expect(screen.getByTestId("sparkline-past")).toBeTruthy();
+    expect(screen.getByTestId("sparkline-guide")).toBeTruthy();
+  });
+
+  test("one haptic tick per point, not per touch event", async () => {
+    haptics.calls.length = 0;
+    await render(<Sparkline points={snaps} color="#8bd4ff" width={240} />);
+    const surface = scrubSurface();
+
+    await act(async () => { surface.props.onResponderGrant(touch(0)); });
+    // Three move events that never leave the first point: one tick so far.
+    for (const x of [1, 2, 3]) {
+      await act(async () => { surface.props.onResponderMove(touch(x)); });
+    }
+    expect(haptics.calls).toEqual(["selection"]);
+
+    // Moving to a different point ticks once more. The ticks ARE the
+    // series' granularity, which is the one thing here a glance does
+    // not give you.
+    await act(async () => { surface.props.onResponderMove(touch(239)); });
+    expect(haptics.calls).toEqual(["selection", "selection"]);
   });
 
   test("a single reading draws a point, not a line, and does not crash", async () => {
