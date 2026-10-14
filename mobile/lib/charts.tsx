@@ -203,7 +203,7 @@ export function Sparkline({
     <View testID="sparkline-surface" style={{ height }} {...pan.panHandlers}>
       {/* THE READOUT IS THE POINT OF THE GESTURE, so it is typed like
           it: the amount at reading size, the date under it. It used to
-          be eleven-point grey on one line, which is a footnote about
+          be eleven-point gray on one line, which is a footnote about
           the thing you are actively doing. It tracks the finger
           horizontally — that is what ties it to the point — and gets
           brighter while the finger is down. */}

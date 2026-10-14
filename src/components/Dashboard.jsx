@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
 import { computeCategoryHistory, computeLoggedContributions, computeNetPosition, computeMonthVariance } from "../engine/progress.ts";
 import { computeLoanProgress, computeLoanHistory, computeDebtSummary, isLoanConfigured } from "../engine/loans.ts";
+import { DASHBOARD_COPY } from "../content/dashboard.ts";
 import { primaryAccount, todayISO } from "../engine/model.ts";
 import { accountColor, roleOfTrackerCategory, roleSuffix, NEUTRAL_LINE, LOAN_COLOR, DEGRADED_SOLID } from "../engine/palette.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
@@ -629,9 +630,9 @@ function SetupLoanCard({ category, onSetup }) {
 function AddAssetCard({ onAdd }) {
   return (
     <section className={`${CARD} border-dashed justify-center items-start`}>
-      <div className={LABEL}>Savings &amp; investments</div>
-      <p className="text-sm text-gray-500">A savings account, a Roth IRA, a brokerage — anything you want a balance, a history, and a contribution trend for.</p>
-      <button onClick={onAdd} className={BTN}>+ Add account</button>
+      <div className={LABEL}>{DASHBOARD_COPY.addAsset.label}</div>
+      <p className="text-sm text-gray-500">{DASHBOARD_COPY.addAsset.body}</p>
+      <button onClick={onAdd} className={BTN}>{DASHBOARD_COPY.addAsset.cta}</button>
     </section>
   );
 }
@@ -766,11 +767,11 @@ function DebtOverviewCard({ summary, onExpand, onAddLoan, onEditLoan }) {
     <section className={CARD}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className={LABEL}>Debt</div>
+          <div className={LABEL}>{DASHBOARD_COPY.debt.label}</div>
           <div className="mt-1 text-2xl font-semibold tabular-nums">{money(summary.total)}</div>
           <div className="text-xs text-gray-500">
-            {summary.count} loan{summary.count === 1 ? "" : "s"}
-            {summary.unlogged > 0 && ` · ${summary.unlogged} not logged yet`}
+            {DASHBOARD_COPY.debt.count(summary.count)}
+            {summary.unlogged > 0 && ` · ${DASHBOARD_COPY.debt.unlogged(summary.unlogged)}`}
           </div>
         </div>
         <button onClick={onAddLoan} className={`${BTN} shrink-0`}>+ Add loan</button>
@@ -792,7 +793,7 @@ function DebtOverviewCard({ summary, onExpand, onAddLoan, onEditLoan }) {
                 </span>
                 <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">
                   {loan.outstanding == null
-                    ? <span className="text-xs text-gray-400">not logged</span>
+                    ? <span className="text-xs text-gray-400">{DASHBOARD_COPY.debt.notLogged}</span>
                     : money(loan.outstanding)}
                 </span>
               </button>
@@ -806,7 +807,7 @@ function DebtOverviewCard({ summary, onExpand, onAddLoan, onEditLoan }) {
           the way the cards actually move: right to fan out, left to fold back. */}
       <div className="mt-auto flex justify-end">
         <button onClick={onExpand} className={`${BTN} inline-flex items-center gap-1.5`} aria-expanded={false}>
-          Show {summary.count} loan{summary.count === 1 ? "" : "s"}
+          {DASHBOARD_COPY.debt.expand(summary.count)}
           <Chevron dir="right" className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -817,14 +818,14 @@ function DebtOverviewCard({ summary, onExpand, onAddLoan, onEditLoan }) {
 function AddLoanCard({ onAdd, onCollapse }) {
   return (
     <section className={`${CARD} border-dashed items-start`}>
-      <div className={LABEL}>Loans</div>
-      <p className="text-sm text-gray-500">Car loan, mortgage, student loan — a loan is its own category; payments tag to it like Roth contributions tag to Roth.</p>
-      <button onClick={onAdd} className={BTN}>+ Add loan</button>
+      <div className={LABEL}>{DASHBOARD_COPY.addLoan.label}</div>
+      <p className="text-sm text-gray-500">{DASHBOARD_COPY.addLoan.body}</p>
+      <button onClick={onAdd} className={BTN}>{DASHBOARD_COPY.addLoan.cta}</button>
       {onCollapse && (
         <div className="mt-auto w-full flex justify-end">
           <button onClick={onCollapse} className={`${BTN} inline-flex items-center gap-1.5`} aria-expanded>
             <Chevron dir="left" className="h-3.5 w-3.5" />
-            Minimize
+            {DASHBOARD_COPY.addLoan.collapse}
           </button>
         </div>
       )}

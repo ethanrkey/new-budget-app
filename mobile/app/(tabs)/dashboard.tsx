@@ -9,6 +9,9 @@ import LogBalance from "../../components/LogBalance";
 import { useChrome } from "../../components/Chrome";
 import BottomSheet from "../../components/BottomSheet";
 import LoanSheet from "../../components/LoanSheet";
+import CategorySheet from "../../components/CategorySheet";
+import { blankCategoryDraft, applyCategoryDraft, type CategoryDraft } from "../../lib/categories";
+import { DASHBOARD_COPY as COPY } from "../../../src/content/dashboard.ts";
 import {
   addBalanceSnapshot, addContribution,
   updateContribution, deleteContribution,
@@ -47,6 +50,9 @@ export default function DashboardScreen() {
   const { logChecking } = useChrome();
   const [contributing, setContributing] = useState<string | null>(null);
   const [editingLoan, setEditingLoan] = useState<TrackerCategory | null>(null);
+  // The dashed add-cards. Which KIND is the whole difference between
+  // them, so one slot rather than two booleans that can both be true.
+  const [adding, setAdding] = useState<"asset" | "debt" | null>(null);
   const [editing, setEditing] = useState<{ catId: string | null; id: string; amount: number; date: string } | null>(null);
   // Contributions are the same SHAPE as a reading and a different
   // THING, so they get their own editing slot rather than a flag on
@@ -153,28 +159,56 @@ export default function DashboardScreen() {
             `${cat.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
         />
       ))}
+      {/* The end of the savings section, and the only way to start one
+          from this screen. The web has had this dashed card since the
+          Dashboard was built; the phone sent you to Settings ->
+          Accounts you track, which is a detour from the screen the
+          account is going to appear on. */}
+      <AddCard
+        label={COPY.addAsset.label}
+        body={COPY.addAsset.body}
+        cta={COPY.addAsset.cta}
+        online={online}
+        onPress={() => setAdding("asset")}
+      />
+
       {/* COLLAPSED BY DEFAULT, like the web. Five loan cards is most of
           the Dashboard, and "what do I owe in total" is the question
           almost every visit is actually asking — the per-loan detail is
           the follow-up, not the opening. The choice is remembered per
           device, which is the point of putting something away. */}
-      {debts.length > 0 && (
-        <Pressable
-          style={styles.debtHead}
-          onPress={() => { animate(); setPref("debtsExpanded", !prefs.debtsExpanded); }}
-          accessibilityRole="button"
-          accessibilityLabel={prefs.debtsExpanded ? "Hide the loans" : `Show ${debts.length} loans`}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Debt</Text>
-            <Text style={styles.debtTotal}>{money(debtTotal)}</Text>
-            <Text style={styles.dim}>
-              {debts.length} loan{debts.length === 1 ? "" : "s"}
-              {debtUnlogged > 0 ? ` · ${debtUnlogged} with no logged balance` : ""}
-            </Text>
-          </View>
-          <Text style={styles.chev}>{prefs.debtsExpanded ? "⌃" : "⌄"}</Text>
-        </Pressable>
+      {/* THREE STATES, the same three the web has.
+          No loans at all: just the add-card, with nothing to collapse
+          — an overview of nothing ("$0.00 · 0 loans") is noise.
+          Collapsed: one summary card carrying the total, every loan by
+          name, and the way in.
+          Expanded: the add-card first and the loan cards after it, so
+          the thing you just pressed does not move. */}
+      {debts.length === 0 ? (
+        <AddCard
+          label={COPY.addLoan.label} body={COPY.addLoan.body} cta={COPY.addLoan.cta}
+          online={online} onPress={() => setAdding("debt")}
+        />
+      ) : !prefs.debtsExpanded ? (
+        <DebtOverviewCard
+          summary={debtSummary}
+          online={online}
+          onExpand={() => { animate(); setPref("debtsExpanded", true); }}
+          // Adding from the collapsed card expands the section too: a
+          // new loan lands at the end of the list, and a collapsed
+          // card that silently grew by one is worse than useless.
+          onAddLoan={() => { animate(); setPref("debtsExpanded", true); setAdding("debt"); }}
+          onOpenLoan={(id) => {
+            const cat = debts.find((c) => c.id === id);
+            if (cat) setEditingLoan(cat);
+          }}
+        />
+      ) : (
+        <AddCard
+          label={COPY.addLoan.label} body={COPY.addLoan.body} cta={COPY.addLoan.cta}
+          online={online} onPress={() => setAdding("debt")}
+          onCollapse={() => { animate(); setPref("debtsExpanded", false); }}
+        />
       )}
 
       {prefs.debtsExpanded && debts.map((cat) => (
@@ -190,6 +224,27 @@ export default function DashboardScreen() {
         />
       ))}
 
+
+      {/* The SAME form the account manager uses, mounted here too.
+          Not a second way to create an account — a second door to the
+          one way: the draft, the validation and the three-way engine
+          branch are all lib/categories.ts, which is where they were
+          already tested. */}
+      {adding && (
+        <CategorySheet
+          title={adding === "debt" ? "Add a loan" : "Add an account"}
+          draft={adding === "debt"
+            ? { ...blankCategoryDraft(today), kind: "debt" }
+            : blankCategoryDraft(today)}
+          creating
+          busy={saving}
+          onClose={() => setAdding(null)}
+          onSave={async (d: CategoryDraft) => {
+            const ok = await commit((st) => applyCategoryDraft(st, d, null), `${d.name.trim()} added`);
+            if (ok) setAdding(null);
+          }}
+        />
+      )}
 
       {/* Tracked accounts only. Checking is Chrome's, because its
           control is on every tab. */}
@@ -519,12 +574,130 @@ function DebtCard({ cat, today, online, onLog, onEdit, onEditEntry, onDeleteEntr
   );
 }
 
+/**
+ * A dashed card that starts something: the end of the savings
+ * section, and the whole of the debt section when there are no loans.
+ *
+ * DASHED, like the web's, because the border is the affordance: a
+ * solid card on this screen is a thing you HAVE, and an outline is a
+ * space for a thing you could have. The label and body are shared
+ * copy (src/content/dashboard.ts) so the explanation of what a loan
+ * is reads the same on both clients.
+ */
+function AddCard({
+  label, body, cta, online, onPress, onCollapse,
+}: {
+  label: string; body: string; cta: string; online: boolean;
+  onPress: () => void; onCollapse?: () => void;
+}) {
+  return (
+    <View style={[styles.card, styles.dashed]}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.addBody}>{body}</Text>
+      <View style={styles.addRow}>
+        <Pressable
+          style={({ pressed }) => [styles.ghostBtn, pressed && styles.pressed, !online && styles.off]}
+          disabled={!online}
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={online ? cta : "Offline"}
+        >
+          <Text style={styles.ghostBtnText}>{online ? cta : "Offline"}</Text>
+        </Pressable>
+        {onCollapse && (
+          <Pressable
+            style={({ pressed }) => [styles.ghostBtn, pressed && styles.pressed]}
+            onPress={onCollapse}
+            accessibilityRole="button"
+            accessibilityLabel={COPY.addLoan.collapse}
+          >
+            <Text style={styles.ghostBtnText}>⌃ {COPY.addLoan.collapse}</Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The debt section, collapsed: one card that answers the question
+ * almost every visit is actually asking.
+ *
+ * It lists every loan rather than capping at a few — "just show the
+ * first five" hides exactly the one somebody is looking for — and
+ * each row is the way INTO that loan, because otherwise editing one
+ * means expanding the section first, which is a detour.
+ *
+ * A loan with no reading shows "not logged" rather than $0.00. It is
+ * not zero, it is unknown, and the two are different answers.
+ */
+function DebtOverviewCard({
+  summary, online, onExpand, onAddLoan, onOpenLoan,
+}: {
+  summary: { total: number; count: number; unlogged: number;
+             loans: { id: string; name: string; outstanding: number | null }[] };
+  online: boolean;
+  onExpand: () => void;
+  onAddLoan: () => void;
+  onOpenLoan: (id: string) => void;
+}) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.debtTop}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>{COPY.debt.label}</Text>
+          <Text style={styles.debtTotal}>{money(summary.total)}</Text>
+          <Text style={styles.dim}>
+            {COPY.debt.count(summary.count)}
+            {summary.unlogged > 0 ? ` · ${COPY.debt.unlogged(summary.unlogged)}` : ""}
+          </Text>
+        </View>
+        <Pressable
+          style={({ pressed }) => [styles.ghostBtn, pressed && styles.pressed, !online && styles.off]}
+          disabled={!online}
+          onPress={onAddLoan}
+          accessibilityRole="button"
+          accessibilityLabel={online ? COPY.addLoan.cta : "Offline"}
+        >
+          <Text style={styles.ghostBtnText}>{online ? COPY.addLoan.cta : "Offline"}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.debtListWrap}>
+        {summary.loans.map((loan) => (
+          <Pressable
+            key={loan.id}
+            style={({ pressed }) => [styles.debtListRow, pressed && styles.pressed]}
+            disabled={!online}
+            onPress={() => onOpenLoan(loan.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`${loan.name}, ${loan.outstanding == null ? COPY.debt.notLogged : money(loan.outstanding)}. Edit it.`}
+          >
+            <Text style={styles.debtListName} numberOfLines={1}>{loan.name}</Text>
+            <Text style={loan.outstanding == null ? styles.debtListUnlogged : styles.debtListAmount}>
+              {loan.outstanding == null ? COPY.debt.notLogged : money(loan.outstanding)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Pressable
+        style={({ pressed }) => [styles.ghostBtn, styles.expandBtn, pressed && styles.pressed]}
+        onPress={onExpand}
+        accessibilityRole="button"
+        accessibilityLabel={COPY.debt.expand(summary.count)}
+      >
+        <Text style={styles.ghostBtnText}>{COPY.debt.expand(summary.count)} ⌄</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: T.bg },
   pad: { padding: 16, gap: 12, paddingBottom: 36 },
   hero: { backgroundColor: T.surface, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: T.border, gap: 4 },
   heroHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  chev: { color: T.faint, fontSize: 15 },
   heroNum: { color: T.text, fontSize: 34, fontWeight: "700", fontVariant: ["tabular-nums"] },
   heroRows: { marginTop: 10, gap: 2 },
   line: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 },
@@ -539,8 +712,31 @@ const styles = StyleSheet.create({
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   dim: { color: T.faint, fontSize: 12, lineHeight: 16 },
   contrib: { marginTop: 4, flexDirection: "row", alignItems: "center", gap: 10 },
-  debtHead: { backgroundColor: T.surface, borderRadius: 14, borderWidth: 1, borderColor: T.border, padding: 14, flexDirection: "row", alignItems: "center", gap: 10 },
   debtTotal: { color: T.text, fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"], marginTop: 2 },
+  chev: { color: T.faint, fontSize: 15 },
+  dashed: { borderStyle: "dashed", backgroundColor: "transparent" },
+  addBody: { color: T.dim, fontSize: 13, lineHeight: 19, marginTop: 6 },
+  addRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12, gap: 10 },
+  ghostBtn: {
+    borderWidth: 1, borderColor: T.border, borderRadius: 10, backgroundColor: T.surface,
+    paddingHorizontal: 14, minHeight: 40, justifyContent: "center", alignSelf: "flex-start",
+  },
+  ghostBtnText: { color: T.text, fontSize: 14, fontWeight: "600" },
+  pressed: { opacity: 0.7 },
+  off: { opacity: 0.45 },
+  debtTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  // Named for the OVERVIEW card's list, not for a loan card's rows —
+  // `loanRow` was already taken by the expanded card's label/value
+  // pairs, and tsc caught the collision as a duplicate key.
+  debtListWrap: { marginTop: 14, gap: 2 },
+  debtListRow: {
+    flexDirection: "row", alignItems: "baseline", justifyContent: "space-between",
+    gap: 12, minHeight: 36, paddingHorizontal: 2,
+  },
+  debtListName: { color: T.dim, fontSize: 14, flexShrink: 1 },
+  debtListAmount: { color: T.text, fontSize: 14, fontVariant: ["tabular-nums"] },
+  debtListUnlogged: { color: T.faint, fontSize: 12 },
+  expandBtn: { alignSelf: "flex-end", marginTop: 12 },
   loanTag: { color: T.brass, fontSize: 9, fontWeight: "700", letterSpacing: 0.5, borderWidth: 1, borderColor: T.brass, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, overflow: "hidden" },
   loanActions: { flexDirection: "row", gap: 8, marginTop: 10 },
   loanBlock: { marginTop: 12, gap: 3 },
