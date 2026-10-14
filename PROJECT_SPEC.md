@@ -1711,7 +1711,50 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
     item on the critical path that nobody here controls the timing of.
     Not gated on the app being finished; start it regardless of state.
 24. ~~**The iOS app icon is still the Expo template.**~~ **DONE
-    2026-10-09.** It was the blue chevron on pale blue with the layout
+    2026-10-09, and LAYERED 2026-10-14.**
+
+    The key is struck metal now — a warm highlight top-left falling to
+    a deeper gold bottom-right — and on iOS 26 it is its own layer
+    over a navy fill, so the system supplies the glass, the specular
+    highlight, the parallax and the dark and tinted variants.
+
+    **SDK 57 takes an Icon Composer `.icon` directly**: `ios.icon`
+    pointing at one makes prebuild set
+    `ASSETCATALOG_COMPILER_APPICON_NAME` and add the bundle to the
+    Xcode project (`@expo/prebuild-config/.../withIosIcons.js`). No
+    plugin and no patch. The bundle at
+    `mobile/assets/images/KeyBudget.icon` is hand-authored — the
+    format is undocumented, and the schema came from
+    IconComposerFoundation's own symbol table plus Apple's template
+    under Xcode's file templates — but it is **verified, not hoped
+    for**: `actool` compiles it, emits `Assets.car` and the legacy
+    60x60@2x and 76x76@2x~ipad slots rendered from the same layer,
+    and writes a partial plist naming `KeyBudget` as
+    `CFBundleIconName`. That also answers what older iOS gets.
+
+    **Two bugs, both caught by measuring pixels rather than looking at
+    a thumbnail**, and the second is the better lesson:
+
+    - The first gradient used SVG's default `objectBoundingBox`
+      units. Two of the key's three shapes are straight lines, whose
+      bounding boxes have zero height or zero width, and SVG says
+      such an element is NOT RENDERED — so the shaft and the tooth
+      silently vanished and the icon became a ring on navy.
+      `userSpaceOnUse` across the whole mark fixes it and is the
+      better answer anyway: metal is lit as one object.
+    - The check written to catch that then PASSED the broken icon,
+      because the area floor was 6% and a ring alone is 8.9%. The
+      numbers are measured now — the key is 13.1% of the square and
+      spans 69% of its width, the ring alone 8.9% and 29% — and the
+      SPAN is the sharp test, since only the shaft makes the mark
+      wide.
+
+    `public/favicon.svg` is finally the single source: the generator
+    parses its `<defs>` and `<g id="mark">` rather than restating the
+    geometry, and the nine web rasters — hand-exported once and stale
+    ever since — are generated from it too.
+
+    *The original entry:* **DONE 2026-10-09.** It was the blue chevron on pale blue with the layout
     guides still visible, found by looking at the file after a handoff
     note recorded the icon as done. Now generated from
     `public/favicon.svg` — the one definition of the mark — by
@@ -2125,6 +2168,39 @@ a port.
     architecture the toolchain hands it, and `node -p process.arch`
     reporting `x64` on an M4 means the JS toolchain is in the emulated
     world too. Check that before blaming a build failure on Expo.
+
+    **CLEARED 2026-10-14: Xcode 27.0 (27A266a) ships Swift 6.4, and
+    the whole native project compiles.** Every pod built, expo-modules-jsi
+    included — the package that was the blocker. Three things came out
+    of the attempt and all three outlive it:
+
+    - **A dead Intel Homebrew is the real obstacle now**, not Xcode.
+      `/usr/local/bin/git` is a symlink into an x86_64 Cellar left by
+      Migration Assistant, and it comes first on the PATH that
+      `/bin/sh` hands a CHILD process — so the interactive shell finds
+      the working system git while everything that spawns one does
+      not. It broke `pod install` ("Bad CPU type in executable"),
+      `eas build` ("git found, but git --help exited with status
+      undefined") and `npm test` (check_spelling shells out to
+      `git ls-files`, so the chain died before jest ran, silently,
+      for who knows how long). **Remove that Homebrew, or at least
+      that symlink.** Everything here was run with
+      `PATH=/usr/bin:/bin:$PATH` as a stopgap.
+    - **The remaining local failure is macOS, not Expo.** With a
+      working git the build reaches codesign and dies on
+      `ExpoModulesJSI.framework: resource fork, Finder information, or
+      similar detritus not allowed`. The detritus is
+      `com.apple.provenance`, a system xattr macOS 26 applies and
+      `xattr -rc` does not remove. It does not affect EAS, whose
+      images are clean.
+    - **No iOS 26 simulator runtime is installed** — Xcode 27
+      downloads platform runtimes separately, and the newest here is
+      18.6. So even a working local build cannot show Liquid Glass or
+      the layered icon. A device over TestFlight remains the only
+      honest look at either.
+
+    *The blocker as it stood, kept because the diagnosis is the useful
+    part:*
 
     **THE LOCAL BUILD IS BLOCKED ON XCODE, measured 2026-10-11.** The
     first `npx expo run:ios` got as far as a clean CocoaPods install and
