@@ -13,6 +13,7 @@ import {
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS,
 } from "../../src/content/setup.ts";
+import { emptyBillRow } from "../../src/engine/setup.ts";
 import type { SetupAnswers, SetupCadence } from "../../src/engine/setup.ts";
 import type { BudgetItem } from "../../src/engine/types.ts";
 
@@ -170,7 +171,7 @@ export default function Setup({
                     </View>
                   ))}
                   <Pressable
-                    onPress={() => set("bills", [...d.bills, { name: "", amount: "", day: d.bills[0]?.day ?? "1" }])}
+                    onPress={() => set("bills", [...d.bills, emptyBillRow(todayISO)])}
                     accessibilityRole="button" accessibilityLabel={COPY.bills.add} hitSlop={8}
                   >
                     <Text style={styles.addMore}>{COPY.bills.add}</Text>
@@ -364,6 +365,12 @@ const Money = (p: Omit<Parameters<typeof Field>[0], "placeholder">) => (
   </>
 );
 
+// `selectTextOnFocus` IS NOT POLISH. The field arrives holding two
+// digits and `maxLength` is 2, so tapping it and pressing a number does
+// NOTHING — the keypress is silently swallowed and the only way to
+// change the day is to notice that you have to delete first. Selecting
+// the value on focus makes one tap and one digit enough, which is what
+// a prefilled two-character field has to do.
 const Day = (p: Omit<Parameters<typeof Field>[0], "placeholder">) => (
   <>
     <Text style={styles.label}>{p.label}</Text>
@@ -372,6 +379,7 @@ const Day = (p: Omit<Parameters<typeof Field>[0], "placeholder">) => (
       value={p.value}
       onChangeText={p.onChange}
       keyboardType="number-pad"
+      selectTextOnFocus
       maxLength={2}
       placeholderTextColor={T.faint}
       accessibilityLabel={p.accessibilityLabel ?? p.label}

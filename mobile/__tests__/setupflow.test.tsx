@@ -99,6 +99,35 @@ test("the paycheck step asks when the next payday is, and uses it", async () => 
   expect(pickerProps.current!.minimumDate).toBeInstanceOf(Date);
 });
 
+test("every bill row's due day defaults to today, not to the row above", async () => {
+  // THE BUG: "+ Add another bill" seeded the new row from bills[0].day,
+  // so a second bill inherited whatever had just been typed into the
+  // first — 8 if the first was set to the 8th, 4 if it was set to the
+  // 4th — directly under a sentence saying it defaults to today.
+  await mount();
+  await press("Skip");                      // paycheck
+  await press("Skip");                      // rent
+
+  const today = new Date();
+  const todayDay = String(today.getDate());
+
+  const first = screen.getByLabelText("Bill 1 due day");
+  expect(first.props.value).toBe(todayDay);
+  // And it can be RETYPED. maxLength is 2 and the field arrives holding
+  // two digits, so without selectTextOnFocus the first keypress is
+  // swallowed and nothing happens at all.
+  expect(first.props.selectTextOnFocus).toBe(true);
+
+  await userEvent.clear(first);
+  await userEvent.type(first, "8");
+  expect(screen.getByLabelText("Bill 1 due day").props.value).toBe("8");
+
+  await press("+ Add another bill");
+  expect(screen.getByLabelText("Bill 2 due day").props.value).toBe(todayDay);
+  // ...and the first row kept what was typed into it.
+  expect(screen.getByLabelText("Bill 1 due day").props.value).toBe("8");
+});
+
 test("Continue keeps what was typed; Skip discards it", async () => {
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));

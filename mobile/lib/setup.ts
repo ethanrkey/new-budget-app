@@ -1,7 +1,7 @@
 import type { BudgetItem, BudgetState } from "../../src/engine/types.ts";
 import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
-  blankAccountRows, incompleteAccountRows, collectAccounts,
+  blankAccountRows, incompleteAccountRows, collectAccounts, emptyBillRow,
   type SetupCadence, type BillRow, type AccountRows, type SetupAnswers,
 } from "../../src/engine/setup.ts";
 import { SETUP_STEPS, type SetupStepKey } from "../../src/content/setup.ts";
@@ -43,16 +43,16 @@ export type SetupDraft = {
   accounts: AccountRows;
 };
 
-/** The day of the month `iso` falls on, as a string for a text field. */
-const dayOf = (iso: string) => String(Number(iso.slice(8, 10)));
-
 export function blankSetupDraft(today: string): SetupDraft {
   return {
     payAmount: "", payCadence: "biweekly", payday: today,
     // The 1st, like the web: it is right more often than today is, and
     // the ledger's ordering turns on it.
     rentAmount: "", rentDay: "1",
-    bills: [{ name: "", amount: "", day: dayOf(today) }],
+    // A row, from the one place that makes them — see emptyBillRow.
+    // Every other row on this step comes from there too, which is the
+    // whole reason the second one no longer inherits the first's day.
+    bills: [emptyBillRow(today)],
     groceryAmount: "", groceryCadence: "weekly",
     balance: "",
     accounts: blankAccountRows(),

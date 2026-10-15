@@ -2,7 +2,7 @@ import { useState } from "react";
 import { todayISO } from "../engine/model.ts";
 import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
-  blankAccountRows, incompleteAccountRows, collectAccounts,
+  blankAccountRows, incompleteAccountRows, collectAccounts, emptyBillRow,
 } from "../engine/setup.ts";
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, SETUP_STEPS,
@@ -16,8 +16,12 @@ import { useSubmitOnce } from "../useSubmitOnce.js";
 // same six steps; before that a sentence or a rule edited here would
 // have had to be found and matched by hand on the other side.
 //
-// Today's date, used for every generic bill. Shown, never hidden.
-const defaultBillDay = new Date().getDate();
+// THE BILL ROW IS NOT BUILT HERE. It used to be, from a module-level
+// `new Date().getDate()` — a "today" frozen when the bundle was first
+// evaluated, so a tab left open overnight offered yesterday. The phone
+// had its own version of the same promise and broke it differently
+// (see emptyBillRow in src/engine/setup.ts). One builder now, called
+// when the row is made.
 
 const STEPS = [...SETUP_STEPS, "done"];
 
@@ -40,7 +44,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
   const [rentAmount, setRentAmount] = useState("");
   const [rentDay, setRentDay] = useState("1");
 
-  const [bills, setBills] = useState([{ name: "", amount: "", day: String(defaultBillDay) }]);
+  const [bills, setBills] = useState(() => [emptyBillRow(todayISO())]);
 
   const [groceryAmount, setGroceryAmount] = useState("");
   const [groceryCadence, setGroceryCadence] = useState("weekly");
@@ -108,7 +112,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
     setBills((bs) => bs.map((b, idx) => (idx === i ? { ...b, [field]: value } : b)));
   }
   function addBillRow() {
-    setBills((bs) => [...bs, { name: "", amount: "", day: String(defaultBillDay) }]);
+    setBills((bs) => [...bs, emptyBillRow(todayISO())]);
   }
   function removeBillRow(i) {
     setBills((bs) => bs.filter((_, idx) => idx !== i));
@@ -217,7 +221,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
                       className={`${field} w-16`}
                       type="number" min="1" max="31"
                       aria-label="Day of month"
-                      value={b.day ?? String(defaultBillDay)}
+                      value={b.day ?? emptyBillRow(todayISO()).day}
                       onChange={(e) => updateBill(i, "day", e.target.value)}
                     />
                   </label>

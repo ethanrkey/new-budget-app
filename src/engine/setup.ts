@@ -214,6 +214,35 @@ export function firstMonthlyOn(dom: number, today: ISODate): ISODate {
 // Inventing a number here would make two rules fight over position 0.
 
 /**
+ * A NEW bill row, blank except for the day — which is today's.
+ *
+ * THE BUG THIS EXISTS FOR (found on a device, 2026-10-15). The step's
+ * own copy says the due day "defaults to today", and the first row's
+ * did. Every row after it did not: the phone seeded "+ Add another
+ * bill" from `bills[0].day`, so a second bill inherited whatever the
+ * user had just typed into the first one. Set bill 1 to the 8th and
+ * every later row offered the 8th; set it to the 4th and they offered
+ * the 4th. Deterministic, invisible, and contradicting the sentence
+ * directly above it.
+ *
+ * The web seeded from a module-level `new Date().getDate()` instead,
+ * which is today only until the tab has been open past midnight — the
+ * same promise broken a different way, and a second definition of a
+ * thing that should have had one.
+ *
+ * So both clients make a row HERE, and `today` is a parameter so the
+ * answer is computed when the row is created rather than when some
+ * module was first evaluated.
+ */
+export function defaultBillDay(today: ISODate = todayISO()): string {
+  return String(dayOf(today));
+}
+
+export function emptyBillRow(today: ISODate = todayISO()): BillRow {
+  return { name: "", amount: "", day: defaultBillDay(today) };
+}
+
+/**
  * The paycheck step. Null when nothing usable was typed.
  *
  * `payday` IS THE WHOLE REASON THIS TAKES A FOURTH ARGUMENT. Setup

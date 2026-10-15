@@ -12,7 +12,7 @@ import { normalize } from "../src/engine/stateShape.ts";
 import {
   applySetup, paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
   blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
-  firstMonthlyOn,
+  firstMonthlyOn, defaultBillDay, emptyBillRow,
 } from "../src/engine/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
 import { computeLedger } from "../src/engine/compute.ts";
@@ -288,6 +288,23 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   eq("...and keeps the 1st as its day", rentRule("1450", "1", TODAY).dayOfMonth, 1);
   eq("rent due later this month still starts this month",
     rentRule("1450", "28", TODAY).startDate, "2026-10-28");
+}
+
+// ---- EVERY bill row's day defaults to today, not just the first -----
+{
+  // Found on a device: the phone seeded "+ Add another bill" from the
+  // FIRST row's current value, so a second bill offered whatever had
+  // just been typed into the first. The web seeded from a module-level
+  // `new Date().getDate()`, frozen when the bundle loaded. One builder
+  // now, and it takes the day as an argument.
+  eq("a new row's day is today's", emptyBillRow(TODAY).day, "12");
+  eq("...with nothing else filled in", emptyBillRow(TODAY), { name: "", amount: "", day: "12" });
+  eq("a single-digit day has no leading zero", defaultBillDay("2026-10-04"), "4");
+  eq("a two-digit day is itself", defaultBillDay("2026-10-31"), "31");
+  // The point of the parameter: two rows made on different days differ,
+  // and two rows made on the same day agree however many came before.
+  not("rows made on different days share a default",
+    emptyBillRow("2026-10-04").day === emptyBillRow("2026-10-08").day);
 }
 
 // ---- the bills step's defaulted day is TODAY, shown not guessed ------
