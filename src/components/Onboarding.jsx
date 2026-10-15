@@ -5,7 +5,7 @@ import {
   blankAccountRows, incompleteAccountRows, collectAccounts, emptyBillRow,
 } from "../engine/setup.ts";
 import {
-  SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, SETUP_STEPS,
+  SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, SETUP_STEPS, WEEKDAY_OPTIONS,
 } from "../content/setup.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
@@ -48,6 +48,8 @@ export default function Onboarding({ initialBalance, onComplete }) {
 
   const [groceryAmount, setGroceryAmount] = useState("");
   const [groceryCadence, setGroceryCadence] = useState("weekly");
+  // A day of the WEEK (Date.getDay()), not a date — see groceryRule.
+  const [groceryDay, setGroceryDay] = useState(0);
 
   const [balanceInput, setBalanceInput] = useState(initialBalance != null ? String(initialBalance) : "");
   const [accounts, setAccounts] = useState(blankAccountRows);
@@ -91,7 +93,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
     goNext();
   }
   function submitGroceries() {
-    addIf(groceryRule(groceryAmount, groceryCadence, todayISO()));
+    addIf(groceryRule(groceryAmount, groceryCadence, todayISO(), groceryDay));
     goNext();
   }
   // The verified balance is the single value the whole forecast builds
@@ -252,6 +254,30 @@ export default function Onboarding({ initialBalance, onComplete }) {
                 <select className={field} value={groceryCadence} onChange={(e) => setGroceryCadence(e.target.value)}>
                   {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
+              </div>
+            </div>
+            {/* A DAY OF THE WEEK, not a date — see groceryRule. Chips
+                rather than a select, because seven short options read
+                at a glance and the phone's flow draws the same row. */}
+            <div>
+              <label className={label}>{COPY.groceries.dayLabel}</label>
+              <div className="flex gap-1">
+                {WEEKDAY_OPTIONS.map((w) => (
+                  <button
+                    key={w.value}
+                    type="button"
+                    onClick={() => setGroceryDay(w.value)}
+                    aria-pressed={groceryDay === w.value}
+                    aria-label={w.full}
+                    className={`flex-1 py-2 rounded-lg border text-xs ${
+                      groceryDay === w.value
+                        ? "bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white font-semibold"
+                        : "border-gray-300 dark:border-gray-700 text-gray-500 hover:border-gray-400"
+                    }`}
+                  >
+                    {w.label}
+                  </button>
+                ))}
               </div>
             </div>
             <StepButtons onSkip={goNext} onContinue={submitGroceries} />

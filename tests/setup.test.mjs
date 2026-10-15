@@ -12,7 +12,7 @@ import { normalize } from "../src/engine/stateShape.ts";
 import {
   applySetup, paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
   blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
-  firstMonthlyOn, defaultBillDay, emptyBillRow,
+  firstMonthlyOn, defaultBillDay, emptyBillRow, firstWeekdayOn,
 } from "../src/engine/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
 import { computeLedger } from "../src/engine/compute.ts";
@@ -288,6 +288,29 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   eq("...and keeps the 1st as its day", rentRule("1450", "1", TODAY).dayOfMonth, 1);
   eq("rent due later this month still starts this month",
     rentRule("1450", "28", TODAY).startDate, "2026-10-28");
+}
+
+// ---- groceries happen on a DAY OF THE WEEK -------------------------
+{
+  // TODAY is 2026-10-12, a Monday.
+  eq("today counts when it is the chosen day", firstWeekdayOn(1, TODAY), "2026-10-12");
+  eq("a day later this week is this week", firstWeekdayOn(4, TODAY), "2026-10-15");
+  eq("a day already gone is next week", firstWeekdayOn(0, TODAY), "2026-10-18");
+  eq("Saturday from a Monday", firstWeekdayOn(6, TODAY), "2026-10-17");
+  // Across a month, and across a year.
+  eq("the next Sunday can be in the next month", firstWeekdayOn(0, "2026-10-28"), "2026-11-01");
+  eq("...and in the next year", firstWeekdayOn(5, "2026-12-29"), "2027-01-01");
+
+  const g = groceryRule("150", "weekly", TODAY);
+  eq("groceries default to Sunday", g.startDate, "2026-10-18");
+  eq("...and the rule's day of month comes from that date, not today", g.dayOfMonth, 18);
+  eq("a chosen weekday is used", groceryRule("150", "weekly", TODAY, 3).startDate, "2026-10-14");
+  // The whole point: the series must not inherit the day setup was run.
+  not("the start date is the day setup happened to be run",
+    groceryRule("150", "weekly", TODAY, 6).startDate === TODAY);
+  // Everything else about the step is unchanged.
+  eq("groceries are still variable spending", groceryRule("150", "weekly", TODAY).variable, true);
+  eq("a blank amount is still nothing", groceryRule("", "weekly", TODAY, 2), null);
 }
 
 // ---- EVERY bill row's day defaults to today, not just the first -----

@@ -12,7 +12,7 @@ import {
   scrollToReveal, type SetupDraft, type SetupStepKey,
 } from "../lib/setup";
 import {
-  SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS,
+  SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, WEEKDAY_OPTIONS,
 } from "../../src/content/setup.ts";
 import { emptyBillRow } from "../../src/engine/setup.ts";
 import type { SetupAnswers, SetupCadence } from "../../src/engine/setup.ts";
@@ -242,6 +242,10 @@ export default function Setup({
                 <Question title={COPY.groceries.title} sub={COPY.groceries.sub}>
                   <Money label={COPY.labels.amount} value={d.groceryAmount} onChange={(v) => set("groceryAmount", v)} autoFocus />
                   <Cadence label={COPY.labels.cadence} value={d.groceryCadence} onChange={(v) => set("groceryCadence", v)} />
+                  {/* A DAY OF THE WEEK, not a date — see groceryRule.
+                      Seven chips share one row, so they are short and
+                      the full name is what a screen reader says. */}
+                  <Weekday label={COPY.groceries.dayLabel} value={d.groceryDay} onChange={(v) => set("groceryDay", v)} />
                 </Question>
               )}
 
@@ -499,6 +503,36 @@ function Cadence({
   );
 }
 
+// Seven chips on one row at 390px: 6pt gaps, so each is about 46pt
+// wide — above the 44pt target, and the reason the labels are three
+// letters rather than the full name the screen reader gets.
+function Weekday({
+  label, value, onChange,
+}: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.days}>
+        {WEEKDAY_OPTIONS.map((w) => {
+          const on = w.value === value;
+          return (
+            <Pressable
+              key={w.value}
+              style={[styles.day, on && styles.chipOn]}
+              onPress={() => { Keyboard.dismiss(); onChange(w.value); }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={w.full}
+            >
+              <Text style={[styles.chipText, on && styles.chipTextOn]}>{w.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: T.bg },
   head: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 20 },
@@ -523,6 +557,11 @@ const styles = StyleSheet.create({
   pickRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   pickCue: { color: T.brass, fontSize: 13, fontWeight: "600" },
   chips: { flexDirection: "row", gap: 6, marginTop: 6 },
+  days: { flexDirection: "row", gap: 4, marginTop: 6 },
+  day: {
+    flex: 1, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    borderRadius: 10, minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 2,
+  },
   chip: {
     flex: 1, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
     borderRadius: 10, minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: 4,

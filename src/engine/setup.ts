@@ -322,6 +322,29 @@ export function billRules(rows: BillRow[], today: ISODate = todayISO()): BudgetI
 }
 
 /**
+ * The first date a rule that happens on `dow` should charge.
+ *
+ * The weekday twin of `firstMonthlyOn`, and it exists for the same
+ * reason: `occurrenceDates` emits a rule's `startDate` verbatim as its
+ * first occurrence, so a weekly rule starting today happens today
+ * whatever day of the week today is. Groceries bought on Sunday were
+ * entering the forecast on a Wednesday because that is when setup was
+ * run.
+ *
+ * TODAY COUNTS. Somebody setting up on a Sunday and saying they shop
+ * on Sundays means this Sunday, not next week — the same call
+ * `firstMonthlyOn` makes about a due day that is today.
+ *
+ * `dow` is 0 = Sunday, matching `Date.getDay()`.
+ */
+export function firstWeekdayOn(dow: number, today: ISODate): ISODate {
+  const t = new Date(today + "T00:00:00");
+  const ahead = (((dow - t.getDay()) % 7) + 7) % 7;
+  t.setDate(t.getDate() + ahead);
+  return toISODate(t);
+}
+
+/**
  * The groceries step. Null when nothing usable was typed.
  *
  * `variable: true`, which is the flag the Ledger's own form offers as
@@ -331,15 +354,24 @@ export function billRules(rows: BillRow[], today: ISODate = todayISO()): BudgetI
  * really spent. Without the flag the Spending tab has nothing to put
  * in its variance column for the one rule most likely to move, and
  * the forecast treats a guess with the same certainty as rent.
+ *
+ * `weekday` IS A DAY OF THE WEEK, not a date. Shopping is the one
+ * thing in setup that genuinely happens on a Saturday rather than on
+ * the 23rd, and starting the rule on the day setup happened to be run
+ * put the whole series on the wrong day of the week for good. Sunday
+ * is the default because it is the most common one and because a
+ * step with nothing chosen is a step people skip.
  */
 export function groceryRule(
   amount: string, cadence: SetupCadence, today: ISODate = todayISO(),
+  weekday = 0,
 ): BudgetItem | null {
   const amt = positive(amount);
   if (amt == null) return null;
+  const start = firstWeekdayOn(weekday, today);
   return {
     id: uid(), name: "Groceries", amount: amt, category: "bill",
-    cadence, startDate: today, dayOfMonth: dayOf(today), variable: true,
+    cadence, startDate: start, dayOfMonth: dayOf(start), variable: true,
   } as BudgetItem;
 }
 

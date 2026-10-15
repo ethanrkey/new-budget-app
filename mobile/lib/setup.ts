@@ -39,6 +39,8 @@ export type SetupDraft = {
   bills: BillRow[];
   groceryAmount: string;
   groceryCadence: SetupCadence;
+  /** Day of the week, Date.getDay() — not a date. See groceryRule. */
+  groceryDay: number;
   balance: string;
   accounts: AccountRows;
 };
@@ -53,7 +55,7 @@ export function blankSetupDraft(today: string): SetupDraft {
     // Every other row on this step comes from there too, which is the
     // whole reason the second one no longer inherits the first's day.
     bills: [emptyBillRow(today)],
-    groceryAmount: "", groceryCadence: "weekly",
+    groceryAmount: "", groceryCadence: "weekly", groceryDay: 0,
     balance: "",
     accounts: blankAccountRows(),
   };
@@ -73,7 +75,7 @@ export function rulesForStep(step: SetupStepKey, d: SetupDraft, today: string): 
     case "paycheck": return one(paycheckRule(d.payAmount, d.payCadence, today, d.payday));
     case "rent": return one(rentRule(d.rentAmount, d.rentDay, today));
     case "bills": return billRules(d.bills, today);
-    case "groceries": return one(groceryRule(d.groceryAmount, d.groceryCadence, today));
+    case "groceries": return one(groceryRule(d.groceryAmount, d.groceryCadence, today, d.groceryDay));
     // The balance is not a rule — it is the anchor, and it is read off
     // the draft at the end rather than accumulated, because it is the
     // one answer that can be changed by going back.

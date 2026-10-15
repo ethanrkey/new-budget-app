@@ -170,6 +170,34 @@ test("every bill row's due day defaults to today, not to the row above", async (
   expect(screen.getByLabelText("Bill 1 due day").props.value).toBe("8");
 });
 
+test("groceries ask which day of the week, and the rule starts on it", async () => {
+  const got: SetupAnswers[] = [];
+  await mount((a) => got.push(a));
+  await press("Skip");                      // paycheck
+  await press("Skip");                      // rent
+  await press("Skip");                      // bills
+
+  // Sunday is chosen on arrival — a step with nothing picked is a step
+  // people skip, and Sunday is the common answer.
+  expect(screen.getByLabelText("Sunday").props.accessibilityState.selected).toBe(true);
+  expect(screen.getByLabelText("Saturday").props.accessibilityState.selected).toBe(false);
+
+  await userEvent.type(screen.getByLabelText("Amount"), "150");
+  await userEvent.press(screen.getByLabelText("Saturday"));
+  expect(screen.getByLabelText("Saturday").props.accessibilityState.selected).toBe(true);
+
+  await press("Continue");
+  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
+  await press("Continue");
+  await press("Finish");
+  await press("Go to my budget");
+
+  const groceries = got[0]!.recurring!.find((r) => r.name === "Groceries")!;
+  const start = new Date(("startDate" in groceries ? groceries.startDate : "") + "T00:00:00");
+  expect(start.getDay()).toBe(6);                       // a Saturday
+  expect(start.getTime()).toBeGreaterThanOrEqual(new Date(new Date().toDateString()).getTime());
+});
+
 test("Continue keeps what was typed; Skip discards it", async () => {
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));

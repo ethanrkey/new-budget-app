@@ -52,6 +52,12 @@ export const SETUP_COPY = {
   groceries: {
     title: "About how much do you spend on groceries?",
     sub: "A rough estimate is fine — you can always adjust it later.",
+    // A DAY OF THE WEEK, not a date. Shopping is the one thing setup
+    // asks about that genuinely happens on a Saturday rather than on
+    // the 23rd, and the rule used to start on whatever day setup was
+    // run — so a Sunday shopper who set up on a Wednesday got a
+    // Wednesday series forever.
+    dayLabel: "Which day do you usually shop?",
   },
   balance: {
     title: "What's the balance of your primary checking account?",
@@ -100,6 +106,19 @@ export const SETUP_COPY = {
 export function platformText(t: PlatformText, platform: SetupPlatform): string {
   return t[platform];
 }
+
+// Sunday first, like every calendar on the phone this runs on, and
+// `value` is Date.getDay() so nothing has to translate it. Short
+// labels because seven of them share one row at 390px.
+export const WEEKDAY_OPTIONS: readonly { value: number; label: string; full: string }[] = [
+  { value: 0, label: "Sun", full: "Sunday" },
+  { value: 1, label: "Mon", full: "Monday" },
+  { value: 2, label: "Tue", full: "Tuesday" },
+  { value: 3, label: "Wed", full: "Wednesday" },
+  { value: 4, label: "Thu", full: "Thursday" },
+  { value: 5, label: "Fri", full: "Friday" },
+  { value: 6, label: "Sat", full: "Saturday" },
+];
 
 export const CADENCE_OPTIONS: readonly { value: "weekly" | "biweekly" | "monthly"; label: string }[] = [
   { value: "weekly", label: "Every week" },
