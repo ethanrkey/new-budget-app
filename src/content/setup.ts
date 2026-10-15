@@ -104,8 +104,13 @@ export const SETUP_COPY = {
   },
   done: {
     title: "All set!",
+    // "YOU'VE", NOT "WE'VE", 2026-10-15. The user answered six
+    // questions; the app turned the answers into rules. Taking credit
+    // for that on the finish screen is the one place the app would
+    // sound like it did the work, and it is the screen where the
+    // person has just done the most.
     withRules: (n: number) =>
-      `We've added ${n} recurring item${n === 1 ? "" : "s"} to get you started. You can edit, delete, or add more anytime.`,
+      `You've added ${n} recurring item${n === 1 ? "" : "s"} to get you started. You can edit, delete, or add more anytime.`,
     withoutRules: "No problem — you can add everything yourself whenever you're ready.",
     cta: "Go to my budget",
   },

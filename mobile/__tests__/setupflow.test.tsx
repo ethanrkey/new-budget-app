@@ -561,7 +561,9 @@ test("what reaches applySetup is what was on the screen", async () => {
   await press("Continue");
   await press("Finish");
 
-  expect(screen.getByText(/We've added 4 recurring items/)).toBeOnTheScreen();
+  // "You've", not "We've": the person answered the questions.
+  expect(screen.getByText(/You've added 4 recurring items/)).toBeOnTheScreen();
+  expect(screen.queryByText(/We've added/)).toBeNull();
   await press("Go to my budget");
 
   const answers = got[0]!;
