@@ -146,3 +146,40 @@ export function shouldRunSetup(state: BudgetState, dismissed: boolean): boolean 
   if (state.settings?.hasSeenOnboarding) return false;
   return isNewAccount(state);
 }
+
+/**
+ * Where the setup ScrollView has to sit for `field` to clear the keyboard.
+ *
+ * WHY THIS IS A FUNCTION rather than three lines in an onFocus handler.
+ * The paycheck step's payday control sits below the fold the moment the
+ * number pad is up, which is the whole reason it was reported: somebody
+ * typed their pay, picked a frequency, went to tap the date and found
+ * nothing there. A component can only be trusted to do this right if
+ * the arithmetic can be checked without a device, and a device is
+ * exactly what is not available here.
+ *
+ * `field` is in CONTENT coordinates (what measureLayout against the
+ * scroll view's content gives); `view` is where the window currently
+ * sits and how tall it is once the keyboard has taken its share.
+ *
+ * Returns the new offset, or null when the field is already clear —
+ * null matters, because scrolling a field that is already visible
+ * yanks the screen out from under somebody mid-type.
+ */
+export function scrollToReveal(
+  field: { y: number; height: number },
+  view: { offset: number; height: number },
+  pad = 16,
+): number | null {
+  if (view.height <= 0) return null;
+  const top = field.y - pad;
+  const bottom = field.y + field.height + pad;
+  // Above the window: put its top just inside, never past the start.
+  if (top < view.offset) return Math.max(0, top);
+  // Below it: lift by exactly as much as is hidden. A field taller than
+  // the window still shows its top, which is where the label is.
+  if (bottom > view.offset + view.height) {
+    return Math.max(0, Math.min(top, bottom - view.height));
+  }
+  return null;
+}

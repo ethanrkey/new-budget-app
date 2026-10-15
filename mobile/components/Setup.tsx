@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import {
-  ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DatePicker from "./DatePicker";
+import type { NativeMethods } from "react-native";
 import { T } from "../lib/theme";
 import {
   STEPS, blankSetupDraft, rulesForStep, canAdvance, accountRowErrors, setupAnswers,
-  type SetupDraft, type SetupStepKey,
+  scrollToReveal, type SetupDraft, type SetupStepKey,
 } from "../lib/setup";
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS,
@@ -38,6 +39,25 @@ import type { BudgetItem } from "../../src/engine/types.ts";
 // 390pt screen shows one question at a time, so a typo two steps ago
 // is unreachable without it — which is why the whole draft is held at
 // once rather than committed step by step.
+// WHAT THE KEYBOARD HIDES, AND WHO PUTS IT BACK.
+//
+// Reported from a device on the paycheck step: amount, frequency, and
+// then the payday control is below the fold with the number pad up and
+// nothing says it is there. "I tried to tap it, couldn't, then
+// realized I had to scroll."
+//
+// So every focusable thing on every step reports itself here when it
+// takes focus, and the step scrolls it clear. The arithmetic is
+// scrollToReveal in lib/setup.ts, where it can be checked without a
+// phone; this is only the plumbing that measures and calls it.
+//
+// `measureLayout` is guarded because it does not exist under the test
+// renderer — a field that cannot be measured simply is not scrolled,
+// which is what happened before any of this.
+type Measurable = { measureLayout?: NativeMethods["measureLayout"] };
+const RevealCtx = createContext<(node: Measurable | null) => void>(() => {});
+const useReveal = () => useContext(RevealCtx);
+
 export default function Setup({
   busy, onComplete, onSkip,
 }: {
@@ -60,6 +80,23 @@ export default function Setup({
   const [collected, setCollected] = useState<Partial<Record<SetupStepKey, BudgetItem[]>>>({});
   const [done, setDone] = useState(false);
 
+  // The scroll window: where it sits and how tall it is once the
+  // keyboard has taken its share. Both are refs rather than state —
+  // nothing renders differently because of them, and a setState on
+  // every scroll frame would re-render the whole wizard.
+  const scroll = useRef<ScrollView>(null);
+  const payday = useRef<View>(null);
+  const content = useRef<View>(null);
+  const window = useRef({ offset: 0, height: 0 });
+
+  const reveal = useCallback((node: Measurable | null) => {
+    if (!node?.measureLayout || !content.current) return;
+    node.measureLayout(content.current, (_x, y, _w, height) => {
+      const to = scrollToReveal({ y, height }, window.current);
+      if (to != null) scroll.current?.scrollTo({ y: to, animated: true });
+    }, () => {});
+  }, []);
+
   const step = STEPS[i]!;
   const set = <K extends keyof SetupDraft>(k: K, v: SetupDraft[K]) => setD((p) => ({ ...p, [k]: v }));
   const rules = STEPS.flatMap((s) => collected[s] ?? []);
@@ -75,6 +112,7 @@ export default function Setup({
   }
 
   return (
+    <RevealCtx.Provider value={reveal}>
     <Modal visible animationType="slide" onRequestClose={onSkip} transparent={false}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -97,7 +135,22 @@ export default function Setup({
             </View>
             <Text style={styles.count}>Step {i + 1} of {STEPS.length}</Text>
 
-            <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              ref={scroll}
+              testID="setup-scroll"
+              keyboardShouldPersistTaps="handled"
+              // Flick the keyboard away by dragging the content, which
+              // is how every other iOS form behaves.
+              keyboardDismissMode="interactive"
+              // Belt and braces for the KeyboardAvoidingView above: if
+              // the padding under-compensates, the inset still lets the
+              // content scroll past the keyboard instead of ending at it.
+              automaticallyAdjustKeyboardInsets
+              scrollEventThrottle={16}
+              onScroll={(e) => { window.current.offset = e.nativeEvent.contentOffset.y; }}
+              onLayout={(e) => { window.current.height = e.nativeEvent.layout.height; }}
+            >
+              <View ref={content} style={styles.body}>
               {step === "paycheck" && (
                 <Question title={COPY.paycheck.title} sub={COPY.paycheck.sub}>
                   <Money label={COPY.labels.amount} value={d.payAmount} onChange={(v) => set("payAmount", v)} autoFocus />
@@ -110,12 +163,18 @@ export default function Setup({
                       whole forecast counts forward from is cheap. */}
                   <Text style={styles.label}>{COPY.paycheck.paydayLabel}</Text>
                   <Pressable
-                    style={styles.input}
-                    onPress={() => setPickingPayday(true)}
+                    ref={payday}
+                    style={[styles.input, styles.pickRow]}
+                    onPress={() => { Keyboard.dismiss(); reveal(payday.current); setPickingPayday(true); }}
                     accessibilityRole="button"
                     accessibilityLabel={`${COPY.paycheck.paydayLabel} ${d.payday}. Change the date.`}
                   >
+                    {/* It LOOKS like a control now. A date in a box that
+                        is the same shape as the text fields above it
+                        reads as something already filled in, which is
+                        half of why it was not tapped. */}
                     <Text style={styles.inputText}>{d.payday}</Text>
+                    <Text style={styles.pickCue}>Change ›</Text>
                   </Pressable>
                   <Text style={styles.note}>{COPY.paycheck.paydayHelp}</Text>
                   {pickingPayday && (
@@ -253,6 +312,7 @@ export default function Setup({
                   ))}
                 </Question>
               )}
+              </View>
             </ScrollView>
 
             {/* The footer is fixed and inside the safe area, so the
@@ -295,6 +355,7 @@ export default function Setup({
         )}
       </KeyboardAvoidingView>
     </Modal>
+    </RevealCtx.Provider>
   );
 }
 
@@ -333,13 +394,17 @@ function Field({
   label: string; value: string; onChange: (v: string) => void;
   placeholder?: string; bad?: boolean; accessibilityLabel?: string; autoFocus?: boolean;
 }) {
+  const reveal = useReveal();
+  const box = useRef<TextInput>(null);
   return (
     <>
       <Text style={styles.label}>{label}</Text>
       <TextInput
+        ref={box}
         style={[styles.input, bad && styles.inputBad]}
         value={value}
         onChangeText={onChange}
+        onFocus={() => reveal(box.current)}
         placeholder={placeholder}
         placeholderTextColor={T.faint}
         accessibilityLabel={accessibilityLabel ?? label}
@@ -349,21 +414,27 @@ function Field({
   );
 }
 
-const Money = (p: Omit<Parameters<typeof Field>[0], "placeholder">) => (
-  <>
-    <Text style={styles.label}>{p.label}</Text>
-    <TextInput
-      style={[styles.input, p.bad && styles.inputBad]}
-      value={p.value}
-      onChangeText={p.onChange}
-      keyboardType="decimal-pad"
-      placeholder="0.00"
-      placeholderTextColor={T.faint}
-      accessibilityLabel={p.accessibilityLabel ?? p.label}
-      autoFocus={p.autoFocus}
-    />
-  </>
-);
+function Money(p: Omit<Parameters<typeof Field>[0], "placeholder">) {
+  const reveal = useReveal();
+  const box = useRef<TextInput>(null);
+  return (
+    <>
+      <Text style={styles.label}>{p.label}</Text>
+      <TextInput
+        ref={box}
+        style={[styles.input, p.bad && styles.inputBad]}
+        value={p.value}
+        onChangeText={p.onChange}
+        onFocus={() => reveal(box.current)}
+        keyboardType="decimal-pad"
+        placeholder="0.00"
+        placeholderTextColor={T.faint}
+        accessibilityLabel={p.accessibilityLabel ?? p.label}
+        autoFocus={p.autoFocus}
+      />
+    </>
+  );
+}
 
 // `selectTextOnFocus` IS NOT POLISH. The field arrives holding two
 // digits and `maxLength` is 2, so tapping it and pressing a number does
@@ -371,21 +442,27 @@ const Money = (p: Omit<Parameters<typeof Field>[0], "placeholder">) => (
 // change the day is to notice that you have to delete first. Selecting
 // the value on focus makes one tap and one digit enough, which is what
 // a prefilled two-character field has to do.
-const Day = (p: Omit<Parameters<typeof Field>[0], "placeholder">) => (
-  <>
-    <Text style={styles.label}>{p.label}</Text>
-    <TextInput
-      style={styles.input}
-      value={p.value}
-      onChangeText={p.onChange}
-      keyboardType="number-pad"
-      selectTextOnFocus
-      maxLength={2}
-      placeholderTextColor={T.faint}
-      accessibilityLabel={p.accessibilityLabel ?? p.label}
-    />
-  </>
-);
+function Day(p: Omit<Parameters<typeof Field>[0], "placeholder">) {
+  const reveal = useReveal();
+  const box = useRef<TextInput>(null);
+  return (
+    <>
+      <Text style={styles.label}>{p.label}</Text>
+      <TextInput
+        ref={box}
+        style={styles.input}
+        value={p.value}
+        onChangeText={p.onChange}
+        onFocus={() => reveal(box.current)}
+        keyboardType="number-pad"
+        selectTextOnFocus
+        maxLength={2}
+        placeholderTextColor={T.faint}
+        accessibilityLabel={p.accessibilityLabel ?? p.label}
+      />
+    </>
+  );
+}
 
 // Three chips, not a picker. A three-option iOS picker is two taps and
 // a spinner to see what a row of chips says at a glance — the same call
@@ -403,7 +480,12 @@ function Cadence({
             <Pressable
               key={c.value}
               style={[styles.chip, on && styles.chipOn]}
-              onPress={() => onChange(c.value)}
+              // PICKING A FREQUENCY PUTS THE KEYBOARD AWAY. It is the
+              // step's last typed answer, and on the paycheck step the
+              // payday control lives directly underneath — which is
+              // exactly where the number pad was, and why somebody
+              // tried to tap a date they could not see.
+              onPress={() => { Keyboard.dismiss(); onChange(c.value); }}
               accessibilityRole="button"
               accessibilityState={{ selected: on }}
               accessibilityLabel={c.label}
@@ -438,6 +520,8 @@ const styles = StyleSheet.create({
   },
   inputBad: { borderColor: T.expense },
   inputText: { color: T.text, fontSize: 16 },
+  pickRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  pickCue: { color: T.brass, fontSize: 13, fontWeight: "600" },
   chips: { flexDirection: "row", gap: 6, marginTop: 6 },
   chip: {
     flex: 1, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,

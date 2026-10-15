@@ -99,6 +99,48 @@ test("the paycheck step asks when the next payday is, and uses it", async () => 
   expect(pickerProps.current!.minimumDate).toBeInstanceOf(Date);
 });
 
+test("the keyboard cannot hide a control: every field reports its focus", async () => {
+  // From a device: "the payday date field is below the fold with the
+  // keypad up, and nothing shows it's there. I tried to tap it,
+  // couldn't, then realized I had to scroll."
+  //
+  // The arithmetic is scrollToReveal, checked in
+  // tests/mobile-setup.test.mjs. What can only be checked mounted is
+  // that every field is actually wired to it, on every step — a
+  // handler missing from one field is exactly how this comes back.
+  await mount();
+
+  const scroller = screen.getByTestId("setup-scroll");
+  expect(scroller.props.automaticallyAdjustKeyboardInsets).toBe(true);
+  expect(typeof scroller.props.onLayout).toBe("function");
+  expect(typeof scroller.props.onScroll).toBe("function");
+
+  const reports = (label: string) =>
+    expect(typeof screen.getByLabelText(label).props.onFocus).toBe("function");
+
+  reports("Amount");                                    // paycheck
+  // The payday control is not a text field, so it cannot take focus —
+  // it says it is a control instead, which is the other half of why
+  // it was missed.
+  expect(screen.getByText("Change ›")).toBeOnTheScreen();
+
+  await press("Skip");
+  reports("Amount");                                    // rent
+  reports("Due on day");
+  await press("Skip");
+  reports("Bill 1 name");                               // bills
+  reports("Bill 1 amount");
+  reports("Bill 1 due day");
+  await press("Skip");
+  reports("Amount");                                    // groceries
+  await press("Skip");
+  reports("Current balance");                           // balance
+  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
+  await press("Continue");
+  reports("Savings 1 name");                            // accounts
+  reports("Savings 1 amount");
+});
+
 test("every bill row's due day defaults to today, not to the row above", async () => {
   // THE BUG: "+ Add another bill" seeded the new row from bills[0].day,
   // so a second bill inherited whatever had just been typed into the

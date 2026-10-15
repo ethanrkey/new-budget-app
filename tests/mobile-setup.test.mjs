@@ -17,7 +17,7 @@ import { applySetup } from "../src/engine/setup.ts";
 import { updateAccountBalance, upsertItem } from "../src/engine/mutate.ts";
 import {
   STEPS, blankSetupDraft, rulesForStep, canAdvance, accountRowErrors,
-  setupAnswers, shouldRunSetup,
+  setupAnswers, shouldRunSetup, scrollToReveal,
 } from "../mobile/lib/setup.ts";
 
 let failures = 0, checks = 0;
@@ -145,6 +145,37 @@ eq("the balance comes before the accounts step", STEPS.indexOf("balance") < STEP
   not("an account with rules in it is never asked", shouldRunSetup(used, false));
   const anchored = updateAccountBalance(blank, "checking", 4000, TODAY);
   not("...nor one with a logged balance", shouldRunSetup(anchored, false));
+}
+
+// ---- the keyboard must not be allowed to hide a control ------------
+{
+  // Reported from a device: on the paycheck step the payday control
+  // sits below the fold with the number pad up, and nothing says so —
+  // "I tried to tap it, couldn't, then realized I had to scroll."
+  const view = { offset: 0, height: 340 };   // what is left above the keypad
+
+  eq("a field already in the window is left alone",
+    scrollToReveal({ y: 100, height: 48 }, view), null);
+  eq("...including one that ends exactly at the pad",
+    scrollToReveal({ y: 276, height: 48 }, view), null);
+
+  // 420 + 48 + 16 = 484 wanted; 484 - 340 = 144.
+  eq("a field below the window is lifted by exactly what is hidden",
+    scrollToReveal({ y: 420, height: 48 }, view), 144);
+  // Only by what is hidden: its top never goes above the window's top.
+  eq("...and never further than its own top",
+    scrollToReveal({ y: 350, height: 900 }, view), 334);
+
+  const scrolled = { offset: 300, height: 340 };
+  eq("a field above the window is brought back down",
+    scrollToReveal({ y: 120, height: 48 }, scrolled), 104);
+  eq("the first field never scrolls to a negative offset",
+    scrollToReveal({ y: 4, height: 48 }, scrolled), 0);
+
+  // Before the scroll view has been laid out there is no answer to
+  // give, and guessing one would jump the content on the first focus.
+  eq("an unmeasured window does nothing",
+    scrollToReveal({ y: 999, height: 48 }, { offset: 0, height: 0 }), null);
 }
 
 // A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a
