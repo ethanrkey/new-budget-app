@@ -29,6 +29,12 @@ const COL_W = 108;
 type Cell = {
   key: string; label: string; values: (c: BudgetColumn) => number;
   tone?: string; head?: boolean; bold?: boolean;
+  /** Row tint, for the totals. Opaque: a phone cell cannot be 30% of
+   *  anything, so the web's tints arrive already flattened. */
+  fill?: string;
+  /** A heavy rule above this row — what separates the totals block
+   *  from the rows it totals. */
+  rule?: boolean;
   /** The item this row stands for, when there is exactly one. Totals and
    *  section summaries have none and stay inert. */
   itemName?: string;
@@ -66,7 +72,7 @@ export default function BudgetScreen() {
     for (const n of layout.otherIncomeNames) {
       out.push({ key: `oi-${n}`, label: n, values: (c) => c.otherInItems[n]?.val ?? 0, tone: T.income });
     }
-    out.push({ key: "totalIn", label: "TOTAL IN", values: (c) => c.totalIn, tone: T.income, bold: true });
+    out.push({ key: "totalIn", label: "TOTAL IN", values: (c) => c.totalIn, tone: T.income, bold: true, fill: T.tintIn, rule: true });
 
     for (const sec of BUDGET_SECTIONS) {
       const names = sec.key === "saving" ? layout.savingGroups.flat() : layout.sectionItems[sec.key];
@@ -86,9 +92,15 @@ export default function BudgetScreen() {
         });
       }
     }
-    out.push({ key: "totalOut", label: "TOTAL OUT", values: (c) => c.totalOut, tone: T.expense, bold: true });
-    out.push({ key: "net", label: "MONTHLY NET", values: (c) => c.net, bold: true });
-    out.push({ key: "cum", label: "CUMULATIVE NET", values: (c) => c.cumulative, bold: true, head: true });
+    // THE TOTALS ARE A BLOCK, and until now the phone did not say so:
+    // TOTAL OUT sat flush against the last Saving/Debt row with the
+    // same background and the same hairline, so the three figures the
+    // screen exists to produce read as three more rows. The web has
+    // had a tinted TOTAL OUT and a heavy rule above every total since
+    // it was written; this is that, with the tints flattened (T.tintOut).
+    out.push({ key: "totalOut", label: "TOTAL OUT", values: (c) => c.totalOut, tone: T.expense, bold: true, fill: T.tintOut, rule: true });
+    out.push({ key: "net", label: "MONTHLY NET", values: (c) => c.net, bold: true, rule: true });
+    out.push({ key: "cum", label: "CUMULATIVE NET", values: (c) => c.cumulative, bold: true, head: true, rule: true });
 
     return { columns, rows: out };
   }, [state]);
@@ -119,7 +131,12 @@ export default function BudgetScreen() {
             ) : (
               <View
                 key={r.key}
-                style={[styles.cell, { width: LABEL_W, alignItems: "flex-start" }, r.head && styles.cumRow]}
+                style={[
+                  styles.cell, { width: LABEL_W, alignItems: "flex-start" },
+                  r.head && styles.cumRow,
+                  r.fill != null && { backgroundColor: r.fill },
+                  r.rule && styles.ruleAbove,
+                ]}
               >
                 <Text
                   style={[styles.labelText, r.bold && styles.boldText]}
@@ -144,7 +161,15 @@ export default function BudgetScreen() {
                   "section" in r ? (
                     <View key={`s${i}`} style={[styles.section, { width: COL_W }]} />
                   ) : (
-                    <View key={r.key} style={[styles.cell, { width: COL_W }, r.head && styles.cumRow]}>
+                    <View
+                      key={r.key}
+                      style={[
+                        styles.cell, { width: COL_W },
+                        r.head && styles.cumRow,
+                        r.fill != null && { backgroundColor: r.fill },
+                        r.rule && styles.ruleAbove,
+                      ]}
+                    >
                       <Text
                         style={[
                           styles.num,
@@ -197,5 +222,9 @@ const styles = StyleSheet.create({
   boldText: { fontWeight: "700" },
   num: { color: T.dim, fontSize: 12, fontVariant: ["tabular-nums"] },
   cumRow: { backgroundColor: T.surfaceAlt },
+  // The web's border-t-2 border-gray-700. Two points, against the
+  // hairline every other row carries, is what makes the three figures
+  // below read as a block rather than as three more rows.
+  ruleAbove: { borderTopWidth: 2, borderTopColor: T.rule },
   foot: { color: T.faint, fontSize: 11, textAlign: "center", paddingVertical: 14 },
 });
