@@ -68,3 +68,20 @@ test("the tour is reachable from the bottom of any section", async () => {
   await userEvent.press(screen.getByLabelText("Take the tour"));
   expect(onStartTour).toHaveBeenCalledTimes(1);
 });
+
+test("the phone's About does not describe a setting the phone does not have", async () => {
+  // Appearance was removed from Settings on 2026-10-15 — dark only, so
+  // a setting with no choice in it reads as a broken control. The
+  // shared copy still listed it, which is the doc rot the standing
+  // rule exists to stop: grep for a feature's name before committing
+  // its deletion.
+  await render(<About onStartTour={() => {}} onClose={() => {}} />);
+  const settings = ABOUT_SECTIONS.findIndex((s) => s.id === "settings");
+  await userEvent.press(screen.getByLabelText(ABOUT_SECTIONS[settings]!.title));
+
+  expect(screen.queryByText("Appearance")).toBeNull();
+  // The rest of that list is still there, so this is a filter and not
+  // a section that failed to render.
+  expect(screen.getByText("Categories")).toBeOnTheScreen();
+  expect(screen.getByText("Wipe data")).toBeOnTheScreen();
+});

@@ -163,14 +163,13 @@ export default function Settings({
           />
           <Row label="About & tour" sub="What every screen does, and a walk through the four tabs." onPress={onOpenAbout} />
           <Row label="Export" sub="Ledger or Budget as CSV, or the whole account as a JSON backup." onPress={onOpenExport} />
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.rowText}>Appearance</Text>
-              {/* Stated rather than offered: dark only is a decision, and
-                  a toggle that does nothing is worse than its absence. */}
-              <Text style={styles.rowSub}>Dark. The phone has one theme on purpose.</Text>
-            </View>
-          </View>
+          {/* NO APPEARANCE ROW. There was one, stating "Dark. The phone
+              has one theme on purpose." — a setting with no choice in
+              it, which reads as a control that is broken rather than
+              as a decision that has been made. Removed 2026-10-15. If
+              light mode is ever asked for it comes back as a real
+              toggle; until then the absence says more than the
+              sentence did. */}
         </View>
 
         <Text style={[styles.sectionLabel, styles.danger]}>Danger zone</Text>

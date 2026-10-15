@@ -1670,9 +1670,13 @@ what, not by size.
      deletion — is already written down one section up.
    - **:107** "Rows can be dragged or arrow-moved within their section.
      Click a row name" — drag is not ported, arrow-move is web-only.
-   - **:194** "Appearance — Light or dark, remembered PER DEVICE" — the
-     phone is dark only, by decision, so this offers a control that is
-     not there.
+   - ~~**:194** "Appearance — Light or dark, remembered PER DEVICE"~~ —
+     **FIXED 2026-10-15.** The phone's Settings row was removed the
+     same day (a setting with no choice in it reads as a broken
+     control, not as a decision), and this line is now marked `"web"`
+     via `AboutOnly` — the per-block platform variant this list asked
+     for, built for the first line that needed it. The other eight
+     below are untouched and still want the voice pass.
    - **:212** "It's one click and it has saved this project before."
 
    **Outside the repo, same pass:** the Supabase email templates still

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { T } from "../lib/theme";
-import { ABOUT_SECTIONS, type AboutBlock } from "../../src/content/about.ts";
+import { ABOUT_SECTIONS, type AboutBlock, type AboutOnly } from "../../src/content/about.ts";
 import { ACCOUNT_HUES, LOAN_COLOR, SPENDING_COLOR, NEUTRAL_CHART } from "../../src/engine/palette.ts";
 
 // The web's About page, rendered for a phone — the SAME words, from
@@ -31,12 +31,18 @@ function Block({ block }: { block: AboutBlock }) {
   if (kind === "dl") {
     return (
       <View style={styles.list}>
-        {(value as [string, string][]).map(([term, def]) => (
-          <View key={term} style={styles.dlRow}>
-            <Text style={styles.strong}>{term}</Text>
-            <Text style={styles.p}>{def}</Text>
-          </View>
-        ))}
+        {/* A term marked "web" describes a control this client does not
+            have — Appearance, which the phone does not offer because
+            it is dark only. Filtered rather than forked: one list,
+            both clients, neither able to go stale alone. */}
+        {(value as ([string, string] | [string, string, AboutOnly])[])
+          .filter(([, , only]) => only !== "web")
+          .map(([term, def]) => (
+            <View key={term} style={styles.dlRow}>
+              <Text style={styles.strong}>{term}</Text>
+              <Text style={styles.p}>{def}</Text>
+            </View>
+          ))}
       </View>
     );
   }

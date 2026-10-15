@@ -170,7 +170,9 @@ function Block({ block }) {
   }
   return (
     <dl className="space-y-2.5">
-      {value.map(([term, def], i) => (
+      {/* A term marked "mobile" describes a control the web does not
+          have. See AboutOnly in src/content/about.ts. */}
+      {value.filter(([, , only]) => only !== "mobile").map(([term, def], i) => (
         <div key={i}>
           <dt className="font-medium text-gray-900 dark:text-gray-100">{term}</dt>
           <dd className="text-gray-600 dark:text-gray-400">{def}</dd>

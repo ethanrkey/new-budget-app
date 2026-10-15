@@ -10,15 +10,31 @@
 // Block kinds the renderers must handle:
 //   ["p", string]              a paragraph
 //   ["note", string]           an aside, quieter
-//   ["dl", [[term, def], ...]] a definition list
+//   ["dl", [[term, def, only?], ...]] a definition list. `only` marks a
+//                              term that exists on ONE client — see
+//                              AboutOnly below.
 //   ["steps", [string, ...]]   an ordered list
 //   ["legend"]                 the color legend, drawn from palette.ts by
 //                              each client, because the swatches are live
 //                              values rather than copy
+/**
+ * A definition-list term that exists on one client only.
+ *
+ * The mechanism the 2026-09-24 doc audit asked for, built on
+ * 2026-10-15 for the first line that needed it: Appearance was
+ * removed from the phone's Settings (dark only, so a setting with no
+ * choice in it), and the shared copy still described it. A second
+ * about file would have let the two drift; a flag on the one entry
+ * keeps both clients reading the same list.
+ *
+ * Omitted means both, which is almost every line.
+ */
+export type AboutOnly = "web" | "mobile";
+
 export type AboutBlock =
   | ["p", string]
   | ["note", string]
-  | ["dl", [string, string][]]
+  | ["dl", ([string, string] | [string, string, AboutOnly])[]]
   | ["steps", string[]]
   | ["legend"];
 
@@ -200,7 +216,7 @@ export const ABOUT_SECTIONS: AboutSection[] = [
     title: "Settings",
     body: [
       ["dl", [
-        ["Appearance", "Light or dark, remembered PER DEVICE — light on the laptop and dark on the phone is a normal thing to want, so the choice doesn't sync."],
+        ["Appearance", "Light or dark, remembered PER DEVICE — light on the laptop and dark on the phone is a normal thing to want, so the choice doesn't sync.", "web"],
         ["Categories", "The manager described above."],
         ["Account", "Who you're signed in as, how you signed in, and when you joined — plus Sign out. Signing out leaves your data on the server, tied to your account."],
         ["Delete my account", "Schedules your whole account for deletion in 7 days — the sign-in, every rule, every logged balance. You can cancel any time before then from the same place. After that it's gone and there's no backup to restore from."],
