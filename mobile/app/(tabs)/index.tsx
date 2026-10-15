@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  Platform, Pressable, RefreshControl, SectionList, StyleSheet, Text, View,
+  Alert, Platform, Pressable, RefreshControl, SectionList, StyleSheet, Text, View,
 } from "react-native";
 import { useBudget } from "../../components/StateProvider";
 import { useChrome } from "../../components/Chrome";
@@ -16,6 +16,7 @@ import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../..
 import { ledgerHorizonOf } from "../../../src/engine/model.ts";
 import { showFirstRun } from "../../lib/firstRun";
 import * as feel from "../../lib/haptics";
+import { DISCARD } from "../../../src/content/transaction.ts";
 import {
   rowTarget, overrideAt, scopeActions, orphansIfSaved,
   saveItem, saveOccurrence, resetOccurrence, removeItem,
@@ -39,6 +40,12 @@ export default function LedgerScreen() {
   // whole and only split by the named helpers in lib/edit.
   const [scopeFor, setScopeFor] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetMode | null>(null);
+  // Whether the open transaction form has anything in it. Lives HERE
+  // rather than in the sheet because the host owns every way out of
+  // it — the scrim, the hardware back button and the swipe are all
+  // this screen's, and a "Discard changes?" that guards only the
+  // Cancel button is not a guard.
+  const [dirty, setDirty] = useState(false);
   // The new-account guide. Shown until the three steps are done or it
   // is put away — NOT until the first write, which is the bug the first
   // version shipped with: logging a balance made the whole thing vanish
@@ -95,17 +102,41 @@ export default function LedgerScreen() {
     if (ok) setScopeFor(null);
   }
 
+  /**
+   * Every way out of the transaction form, and the only one.
+   *
+   * The sheet takes most of the screen, so it is now dismissible by
+   * swiping it down as well as by Cancel, the scrim and the hardware
+   * back button. Four doors is three more chances to throw away a
+   * half-typed transaction by accident, so all four come through
+   * here and anything typed is confirmed first.
+   *
+   * A clean form closes immediately. A confirm over an untouched
+   * sheet is the kind of prompt people learn to dismiss without
+   * reading, which is how the next one gets dismissed too.
+   */
+  function closeSheets() {
+    const leave = () => { setSheet(null); setScopeFor(null); setPicking(false); setDirty(false); };
+    if (!sheet || !dirty) { leave(); return; }
+    Alert.alert(DISCARD.title, DISCARD.body, [
+      { text: DISCARD.keep, style: "cancel" },
+      { text: DISCARD.discard, style: "destructive", onPress: leave },
+    ]);
+  }
+
   async function submitDraft(d: Draft) {
     const existing = sheet && sheet.kind !== "add" ? sheet.item : null;
     const ok = await commit(saveItem(d, existing), `${d.name.trim() || "Transaction"}${existing ? "" : " added"}`);
-    if (ok) setSheet(null);
+    // Saved is not dirty. Without this the next sheet opens carrying
+    // the last one's answer to "has anything been typed?".
+    if (ok) { setSheet(null); setDirty(false); }
   }
 
   async function submitOccurrence(amount: string) {
     if (!sheet || sheet.kind !== "occurrence") return;
     const { item, date } = sheet;
     const ok = await commit(saveOccurrence(item.id, date, amount), `${item.name} on ${fmtDate(date)}`);
-    if (ok) setSheet(null);
+    if (ok) { setSheet(null); setDirty(false); }
   }
 
   const { sections, rows, ending, mix } = useMemo(() => {
@@ -132,9 +163,9 @@ export default function LedgerScreen() {
           style={styles.chip}
           onPress={() => setPicking(true)}
           accessibilityRole="button"
-          accessibilityLabel={`Project through ${effective}. Change the date.`}
+          accessibilityLabel={`Project through ${fmtDate(effective)}. Change the date.`}
         >
-          <Text style={styles.chipText}>through {effective}</Text>
+          <Text style={styles.chipText}>through {fmtDate(effective)}</Text>
         </Pressable>
         {/* Offline is READ-ONLY by decision, so the control says so
             rather than failing after the tap. */}
@@ -238,7 +269,7 @@ export default function LedgerScreen() {
           someone remembered. */}
       <BottomSheet
         visible={!!sheet || !!target || picking}
-        onClose={() => { setSheet(null); setScopeFor(null); setPicking(false); }}
+        onClose={closeSheets}
       >
         {picking ? (
           <DatePicker
@@ -255,7 +286,8 @@ export default function LedgerScreen() {
               orphansIfSaved(state!, d, sheet.kind === "add" ? null : sheet.item, effective).length}
             onSaveDraft={submitDraft}
             onSaveOccurrence={submitOccurrence}
-            onClose={() => setSheet(null)}
+            onClose={closeSheets}
+            onDirtyChange={setDirty}
           />
         ) : target ? (
           <ScopeSheet

@@ -56,13 +56,13 @@ describe("the Ledger's horizon picker", () => {
   test("it is closed until the chip is tapped", async () => {
     await openLedger();
     expect(screen.queryByLabelText("Date picker")).toBeNull();
-    await userEvent.press(screen.getByText(/through 2027-/));
+    await userEvent.press(screen.getByText(/through \d\d\/\d\d\/2027/));
     expect(screen.getByLabelText("Date picker")).toBeTruthy();
   });
 
   test("THE BUG: choosing a date closes it", async () => {
     await openLedger();
-    await userEvent.press(screen.getByText(/through 2027-/));
+    await userEvent.press(screen.getByText(/through \d\d\/\d\d\/2027/));
     expect(screen.getByLabelText("Date picker")).toBeTruthy();
 
     // What the native picker fires when a date is chosen.
@@ -71,16 +71,16 @@ describe("the Ledger's horizon picker", () => {
     });
 
     expect(screen.queryByLabelText("Date picker")).toBeNull();
-    expect(screen.getByText(/through 2027-03-01/)).toBeTruthy();
+    expect(screen.getByText("through 03/01/2027")).toBeTruthy();
   });
 
   test("THE BUG: it can be dismissed WITHOUT choosing a date", async () => {
     await openLedger();
-    await userEvent.press(screen.getByText(/through 2027-/));
+    await userEvent.press(screen.getByText(/through \d\d\/\d\d\/2027/));
     await userEvent.press(screen.getByLabelText("Done"));
     expect(screen.queryByLabelText("Date picker")).toBeNull();
     // and the horizon is unchanged
-    expect(screen.getByText(/through 2027-02-01/)).toBeTruthy();
+    expect(screen.getByText("through 02/01/2027")).toBeTruthy();
   });
 });
 
