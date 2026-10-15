@@ -9,6 +9,18 @@
 // the first time the mark changes — the same mistake the screenshots and
 // the README each made once already. So the phone's icon is generated too.
 //
+// THE PHONE'S ICON IS A FLAT PNG AND NOTHING ELSE, which is a
+// decision this script carried the other way for four builds. From
+// build 6 to build 9 it also wrote `KeyBudget.icon`, Icon Composer's
+// layered format, so that iOS 26 would composite its own glass over
+// the key. On a real phone that glass turns the ring faceted — an
+// octagon with shaded edges — because the system RE-RENDERS a layered
+// icon rather than drawing it. Build 9 shipped geometry identical to
+// build 5's and still looked wrong, which is what finally separated
+// the artwork from the pipeline. Reverted 2026-10-15 by the owner's
+// call: ship exactly what build 5 shipped, the same way, and the two
+// checks at the bottom of this file hold it there.
+//
 // TWO DELIBERATE DIFFERENCES from the web raster, and both matter:
 //
 //   1. NO ROUNDED CORNERS. The web icon carries rx=96 because a browser
@@ -25,9 +37,7 @@
 // Expo's asset pipeline downsamples every other slot from. Generating at
 // 1024 from vector geometry is also why this is not an upscale of the
 // 512 PNG: there is no 512 in the path at all.
-import { writeFileSync, readFileSync, mkdirSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { writeFileSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import puppeteer from "puppeteer-core";
 
@@ -100,72 +110,6 @@ const splashSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="33 40 440 44
   ${defs}
   ${mark}
 </svg>`;
-
-// ---------------------------------------------------------------------
-// THE iOS 26 LAYERED ICON.
-//
-// `.icon` is Icon Composer's format, and Expo SDK 57 takes one
-// directly: `ios.icon` pointing at a `.icon` directory makes prebuild
-// set ASSETCATALOG_COMPILER_APPICON_NAME and add the bundle to the
-// Xcode project (@expo/prebuild-config, withIosIcons.js). That is the
-// whole integration — no plugin, no patch.
-//
-// WHY IT IS WORTH IT: the system composites the layer itself, so the
-// icon gets iOS 26's glass, its specular highlight, its parallax and
-// its dark and tinted variants for free, all of which track whatever
-// Apple changes next. A flat PNG gets none of that and never will.
-//
-// The background is a FILL rather than an image, and the key is the
-// only layer, because that is what layering is for: a key baked onto a
-// navy square is one picture, and the system has nothing to separate.
-//
-// AUTHORED BY HAND, which is worth being honest about. The format is
-// undocumented; the schema here was read out of
-// IconComposerFoundation's own symbol table (`fill`, `groups`,
-// `layers`, `image-name`, `glass`, `supported-platforms`, and the
-// `<color-space>:<components>` color encoding), and the shape matches
-// Apple's own template at
-// Xcode.app/.../Templates/File Templates/MultiPlatform/Resource/Icon
-// Composer Icon.xctemplate. It could NOT be validated here, because
-// actool needs `xcodebuild -runFirstLaunch` and that needs sudo. The
-// validator is therefore the EAS build: actool either compiles this or
-// fails loudly, and the fallback is one line in app.json back to
-// icon.png.
-const ICON_DIR = new URL("../mobile/assets/images/KeyBudget.icon/", import.meta.url);
-const ICON_ASSETS = new URL("Assets/", ICON_DIR);
-mkdirSync(ICON_ASSETS, { recursive: true });
-
-// The key alone, transparent. No background plate: the plate is
-// `fill` below.
-//
-// WIDTH AND HEIGHT ARE NOT OPTIONAL, and leaving them off is what
-// made build 6's key a third of the tile. An SVG with only a viewBox
-// has no intrinsic size, so whatever rasterizes the layer picks its
-// own — and the artwork lands tiny inside a 1024 canvas. Measured:
-// the same drawing renders at 33.3% of the tile without them and
-// 78.3% with them, and neither the viewBox nor the layer's `scale`
-// property moves it at all while they are missing.
-//
-// THE FRAME IS 0 0 512 512 — exactly the flat icon's. The key then
-// occupies the same fraction of the layer that it occupies of
-// icon.png, so "the layered icon matches the flat one's proportions"
-// is true by construction rather than by a tuned number someone has
-// to re-tune.
-writeFileSync(new URL("key.svg", ICON_ASSETS), `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512">
-  ${defs}
-  ${mark}
-</svg>
-`);
-
-// #111827 in the encoding IconComposerFoundation parses: a color space
-// name, a colon, then components. Five decimals, like Apple's template.
-const c = (hex) => [1, 3, 5].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(5)).join(",");
-writeFileSync(new URL("icon.json", ICON_DIR), JSON.stringify({
-  fill: { solid: `extended-srgb:${c(BG)},1.00000` },
-  groups: [{ layers: [{ "image-name": "key.svg", glass: true }] }],
-  "supported-platforms": { circles: ["watchOS"], squares: "shared" },
-}, null, 2) + "\n");
-console.log(`wrote ${new URL("icon.json", ICON_DIR).pathname}`);
 
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: "shell" });
 const tab = await browser.newPage();
@@ -330,53 +274,99 @@ writeFileSync(new URL("../public/icon-maskable-512.png", import.meta.url), await
 console.log(`wrote ${WEB.length + 2} web rasters from the same source`);
 
 // ---------------------------------------------------------------------
-// THE LAYERED ICON IS COMPARED AGAINST THE FLAT ONE, not eyeballed.
+// IT IS COMPARED, PIXEL FOR PIXEL, AGAINST THE ICON BUILD 5 SHIPPED.
 //
-// Build 6 shipped a key that filled a third of the tile and nobody
-// caught it until it was on a phone, because the .icon cannot be
-// previewed from here — the only way to see it is to compile it.
-// `actool` can, so it does: compile the bundle, measure the slot it
-// renders, and compare against icon.png, which is the composition
-// that was right in build 5.
+// Builds 6 to 9 all failed the same way and the last of them failed
+// with a correct drawing: on 2026-10-15 `public/favicon.svg` was
+// reverted to build 5's geometry exactly and build 9 STILL came off
+// the phone wrong — a faceted, octagonal ring with glass shading on
+// its edges. The artwork was right and the PIPELINE was wrong. Build 5
+// shipped a flat PNG; 6 to 9 shipped `KeyBudget.icon`, and iOS 26
+// re-renders a layered icon rather than drawing it, so the system's
+// own glass pass is applied to the mark whatever the mark is.
 //
-// Skipped loudly rather than silently when Xcode is not installed,
-// because a check that quietly does nothing is worse than no check.
-const ICON_SLOT_TOLERANCE = 4;   // percentage points, at a 120px render
-try {
-  const tmp = mkdtempSync(join(tmpdir(), "keybudget-icon-"));
-  execFileSync("xcrun", [
-    "actool", "--compile", tmp, "--app-icon", "KeyBudget",
-    "--output-partial-info-plist", join(tmp, "partial.plist"),
-    "--platform", "iphoneos", "--minimum-deployment-target", "18.0",
-    "--target-device", "iphone",
-    new URL("../mobile/assets/images/KeyBudget.icon", import.meta.url).pathname,
-  ], { stdio: "pipe" });
+// Every check above this line reads the SVG, which means every check
+// above this line would have passed build 9. So the check that
+// belongs here is the one the owner asked for: compare against build
+// 5's actual icon, not against the drawing it was made from.
+//
+// THE REFERENCE IS A BUILD ARTIFACT, NOT A SECOND ORIGINAL. It is
+// `AppIcon60x60@2x.png` lifted out of build 5's own IPA
+// (02fadd39-8ea0-46ca-895b-616ae9989b14, commit fec01220), run
+// through `pngcrush -revert-iphone-optimizations` because Apple
+// stores a CgBI variant no browser can decode. Nothing is ever
+// GENERATED from it — it is only ever compared against — so it cannot
+// drift into being a second definition of the mark the way a second
+// SVG would. When the key is redrawn (the owner's own project), this
+// file is replaced deliberately, in the same commit, from the first
+// build of the new one.
+//
+// THE TOLERANCE IS MEASURED, NOT PICKED. Chrome's downscale and
+// actool's do not agree to the bit, so this is a mean absolute
+// channel difference over the 120x120 render, and the three numbers
+// that set the threshold were measured here on 2026-10-15:
+//
+//     build 5's own artwork (what ships now)   0.81
+//     the build 6-7 metallic gradient          2.30
+//     the build 8 filleted key                 2.34
+//
+// 1.5 sits between them with most of a point of margin on each side.
+// A regression that changes the mark's COLOR or its JUNCTIONS — the
+// two things that actually went wrong — lands on the far side of it.
+const BUILD_5_MEAN_TOLERANCE = 1.5;
+const reference = readFileSync(new URL("./fixtures/build5-appicon-120.png", import.meta.url));
+const diff = await tab.evaluate(async (a, b) => {
+  const px = async (b64) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = 120; c.height = 120;
+    const g = c.getContext("2d");
+    g.imageSmoothingQuality = "high";
+    g.drawImage(img, 0, 0, 120, 120);
+    return g.getImageData(0, 0, 120, 120).data;
+  };
+  const x = await px(a), y = await px(b);
+  let sum = 0, n = 0, max = 0;
+  for (let i = 0; i < x.length; i += 4) {
+    for (let k = 0; k < 3; k++) {
+      const d = Math.abs(x[i + k] - y[i + k]);
+      sum += d; n++; if (d > max) max = d;
+    }
+  }
+  return { mean: sum / n, max };
+}, buf.toString("base64"), reference.toString("base64"));
 
-  const slot = readFileSync(join(tmp, "KeyBudget60x60@2x.png"));
-  const layered = await inspect(slot);
-  const flatPct = shape.spanX * 100, layeredPct = layered.spanX * 100;
-  console.log(`  layered icon: key spans ${layeredPct.toFixed(1)}% of the tile, flat icon ${flatPct.toFixed(1)}%`);
-  if (Math.abs(layeredPct - flatPct) > ICON_SLOT_TOLERANCE) {
-    console.error(`FAIL: the layered icon's key is ${layeredPct.toFixed(1)}% of the tile but the flat one is ${flatPct.toFixed(1)}% — they are the same drawing and should be the same size`);
-    process.exit(1);
-  }
-} catch (err) {
-  // ONLY A MISSING TOOLCHAIN IS A SKIP. The first version of this
-  // matched /actool/ in the message, so actool REFUSING THE BUNDLE —
-  // the exact failure this check exists to catch — was reported as
-  // "this machine has no Xcode" and the script exited green. An
-  // exception from a tool that ran is a failure.
-  const msg = String(err.message ?? err);
-  const stderr = String(err.stderr ?? "");
-  const missing = /unable to find utility|command not found|ENOENT|no developer tools|xcode-select/i.test(msg + stderr);
-  if (missing) {
-    console.warn("  note: skipping the layered-icon comparison — actool needs Xcode, and this machine has none");
-  } else {
-    console.error("FAIL: actool could not compile the .icon bundle");
-    console.error((stderr || msg).trim().split("\n").slice(-25).join("\n"));
-    process.exit(1);
-  }
+console.log(`  against build 5's shipped icon: mean channel difference ${diff.mean.toFixed(2)}, worst pixel ${diff.max}`);
+if (diff.mean > BUILD_5_MEAN_TOLERANCE) {
+  console.error(`FAIL: this is not the icon build 5 shipped — mean channel difference ${diff.mean.toFixed(2)}, and build 5's own artwork scores 0.81`);
+  process.exit(1);
 }
+
+// ---------------------------------------------------------------------
+// AND IT IS SHIPPED THE WAY BUILD 5 SHIPPED IT.
+//
+// This is the actual root cause of builds 6 through 9, and no amount
+// of measuring the PNG finds it: the PNG was fine and app.json sent
+// iOS somewhere else. `ios.icon` pointing at a `.icon` directory makes
+// prebuild set ASSETCATALOG_COMPILER_APPICON_NAME to the layered
+// bundle, and the flat PNG this script spent 300 lines getting right
+// is then never drawn on a phone at all.
+//
+// So the config is asserted here, next to the artwork, rather than
+// trusted. Build 5's ios block had no `icon` key; this is that, as a
+// check.
+const appJson = JSON.parse(readFileSync(new URL("../mobile/app.json", import.meta.url), "utf8"));
+if (appJson.expo?.icon !== "./assets/images/icon.png") {
+  console.error(`FAIL: app.json's expo.icon is ${JSON.stringify(appJson.expo?.icon)}, not the PNG this script writes`);
+  process.exit(1);
+}
+if (appJson.expo?.ios?.icon !== undefined) {
+  console.error(`FAIL: app.json sets ios.icon to ${JSON.stringify(appJson.expo.ios.icon)} — that is the layered bundle builds 6-9 shipped, and iOS 26 re-renders it`);
+  process.exit(1);
+}
+console.log("  app.json ships the flat PNG, with no ios.icon override");
 
 await browser.close();
 console.log("ICON OK");

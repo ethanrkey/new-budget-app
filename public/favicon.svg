@@ -1,7 +1,7 @@
 <svg role="img" aria-label="Key Budget" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <!-- THE ONE DEFINITION OF THE MARK. The web uses this file directly;
-       mobile/assets/images/icon.png, the splash mark and the iOS
-       KeyBudget.icon are all generated from it by
+       mobile/assets/images/icon.png and the splash mark are all
+       generated from it by
        scripts/make_app_icon.mjs, which READS the geometry below rather
        than restating it. Edit the key here and everywhere follows. -->
   <!-- FLAT GOLD, ON PURPOSE. Builds 6 to 8 drew this mark with a
@@ -20,9 +20,12 @@
        an earlier mention of its opening tag up here captures from the
        comment instead, and the guard against a nested group fires.
        That is how this paragraph was written the first time.)
-       On iOS the key still ships as the single layer of
-       KeyBudget.icon, so iOS 26 composites its OWN glass and specular
-       pass over flat gold, which is the lighting this mark gets. -->
+       On iOS this ships as a FLAT PNG, the way build 5 shipped it.
+       Builds 6 to 9 shipped a layered Icon Composer bundle instead so
+       that iOS 26 would add its own glass; the system re-renders such
+       an icon, and the re-render came out of the phone faceted, with
+       the ring reading as an octagon. Build 9 proved the geometry was
+       innocent — it was this drawing exactly, and still wrong. -->
   <rect width="512" height="512" rx="96" fill="#111827"/>
   <g id="mark">
     <circle cx="176" cy="256" r="74" fill="none" stroke="#eebb4d" stroke-width="50"/>

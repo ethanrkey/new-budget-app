@@ -98,10 +98,16 @@ tab. The small sizes use a ONE-tooth key in flat gold because at 16px two teeth
 merge into a single blob and a gradient just muddies; ring and shaft are
 identical across both builds so it stays one key. **The mark is FLAT gold
 (`#eebb4d`) — build 5's artwork, restored 2026-10-15 after builds 6-8 tried a
-metallic gradient and then fillets on its concave junctions.** Lighting belongs
-to iOS 26, which composites its own glass and specular pass over the `.icon`
-layer; a second one underneath read as plastic, and the shape is what wants
-redrawing (backlog). If a gradient is ever tried again it must use
+metallic gradient and then fillets on its concave junctions.** **The phone
+ships it as a FLAT PNG** — `expo.icon`, no `ios.icon` — which is how build 5
+shipped it; builds 6 to 9 shipped an Icon Composer `.icon` so iOS 26 would add
+its own glass, and the system RE-RENDERS a layered icon, which came off a real
+phone faceted: the ring reading as an octagon with shaded edges. Build 9 settled
+it by shipping build 5's geometry exactly and still looking wrong. The shape is
+what wants redrawing (backlog 18b), and until then the icon does not change
+again — `scripts/make_app_icon.mjs` compares the render pixel for pixel against
+`scripts/fixtures/build5-appicon-120.png`, lifted out of build 5's own IPA, and
+asserts app.json's two icon keys. If a gradient is ever tried again it must use
 `gradientUnits="userSpaceOnUse"` — the shaft and teeth are straight lines with
 zero-height/width bounding boxes, and a default objectBoundingBox gradient is
 degenerate on those, so they silently do not paint at all. `theme-color` is
@@ -2137,13 +2143,49 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
     gradient and the fillets are gone; the mark is flat `#eebb4d`
     again. Owner's call from a device pass on build 8: a redrawn key
     is his own future project, so the drawing holds at the last
-    composition that looked right. What stayed is the pipeline — one
-    source, actool compiling the `.icon` locally, and the size check,
-    which is now an EQUALITY against build 5's 68.8% span with 1.5
-    points of slack rather than a floor. A floor passes a key that
-    grew; build 6's key was a third of the tile, and build 8's
-    fillets widened the silhouette. `<defs>` is optional now, since
-    requiring one made removing the gradient a failing build.
+    composition that looked right. The size check became an EQUALITY
+    against build 5's 68.8% span with 1.5 points of slack rather than
+    a floor. A floor passes a key that grew; build 6's key was a
+    third of the tile, and build 8's fillets widened the silhouette.
+    `<defs>` is optional now, since requiring one made removing the
+    gradient a failing build.
+
+    **AND THE `.icon` IS GONE TOO, 2026-10-15, after build 9's device
+    pass — this is the entry's real conclusion.** Build 9 shipped the
+    reverted geometry and the icon on the phone was STILL wrong: a
+    faceted, octagonal ring with glass shading on its edges. The
+    artwork was innocent and the pipeline was the bug. iOS 26 does
+    not draw a layered icon, it RE-RENDERS it, so the system's glass
+    pass is applied to the mark whatever the mark is — and every
+    check above read `public/favicon.svg`, so every check above
+    passed build 9. `ios.icon` is removed from app.json and
+    `mobile/assets/images/KeyBudget.icon` is deleted; the phone ships
+    `expo.icon` → the flat 1024 PNG, exactly as build 5 did, and
+    build 5's own `ios` block is now app.json's `ios` block key for
+    key.
+
+    The two checks that replaced the `actool` comparison are the ones
+    that would have caught it:
+
+    - **Pixels against build 5's actual icon.** The reference is
+      `AppIcon60x60@2x.png` out of build 5's IPA
+      (`02fadd39…`, commit `fec01220`), reverted from Apple's CgBI
+      form with `pngcrush -revert-iphone-optimizations` and committed
+      at `scripts/fixtures/build5-appicon-120.png`. It is a build
+      ARTIFACT, never a source: nothing is generated from it. The
+      measure is the mean absolute channel difference over a 120x120
+      render, and the threshold is measured rather than picked —
+      build 5's artwork scores 0.81, the build 6 gradient 2.30 and
+      the build 8 fillets 2.34, so the gate is 1.5.
+    - **app.json's icon keys.** `expo.icon` must be the PNG the
+      script writes and `expo.ios.icon` must be absent. This is the
+      only one of the two that actually catches the build 9 bug, and
+      no amount of measuring the PNG finds it, because the PNG was
+      correct.
+
+    Both were proved to fail: putting `ios.icon` back fails the
+    second, and rendering the build 6 gradient scores 2.30 against
+    the first.
 
     *The original entry:* **DONE 2026-10-09.** It was the blue chevron on pale blue with the layout
     guides still visible, found by looking at the file after a handoff
