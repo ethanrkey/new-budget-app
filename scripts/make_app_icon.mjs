@@ -283,14 +283,6 @@ const WEB = [
   ["favicon-16.png", 16], ["favicon-32.png", 32], ["favicon-48.png", 48],
   ["icon-192.png", 192], ["icon-512.png", 512],
   ["apple-touch-icon.png", 180], ["apple-touch-icon-152.png", 152], ["apple-touch-icon-167.png", 167],
-  // GOOGLE'S OAUTH CONSENT SCREEN. The Google Cloud Branding page takes
-  // a 120x120 PNG and shows it on the "Sign in with Google" sheet next
-  // to the app's name. It is generated here rather than exported by
-  // hand for the same reason as everything else in this list: a logo
-  // Google shows to users is the mark, and the mark has one definition.
-  // Rounded like the other web rasters, because Google draws the image
-  // as given.
-  ["google-branding-120.png", 120],
 ];
 const rounded = SOURCE.replace(/\s*<!--[\s\S]*?-->/g, "");
 for (const [name, px] of WEB) {
@@ -301,6 +293,28 @@ for (const [name, px] of WEB) {
   );
   writeFileSync(new URL(`../public/${name}`, import.meta.url), await tab.screenshot({ type: "png", omitBackground: true }));
 }
+
+// GOOGLE'S OAUTH CONSENT SCREEN. The Google Cloud Branding page takes
+// a 120x120 PNG and shows it on the "Sign in with Google" sheet beside
+// the app's name. Generated here rather than exported by hand for the
+// same reason as everything else above: a logo Google shows to users
+// is the mark, and the mark has one definition.
+//
+// SQUARE AND OPAQUE, unlike the web rasters. Google draws it in a
+// circle, so the rounded corners would be masked off anyway — and a
+// corner-rounded source inside a circle leaves four transparent
+// slivers where the rounding cuts inside the circle. Full-bleed navy
+// survives any mask they choose.
+const GOOGLE = 120;
+await tab.setViewport({ width: GOOGLE, height: GOOGLE, deviceScaleFactor: 1 });
+await tab.setContent(`<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;padding:0;background:${BG}}svg{display:block}</style>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="${GOOGLE}" height="${GOOGLE}">
+  ${defs}
+  <rect width="512" height="512" fill="${BG}"/>
+  ${mark}
+</svg>`, { waitUntil: "load" });
+writeFileSync(new URL("../public/google-branding-120.png", import.meta.url), await tab.screenshot({ type: "png", omitBackground: false }));
 
 // Maskable: square, and the key at 72% so it survives a circular mask.
 const MASK = 512;
@@ -313,7 +327,7 @@ await tab.setContent(`<!doctype html><meta charset="utf-8">
   <g transform="translate(256 256) scale(0.72) translate(-253 -260)">${mark}</g>
 </svg>`, { waitUntil: "load" });
 writeFileSync(new URL("../public/icon-maskable-512.png", import.meta.url), await tab.screenshot({ type: "png", omitBackground: false }));
-console.log(`wrote ${WEB.length + 1} web rasters from the same source`);
+console.log(`wrote ${WEB.length + 2} web rasters from the same source`);
 
 // ---------------------------------------------------------------------
 // THE LAYERED ICON IS COMPARED AGAINST THE FLAT ONE, not eyeballed.

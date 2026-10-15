@@ -508,10 +508,43 @@ written here in the same sitting** — there is no other record of it.
   author. Branding is filled in: app name, support email, homepage
   `https://keybudget.app`, privacy `https://keybudget.app/privacy`,
   authorized domain `keybudget.app`.
-- **No logo, deliberately.** Uploading one triggers Google's brand
-  verification, which is a review with its own timeline. It can be
-  added later; doing it before launch would put a third party's queue
-  on the critical path.
+- ~~**No logo, deliberately.**~~ **Reversed 2026-10-15**, by the owner.
+  The consent sheet reads "to continue to
+  kjcvtpmorftjyejjskwm.supabase.co", which looks like a phishing page
+  to anyone who did not build this, and brand verification is what
+  replaces that string with the app's name. The cost stands — it is a
+  review on Google's timeline, not ours — but it is now worth paying
+  and it does not block a build.
+
+  The logo to upload is **`public/google-branding-120.png`**, 120x120,
+  opaque, generated from `public/favicon.svg` by
+  `scripts/make_app_icon.mjs` like every other raster. Square and
+  full-bleed rather than corner-rounded, because Google draws it in a
+  circle and a rounded source leaves four transparent slivers inside
+  that circle.
+
+- **WHICH FLOW SHOWS THAT STRING, and it is not the phone's.** The two
+  clients take different paths and only one of them has a redirect
+  domain to show:
+
+  - **Web** — `supabase.auth.signInWithOAuth` (`src/auth.js`). The
+    browser goes to `https://<ref>.supabase.co/auth/v1/authorize`,
+    which hands off to Google using the WEB client, whose authorized
+    redirect URI is `https://<ref>.supabase.co/auth/v1/callback`. For
+    an app Google has not verified, that redirect's host is what the
+    consent screen names — hence the Supabase URL.
+  - **iOS** — the NATIVE Google Sign-In SDK
+    (`@react-native-google-signin/google-signin` v16,
+    `mobile/lib/google.ts`), configured with `iosClientId` only.
+    `GoogleSignin.signIn()` returns an ID token on the device and it
+    goes straight to `supabase.auth.signInWithIdToken`. There is no
+    browser redirect to catch and an iOS OAuth client has no redirect
+    URI at all, so this sheet cannot name a Supabase domain. It is
+    not an in-app auth session of ours and it is not
+    `signInWithOAuth`.
+
+  Verification is per PROJECT, so approving the branding fixes the web
+  sheet and names the app on the phone's too.
 
 **App Store Connect / TestFlight**
 
