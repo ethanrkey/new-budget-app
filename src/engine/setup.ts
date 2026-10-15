@@ -602,13 +602,24 @@ export function collectAccountsWith(
  * What a contribution is CALLED in the Ledger.
  *
  * Generated rather than asked for: a sixth question per account is
- * exactly the kind of thing that makes a step feel like paperwork,
- * and "To Ally Savings" is what somebody would have typed anyway.
- * Debt says "payment" because that is the word for it, and because
- * the row has to be legible next to the others in a month's bills.
+ * exactly the kind of thing that makes a step feel like paperwork.
+ *
+ * NO "To " PREFIX, since 2026-10-15 — owner's call from the build 8
+ * device pass. "To Everbank savings" reads as a sentence fragment in
+ * a column of nouns, and the account name is already the whole
+ * answer: the row sits in that account's own category, so the
+ * direction is in the category rather than in the name. It also
+ * stopped the name lining up with anything — the Budget's rows and
+ * the Dashboard's cards say "Everbank savings" and the Ledger said
+ * "To Everbank savings" for the same thing.
+ *
+ * DEBT KEEPS "payment", which is not an exception to that. It is not
+ * a prefix and it is not a direction; it is what the thing is, and
+ * it is what makes the row legible beside a month's other bills,
+ * where the bare account name would read as the balance.
  */
 export function contributionName(a: Pick<SetupAccount, "name" | "group">): string {
-  return a.group === "debt" ? `${a.name} payment` : `To ${a.name}`;
+  return a.group === "debt" ? `${a.name} payment` : a.name;
 }
 
 /**
@@ -652,7 +663,7 @@ export function contributionRule(
  * The Dashboard asks the same question setup's contributions step
  * asks, one account at a time, after an account is added — and it has
  * a real category rather than a typed row. This is the one conversion
- * between the two, so "To Ally" and "Car loan payment" come out the
+ * between the two, so "Ally" and "Car loan payment" come out the
  * same whichever door the account came in through.
  */
 export function groupOfCategory(

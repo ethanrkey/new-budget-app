@@ -185,7 +185,8 @@ describe("after a new account is added", () => {
       };
       expect(last.recurring).toHaveLength(1);
       const ally = last.trackerCategories.find((c) => c.name === "Ally")!;
-      expect(last.recurring[0]!.name).toBe("To Ally");
+      // Named after the account, with no "To " in front of it.
+      expect(last.recurring[0]!.name).toBe("Ally");
       expect(last.recurring[0]!.amount).toBe(300);
       expect(last.recurring[0]!.category).toBe(ally.id);
     });

@@ -493,7 +493,18 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
     contributionOf({ amount: "50", cadence: "weekly", start: "" }, TODAY),
     { amount: 50, cadence: "weekly", start: TODAY });
 
-  eq("savings and investments are transfers in", contributionName({ name: "Ally", group: "savings" }), "To Ally");
+  // NAMED AFTER THE ACCOUNT, with no "To " in front of it — owner's
+  // call 2026-10-15. The row already sits in that account's own
+  // category, so the direction is in the category rather than in the
+  // name, and "To Everbank savings" in the Ledger did not line up
+  // with the "Everbank savings" the Budget and the Dashboard show
+  // for the same thing. Debt keeps "payment" because that is what
+  // the thing IS, not a direction: beside a month's other bills, the
+  // bare account name reads as the balance.
+  eq("a savings contribution is named after the account",
+    contributionName({ name: "Everbank savings", group: "savings" }), "Everbank savings");
+  eq("...and so is an investment one",
+    contributionName({ name: "Roth IRA", group: "investment" }), "Roth IRA");
   eq("debt is a payment", contributionName({ name: "Car loan", group: "debt" }), "Car loan payment");
 
   const withOne = collectAccountsWith(rows, { "debt:0": { amount: "450", cadence: "monthly", start: "2026-11-01" } }, TODAY);
@@ -521,7 +532,7 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
     }, TODAY),
   }, TODAY);
   const ally = savingsOut.trackerCategories.find((c) => c.name === "Ally");
-  const toAlly = savingsOut.recurring.find((r) => r.name === "To Ally");
+  const toAlly = savingsOut.recurring.find((r) => r.name === "Ally");
   eq("an asset's rule points at the asset's category", toAlly.category, ally.id);
   // THE REPORT THIS FIXES: a weekly contribution used to start today,
   // the same date as the logged balance, so the first transfer was
@@ -539,7 +550,7 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
     }, TODAY),
   }, TODAY);
   eq("a backdated contribution is pulled up to today",
-    backdated.recurring.find((r) => r.name === "To Ally").startDate, TODAY);
+    backdated.recurring.find((r) => r.name === "Ally").startDate, TODAY);
   eq("...and it is an outflow that the Budget treats as money kept",
     savingsOut.trackerCategories.find((c) => c.id === toAlly.category).kind, "asset");
 }

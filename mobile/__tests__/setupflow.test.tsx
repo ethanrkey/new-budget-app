@@ -550,7 +550,7 @@ test("a contribution becomes a recurring rule in that account's category", async
   // than on the day setup happened to be run.
   const out = applySetup(normalize({}), got[0]!, "2026-10-13");
   const ally = out.trackerCategories.find((c) => c.name === "Ally")!;
-  const rule = out.recurring.find((r) => r.name === "To Ally")!;
+  const rule = out.recurring.find((r) => r.name === "Ally")!;
   expect(rule.category).toBe(ally.id);
   expect(rule.amount).toBe(300);
   expect("cadence" in rule && rule.startDate).toBe(first);
