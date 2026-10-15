@@ -56,6 +56,18 @@ if (!defs || !mark) {
   console.error("FAIL: public/favicon.svg no longer has <defs> and <g id=\"mark\">, which this script reads");
   process.exit(1);
 }
+// NO NESTED GROUP INSIDE THE MARK, and this is not fussiness. The
+// regex above is non-greedy, so it stops at the first </g> — an inner
+// one — and the layer written below gets an unclosed tag. That
+// happened on 2026-10-15 when the fillets were first wrapped in a <g>:
+// Chrome's parser repaired the file and every PNG looked correct,
+// while actool refused the whole bundle with "Exception Raised during
+// asset import". Refusing here is the difference between a two-minute
+// fix and finding out from a failed build.
+if (/<g[\s>]/.test(mark.replace(/<!--[\s\S]*?-->/g, ""))) {
+  console.error("FAIL: <g id=\"mark\"> contains a nested <g>, which the non-greedy regex above would truncate. Flatten it.");
+  process.exit(1);
+}
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="${SIZE}" height="${SIZE}">
   ${defs}
@@ -238,6 +250,69 @@ if (!(shape.topLeft > shape.bottomRight + 20)) {
   process.exit(1);
 }
 
+// ---------------------------------------------------------------------
+// THE JUNCTIONS ARE FILLETED, and that is measured rather than looked at.
+//
+// Reported from a device on build 7: "the key has hard straight lines
+// running along its top and left edges, like a clipped highlight or
+// bevel." It did. The mark is three strokes unioned by overlap, and
+// they met in four unfilleted concave corners — the shaft's straight
+// edges running into the ring's arc, and the tooth's two vertical
+// edges meeting the shaft's bottom edge at a right angle. A highlight
+// that stops dead at a corner reads as a bevel someone cropped.
+//
+// public/favicon.svg fills those notches. This checks they are filled,
+// FROM BOTH SIDES: a probe just outside each old corner has to be gold
+// now (the fillet is there) and a probe further out along the same
+// line has to still be navy (the fillet is a fillet and not a blob).
+// One-sided would pass a key drawn as a solid lozenge.
+//
+// The offsets are small because the fillets are: the deepest new
+// material at a ring corner sits 4.2 units past the old corner, and at
+// a tooth corner 7.5. Both probes are inside those margins by at least
+// two units, which is four pixels at 1024.
+const CORNERS = [
+  // [label, corner x, corner y, outward bisector x, y, fill at, clear at]
+  ["ring/shaft top",    271.79, 231, 0.6116, -0.7917, 2, 8],
+  ["ring/shaft bottom", 271.79, 281, 0.6116, 0.7917, 2, 8],
+  ["tooth left",        349, 281, -0.7071, 0.7071, 4, 12],
+  ["tooth right",       395, 281, 0.7071, 0.7071, 4, 12],
+];
+const goldAt = async (buf, points) => await tab.evaluate(async (b64, pts) => {
+  const img = new Image();
+  img.src = `data:image/png;base64,${b64}`;
+  await img.decode();
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const g = c.getContext("2d");
+  g.drawImage(img, 0, 0);
+  // The source is a 512 viewBox; the render is SIZE across.
+  const k = c.width / 512;
+  return pts.map(([x, y]) => {
+    const d = g.getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data;
+    return d[3] > 128 && d[0] > 120 && d[0] - d[2] > 60;
+  });
+}, buf.toString("base64"), points);
+
+const probes = CORNERS.flatMap(([, x, y, bx, by, fill, clear]) => [
+  [x + bx * fill, y + by * fill],
+  [x + bx * clear, y + by * clear],
+]);
+const hit = await goldAt(buf, probes);
+let cornersOk = true;
+CORNERS.forEach(([label], i) => {
+  const filled = hit[i * 2], spilled = hit[i * 2 + 1];
+  if (!filled) {
+    console.error(`FAIL: the ${label} corner is not filleted — it is still a hard corner`);
+    cornersOk = false;
+  } else if (spilled) {
+    console.error(`FAIL: the ${label} fillet has spread past the notch it was meant to fill`);
+    cornersOk = false;
+  }
+});
+if (!cornersOk) process.exit(1);
+console.log(`  all ${CORNERS.length} junctions filleted, and none of them spilled`);
+
 // Prove it, rather than assume it. An icon that is the wrong size or
 // carries alpha fails at upload time, which is the worst moment to find
 // out — so the two properties Apple checks are checked here.
@@ -324,10 +399,20 @@ try {
     process.exit(1);
   }
 } catch (err) {
-  if (/xcrun|actool|ENOENT/i.test(String(err.message))) {
+  // ONLY A MISSING TOOLCHAIN IS A SKIP. The first version of this
+  // matched /actool/ in the message, so actool REFUSING THE BUNDLE —
+  // the exact failure this check exists to catch — was reported as
+  // "this machine has no Xcode" and the script exited green. An
+  // exception from a tool that ran is a failure.
+  const msg = String(err.message ?? err);
+  const stderr = String(err.stderr ?? "");
+  const missing = /unable to find utility|command not found|ENOENT|no developer tools|xcode-select/i.test(msg + stderr);
+  if (missing) {
     console.warn("  note: skipping the layered-icon comparison — actool needs Xcode, and this machine has none");
   } else {
-    throw err;
+    console.error("FAIL: actool could not compile the .icon bundle");
+    console.error((stderr || msg).trim().split("\n").slice(-25).join("\n"));
+    process.exit(1);
   }
 }
 

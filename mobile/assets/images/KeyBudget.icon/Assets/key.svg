@@ -33,5 +33,48 @@
     <circle cx="176" cy="256" r="74" fill="none" stroke="url(#keyGold)" stroke-width="50"/>
     <path d="M250 256 H 404" fill="none" stroke="url(#keyGold)" stroke-width="50" stroke-linecap="round"/>
     <path d="M372 256 V 340" fill="none" stroke="url(#keyGold)" stroke-width="46" stroke-linecap="round"/>
+    <!-- FILLETS. Reported from a device on build 7: "the key has hard
+         straight lines running along its top and left edges, like a
+         clipped highlight or bevel."
+         It does, and these are them. Three strokes unioned by overlap
+         meet in four unfilleted concave corners — the shaft's straight
+         top and bottom edges running into the ring's arc at about 75
+         degrees, and the tooth's two vertical edges meeting the shaft's
+         bottom edge at a right angle. On a 60pt tile, with the gradient
+         brightening toward the top-left and iOS 26 tracing its own
+         specular pass along the silhouette, a highlight that stops dead
+         at a corner reads as a bevel someone cropped.
+         Each shape below fills one notch: an arc of radius 18 tangent
+         to both edges, closed back THROUGH the key's interior rather
+         than along its boundary. That overlap is deliberate — two
+         fills that merely abut leave a hairline antialiasing seam, and
+         a seam across an app icon is the thing this fix was supposed
+         to remove. The numbers are computed, not nudged
+         — for an arc-and-line corner the fillet center sits at distance
+         18 from the line and 99+18 from the ring's center, which puts
+         it at x = 176 + sqrt(117^2 - 43^2); for the two straight
+         corners it is one radius along each edge. The right-hand one is
+         struck against the shaft's round CAP rather than its bottom
+         edge, because that edge only runs nine units past the tooth
+         before the cap takes over, and 18 would have hung a bump off
+         the outside.
+         FOUR SEPARATE PATHS, NOT A GROUP. Wrapping them in a group
+         is the obvious way to write this and it broke the icon
+         generator silently: that script lifts this element with a
+         non-greedy regex, so it stops at the FIRST closing group tag
+         — the inner one — and the layer it wrote had an unclosed tag.
+         Chrome's parser repaired it and every PNG looked right;
+         actool refused the whole bundle with "Exception Raised during
+         asset import". The generator now refuses a nested group
+         outright rather than mangling it. (This comment may not name
+         those tags literally, for exactly the same reason: a closing
+         group tag inside the comment truncates the capture too, which
+         is how the guard caught itself.)
+         scripts/make_app_icon.mjs measures the silhouette and fails if
+         any of these fillets comes back. -->
+    <path fill="url(#keyGold)" d="M 268.07 219.62 A 18 18 0 0 0 284.81 231 L 284.81 238 L 266 238 Z"/>
+    <path fill="url(#keyGold)" d="M 268.07 292.38 A 18 18 0 0 1 284.81 281 L 284.81 274 L 266 274 Z"/>
+    <path fill="url(#keyGold)" d="M 331 281 A 18 18 0 0 1 349 299 L 356 299 L 356 274 L 331 274 Z"/>
+    <path fill="url(#keyGold)" d="M 409.23 280.45 A 18 18 0 0 0 395 298.05 L 388 298.05 L 388 274 L 409.23 274 Z"/>
   
 </svg>
