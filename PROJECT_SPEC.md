@@ -599,6 +599,22 @@ written here in the same sitting** — there is no other record of it.
       the word "actool" anywhere in the error. The check that exists
       to catch exactly that was swallowing it.
 
+  **The audit after it: 136 mutations, 127 renderer tests, every test
+  dying to at least one.** The first run reported THIRTEEN tests that
+  nothing could reach and all thirteen were written that day — the
+  fourth time that lesson has been learned here, so the 23 new
+  entries went in rather than the lesson being written down again.
+  The one survivor was not a missing test but a weak one: the date
+  picker's dismissal guard, whose test only ever fired a dismissal
+  with no date. The `!d` branch catches that on its own, so deleting
+  the `type === "dismissed"` check killed nothing — and that check is
+  the one that matters, because an Android cancel hands back whatever
+  the wheel was showing. The test fires both shapes now.
+
+  Built and uploaded to App Store Connect the same evening, from
+  commit `99e1bf0`, runtime `0e61aaac…` — a new runtime, because the
+  icon changed, so build 7 is superseded rather than updated.
+
 - **1.0.0 (7) was built and submitted 2026-10-15.** The Sunday-priority
   setup fixes plus the ledger, form and Budget-order work, and two
   things from testing build 6 on a device: the icon's key back to
