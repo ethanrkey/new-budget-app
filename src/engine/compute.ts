@@ -52,7 +52,7 @@ export function groupByMonth(rows: LedgerRow[]): Array<{ label: string; rows: Le
 }
 
 // An income item counts as "take-home" (a paycheck) when its name matches this;
-// anything else income is "other in" (money from Poppy, etc.).
+// anything else income is "other in" (a repayment from a friend, a rebate).
 const PAY_RE = /pay|salary|take.?home/i;
 
 // Group rows by calendar day for the Ledger's calendar view. Returns a Map

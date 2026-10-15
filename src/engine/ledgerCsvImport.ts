@@ -81,7 +81,14 @@ function guessCategory(name: string, direction: Direction, isRecurring: boolean,
   const find = (re: RegExp) => trackerCategories.find((c) => re.test(c.name.toLowerCase()));
   const fallback = () => trackerCategories[0]?.id ?? "saved";
   if (/roth|\bira\b/.test(n)) return find(/roth|ira/)?.id ?? fallback();
-  if (/everbank|emergency|\bsaving/.test(n)) return find(/saved|savings/)?.id ?? fallback();
+  // NO BRAND NAMES IN HERE. Until 2026-10-15 this alternation also
+  // matched one named bank — the author's own, hardcoded into a
+  // guesser that ships to everyone and matching nothing for anyone
+  // else. A row called "<that bank> savings" still lands here on
+  // `\bsaving`; a row named only after the institution now falls
+  // through, which is the right behavior for a brand this code has no
+  // business knowing.
+  if (/emergency|\bsaving/.test(n)) return find(/saved|savings/)?.id ?? fallback();
   if (/brokerage|\binvest|\bstock|\betf\b/.test(n)) return find(/brokerage|invest|stock/)?.id ?? fallback();
   if (/student loan|\bloan/.test(n)) return find(/loan|debt/)?.id ?? fallback();
   return isRecurring ? "bill" : "oneoff";

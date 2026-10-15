@@ -211,7 +211,7 @@ test("the checking bar says AS OF, and never the word verified", async () => {
 
 test("the as-of date has its own line, so no balance can crowd it out", async () => {
   // THE BUG THIS WOULD HAVE CAUGHT. On a device, at a real balance of
-  // $1,276.57, "verified 2026-10-14" was cut off. Everything sat on
+  // $1,234.56, "verified 2026-10-14" was cut off. Everything sat on
   // one row — name, amount, date, "Update ›" — and the date was the
   // only thing carrying `flexShrink`, so the date was what gave way.
   //

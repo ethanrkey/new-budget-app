@@ -60,7 +60,11 @@ export default function CategorySheet({
             <Text style={styles.label}>Name</Text>
             <TextInput
               style={styles.field}
-              placeholder="Ally Savings, Roth IRA, Car loan…"
+              // A KIND OF THING, NEVER A BRAND, and the same examples
+              // the web's AssetSetupModal gives. This said "Ally
+              // Savings" until 2026-10-15, which is a real bank this
+              // app has nothing to do with.
+              placeholder="Emergency fund, Roth IRA, Car loan…"
               placeholderTextColor={T.faint}
               value={d.name}
               onChangeText={(v) => set("name", v)}

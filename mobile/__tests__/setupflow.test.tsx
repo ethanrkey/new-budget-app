@@ -499,12 +499,13 @@ test("the accounts step lists investments first, and names no bank", async () =>
     screen.getAllByText(/^(Investments|Savings|Debt)$/).map((n) => n.props.children)
   ).toEqual(["Investments", "Savings", "Debt"]);
 
-  // AND NO PLACEHOLDER NAMES A BANK. Savings said "e.g. Everbank",
-  // which is the owner's own — a real institution's name in a shipped
-  // app that has nothing to do with it, suggesting where to keep the
-  // money rather than what to call it.
+  // AND NO PLACEHOLDER NAMES A BANK. Savings named the owner's own
+  // until 2026-10-15 — a real institution in a shipped app that has
+  // nothing to do with it, suggesting where to keep the money rather
+  // than what to call it.
   expect(screen.getByLabelText("Savings 1 name").props.placeholder).toBe("e.g. Emergency fund");
-  expect(screen.queryByPlaceholderText(/Everbank/i)).toBeNull();
+  expect(screen.getByLabelText("Investments 1 name").props.placeholder).toBe("e.g. Roth IRA, 401k, HSA");
+  expect(screen.getByLabelText("Debt 1 name").props.placeholder).toBe("e.g. Student loan");
 });
 
 test("a half-filled account row blocks Finish and says which half", async () => {

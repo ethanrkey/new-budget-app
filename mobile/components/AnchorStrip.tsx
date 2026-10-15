@@ -45,12 +45,12 @@ import { fmtDate } from "../../src/shared/dates.ts";
 // TWO LINES, AND THE DATE HAS THE SECOND ONE TO ITSELF.
 //
 // Reported from a device on build 8: "verified 2026-10-14" was cut off
-// at a real balance of $1,276.57. It was, and the reason is arithmetic
+// at a real balance of $1,234.56. It was, and the reason is arithmetic
 // rather than a missing `flexShrink`. On the narrowest iPhone this app
 // supports — the 12/13 mini at 360pt — this strip gets
 // 360 - 16 (margin) - 60 (room for the floating settings button)
 // - 24 (padding) = 260pt of content. Measured in SF Pro at the sizes
-// below: "Checking" 53, "$1,276.57" 83.5, "verified 10/14/2026" 101.1,
+// below: "Checking" 53, "$1,234.56" 83.5, "verified 10/14/2026" 101.1,
 // "Update ›" 52.5, three gaps 26. That is 316pt in a 260pt box, so
 // something had to go — and the only thing carrying `flexShrink` was
 // the date.

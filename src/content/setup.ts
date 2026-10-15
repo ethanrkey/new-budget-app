@@ -180,11 +180,10 @@ export const CADENCE_OPTIONS: readonly { value: "weekly" | "biweekly" | "monthly
 // engine must not import copy.
 //
 // EVERY PLACEHOLDER NAMES A KIND OF THING, NEVER A BRAND. Savings
-// said "e.g. Everbank" until 2026-10-15, which is the owner's own
-// bank — a placeholder suggesting where to keep your money rather
-// than what to call it, and in a shipped app a real institution's
-// name it has nothing to do with. "Emergency fund" is the same shape
-// as the other two.
+// named the owner's own bank until 2026-10-15 — a placeholder
+// suggesting where to keep your money rather than what to call it,
+// and in a shipped app a real institution's name it has nothing to do
+// with. "Emergency fund" is the same shape as the other two.
 export const ACCOUNT_GROUPS: readonly {
   key: "savings" | "investment" | "debt";
   label: string;

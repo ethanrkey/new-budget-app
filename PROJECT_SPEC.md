@@ -606,7 +606,7 @@ written here in the same sitting** — there is no other record of it.
      a $400 savings transfer dated the same day as the logged balance
      — which is both inside that balance and projected on top of it,
      the same double count the paycheck step was fixed for.
-  7. **"To Everbank savings" is just "Everbank savings".** The rule
+  7. **"To <account>" is just "<account>".** The rule
      sits in that account's own category, so the direction was in the
      category already, and the Budget and the Dashboard said the name
      without it. Debt keeps "payment": that is what the thing is, not

@@ -433,8 +433,8 @@ const ledgerRowsM = [
   ["2026-10-14", "Gas", "out", "40"], ["2026-10-29", "Gas", "out", "40"], ["2026-11-12", "Gas", "out", "40"],
   ["2026-11-26", "Gas", "out", "40"], ["2026-12-10", "Gas", "out", "40"], ["2026-12-24", "Gas", "out", "40"],
   ["2027-01-07", "Gas", "out", "40"],
-  ["2026-09-07", "EverBank savings", "out", "200"], ["2026-10-07", "EverBank savings", "out", "200"],
-  ["2026-11-07", "EverBank savings", "out", "200"], ["2026-12-07", "EverBank savings", "out", "200"], ["2027-01-07", "EverBank savings", "out", "200"],
+  ["2026-09-07", "High-yield savings", "out", "200"], ["2026-10-07", "High-yield savings", "out", "200"],
+  ["2026-11-07", "High-yield savings", "out", "200"], ["2026-12-07", "High-yield savings", "out", "200"], ["2027-01-07", "High-yield savings", "out", "200"],
   ["2026-09-10", "Brokerage", "out", "300"], ["2026-10-10", "Brokerage", "out", "300"],
   ["2026-11-10", "Brokerage", "out", "300"], ["2026-12-10", "Brokerage", "out", "300"], ["2027-01-10", "Brokerage", "out", "300"],
   // Paycheck: BIWEEKLY, constant amount, extends through Jan -> open-ended.
@@ -442,8 +442,8 @@ const ledgerRowsM = [
   ["2026-10-16", "Paycheck", "in", "2000"], ["2026-10-30", "Paycheck", "in", "2000"], ["2026-11-13", "Paycheck", "in", "2000"],
   ["2026-11-27", "Paycheck", "in", "2000"], ["2026-12-11", "Paycheck", "in", "2000"], ["2026-12-25", "Paycheck", "in", "2000"],
   ["2027-01-08", "Paycheck", "in", "2000"],
-  ["2026-09-12", "Money from Poppy", "in", "100"], ["2026-10-12", "Money from Poppy", "in", "100"],
-  ["2026-11-12", "Money from Poppy", "in", "100"], ["2026-12-12", "Money from Poppy", "in", "100"], ["2027-01-12", "Money from Poppy", "in", "100"],
+  ["2026-09-12", "Money from a friend", "in", "100"], ["2026-10-12", "Money from a friend", "in", "100"],
+  ["2026-11-12", "Money from a friend", "in", "100"], ["2026-12-12", "Money from a friend", "in", "100"], ["2027-01-12", "Money from a friend", "in", "100"],
 ];
 const parsedM = parseLedgerCSV(ledgerRowsM.map((r) => r.join(",")).join("\n"), legacyTrackerCategories());
 
@@ -478,15 +478,15 @@ eq("Gas: detected biweekly despite 13-15 day (not exactly 14) gaps", [gasM.caden
 const paycheckM = parsedM.recurring.find((r) => r.name === "Paycheck");
 eq("Paycheck: detected biweekly (not one-offs), income, open-ended", [paycheckM.cadence, paycheckM.category, paycheckM.endDate], ["biweekly", "income", null]);
 
-eq("EverBank savings / Brokerage categories guessed, both monthly recurring",
-  ["EverBank savings", "Brokerage"].map((n) => {
+eq("High-yield savings / Brokerage categories guessed, both monthly recurring",
+  ["High-yield savings", "Brokerage"].map((n) => {
     const r = parsedM.recurring.find((x) => x.name === n);
     return [r?.category, r?.cadence];
   }),
   [["saved", "monthly"], ["brokerage", "monthly"]]);
 
-const poppyM = parsedM.recurring.find((r) => r.name === "Money from Poppy");
-eq("Poppy recurring monthly, income, open-ended", [poppyM.cadence, poppyM.category, poppyM.endDate], ["monthly", "income", null]);
+const friendM = parsedM.recurring.find((r) => r.name === "Money from a friend");
+eq("an irregular income source: recurring monthly, income, open-ended", [friendM.cadence, friendM.category, friendM.endDate], ["monthly", "income", null]);
 
 // ---------- Scenario N: hasSeenOnboarding migration (storage.normalize) ----------
 console.log("\n== Scenario N: onboarding-seen migration ==");

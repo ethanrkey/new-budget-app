@@ -644,13 +644,13 @@ export function collectAccountsWith(
  * exactly the kind of thing that makes a step feel like paperwork.
  *
  * NO "To " PREFIX, since 2026-10-15 — owner's call from the build 8
- * device pass. "To Everbank savings" reads as a sentence fragment in
+ * device pass. "To Emergency fund" reads as a sentence fragment in
  * a column of nouns, and the account name is already the whole
  * answer: the row sits in that account's own category, so the
  * direction is in the category rather than in the name. It also
  * stopped the name lining up with anything — the Budget's rows and
- * the Dashboard's cards say "Everbank savings" and the Ledger said
- * "To Everbank savings" for the same thing.
+ * the Dashboard's cards say "Emergency fund" and the Ledger said
+ * "To Emergency fund" for the same thing.
  *
  * DEBT KEEPS "payment", which is not an exception to that. It is not
  * a prefix and it is not a direction; it is what the thing is, and

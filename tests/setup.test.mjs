@@ -543,13 +543,13 @@ eq("...and that order is investments, savings, debt",
   // NAMED AFTER THE ACCOUNT, with no "To " in front of it — owner's
   // call 2026-10-15. The row already sits in that account's own
   // category, so the direction is in the category rather than in the
-  // name, and "To Everbank savings" in the Ledger did not line up
-  // with the "Everbank savings" the Budget and the Dashboard show
+  // name, and "To Emergency fund" in the Ledger did not line up
+  // with the "Emergency fund" the Budget and the Dashboard show
   // for the same thing. Debt keeps "payment" because that is what
   // the thing IS, not a direction: beside a month's other bills, the
   // bare account name reads as the balance.
   eq("a savings contribution is named after the account",
-    contributionName({ name: "Everbank savings", group: "savings" }), "Everbank savings");
+    contributionName({ name: "Emergency fund", group: "savings" }), "Emergency fund");
   eq("...and so is an investment one",
     contributionName({ name: "Roth IRA", group: "investment" }), "Roth IRA");
   eq("debt is a payment", contributionName({ name: "Car loan", group: "debt" }), "Car loan payment");
