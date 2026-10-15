@@ -548,6 +548,78 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **1.0.0 (9), 2026-10-15** — a device pass on build 8. Nine items.
+  Confirmed good and untouched: the payday flow, the groceries weekday
+  picker, the bill due day defaulting to today, MM/DD/YYYY, the Budget
+  totals block, Appearance's absence, the web's gray amounts.
+
+  1. **The icon is build 5's flat artwork again.** The gradient
+     (build 6) and the filleted junctions (build 8) both tried to make
+     the mark read as struck metal and neither did; the shape is what
+     wants redrawing, and that is the owner's own project (backlog
+     18b). Verified shape for shape against 17f554a. The pipeline
+     stays — one source, actool compiling the `.icon` locally — and
+     the size check is now an EQUALITY against build 5's 68.8% span
+     rather than a floor, because a floor passes a key that GREW and
+     the fillets widened the silhouette.
+  2. **The checking bar's verified date could not fit.** Measured the
+     four strings in SF Pro at the strip's own sizes: 316pt of text
+     in the 260pt the narrowest supported iPhone gives it. No shrink
+     rule fixes 56pt. The date has its own line now, where it cannot
+     truncate for any balance; "Update ›" is a muted `pencil.circle`,
+     which buys back 62pt and says the same thing.
+  3. **The sign-in screen's keyboard had no way off** — autofocus, a
+     "go" return key and a number pad with no return key at all — and
+     the two brand buttons did not match, because only one of them
+     was ours. Apple's native `ASAuthorizationAppleIDButton` sizes its
+     own title from its own frame and exposes nothing but type, style
+     and corner radius, so "match them" and "keep the native view"
+     cannot both hold. Both are one `BrandButton` now: a 20pt mark,
+     12pt gap and a 17pt/500 label centered as a GROUP in a 50pt
+     full-width button with a 12pt radius. That is what Apple's own
+     button does and what Google's rendered SDK button does when it
+     is wider than its content, and it clears Google's iOS padding
+     minimums (16/12/16) with exactly 12 in the middle. Apple's mark
+     is `apple.logo` from SF Symbols — their artwork, drawn by the
+     system, which is what the guidelines require. **The trade:** a
+     native button is compliant by construction and a custom one is
+     compliant because somebody read the rules.
+  4. **A due day could be 50.** `min`/`max` on a number input are
+     advisory and RN's number pad has no range, so 50 reached
+     `clampDay`, became 31, and said nothing. Both clients draw a
+     1-31 picker now — a wheel on the phone (the payday pattern,
+     exactly), a select on the web. `clampDay` stays and is tested in
+     its own right: the CSV importers call the engine too. Rent's
+     label became a question.
+  5. **Bill rows could not be removed** on the phone, and the web hid
+     its ✕ at one row. Swipe-left on the phone, always-visible ✕ on
+     the web, and `removeBillRow` in the engine so both agree that
+     removing the last one leaves a blank row rather than none.
+  6. **A contribution started on the day setup was run** unless it was
+     monthly. Every cadence asks for a first date now. The report was
+     a $400 savings transfer dated the same day as the logged balance
+     — which is both inside that balance and projected on top of it,
+     the same double count the paycheck step was fixed for.
+  7. **"To Everbank savings" is just "Everbank savings".** The rule
+     sits in that account's own category, so the direction was in the
+     category already, and the Budget and the Dashboard said the name
+     without it. Debt keeps "payment": that is what the thing is, not
+     a direction.
+  8. **The transaction form is a system page sheet.** Build 8's
+     hand-rolled swipe only dragged from the grab bar and left a gap
+     under the sheet — measured, and the cause is in section 8: a
+     `maxHeight: "88%"` whose owner became a wrapper with no height.
+     `presentationStyle="pageSheet"` plus `allowSwipeDismissal`
+     (`isModalInPresentation` inverted) gives the gesture, the tab-bar
+     coverage and the discard guard from UIKit. The cost is two hosts
+     on the Ledger, so the scope sheet hands over to the editor
+     through `onDismissed` — `Modal.onDismiss` is iOS-only, which was
+     the reason it was rejected in the first place, and iOS-only is
+     settled.
+  9. **A 120x120 logo for Google's consent screen**, generated from
+     the same source: `public/google-branding-120.png`. Which flow
+     shows the Supabase domain, and why, is recorded above.
+
 - **1.0.0 (8), 2026-10-15** — a slow, careful device pass on build 7,
   twelve items, every one of them diagnosed before it was fixed. The
   ones with a reason worth keeping:
