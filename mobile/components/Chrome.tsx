@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
 import { T } from "../lib/theme";
+import * as feel from "../lib/haptics";
 import { useBudget } from "./StateProvider";
 import Settings from "./Settings";
 import About from "./About";
@@ -100,7 +101,14 @@ export function Chrome({ session, children }: { session: Session; children: Reac
           would mean four of them agreeing. */}
       <Pressable
         style={[styles.fab, { top: insets.top + 6 }]}
-        onPress={() => setScreen("settings")}
+        // THE SAME TICK A TAB GETS, from 2026-10-15. This button sits
+        // in the same corner of the same chrome as the tab bar and
+        // does the same kind of thing — it moves you to another
+        // screen — and it was the one navigation control in the app
+        // that was silent. `selection` is the vocabulary word for
+        // "you moved between discrete things"; see lib/haptics.ts,
+        // and the tab bar's own screenListeners in (tabs)/_layout.
+        onPress={() => { feel.selection(); setScreen("settings"); }}
         accessibilityRole="button"
         accessibilityLabel="Settings, about and export"
         hitSlop={8}

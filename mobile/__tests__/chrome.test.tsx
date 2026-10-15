@@ -1,6 +1,6 @@
 import { act, render, screen, userEvent, waitFor, within } from "@testing-library/react-native";
 import { T } from "../lib/theme";
-import { pickerProps } from "./setup";
+import { haptics, pickerProps } from "./setup";
 import { normalize } from "../../src/engine/stateShape.ts";
 
 // PHASE 3: who is met with the six questions, and what happens to the
@@ -63,6 +63,7 @@ async function mount() {
 }
 
 beforeEach(async () => {
+  haptics.calls.length = 0;
   mockNet.connected = true;
   mockSaved.length = 0;
   mockLoaded.state = blank;
@@ -151,6 +152,27 @@ test("...and says nothing when there is nothing to say", async () => {
   expect(screen.queryByText("Apple sign-in isn't fully linked")).toBeNull();
 });
 
+
+test("the settings button ticks like a tab, because it is one", async () => {
+  // Reported from build 9's device pass: every tab gives the
+  // selection tick and the gear in the corner gave nothing, which
+  // made the one navigation control outside the tab bar feel dead.
+  //
+  // The SAME feeling, not a new one — the vocabulary stays at five
+  // words, and `selection` is already the one for "you moved between
+  // discrete things" (lib/haptics.ts, and the tab bar's own
+  // screenListeners in (tabs)/_layout.tsx).
+  mockLoaded.state = seen;
+  await mount();
+  haptics.calls.length = 0;
+
+  await userEvent.press(screen.getByLabelText("Settings, about and export"));
+  // Nothing is ever ONLY a haptic: the screen it opens is the thing
+  // you can see, and this is confirmation of it.
+  expect(await screen.findByText("Settings")).toBeOnTheScreen();
+  // Once, and the tab bar's word rather than a sixth one.
+  expect(haptics.calls).toEqual(["selection"]);
+});
 
 // ---- the anchor is a door, on every tab ------------------------------
 
