@@ -16,6 +16,22 @@ const seen = { ...blank, settings: { ...blank.settings, hasSeenOnboarding: true 
 
 // `mock` prefix: jest allows a module factory to reference it.
 const mockLoaded: { state: unknown } = { state: blank };
+// The shared stub in __tests__/setup.ts is always connected; this file
+// needs to turn the network off, because offline is read-only and a
+// control that invites a write it cannot make is worse than none.
+const mockNet: { connected: boolean; listener: ((s: { isConnected: boolean }) => void) | null } =
+  { connected: true, listener: null };
+jest.mock("@react-native-community/netinfo", () => ({
+  __esModule: true,
+  default: {
+    addEventListener: (fn: (s: { isConnected: boolean }) => void) => {
+      mockNet.listener = fn;
+      fn({ isConnected: mockNet.connected });
+      return () => { mockNet.listener = null; };
+    },
+    fetch: async () => ({ isConnected: mockNet.connected }),
+  },
+}));
 const mockSaved: unknown[] = [];
 
 jest.mock("../lib/supabase", () => ({
@@ -46,6 +62,7 @@ async function mount() {
 }
 
 beforeEach(async () => {
+  mockNet.connected = true;
   mockSaved.length = 0;
   mockLoaded.state = blank;
   const AsyncStorage = require("@react-native-async-storage/async-storage");
@@ -148,6 +165,23 @@ test("tapping the balance at the top opens the one Update balance sheet", async 
   // The same modal the Dashboard card opens, warning and all — a
   // second door, not a second way.
   expect(screen.getByText(/Transactions dated before this will drop out/)).toBeOnTheScreen();
+});
+
+test("the balance says it can be tapped, and says nothing offline", async () => {
+  // It was tappable and gave no sign of it. The web has a plain
+  // "Update balance" button; the phone had a line of text that
+  // happened to respond.
+  mockLoaded.state = seen;
+  await mount();
+  expect(await screen.findByText("Update ›")).toBeOnTheScreen();
+
+  // Offline is read-only everywhere else, so there is nothing to
+  // invite — a cue that opens a form which cannot save is worse than
+  // no cue at all.
+  mockNet.connected = false;
+  await act(async () => { mockNet.listener?.({ isConnected: false }); });
+  expect(screen.queryByText("Update ›")).toBeNull();
+  mockNet.connected = true;
 });
 
 test("...and writes the balance it was given", async () => {

@@ -24,6 +24,13 @@ import { fmtDate } from "../../src/shared/dates.ts";
 // number it shows, and until now that meant going to the Dashboard
 // for something every tab depends on.
 //
+// AND IT SAYS SO SINCE 2026-10-15. It was tappable but gave no sign of
+// it: the web has a plain "Update balance" button and the phone had a
+// line of text that happened to respond. So the row wears a surface
+// and a border — the iOS cue for "this is a control, not a label" —
+// and carries "Update ›" at its right, which is the same word the
+// web's button uses.
+//
 // Tapping OPENS THE SAME MODAL the Dashboard's card does — it is not a
 // second way to log a balance, it is a second door to the one way. The
 // web learned the other lesson the hard way: its predecessor was an
@@ -37,36 +44,50 @@ export default function AnchorStrip({ onPress }: { onPress?: () => void }) {
   const { state, online } = useBudget();
   if (!state) return null;
   const account = primaryAccount(state);
+  const live = !!onPress && online;
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.wrap, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.wrap, live && styles.live, pressed && styles.pressed]}
       onPress={onPress}
-      // Offline is read-only everywhere else, so it is read-only here
-      // rather than opening a form that cannot save.
-      disabled={!onPress || !online}
-      accessibilityRole={onPress && online ? "button" : "summary"}
+      disabled={!live}
+      accessibilityRole={live ? "button" : "summary"}
       accessibilityLabel={
-        onPress && online
+        live
           ? `${account.name} ${money(account.balance)}, verified ${fmtDate(account.balanceAsOf)}. Update the balance.`
           : undefined
       }
     >
-      <Text style={styles.name} numberOfLines={1}>{account.name}</Text>
-      <Text style={styles.amount}>{money(account.balance)}</Text>
-      <Text style={styles.asOf}>verified {fmtDate(account.balanceAsOf)}</Text>
+      <View style={styles.info}>
+        <Text style={styles.name} numberOfLines={1}>{account.name}</Text>
+        <Text style={styles.amount}>{money(account.balance)}</Text>
+        {/* Shrinks before the cue does: the date is the thing that can
+            be read from the Dashboard, the cue is the thing somebody
+            is looking for. */}
+        <Text style={styles.asOf} numberOfLines={1}>verified {fmtDate(account.balanceAsOf)}</Text>
+      </View>
+      {/* Offline is read-only everywhere else, so there is nothing to
+          invite here — a cue that opens a form which cannot save is
+          worse than no cue. */}
+      {live && <Text style={styles.cue}>Update ›</Text>}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    flexDirection: "row", alignItems: "baseline", gap: 8,
+    flexDirection: "row", alignItems: "center", gap: 10,
     // Room for the settings button, which floats at top-right.
-    paddingLeft: 16, paddingRight: 60, paddingBottom: 8,
+    marginLeft: 16, marginRight: 60, marginBottom: 8,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
   },
+  // A surface and a border only when there is something to press. A
+  // control-shaped thing that does nothing is its own kind of lie.
+  live: { backgroundColor: T.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: T.border },
   pressed: { opacity: 0.6 },
+  info: { flex: 1, flexDirection: "row", alignItems: "baseline", gap: 8 },
   name: { color: T.faint, fontSize: 12 },
   amount: { color: T.text, fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  asOf: { color: T.faint, fontSize: 11 },
+  asOf: { color: T.faint, fontSize: 11, flexShrink: 1 },
+  cue: { color: T.brass, fontSize: 12, fontWeight: "700" },
 });
