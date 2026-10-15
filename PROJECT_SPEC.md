@@ -554,6 +554,76 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **1.0.0 (10), 2026-10-15** — a device pass on build 9. Eight items.
+  Confirmed good and untouched, which is most of what build 9 changed:
+  the native page sheet on the transaction form (swipe from anywhere,
+  no gap, the dirty-form bounce and the discard prompt — "this is the
+  bar"), the date picker on payday and contributions, the matching
+  Apple and Google buttons, the pencil on the checking bar, and the
+  Ledger's tap-a-row flow. Google on iOS shows "continue to Key
+  Budget", confirming build 9's finding that the Supabase host is a
+  web-only artifact.
+
+  1. **THE ICON WAS THE PIPELINE, NOT THE ARTWORK**, and build 9 is
+     what proved it: the drawing was build 5's geometry exactly and
+     the ring still came off the phone faceted, like an octagon, with
+     glass shading on its edges. iOS 26 RE-RENDERS a layered icon
+     rather than drawing it. `ios.icon` and
+     `mobile/assets/images/KeyBudget.icon` are gone; the phone ships
+     `expo.icon` → the flat 1024 PNG, and `expo.ios` is now build 5's
+     `ios` block key for key. Every check in the generator read
+     `public/favicon.svg`, which is why every one of them passed
+     build 9 — so the two that replaced the `actool` comparison read
+     what actually ships: the render against build 5's own
+     `AppIcon60x60@2x.png` out of its IPA, and app.json's two icon
+     keys. See band G item 24. **The icon does not change again until
+     the owner redraws the key** (backlog 18b).
+  2. **"verified" became "as of"** on the checking bar, both clients.
+     Savings and investment cards keep "logged" — a different kind of
+     reading, and now asserted positively on both sides so a sweep of
+     one word cannot take the other. ONE ROW WAS ASKED FOR AND
+     RE-MEASURED with the shorter word and the pencil both counted:
+     53 + 93.9 + 18 + 87.7 + 24 of gaps = **276.6pt in 260**, so it
+     stays two rows. Closing the gaps to 4 leaves 264.6; dropping the
+     date to 10pt as well leaves 259.5, which fits by half a point
+     with the default name and breaks for any real one. One row
+     leaves 36.4pt for the account name and "Checking" alone needs 53.
+  3. **The day wheel committed when it stopped scrolling.** That is
+     the date picker's behavior copied one control too far: a
+     `UIDatePicker` in inline mode is a calendar and a tap is an
+     answer, a `UIPickerView` reports whatever row it coasts to a
+     stop on. Flicking past the 14th on the way to the 20th set the
+     14th AND closed the picker. The wheel moves a draft now, Done
+     commits, Cancel leaves the old value, and reopening starts from
+     the committed value rather than the abandoned draft.
+  4. **Swipe-to-delete is gone.** Build 9's hand-rolled PanResponder
+     row swipe was "extremely buggy — I can barely get it to peek
+     out", which is what happens when a horizontal gesture has to win
+     a responder negotiation against the ScrollView it lives in.
+     Both lists wear a visible ✕ instead, on every row including the
+     blank one, and it now covers the three ACCOUNT groups, which the
+     swipe never reached on either client. `removeAccountRow` joins
+     `removeBillRow` in the engine.
+  5. **Investments above Savings, then Debt**, and that is the order
+     the engine collects in too (`SETUP_GROUPS`), so the categories
+     come out the way the step asked. The savings placeholder named
+     the owner's own bank; every placeholder names a kind of thing
+     now. **A sweep for the rest of it** found seven more places —
+     one of them shipping: `ledgerCsvImport.ts` matched that bank by
+     name in the category guesser, for every user. See band G item 25.
+  6. **"We've added N recurring items" is "You've added".** The
+     person answered the questions.
+  7. **The tour ends on the Ledger**, by every exit, on both clients.
+     The stops are unchanged and the Dashboard is still the last
+     card; what changed is where you are put down afterwards. From
+     the owner's own first run: the Dashboard's value is not obvious
+     right after setup, when it holds one reading of each account and
+     no trend. The Dashboard stop's copy is spelled out and is a
+     DRAFT for the voice pass.
+  8. **The settings button ticks like a tab.** The one navigation
+     control outside the tab bar was silent. Same `selection`, not a
+     sixth word.
+
 - **1.0.0 (9), 2026-10-15** — a device pass on build 8. Nine items.
   Confirmed good and untouched: the payday flow, the groceries weekday
   picker, the bill due day defaulting to today, MM/DD/YYYY, the Budget
@@ -2198,6 +2268,34 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
     assumed. The splash mark came from the same pass, and the splash
     background went from the template's white to `#111827`, which was a
     white flash on launch in a dark-only app.
+24a. **Nothing in the app is named after one real person's finances.**
+    **DONE 2026-10-15**, from build 9's device pass — the savings
+    placeholder on the accounts step said "e.g. Everbank", which is
+    the owner's own bank. A sweep for the rest found seven more, and
+    one of them shipped:
+
+    - `src/engine/ledgerCsvImport.ts` guessed a CSV row's category
+      with `/everbank|emergency|\bsaving/` — a named bank hardcoded
+      into a heuristic that runs for every user and matches nothing
+      for anyone but one. Removed; a row called "<bank> savings"
+      still lands on `\bsaving`.
+    - `mobile/components/CategorySheet.tsx`'s placeholder named a
+      real bank. It is the web's three examples now, which also
+      stopped the two clients disagreeing.
+    - `tests/engine.test.mjs`'s CSV fixture used that bank and a real
+      person's name; `tests/setup.test.mjs` and `src/engine/setup.ts`
+      used the bank in the contribution-naming case and its comments;
+      `src/engine/compute.ts`'s "other in" comment named the person.
+    - `AnchorStrip.tsx` and `chrome.test.tsx` carried the owner's
+      actual checking balance as the measured example, twice each.
+      The figures are tabular, so the substitute is the same width
+      and the arithmetic in the note is unchanged.
+
+    Git history keeps all of it; this is about what the files say and
+    what ships. **The standing rule: a placeholder or an example
+    names a KIND OF THING, never a brand and never an account
+    somebody actually has.**
+
 25. **App Privacy questionnaire.** The item that takes real thought —
     this app holds a user's complete financial state and Apple asks
     about exactly that.
@@ -2246,10 +2344,15 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
     struck metal with a gradient and then with filleted junctions, and
     the device pass on each said the same thing: the lighting is not
     the problem, the shape is. Build 9 reverts to build 5's flat
-    artwork and holds there. Whatever replaces it goes through
-    `public/favicon.svg` and nowhere else, and the generator's
-    `BUILD_5_SPAN` check is the thing to update deliberately when it
-    does.
+    artwork and build 10 proves the artwork was never the problem —
+    the `.icon` bundle was, because iOS 26 re-renders a layered icon
+    and the re-render came out faceted. Whatever replaces the key
+    goes through `public/favicon.svg` and nowhere else, and THREE
+    things in `scripts/make_app_icon.mjs` are then updated
+    deliberately, in the same commit: `BUILD_5_SPAN`,
+    `BUILD_5_MEAN_TOLERANCE`, and `scripts/fixtures/build5-appicon-120.png`,
+    which is replaced from the first build of the new mark. Until
+    then the icon does not change — the owner's words.
 
 18c. **A "Schedule contributions" link on a new account's Dashboard
     card**, as an alternative to the post-add prompt. Raised
