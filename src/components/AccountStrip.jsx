@@ -15,8 +15,13 @@ export default function AccountStrip({ account, onUpdateClick }) {
       <span className="font-medium">{account.name}</span>
       <span className="text-gray-300 dark:text-gray-700">·</span>
       <span className="font-semibold text-base">{money(account.balance)}</span>
+      {/* "as of", not "verified" — the owner's word, 2026-10-15, and
+          the phone's bar says the same thing. What the line reports is
+          when the number was true, not that an act of verification
+          happened. The savings and investment cards keep "logged",
+          which IS an act you performed. */}
       <span className="text-gray-500">
-        verified {fmtDate(account.balanceAsOf)}
+        as of {fmtDate(account.balanceAsOf)}
       </span>
       <button
         onClick={onUpdateClick}

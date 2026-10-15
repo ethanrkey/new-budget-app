@@ -35,6 +35,13 @@ import { fmtDate } from "../../src/shared/dates.ts";
 // editable bar that committed a new balance on every keystroke, so a
 // half-typed number was live state. Nothing changes until Confirm.
 //
+// "AS OF", NOT "VERIFIED", SINCE 2026-10-15. The owner's word, and the
+// better one: "verified" is a claim about an act, and what this line
+// is actually saying is when the number was true. The savings and
+// investment cards keep "logged" — that IS an act you performed, and
+// a balance you typed in off a statement is logged rather than
+// verified against anything.
+//
 // TWO LINES, AND THE DATE HAS THE SECOND ONE TO ITSELF.
 //
 // Reported from a device on build 8: "verified 2026-10-14" was cut off
@@ -48,10 +55,25 @@ import { fmtDate } from "../../src/shared/dates.ts";
 // something had to go — and the only thing carrying `flexShrink` was
 // the date.
 //
-// Deleting the word cue buys 62pt and the symbol costs 18 back, which
-// still leaves 272 against 260 at $1,276.57 and 282 at $12,345.67.
-// One line cannot hold this, so it is not asked to: the date gets its
-// own line, where its 101pt sits in 260 and CANNOT truncate for any
+// ONE ROW WAS ASKED FOR AGAIN ON 2026-10-15 AND RE-MEASURED, WITH THE
+// SHORTER WORD AND THE SYMBOL BOTH COUNTED. It is still 16.6pt too
+// wide, so it is still two rows:
+//
+//     "Checking"            53.0   (12pt)
+//     "$12,345.67"          93.9   (16pt semibold, tabular)
+//     pencil.circle         18.0
+//     "as of 10/14/2026"    87.7   (11pt)
+//     three 8pt gaps        24.0
+//     ------------------------------------
+//                          276.6   in 260
+//
+// Closing the gaps to 4pt leaves 264.6 and dropping the date to 10pt
+// as well leaves 259.5 — which "fits" by half a point with the
+// DEFAULT account name and breaks for any real one. Subtract
+// everything that is not the name and the row has 36.4pt left for it;
+// the word "Checking" alone needs 53. So one line cannot hold this at
+// the narrowest width, and it is not asked to: the date gets its own
+// line, where its 87.7pt sits in 260 and CANNOT truncate for any
 // balance, any account name, or any date. The first line shrinks the
 // ACCOUNT NAME instead, which is the one piece of it that is both
 // user-supplied and the least load-bearing.
@@ -69,7 +91,7 @@ export default function AnchorStrip({ onPress }: { onPress?: () => void }) {
       accessibilityRole={live ? "button" : "summary"}
       accessibilityLabel={
         live
-          ? `${account.name} ${money(account.balance)}, verified ${fmtDate(account.balanceAsOf)}. Update the balance.`
+          ? `${account.name} ${money(account.balance)}, as of ${fmtDate(account.balanceAsOf)}. Update the balance.`
           : undefined
       }
     >
@@ -102,7 +124,7 @@ export default function AnchorStrip({ onPress }: { onPress?: () => void }) {
           cannot be placed in time, and "the date is half the exception"
           is the whole reason the anchor is allowed in at all. It owns
           this line, with no sibling to be squeezed by. */}
-      <Text style={styles.asOf}>verified {fmtDate(account.balanceAsOf)}</Text>
+      <Text style={styles.asOf}>as of {fmtDate(account.balanceAsOf)}</Text>
     </Pressable>
   );
 }

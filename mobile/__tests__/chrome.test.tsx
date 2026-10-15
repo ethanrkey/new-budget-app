@@ -195,7 +195,21 @@ test("the balance says it can be tapped, in muted gray, and says nothing offline
   mockNet.connected = true;
 });
 
-test("the verified date has its own line, so no balance can crowd it out", async () => {
+test("the checking bar says AS OF, and never the word verified", async () => {
+  // The owner's word, 2026-10-15. "Verified" is a claim about an act;
+  // this line is saying when the number was true. The savings and
+  // investment cards keep "logged", which IS an act you performed —
+  // see the dashboard suite, which asserts that separately, so
+  // changing one of the two words here cannot quietly change both.
+  mockLoaded.state = seen;
+  await mount();
+  expect(await screen.findByText(/^as of /)).toBeOnTheScreen();
+  expect(screen.queryByText(/verified/i)).toBeNull();
+  // The screen reader hears the same sentence the eye reads.
+  expect(await screen.findByLabelText(/Checking .*, as of .*Update the balance/)).toBeOnTheScreen();
+});
+
+test("the as-of date has its own line, so no balance can crowd it out", async () => {
   // THE BUG THIS WOULD HAVE CAUGHT. On a device, at a real balance of
   // $1,276.57, "verified 2026-10-14" was cut off. Everything sat on
   // one row — name, amount, date, "Update ›" — and the date was the
@@ -207,6 +221,12 @@ test("the verified date has its own line, so no balance can crowd it out", async
   // settings button and 24pt of padding) gives it. No shrink rule
   // fixes 56pt of overflow; the line has to stop being shared.
   //
+  // RE-MEASURED 2026-10-15 with the shorter word and the pencil, both
+  // counted: 53 + 93.9 + 18 + 87.7 + 24 of gaps = 276.6 in 260. Still
+  // 16.6pt over, so this is still two lines. Subtract everything that
+  // is not the account name and one row leaves 36.4pt for it, which
+  // the default name "Checking" overruns on its own at 53.
+  //
   // So this does not assert a width, which jest cannot see. It
   // asserts the STRUCTURE that makes the width irrelevant: the date
   // is not on the row with the balance. Put it back on that row and
@@ -217,11 +237,11 @@ test("the verified date has its own line, so no balance can crowd it out", async
   };
   await mount();
 
-  const dated = await screen.findByText("verified 10/14/2026");
+  const dated = await screen.findByText("as of 10/14/2026");
   expect(dated).toBeOnTheScreen();
   // ...and its own Text is one unbroken string, not two runs that a
   // parent could have split.
-  expect(within(screen.getByTestId("anchor-line")).queryByText(/verified/)).toBeNull();
+  expect(within(screen.getByTestId("anchor-line")).queryByText(/as of/)).toBeNull();
   // The balance is the thing that grew, and it is on the other line.
   expect(within(screen.getByTestId("anchor-line")).getByText("$12,345.67")).toBeOnTheScreen();
   mockLoaded.state = seen;

@@ -70,6 +70,15 @@ test("the savings section ends with a card that starts one", async () => {
   // The explanation of what the section is FOR, shared with the web
   // so it cannot drift (src/content/dashboard.ts).
   expect(screen.getByText(/a Roth IRA, a brokerage/)).toBeOnTheScreen();
+  // A SAVINGS CARD SAYS "logged", AND THAT IS NOT THE WORD THE
+  // CHECKING BAR USES. The checking bar said "verified" until
+  // 2026-10-15 and says "as of" now; these two readings are different
+  // in kind, which is the owner's point — a balance you typed in off
+  // a statement is logged, and the one the whole forecast counts
+  // forward from is simply true as of a date. Asserted on both sides
+  // so a sweep of one word cannot quietly take the other with it.
+  expect(screen.getByText("logged 10/01/2026")).toBeOnTheScreen();
+  expect(screen.queryByText(/as of 10\/01\/2026/)).toBeNull();
   await userEvent.press(screen.getByLabelText("+ Add account"));
   expect(await screen.findByText("Add an account")).toBeOnTheScreen();
 });
