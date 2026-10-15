@@ -486,6 +486,27 @@ test("the balance step cannot be passed, and says why", async () => {
   await waitFor(() => expect(screen.getByLabelText("Continue")).toBeEnabled());
 });
 
+test("the accounts step lists investments first, and names no bank", async () => {
+  // Owner's call from build 9's device pass: investments above
+  // savings, then debt. Asserted as the ORDER ON SCREEN rather than
+  // as the contents of ACCOUNT_GROUPS, which would only be the
+  // constant checked against itself. The engine's own collection
+  // order is held to the same list in tests/setup.test.mjs, so the
+  // categories come out the way the step asked.
+  await mount();
+  await toAccounts();
+  expect(
+    screen.getAllByText(/^(Investments|Savings|Debt)$/).map((n) => n.props.children)
+  ).toEqual(["Investments", "Savings", "Debt"]);
+
+  // AND NO PLACEHOLDER NAMES A BANK. Savings said "e.g. Everbank",
+  // which is the owner's own — a real institution's name in a shipped
+  // app that has nothing to do with it, suggesting where to keep the
+  // money rather than what to call it.
+  expect(screen.getByLabelText("Savings 1 name").props.placeholder).toBe("e.g. Emergency fund");
+  expect(screen.queryByPlaceholderText(/Everbank/i)).toBeNull();
+});
+
 test("a half-filled account row blocks Finish and says which half", async () => {
   await mount();
   await toAccounts();

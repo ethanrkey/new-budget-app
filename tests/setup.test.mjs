@@ -14,8 +14,9 @@ import {
   blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
   firstMonthlyOn, defaultBillDay, emptyBillRow, firstWeekdayOn,
   contributionTargets, contributionOf, collectAccountsWith, contributionName,
-  blankContributionRow, clampDay, removeBillRow, removeAccountRow,
+  blankContributionRow, clampDay, removeBillRow, removeAccountRow, SETUP_GROUPS,
 } from "../src/engine/setup.ts";
+import { ACCOUNT_GROUPS } from "../src/content/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
 import { computeLedger } from "../src/engine/compute.ts";
 
@@ -291,6 +292,20 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
     removeAccountRow(rows, 9).map((r) => r.name), ["Emergency fund", "Vacation", "Roth IRA"]);
 }
 
+// ---- THE STEP'S ORDER AND THE ENGINE'S ARE ONE ORDER -----------------
+//
+// Investments above Savings, then Debt, from 2026-10-15. ACCOUNT_GROUPS
+// is what both clients render and SETUP_GROUPS is what the engine walks
+// when it collects the rows, so the second decides what order the
+// categories are CREATED in. Two lists that have to agree, and nothing
+// in the type system makes them — content cannot import from the
+// engine's side of the line and the engine must not import copy. So
+// they agree here.
+eq("the step asks in the order the engine collects",
+  ACCOUNT_GROUPS.map((g) => g.key), [...SETUP_GROUPS]);
+eq("...and that order is investments, savings, debt",
+  [...SETUP_GROUPS], ["investment", "savings", "debt"]);
+
 // ---- 1 TO 31, WHOEVER IS ASKING ---------------------------------------
 //
 // Reported from a device on build 8: the due day was a number pad
@@ -472,15 +487,18 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
     investment: [{ name: "Roth IRA", amount: "15400" }],
     debt: [{ name: "Car loan", amount: "9100" }],
   };
-  eq("finished rows survive and are trimmed", collectAccounts(rows), [
-    { name: "Ally Savings", amount: 8200, group: "savings" },
+  // INVESTMENTS FIRST: the order the step asks in is the order the
+  // categories come out in — see SETUP_GROUPS.
+  eq("finished rows survive and are trimmed, investments first", collectAccounts(rows), [
     { name: "Roth IRA", amount: 15400, group: "investment" },
+    { name: "Ally Savings", amount: 8200, group: "savings" },
     { name: "Car loan", amount: 9100, group: "debt" },
   ]);
   eq("the trailing empty row does not block Finish", incompleteAccountRows(rows).length, 0);
   // A zero is a real balance on this step, unlike an amount field.
   eq("zero in an account row is kept",
-    collectAccounts({ ...rows, savings: [{ name: "Emergency", amount: "0" }] })[0].amount, 0);
+    collectAccounts({ ...rows, savings: [{ name: "Emergency", amount: "0" }] })
+      .find((a) => a.group === "savings").amount, 0);
 }
 
 // ---- scheduling what goes IN to an account ---------------------------
@@ -495,8 +513,8 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   // of its group and position — not its place in the finished list,
   // which moves when somebody goes back and edits, and not its name,
   // because two accounts are allowed to share one.
-  eq("every finished account is asked about",
-    contributionTargets(rows).map((t) => t.key), ["savings:0", "investment:0", "debt:0"]);
+  eq("every finished account is asked about, in the step's order",
+    contributionTargets(rows).map((t) => t.key), ["investment:0", "savings:0", "debt:0"]);
   eq("...and an unfinished row is not",
     contributionTargets({ savings: [{ name: "Ally", amount: "" }], investment: [], debt: [] }).length, 0);
 

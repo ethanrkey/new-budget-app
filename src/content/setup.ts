@@ -171,14 +171,28 @@ export const CADENCE_OPTIONS: readonly { value: "weekly" | "biweekly" | "monthly
 // something to point at. (Decided twice, 2026-10-11 and again before
 // the phone's flow was built: loan terms stay out of setup on BOTH
 // clients.)
+//
+// INVESTMENTS FIRST, then Savings, then Debt — the owner's call from
+// build 9's device pass, 2026-10-15. The order here is the order the
+// step asks in AND the order the categories are created in: the
+// engine walks SETUP_GROUPS, and tests/setup.test.mjs asserts the two
+// lists agree, because content cannot import from the engine and the
+// engine must not import copy.
+//
+// EVERY PLACEHOLDER NAMES A KIND OF THING, NEVER A BRAND. Savings
+// said "e.g. Everbank" until 2026-10-15, which is the owner's own
+// bank — a placeholder suggesting where to keep your money rather
+// than what to call it, and in a shipped app a real institution's
+// name it has nothing to do with. "Emergency fund" is the same shape
+// as the other two.
 export const ACCOUNT_GROUPS: readonly {
   key: "savings" | "investment" | "debt";
   label: string;
   kindNote: string;
   placeholder: string;
 }[] = [
-  { key: "savings", label: "Savings", kindNote: "Cash you control — saved as Savings", placeholder: "e.g. Everbank" },
   { key: "investment", label: "Investments", kindNote: "Value the market moves — saved as Investment", placeholder: "e.g. Roth IRA, 401k, HSA" },
+  { key: "savings", label: "Savings", kindNote: "Cash you control — saved as Savings", placeholder: "e.g. Emergency fund" },
   { key: "debt", label: "Debt", kindNote: "What you owe now — add the rate later on the card", placeholder: "e.g. Student loan" },
 ];
 

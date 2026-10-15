@@ -200,6 +200,21 @@ export type AccountRow = { name: string; amount: string };
 
 export type SetupGroup = SetupAccount["group"];
 
+/**
+ * The three groups, IN THE ORDER THE STEP ASKS ABOUT THEM.
+ *
+ * Investments first since 2026-10-15, the owner's call from build 9's
+ * device pass. This is not only a display order: it is the order
+ * `startedAccountRows` walks, and therefore the order the categories
+ * come out in, so the Dashboard lists them the way the step listed
+ * them. One array rather than two, and a check in tests/setup.test.mjs
+ * asserts that `ACCOUNT_GROUPS` in src/content/setup.ts — which is
+ * what both clients actually render — is in this same order. Content
+ * cannot import from the engine's side of the line and the engine
+ * must not import copy, so the two agree by assertion.
+ */
+export const SETUP_GROUPS = ["investment", "savings", "debt"] as const;
+
 /** The accounts step's three groups, each a list of typed rows. */
 export type AccountRows = Record<SetupGroup, AccountRow[]>;
 
@@ -526,7 +541,7 @@ type StartedRow = { group: SetupGroup; index: number; name: string; amount: numb
  */
 export function startedAccountRows(rows: AccountRows): StartedRow[] {
   const out: StartedRow[] = [];
-  for (const group of ["savings", "investment", "debt"] as const) {
+  for (const group of SETUP_GROUPS) {
     (rows[group] ?? []).forEach((r, index) => {
       const amount = r.amount.trim() === "" ? null : Number(r.amount);
       if (r.name.trim() === "" && amount == null) return;
