@@ -50,10 +50,15 @@ const SIZE = 1024;
 // producing an icon with no key on it.
 const BG = "#111827";
 const SOURCE = readFileSync(new URL("../public/favicon.svg", import.meta.url), "utf8");
-const defs = (SOURCE.match(/<defs>[\s\S]*?<\/defs>/) ?? [])[0];
+// <defs> is OPTIONAL and <g id="mark"> is not. The mark has to be
+// there or every output is a navy square; a <defs> only exists when
+// the drawing needs one, and since the 2026-10-15 revert to build 5's
+// flat gold it does not. Requiring one here would have made removing
+// the gradient a failing build for no reason.
+const defs = (SOURCE.match(/<defs>[\s\S]*?<\/defs>/) ?? [])[0] ?? "";
 const mark = (SOURCE.match(/<g id="mark">([\s\S]*?)<\/g>/) ?? [])[1];
-if (!defs || !mark) {
-  console.error("FAIL: public/favicon.svg no longer has <defs> and <g id=\"mark\">, which this script reads");
+if (!mark) {
+  console.error("FAIL: public/favicon.svg no longer has <g id=\"mark\">, which this script reads");
   process.exit(1);
 }
 // NO NESTED GROUP INSIDE THE MARK, and this is not fussiness. The
@@ -177,20 +182,19 @@ const splashBuf = await tab.screenshot({ type: "png", omitBackground: true });
 writeFileSync(OUT, buf);
 writeFileSync(SPLASH, splashBuf);
 
-// THE MARK IS ON IT, and the gradient runs the way it is supposed to.
+// THE MARK IS ON IT, AND IT IS THE RIGHT SIZE.
 //
-// This check exists because of a bug it would have caught and a human
-// did not: the first metallic gradient used SVG's default
+// This check exists because of two bugs it would have caught and a
+// human did not. The first metallic gradient used SVG's default
 // objectBoundingBox units, and two of the key's three shapes are
 // STRAIGHT LINES whose bounding boxes have zero height or zero width.
 // SVG says an element with a degenerate bounding box and
 // objectBoundingBox units is not rendered at all — so the shaft and
 // the tooth silently disappeared and the icon became a gold ring on
-// navy. It looked plausible in a thumbnail.
+// navy. It looked plausible in a thumbnail. The second was build 6's
+// layered icon, whose key filled a third of the tile.
 //
-// So: count the gold, and compare the top-left half of it with the
-// bottom-right half. A missing shape collapses the count; a gradient
-// that is flat, inverted, or gone collapses the difference.
+// So: count the gold, and measure how wide the mark is.
 const inspect = async (buf) => await tab.evaluate(async (b64) => {
   const img = new Image();
   img.src = `data:image/png;base64,${b64}`;
@@ -200,19 +204,16 @@ const inspect = async (buf) => await tab.evaluate(async (b64) => {
   const g = c.getContext("2d");
   g.drawImage(img, 0, 0);
   const { data } = g.getImageData(0, 0, c.width, c.height);
-  let gold = 0, tlSum = 0, tlN = 0, brSum = 0, brN = 0;
+  let gold = 0;
   let minX = c.width, maxX = -1;
   for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], gg = data[i + 1], b = data[i + 2], a = data[i + 3];
+    const r = data[i], b = data[i + 2], a = data[i + 3];
     // Gold is the only warm thing in the frame: red well above blue.
     if (a > 128 && r > 120 && r - b > 60) {
       gold++;
-      const px = (i / 4) % c.width, py = Math.floor(i / 4 / c.width);
+      const px = (i / 4) % c.width;
       if (px < minX) minX = px;
       if (px > maxX) maxX = px;
-      const along = px / c.width + py / c.height;        // 0 top-left .. 2 bottom-right
-      if (along < 0.8) { tlSum += r + gg + b; tlN++; }
-      else if (along > 1.2) { brSum += r + gg + b; brN++; }
     }
   }
   return {
@@ -221,97 +222,36 @@ const inspect = async (buf) => await tab.evaluate(async (b64) => {
     // sharp one: the key is a ring plus a shaft plus a tooth, and only
     // the shaft makes it wide.
     spanX: maxX < 0 ? 0 : (maxX - minX) / c.width,
-    topLeft: tlN ? tlSum / tlN : 0,
-    bottomRight: brN ? brSum / brN : 0,
   };
 }, buf.toString("base64"));
 
 const shape = await inspect(buf);
 console.log(`  gold ${(shape.goldFraction * 100).toFixed(1)}% of the frame,` +
-  ` spanning ${(shape.spanX * 100).toFixed(0)}% of its width,` +
-  ` top-left ${shape.topLeft.toFixed(0)} vs bottom-right ${shape.bottomRight.toFixed(0)}`);
+  ` spanning ${(shape.spanX * 100).toFixed(1)}% of its width`);
 
 // THE NUMBERS ARE MEASURED, NOT PICKED. The whole key is 13.1% of the
-// square and spans 69% of its width; the ring on its own — which is
+// square and spans 68.8% of its width; the ring on its own — which is
 // what the zero-bounding-box bug left behind — is 8.9% and spans 29%.
 // The first version of this check floored the area at 6% and passed
 // the broken icon, because a ring is more than 6%. The SPAN is what
 // actually separates them: only the shaft makes the mark wide.
+//
+// BUILD_5_SPAN is the composition the owner signed off on from a
+// device, and on 2026-10-15 the drawing was reverted to exactly that
+// artwork. It is an equality check with a point and a half of slack
+// for antialiasing, not a floor: a key that grew as well as a key that
+// shrank is a regression, and build 6's third-of-a-tile key is what
+// a floor alone fails to catch.
+const BUILD_5_SPAN = 68.8;
+const SPAN_TOLERANCE = 1.5;
 if (shape.goldFraction < 0.11) {
   console.error(`FAIL: only ${(shape.goldFraction * 100).toFixed(1)}% of the icon is gold — a shape is missing`);
   process.exit(1);
 }
-if (shape.spanX < 0.6) {
-  console.error(`FAIL: the mark spans only ${(shape.spanX * 100).toFixed(0)}% of the width — the shaft is missing`);
+if (Math.abs(shape.spanX * 100 - BUILD_5_SPAN) > SPAN_TOLERANCE) {
+  console.error(`FAIL: the mark spans ${(shape.spanX * 100).toFixed(1)}% of the width, and build 5's spans ${BUILD_5_SPAN}% — the composition moved`);
   process.exit(1);
 }
-if (!(shape.topLeft > shape.bottomRight + 20)) {
-  console.error("FAIL: the gradient is flat or inverted — top-left should be the lighter end");
-  process.exit(1);
-}
-
-// ---------------------------------------------------------------------
-// THE JUNCTIONS ARE FILLETED, and that is measured rather than looked at.
-//
-// Reported from a device on build 7: "the key has hard straight lines
-// running along its top and left edges, like a clipped highlight or
-// bevel." It did. The mark is three strokes unioned by overlap, and
-// they met in four unfilleted concave corners — the shaft's straight
-// edges running into the ring's arc, and the tooth's two vertical
-// edges meeting the shaft's bottom edge at a right angle. A highlight
-// that stops dead at a corner reads as a bevel someone cropped.
-//
-// public/favicon.svg fills those notches. This checks they are filled,
-// FROM BOTH SIDES: a probe just outside each old corner has to be gold
-// now (the fillet is there) and a probe further out along the same
-// line has to still be navy (the fillet is a fillet and not a blob).
-// One-sided would pass a key drawn as a solid lozenge.
-//
-// The offsets are small because the fillets are: the deepest new
-// material at a ring corner sits 4.2 units past the old corner, and at
-// a tooth corner 7.5. Both probes are inside those margins by at least
-// two units, which is four pixels at 1024.
-const CORNERS = [
-  // [label, corner x, corner y, outward bisector x, y, fill at, clear at]
-  ["ring/shaft top",    271.79, 231, 0.6116, -0.7917, 2, 8],
-  ["ring/shaft bottom", 271.79, 281, 0.6116, 0.7917, 2, 8],
-  ["tooth left",        349, 281, -0.7071, 0.7071, 4, 12],
-  ["tooth right",       395, 281, 0.7071, 0.7071, 4, 12],
-];
-const goldAt = async (buf, points) => await tab.evaluate(async (b64, pts) => {
-  const img = new Image();
-  img.src = `data:image/png;base64,${b64}`;
-  await img.decode();
-  const c = document.createElement("canvas");
-  c.width = img.naturalWidth; c.height = img.naturalHeight;
-  const g = c.getContext("2d");
-  g.drawImage(img, 0, 0);
-  // The source is a 512 viewBox; the render is SIZE across.
-  const k = c.width / 512;
-  return pts.map(([x, y]) => {
-    const d = g.getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data;
-    return d[3] > 128 && d[0] > 120 && d[0] - d[2] > 60;
-  });
-}, buf.toString("base64"), points);
-
-const probes = CORNERS.flatMap(([, x, y, bx, by, fill, clear]) => [
-  [x + bx * fill, y + by * fill],
-  [x + bx * clear, y + by * clear],
-]);
-const hit = await goldAt(buf, probes);
-let cornersOk = true;
-CORNERS.forEach(([label], i) => {
-  const filled = hit[i * 2], spilled = hit[i * 2 + 1];
-  if (!filled) {
-    console.error(`FAIL: the ${label} corner is not filleted — it is still a hard corner`);
-    cornersOk = false;
-  } else if (spilled) {
-    console.error(`FAIL: the ${label} fillet has spread past the notch it was meant to fill`);
-    cornersOk = false;
-  }
-});
-if (!cornersOk) process.exit(1);
-console.log(`  all ${CORNERS.length} junctions filleted, and none of them spilled`);
 
 // Prove it, rather than assume it. An icon that is the wrong size or
 // carries alpha fails at upload time, which is the worst moment to find
@@ -343,6 +283,14 @@ const WEB = [
   ["favicon-16.png", 16], ["favicon-32.png", 32], ["favicon-48.png", 48],
   ["icon-192.png", 192], ["icon-512.png", 512],
   ["apple-touch-icon.png", 180], ["apple-touch-icon-152.png", 152], ["apple-touch-icon-167.png", 167],
+  // GOOGLE'S OAUTH CONSENT SCREEN. The Google Cloud Branding page takes
+  // a 120x120 PNG and shows it on the "Sign in with Google" sheet next
+  // to the app's name. It is generated here rather than exported by
+  // hand for the same reason as everything else in this list: a logo
+  // Google shows to users is the mark, and the mark has one definition.
+  // Rounded like the other web rasters, because Google draws the image
+  // as given.
+  ["google-branding-120.png", 120],
 ];
 const rounded = SOURCE.replace(/\s*<!--[\s\S]*?-->/g, "");
 for (const [name, px] of WEB) {

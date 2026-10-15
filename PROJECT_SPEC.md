@@ -96,7 +96,12 @@ left, shaft right, teeth under the tip) on gray-900 (`#111827`), sized to about
 corners itself and fills any transparency with black), rounded for the browser
 tab. The small sizes use a ONE-tooth key in flat gold because at 16px two teeth
 merge into a single blob and a gradient just muddies; ring and shaft are
-identical across both builds so it stays one key. Any gradient here must use
+identical across both builds so it stays one key. **The mark is FLAT gold
+(`#eebb4d`) — build 5's artwork, restored 2026-10-15 after builds 6-8 tried a
+metallic gradient and then fillets on its concave junctions.** Lighting belongs
+to iOS 26, which composites its own glass and specular pass over the `.icon`
+layer; a second one underneath read as plastic, and the shape is what wants
+redrawing (backlog). If a gradient is ever tried again it must use
 `gradientUnits="userSpaceOnUse"` — the shaft and teeth are straight lines with
 zero-height/width bounding boxes, and a default objectBoundingBox gradient is
 degenerate on those, so they silently do not paint at all. `theme-color` is
@@ -584,7 +589,12 @@ written here in the same sitting** — there is no other record of it.
       shared About copy described it, so `AboutOnly` exists now — the
       per-block platform variant the 2026-09-24 audit asked for, built
       for the first line that needed it.
-  12. **The key's junctions are filleted.** Three strokes unioned by
+  12. **The key's junctions are filleted.** ~~Reverted in build 9~~ —
+      see band G item 24; the artwork is build 5's again and a redrawn
+      key is the owner's own project. The two generator bugs this
+      found are still fixed and still worth the entry.
+
+      Three strokes unioned by
       overlap met in four unfilleted concave corners; at 60pt, with
       iOS 26 tracing its own specular pass along the silhouette, a
       highlight that stops dead at a corner reads as a cropped bevel.
@@ -1941,9 +1951,23 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
       wide.
 
     `public/favicon.svg` is finally the single source: the generator
-    parses its `<defs>` and `<g id="mark">` rather than restating the
-    geometry, and the nine web rasters — hand-exported once and stale
-    ever since — are generated from it too.
+    parses its optional defs and its mark group rather than restating
+    the geometry, and the web rasters — hand-exported once and stale
+    ever since — are generated from it too, including the 120x120
+    `public/google-branding-120.png` that Google's OAuth consent
+    screen shows.
+
+    **REVERTED 2026-10-15, to build 5's artwork exactly.** The
+    gradient and the fillets are gone; the mark is flat `#eebb4d`
+    again. Owner's call from a device pass on build 8: a redrawn key
+    is his own future project, so the drawing holds at the last
+    composition that looked right. What stayed is the pipeline — one
+    source, actool compiling the `.icon` locally, and the size check,
+    which is now an EQUALITY against build 5's 68.8% span with 1.5
+    points of slack rather than a floor. A floor passes a key that
+    grew; build 6's key was a third of the tile, and build 8's
+    fillets widened the silhouette. `<defs>` is optional now, since
+    requiring one made removing the gradient a failing build.
 
     *The original entry:* **DONE 2026-10-09.** It was the blue chevron on pale blue with the layout
     guides still visible, found by looking at the file after a handoff
@@ -1998,6 +2022,23 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
     session, offered in Settings beside the provider list that is
     already there. Not urgent: it needs somebody to have hit it, and
     the first external testers will say whether anyone does.
+
+18b. **Redraw the key.** Raised 2026-10-15, and it is the OWNER'S
+    project, not an agent's. Builds 6-8 tried to make the mark read as
+    struck metal with a gradient and then with filleted junctions, and
+    the device pass on each said the same thing: the lighting is not
+    the problem, the shape is. Build 9 reverts to build 5's flat
+    artwork and holds there. Whatever replaces it goes through
+    `public/favicon.svg` and nowhere else, and the generator's
+    `BUILD_5_SPAN` check is the thing to update deliberately when it
+    does.
+
+18c. **A "Schedule contributions" link on a new account's Dashboard
+    card**, as an alternative to the post-add prompt. Raised
+    2026-10-15, UNDER CONSIDERATION — the prompt that exists is
+    dismissible and only appears once, so the link would be the way
+    back to it afterwards. The current post-add prompt stays as it is
+    until this is decided.
 
 19. Multi-account model (payment method per transaction, credit cards
     with limits). The one deliberate architectural step still ahead.
