@@ -295,55 +295,20 @@ test("the day wheel commits on Done and on nothing else", async () => {
   expect(dayOn(rent)).toBe("20");
 });
 
-describe("a bill row can be swiped away", () => {
-  // Reported from the build 8 device pass: "+ Add another bill" rows
-  // could not be removed. The web had an ✕ from the start; the phone
-  // had nothing, so a row added by mistake was a row you finished
-  // setup with.
+describe("every row in setup has an \u2715, and the list is never left empty", () => {
+  // TWO DEVICE PASSES GOT THIS WRONG IN OPPOSITE DIRECTIONS.
   //
-  // A HORIZONTAL TOUCH COMPLETE ENOUGH FOR PanResponder, which is the
-  // same shape sheets.test.tsx needs and for the same two reasons:
-  // PanResponder reads event.touchHistory.touchBank rather than the
-  // event, and it ignores a move whose timestamp it has already
-  // accounted for. See PROJECT_SPEC.md section 8.
-  let clock = 0;
-  let prevX = 0;
-  const at = (pageX: number) => {
-    clock += 16;
-    const e = {
-      nativeEvent: {
-        pageX, pageY: 200, locationX: pageX, locationY: 200, identifier: 1, timestamp: clock,
-        touches: [{ identifier: 1, pageX, pageY: 200, locationX: pageX, locationY: 200, timestamp: clock }],
-        changedTouches: [],
-        target: 1,
-      },
-      touchHistory: {
-        touchBank: [
-          undefined,
-          { touchActive: true, startPageX: 0, startPageY: 200, startTimeStamp: 0,
-            currentPageX: pageX, currentPageY: 200, currentTimeStamp: clock,
-            previousPageX: prevX, previousPageY: 200, previousTimeStamp: clock - 16 },
-        ],
-        numberActiveTouches: 1,
-        indexOfSingleActiveTouch: 1,
-        mostRecentTimeStamp: clock,
-      },
-    };
-    prevX = pageX;
-    return e;
-  };
-
-  async function swipe(label: string, dx: number) {
-    const row = screen.getByTestId(`swipe-${label}`);
-    await act(async () => {
-      row.props.onMoveShouldSetResponder?.(at(0));
-      row.props.onResponderGrant?.(at(0));
-      row.props.onResponderMove?.(at(dx / 3));
-      row.props.onResponderMove?.(at((dx * 2) / 3));
-      row.props.onResponderMove?.(at(dx));
-      row.props.onResponderRelease?.(at(dx));
-    });
-  }
+  // Build 8: "+ Add another bill" rows could not be removed at all on
+  // the phone. Build 9 answered that with a left-swipe on PanResponder
+  // — native-looking, and on the owner's phone "extremely buggy, I can
+  // barely get it to peek out", because a hand-rolled horizontal
+  // gesture has to win a responder negotiation against the ScrollView
+  // it lives in. It also only ever covered the bills step; the three
+  // account groups could be added to and never pruned.
+  //
+  // So: no gesture, an \u2715 on every row of both lists, and the same
+  // engine rule behind each — removing the last row leaves one blank
+  // one rather than none.
 
   async function threeBills() {
     await mount();
@@ -356,48 +321,77 @@ describe("a bill row can be swiped away", () => {
     await userEvent.type(screen.getByLabelText("Bill 3 name"), "HBO");
   }
 
-  beforeEach(() => { clock = 0; prevX = 0; });
-
-  test("a long swipe left deletes the row, and the rest close up", async () => {
+  test("the \u2715 removes a bill row, and the rest close up", async () => {
     await threeBills();
-    await swipe("Bill 2", -240);
+    await userEvent.press(screen.getByLabelText("Remove bill 2"));
 
     expect(screen.getByLabelText("Bill 1 name").props.value).toBe("Spotify");
     expect(screen.getByLabelText("Bill 2 name").props.value).toBe("HBO");
     expect(screen.queryByLabelText("Bill 3 name")).toBeNull();
   });
 
-  test("a nudge keeps it — a row you brushed is a row you kept", async () => {
-    await threeBills();
-    await swipe("Bill 2", -20);
-    expect(screen.getByLabelText("Bill 2 name").props.value).toBe("Gym");
+  test("...and it is on EVERY bill row, including the blank one", async () => {
+    // Not "past the first": a control that appears at two rows is one
+    // nobody finds when they need it at one.
+    await mount();
+    await press("Skip");                    // paycheck
+    await press("Skip");                    // rent
+    expect(screen.getByLabelText("Remove bill 1")).toBeOnTheScreen();
+    await press("+ Add another bill");
+    expect(screen.getByLabelText("Remove bill 1")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Remove bill 2")).toBeOnTheScreen();
   });
 
-  test("swiping RIGHT does nothing: there is nothing over there", async () => {
-    await threeBills();
-    await swipe("Bill 2", 240);
-    expect(screen.getByLabelText("Bill 2 name").props.value).toBe("Gym");
-  });
-
-  test("the destructive button is reachable without a gesture", async () => {
-    // Behind the row rather than conditionally rendered, so VoiceOver
-    // can reach it at all — a swipe is not an affordance a screen
-    // reader has.
-    await threeBills();
-    await userEvent.press(screen.getByLabelText("Remove Bill 1"));
-    expect(screen.getByLabelText("Bill 1 name").props.value).toBe("Gym");
-  });
-
-  test("removing the last row leaves one empty row, not none", async () => {
+  test("removing the last bill row leaves one empty row, not none", async () => {
     await mount();
     await press("Skip");                    // paycheck
     await press("Skip");                    // rent
     await userEvent.type(screen.getByLabelText("Bill 1 name"), "Spotify");
 
-    await userEvent.press(screen.getByLabelText("Remove Bill 1"));
-    // Still a row, and it is blank — the same row the step opens with.
+    await userEvent.press(screen.getByLabelText("Remove bill 1"));
+    // Still a row, and it is blank — the same row the step opens with,
+    // due day included.
     expect(screen.getByLabelText("Bill 1 name").props.value).toBe("");
     expect(dayOn("Bill 1 due day")).toBe(String(new Date().getDate()));
+  });
+
+  test("the account groups have one too, on all three", async () => {
+    // The step the swipe never reached at all.
+    await mount();
+    await toAccounts();
+    for (const group of ["investments", "savings", "debt"]) {
+      expect(screen.getByLabelText(`Remove ${group} row 1`)).toBeOnTheScreen();
+    }
+
+    await userEvent.type(screen.getByLabelText("Savings 1 name"), "Emergency fund");
+    await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
+    await press("+ Add another savings");
+    await userEvent.type(screen.getByLabelText("Savings 2 name"), "Vacation");
+    await userEvent.type(screen.getByLabelText("Savings 2 amount"), "500");
+
+    await userEvent.press(screen.getByLabelText("Remove savings row 1"));
+    expect(screen.getByLabelText("Savings 1 name").props.value).toBe("Vacation");
+    expect(screen.queryByLabelText("Savings 2 name")).toBeNull();
+    // The other two groups were not touched.
+    expect(screen.getByLabelText("Investments 1 name").props.value).toBe("");
+    expect(screen.getByLabelText("Debt 1 name").props.value).toBe("");
+  });
+
+  test("removing the last row of a group leaves one blank row there too", async () => {
+    await mount();
+    await toAccounts();
+    // HALF-FILLED, which is the state that blocks the step. Clearing
+    // the row is the other half of why this control exists: before
+    // it, the only way past a row you had started by mistake was to
+    // select the text in it and delete it by hand.
+    await userEvent.type(screen.getByLabelText("Debt 1 name"), "Car loan");
+    await waitFor(() => expect(screen.getByLabelText("Finish")).toBeDisabled());
+    expect(screen.getByText("Add the balance, or clear the name.")).toBeOnTheScreen();
+
+    await userEvent.press(screen.getByLabelText("Remove debt row 1"));
+    expect(screen.getByLabelText("Debt 1 name").props.value).toBe("");
+    expect(screen.getByLabelText("Debt 1 amount").props.value).toBe("");
+    await waitFor(() => expect(screen.getByLabelText("Finish")).toBeEnabled());
   });
 });
 

@@ -14,7 +14,7 @@ import {
   blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
   firstMonthlyOn, defaultBillDay, emptyBillRow, firstWeekdayOn,
   contributionTargets, contributionOf, collectAccountsWith, contributionName,
-  blankContributionRow, clampDay, removeBillRow,
+  blankContributionRow, clampDay, removeBillRow, removeAccountRow,
 } from "../src/engine/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
 import { computeLedger } from "../src/engine/compute.ts";
@@ -260,6 +260,35 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
 
   eq("an index that is not there changes nothing",
     removeBillRow(rows, 9, TODAY).map((r) => r.name), ["Spotify", "Gym", "HBO"]);
+}
+
+// ---- AND AN ACCOUNT ROW, BY THE SAME RULE ----------------------------
+//
+// Build 9's swipe only ever reached the bills step; the savings,
+// investment and debt lists could be added to and never pruned. Both
+// clients call this, so the edge case has one definition rather than
+// two that agree today.
+{
+  const rows = [
+    { name: "Emergency fund", amount: "8200" },
+    { name: "Vacation", amount: "500" },
+    { name: "Roth IRA", amount: "14000" },
+  ];
+  eq("the middle row goes and the others close up",
+    removeAccountRow(rows, 1).map((r) => r.name), ["Emergency fund", "Roth IRA"]);
+  eq("the first row goes", removeAccountRow(rows, 0).map((r) => r.name), ["Vacation", "Roth IRA"]);
+  eq("the last row goes", removeAccountRow(rows, 2).map((r) => r.name), ["Emergency fund", "Vacation"]);
+
+  const alone = removeAccountRow([rows[0]], 0);
+  eq("removing the only row leaves one row, not none", alone.length, 1);
+  eq("...and it is blank", [alone[0].name, alone[0].amount], ["", ""]);
+  // The same row a group opens with, so clearing the last one and
+  // arriving fresh are indistinguishable.
+  eq("...and identical to the one a group opens with",
+    alone, blankAccountRows().savings);
+
+  eq("an index that is not there changes nothing",
+    removeAccountRow(rows, 9).map((r) => r.name), ["Emergency fund", "Vacation", "Roth IRA"]);
 }
 
 // ---- 1 TO 31, WHOEVER IS ASKING ---------------------------------------

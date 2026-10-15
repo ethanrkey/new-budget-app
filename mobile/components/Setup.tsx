@@ -6,7 +6,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DatePicker from "./DatePicker";
 import DayPicker from "./DayPicker";
-import SwipeToDelete from "./SwipeToDelete";
 import type { NativeMethods } from "react-native";
 import { T } from "../lib/theme";
 import {
@@ -16,7 +15,9 @@ import {
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, WEEKDAY_OPTIONS,
 } from "../../src/content/setup.ts";
-import { emptyBillRow, removeBillRow, contributionTargets } from "../../src/engine/setup.ts";
+import {
+  emptyBillRow, removeBillRow, emptyAccountRow, removeAccountRow, contributionTargets,
+} from "../../src/engine/setup.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
 import type { SetupAnswers, SetupCadence } from "../../src/engine/setup.ts";
 import type { BudgetItem } from "../../src/engine/types.ts";
@@ -203,12 +204,7 @@ export default function Setup({
                       needs the width to say what it shows and that it
                       can be changed. */}
                   {d.bills.map((b, idx) => (
-                    <SwipeToDelete
-                      key={idx}
-                      label={`Bill ${idx + 1}`}
-                      onDelete={() => set("bills", removeBillRow(d.bills, idx, todayISO))}
-                    >
-                    <View style={styles.billCard}>
+                    <View key={idx} style={styles.billCard}>
                       <View style={styles.billRow}>
                         <View style={styles.grow}>
                           <Field
@@ -227,6 +223,10 @@ export default function Setup({
                             accessibilityLabel={`Bill ${idx + 1} amount`}
                           />
                         </View>
+                        <Remove
+                          label={`Remove bill ${idx + 1}`}
+                          onPress={() => set("bills", removeBillRow(d.bills, idx, todayISO))}
+                        />
                       </View>
                       <Day
                         label={COPY.labels.dueDay}
@@ -235,7 +235,6 @@ export default function Setup({
                         accessibilityLabel={`Bill ${idx + 1} due day`}
                       />
                     </View>
-                    </SwipeToDelete>
                   ))}
                   <Pressable
                     onPress={() => set("bills", [...d.bills, emptyBillRow(todayISO)])}
@@ -305,6 +304,19 @@ export default function Setup({
                                   accessibilityLabel={`${g.label} ${idx + 1} amount`}
                                 />
                               </View>
+                              {/* EVERY ROW, including the blank one a
+                                  group opens with. A control that
+                                  appears at two rows is a control
+                                  nobody finds when they need it at
+                                  one — which is what the web's bills
+                                  step did until build 9. */}
+                              <Remove
+                                label={`Remove ${g.label.toLowerCase()} row ${idx + 1}`}
+                                onPress={() => set("accounts", {
+                                  ...d.accounts,
+                                  [g.key]: removeAccountRow(d.accounts[g.key], idx),
+                                })}
+                              />
                             </View>
                             {err && (
                               <Text style={styles.rowErr}>
@@ -315,7 +327,7 @@ export default function Setup({
                         );
                       })}
                       <Pressable
-                        onPress={() => set("accounts", { ...d.accounts, [g.key]: [...d.accounts[g.key], { name: "", amount: "" }] })}
+                        onPress={() => set("accounts", { ...d.accounts, [g.key]: [...d.accounts[g.key], emptyAccountRow()] })}
                         accessibilityRole="button" accessibilityLabel={`${COPY.accounts.add} ${g.label.toLowerCase()}`} hitSlop={8}
                       >
                         <Text style={styles.addMore}>{COPY.accounts.add}</Text>
@@ -471,6 +483,38 @@ function Field({
         autoFocus={autoFocus}
       />
     </>
+  );
+}
+
+// THE ✕ ON A ROW, AND WHY IT IS NOT A SWIPE.
+//
+// Build 9 gave the bills step a left-swipe built on PanResponder,
+// native-looking and modeled on a UITableView row action. On the
+// owner's phone it was "extremely buggy — I can barely get it to peek
+// out", and that is the honest outcome of hand-rolling a gesture: a
+// vertical ScrollView and a horizontal PanResponder compete for the
+// same touch, and the responder has to win the negotiation before the
+// list scrolls away under the finger. There is no platform row-swipe
+// reachable from React Native to fall back on, and the alternative
+// was a Reanimated worklet pipeline, a root view and a babel plugin.
+//
+// The swipe is gone, and both lists — bills, and the three account
+// groups the swipe never covered — wear a visible ✕ instead. It is
+// discoverable, it is one tap, it has a 44pt target, and VoiceOver
+// can reach it, none of which was true of the gesture. This also puts
+// the two clients on the same control: the web has had an ✕ from the
+// start.
+function Remove({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      style={styles.remove}
+      onPress={() => { Keyboard.dismiss(); onPress(); }}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      <Text style={styles.removeGlyph}>✕</Text>
+    </Pressable>
   );
 }
 
@@ -704,6 +748,11 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   amountCol: { width: 104 },
   acctRow: { marginTop: 2 },
+  // 48 tall so it bottom-aligns with the inputs beside it, which the
+  // row aligns to flex-end; 8pt of hitSlop takes the target past 44
+  // in both directions.
+  remove: { width: 30, height: 48, alignItems: "center", justifyContent: "center" },
+  removeGlyph: { color: T.faint, fontSize: 16 },
   rowErr: { color: T.expense, fontSize: 12, marginTop: 6 },
   group: { marginTop: 22 },
   groupLabel: { color: T.text, fontSize: 15, fontWeight: "700" },

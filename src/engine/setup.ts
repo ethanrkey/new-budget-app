@@ -483,9 +483,33 @@ export function balanceAnswer(raw: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+/** One blank row. The shape in one place, so the two clients and the
+ *  two functions below cannot disagree about what "empty" is. */
+export function emptyAccountRow(): AccountRow {
+  return { name: "", amount: "" };
+}
+
 /** Three empty groups, each with one empty row. */
 export function blankAccountRows(): AccountRows {
-  return { savings: [{ name: "", amount: "" }], investment: [{ name: "", amount: "" }], debt: [{ name: "", amount: "" }] };
+  return { savings: [emptyAccountRow()], investment: [emptyAccountRow()], debt: [emptyAccountRow()] };
+}
+
+/**
+ * Drop an account row, and never leave a group with nothing in it.
+ *
+ * Exactly `removeBillRow`'s rule, for exactly its reason — see the
+ * note there — applied to the savings, investment and debt lists
+ * after build 9's device pass found that those three could be added
+ * to and never pruned. The bills step had the problem first and got
+ * a swipe gesture for it, which was the wrong answer twice over: it
+ * was hard to actuate on a real phone, and it left the accounts step
+ * with no answer at all. Both lists have a visible remove control
+ * now, and both go through a function here so the edge case has one
+ * definition.
+ */
+export function removeAccountRow(rows: AccountRow[], index: number): AccountRow[] {
+  const left = rows.filter((_, i) => i !== index);
+  return left.length ? left : [emptyAccountRow()];
 }
 
 type StartedRow = { group: SetupGroup; index: number; name: string; amount: number | null };

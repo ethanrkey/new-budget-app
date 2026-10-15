@@ -3,6 +3,7 @@ import { todayISO } from "../engine/model.ts";
 import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
   blankAccountRows, incompleteAccountRows, emptyBillRow, removeBillRow,
+  emptyAccountRow, removeAccountRow,
   contributionTargets, collectAccountsWith, blankContributionRow,
 } from "../engine/setup.ts";
 import {
@@ -61,7 +62,12 @@ export default function Onboarding({ initialBalance, onComplete }) {
   const setAccountRow = (group, i, field, value) =>
     setAccounts((a) => ({ ...a, [group]: a[group].map((r, idx) => (idx === i ? { ...r, [field]: value } : r)) }));
   const addAccountRow = (group) =>
-    setAccounts((a) => ({ ...a, [group]: [...a[group], { name: "", amount: "" }] }));
+    setAccounts((a) => ({ ...a, [group]: [...a[group], emptyAccountRow()] }));
+  // Removing the last row in a group leaves an empty one rather than
+  // none, exactly as the bills step does — the rule lives in the
+  // engine so the phone cannot disagree about it.
+  const dropAccountRow = (group, i) =>
+    setAccounts((a) => ({ ...a, [group]: removeAccountRow(a[group], i) }));
   const step = STEPS[stepIndex];
   // The accounts this run can ask about contributions for. Empty means
   // that step is not in the flow at all — a step listing nothing makes
@@ -389,6 +395,17 @@ export default function Onboarding({ initialBalance, onComplete }) {
                               onChange={(e) => setAccountRow(g.key, i, "amount", e.target.value)}
                             />
                           </label>
+                          {/* ALWAYS, and on every group — the phone
+                              got the same ✕ in the same pass. Hiding
+                              it at one row means a row you typed into
+                              can be emptied by hand but never
+                              cleared. */}
+                          <button
+                            onClick={() => dropAccountRow(g.key, i)}
+                            className="text-gray-300 hover:text-expense px-1 self-end pb-2"
+                            title="Remove"
+                            aria-label={`Remove ${g.label.toLowerCase()} row ${i + 1}`}
+                          >✕</button>
                         </div>
                         {(needsName || needsAmount) && (
                           <p className="text-xs text-expense mt-1">
