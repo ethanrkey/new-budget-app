@@ -10,14 +10,16 @@ import { useChrome } from "../../components/Chrome";
 import BottomSheet from "../../components/BottomSheet";
 import LoanSheet from "../../components/LoanSheet";
 import CategorySheet from "../../components/CategorySheet";
+import ContributionPrompt from "../../components/ContributionPrompt";
 import { blankCategoryDraft, applyCategoryDraft, type CategoryDraft } from "../../lib/categories";
 import { DASHBOARD_COPY as COPY } from "../../../src/content/dashboard.ts";
 import {
   addBalanceSnapshot, addContribution,
   updateContribution, deleteContribution,
   updateAccountSnapshot, deleteAccountSnapshot,
-  updateBalanceSnapshot, deleteBalanceSnapshot, setupLoan,
+  updateBalanceSnapshot, deleteBalanceSnapshot, setupLoan, upsertItem,
 } from "../../../src/engine/mutate.ts";
+import { contributionRuleFor } from "../../../src/engine/setup.ts";
 import { Sparkline, HBar } from "../../lib/charts";
 import HistoryList from "../../components/HistoryList";
 import { T, money } from "../../lib/theme";
@@ -54,6 +56,13 @@ export default function DashboardScreen() {
   // The dashed add-cards. Which KIND is the whole difference between
   // them, so one slot rather than two booleans that can both be true.
   const [adding, setAdding] = useState<"asset" | "debt" | null>(null);
+  // THE FOLLOW-UP, after a NEW account is added: the same question
+  // setup's contributions step asks, about the one just created.
+  //
+  // It holds the ids that existed BEFORE the save rather than a name,
+  // because that is the only way to point at the new category without
+  // guessing — two accounts are allowed to share a name.
+  const [addedAfter, setAddedAfter] = useState<Set<string> | null>(null);
   const [editing, setEditing] = useState<{ catId: string | null; id: string; amount: number; date: string } | null>(null);
   // Contributions are the same SHAPE as a reading and a different
   // THING, so they get their own editing slot rather than a flag on
@@ -71,6 +80,9 @@ export default function DashboardScreen() {
   const cats = [...state!.trackerCategories].sort((a, b) => a.order - b.order);
   const assets = cats.filter((c) => c.kind !== "debt");
   const debts = cats.filter((c) => c.kind === "debt");
+  // "The one that was not there a moment ago" — an exact question
+  // once the commit has landed and this screen has re-rendered.
+  const addedCat = addedAfter ? cats.find((c) => !addedAfter.has(c.id)) : null;
   // Summed the same way computeNetPosition does it — the last LOGGED
   // outstanding of each loan — so this card and the hero's Debt figure
   // can never disagree. A loan with no logged balance contributes
@@ -241,9 +253,26 @@ export default function DashboardScreen() {
           busy={saving}
           onClose={() => setAdding(null)}
           onSave={async (d: CategoryDraft) => {
+            // The ids that exist BEFORE the save, so the account that
+            // was just created can be pointed at exactly rather than
+            // found by name — two accounts are allowed to share one.
+            const before = new Set(cats.map((c) => c.id));
             const ok = await commit((st) => applyCategoryDraft(st, d, null), `${d.name.trim()} added`);
-            if (ok) setAdding(null);
+            if (ok) { setAdding(null); setAddedAfter(before); }
           }}
+        />
+      )}
+
+      {addedCat && (
+        <ContributionPrompt
+          category={addedCat}
+          busy={saving}
+          onSchedule={async (row) => {
+            const rule = contributionRuleFor(addedCat, row, today);
+            if (rule) await commit((st) => upsertItem(st, rule), rule.name);
+            setAddedAfter(null);
+          }}
+          onClose={() => setAddedAfter(null)}
         />
       )}
 

@@ -1,8 +1,10 @@
 import type { BudgetItem, BudgetState } from "../../src/engine/types.ts";
 import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
-  blankAccountRows, incompleteAccountRows, collectAccounts, emptyBillRow,
+  blankAccountRows, incompleteAccountRows, emptyBillRow,
+  contributionTargets, collectAccountsWith, blankContributionRow,
   type SetupCadence, type BillRow, type AccountRows, type SetupAnswers,
+  type ContributionRows,
 } from "../../src/engine/setup.ts";
 import { SETUP_STEPS, type SetupStepKey } from "../../src/content/setup.ts";
 import { isNewAccount } from "./firstRun.ts";
@@ -43,6 +45,8 @@ export type SetupDraft = {
   groceryDay: number;
   balance: string;
   accounts: AccountRows;
+  /** Keyed by account row — see contributionTargets in the engine. */
+  contributions: ContributionRows;
 };
 
 export function blankSetupDraft(today: string): SetupDraft {
@@ -58,6 +62,9 @@ export function blankSetupDraft(today: string): SetupDraft {
     groceryAmount: "", groceryCadence: "weekly", groceryDay: 0,
     balance: "",
     accounts: blankAccountRows(),
+    // Empty, not one-per-account: the accounts do not exist yet, and a
+    // row is made the first time the step is drawn for one.
+    contributions: {},
   };
 }
 
@@ -81,6 +88,11 @@ export function rulesForStep(step: SetupStepKey, d: SetupDraft, today: string): 
     // one answer that can be changed by going back.
     case "balance": return [];
     case "accounts": return [];
+    // The contributions step's rules cannot be built here. They point
+    // at tracker categories that do not exist until applySetup has
+    // created them, so they are carried on the accounts and built
+    // there — see contributionRule in src/engine/setup.ts.
+    case "contributions": return [];
   }
 }
 
@@ -98,6 +110,26 @@ export function canAdvance(step: SetupStepKey, d: SetupDraft): boolean {
   if (step === "balance") return balanceAnswer(d.balance) != null;
   if (step === "accounts") return incompleteAccountRows(d.accounts).length === 0;
   return true;
+}
+
+/**
+ * The steps this run will actually show.
+ *
+ * Only one is conditional: there is nothing to ask about
+ * contributions when no savings, investment or debt account was
+ * entered, and a step listing nothing makes the flow look longer
+ * than it is. It is last, so a list that grows while somebody is
+ * typing on the accounts step never moves the step they are on.
+ */
+export function stepsFor(d: SetupDraft): SetupStepKey[] {
+  return SETUP_STEPS.filter(
+    (s) => s !== "contributions" || contributionTargets(d.accounts).length > 0
+  );
+}
+
+/** A contributions row for `key`, made on demand the first time it is shown. */
+export function contributionRowAt(d: SetupDraft, key: string, today: string) {
+  return d.contributions[key] ?? blankContributionRow(today);
 }
 
 /** Which started account rows are unfinished, by group and index. */
@@ -119,7 +151,7 @@ export function setupAnswers(collected: BudgetItem[], d: SetupDraft): SetupAnswe
     // dropped once; here the field is the only copy, which is the same
     // fix done structurally.
     checkInBalance: balanceAnswer(d.balance),
-    accounts: collectAccounts(d.accounts),
+    accounts: collectAccountsWith(d.accounts, d.contributions),
   };
 }
 

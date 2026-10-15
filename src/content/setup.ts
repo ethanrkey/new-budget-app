@@ -77,6 +77,19 @@ export const SETUP_COPY = {
     needsName: "Give this one a name, or clear the amount.",
     needsAmount: "Add the balance, or clear the name.",
   },
+  // A STEP OF ITS OWN, and only when there is something to list. See
+  // the long note in src/engine/setup.ts: the accounts step asks what
+  // you have, this one asks what you are doing about it, and the
+  // first is worth answering even when the second is skipped.
+  contributions: {
+    title: "Are you putting money in regularly?",
+    sub: "Set up a transfer or payment for any of these and it will show up in your Ledger and Budget on its own. Leave anything blank to skip it.",
+    // Only shown for a monthly one, because that is the only cadence
+    // where a day of the month means anything.
+    dayLabel: "Payment day",
+    amountFor: (name: string) => `Into ${name}`,
+    owedFor: (name: string) => `Toward ${name}`,
+  },
   done: {
     title: "All set!",
     withRules: (n: number) =>
@@ -157,6 +170,35 @@ export const ACCOUNT_GROUPS: readonly {
  * the Dashboard. Ordering it last means someone who quits there still
  * leaves with the forecast working, which is the thing that makes the
  * app worth reopening.
+ *
+ * "contributions" comes after accounts for the same reason and one
+ * more: it can only ask about accounts that step produced. It is
+ * SKIPPED ENTIRELY — not shown, not counted in "step N of M" — when
+ * nothing was entered there, because a step listing nothing makes the
+ * flow look longer than it is.
  */
-export const SETUP_STEPS = ["paycheck", "rent", "bills", "groceries", "balance", "accounts"] as const;
+export const SETUP_STEPS = [
+  "paycheck", "rent", "bills", "groceries", "balance", "accounts", "contributions",
+] as const;
 export type SetupStepKey = typeof SETUP_STEPS[number];
+
+/**
+ * The Dashboard's follow-up, which asks setup's contributions
+ * question about ONE account right after it is added.
+ *
+ * Same words where they are the same question — the amount and day
+ * labels come from SETUP_COPY.contributions — and its own title,
+ * because "Are you putting money in regularly?" over a single
+ * account reads as a survey rather than as an offer.
+ *
+ * DISMISSIBLE, and the dismissal is a real button rather than an X in
+ * a corner: this is an offer, and an offer with no visible way to
+ * decline is a demand.
+ */
+export const CONTRIBUTION_PROMPT = {
+  title: (name: string) => `Put money into ${name} regularly?`,
+  sub: "Set up a recurring transfer and it will show up in your Ledger and Budget on its own. You can add or change this any time.",
+  debtSub: "Set up a recurring payment and it will show up in your Ledger and Budget on its own. You can add or change this any time.",
+  add: "Schedule it",
+  skip: "Not now",
+} as const;

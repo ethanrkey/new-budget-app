@@ -139,3 +139,62 @@ test("adding a loan from the collapsed card expands the section too", async () =
   expect(screen.getByLabelText("Minimize")).toBeOnTheScreen();
   expect(screen.queryByText("Debt")).toBeNull();
 });
+
+// ---- the follow-up: what goes IN to the account just added ----------
+//
+// Setup asks this as a step; the Dashboard asks it one account at a
+// time, right after one is created. Same words, same rule builder —
+// an account added here and one added during setup have to produce
+// the same thing.
+describe("after a new account is added", () => {
+  async function addSavings(name: string) {
+    mockLoaded.state = fixture([]);
+    await mount();
+    await userEvent.press(screen.getByLabelText("+ Add account"));
+    await screen.findByText("Add an account");
+    await userEvent.type(screen.getByLabelText("Name"), name);
+    await userEvent.type(screen.getByLabelText("Current balance"), "8200");
+    await userEvent.press(screen.getByLabelText("Save"));
+  }
+
+  test("it offers to schedule a contribution, and the offer can be declined", async () => {
+    await addSavings("Ally");
+    expect(await screen.findByText("Put money into Ally regularly?")).toBeOnTheScreen();
+
+    // DISMISSIBLE, with a real button. An offer that arrives unasked
+    // for and has no visible way out is a demand.
+    await userEvent.press(screen.getByLabelText("Not now"));
+    expect(screen.queryByText("Put money into Ally regularly?")).toBeNull();
+    // Declining writes nothing beyond the account itself.
+    const last = mockSaved[mockSaved.length - 1] as { recurring: unknown[] };
+    expect(last.recurring).toHaveLength(0);
+  });
+
+  test("...and scheduling one writes a rule in that account's own category", async () => {
+    await addSavings("Ally");
+    await screen.findByText("Put money into Ally regularly?");
+
+    await userEvent.type(screen.getByLabelText("Ally contribution amount"), "300");
+    await userEvent.press(screen.getByLabelText("Schedule it"));
+
+    await waitFor(() => {
+      const last = mockSaved[mockSaved.length - 1] as {
+        recurring: { name: string; amount: number; category: string }[];
+        trackerCategories: { id: string; name: string }[];
+      };
+      expect(last.recurring).toHaveLength(1);
+      const ally = last.trackerCategories.find((c) => c.name === "Ally")!;
+      expect(last.recurring[0]!.name).toBe("To Ally");
+      expect(last.recurring[0]!.amount).toBe(300);
+      expect(last.recurring[0]!.category).toBe(ally.id);
+    });
+  });
+
+  test("a weekly cadence drops the payment day, because it cannot mean anything", async () => {
+    await addSavings("Ally");
+    await screen.findByText("Put money into Ally regularly?");
+    expect(screen.getByLabelText("Ally payment day")).toBeOnTheScreen();
+    await userEvent.press(screen.getByLabelText("Every week"));
+    expect(screen.queryByLabelText("Ally payment day")).toBeNull();
+  });
+});

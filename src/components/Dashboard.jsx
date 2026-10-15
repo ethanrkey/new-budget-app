@@ -10,6 +10,8 @@ import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
 import LoanSetupModal from "./LoanSetupModal.jsx";
 import AssetSetupModal from "./AssetSetupModal.jsx";
 import { fmtDate, fmtDay } from "../shared/dates.ts";
+import { blankContributionRow, contributionRuleFor } from "../engine/setup.ts";
+import { SETUP_COPY as COPY, CADENCE_OPTIONS, CONTRIBUTION_PROMPT as PROMPT } from "../content/setup.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -36,6 +38,7 @@ export default function Dashboard({
   onUpdateAccountBalance, onUpdateAccountSnapshot, onDeleteAccountSnapshot,
   onSetupLoan, onSetupAsset, onDeleteCategory, countTagged,
   onAddContribution, onUpdateContribution, onDeleteContribution,
+  onAddRecurring,
 }) {
   const today = todayISO(); // real clock — the reality layer's "now"
   const account = primaryAccount(state);
@@ -47,6 +50,17 @@ export default function Dashboard({
   const [loanModal, setLoanModal] = useState(null); // null | { cat?: category } (cat absent = brand-new loan)
   const [assetModal, setAssetModal] = useState(null); // null | {} (new) | { cat }
   const [contribFor, setContribFor] = useState(null);  // category currently logging a contribution
+  // THE FOLLOW-UP, after a NEW savings, investment or debt account is
+  // added: the same question setup's contributions step asks, about
+  // the one account that was just created.
+  //
+  // It holds the ids that existed BEFORE the save rather than a name
+  // or an index, because that is the only way to point at the new
+  // category without guessing: the save goes through setState and
+  // this component learns about it by re-rendering, by which time
+  // "the one that was not there a moment ago" is an exact question.
+  const [addedAfter, setAddedAfter] = useState(null);
+  const addedCat = addedAfter ? cats.find((c) => !addedAfter.has(c.id)) : null;
 
   const logCat = logFor ? cats.find((c) => c.id === logFor) : null;
   const contribCat = contribFor ? cats.find((c) => c.id === contribFor) : null;
@@ -131,9 +145,28 @@ export default function Dashboard({
         <AssetSetupModal
           initial={assetModal.cat ?? null}
           taggedCount={assetModal.cat ? countTagged(assetModal.cat.id) : 0}
-          onSave={(payload) => { onSetupAsset(payload); setAssetModal(null); }}
+          onSave={(payload) => {
+            const before = new Set(cats.map((c) => c.id));
+            onSetupAsset(payload);
+            setAssetModal(null);
+            // Only for a NEW account. Editing one that already exists
+            // is not the moment to ask what goes into it.
+            if (!assetModal.cat) setAddedAfter(before);
+          }}
           onDelete={assetModal.cat ? () => { onDeleteCategory(assetModal.cat.id); setAssetModal(null); } : undefined}
           onClose={() => setAssetModal(null)}
+        />
+      )}
+
+      {addedCat && (
+        <ContributionPrompt
+          category={addedCat}
+          onSchedule={(row) => {
+            const rule = contributionRuleFor(addedCat, row, today);
+            if (rule) onAddRecurring(rule);
+            setAddedAfter(null);
+          }}
+          onClose={() => setAddedAfter(null)}
         />
       )}
 
@@ -141,11 +174,83 @@ export default function Dashboard({
         <LoanSetupModal
           initial={loanModal.cat ?? null}
           taggedCount={loanModal.cat ? countTagged(loanModal.cat.id) : 0}
-          onSave={(payload) => { onSetupLoan(payload); setLoanModal(null); }}
+          onSave={(payload) => {
+            const before = new Set(cats.map((c) => c.id));
+            onSetupLoan(payload);
+            setLoanModal(null);
+            if (!loanModal.cat) setAddedAfter(before);
+          }}
           onDelete={loanModal.cat ? () => { onDeleteCategory(loanModal.cat.id); setLoanModal(null); } : undefined}
           onClose={() => setLoanModal(null)}
         />
       )}
+    </div>
+  );
+}
+
+// ---- The follow-up: what goes IN to the account just added ----------
+//
+// Setup's contributions step, for one account and reached a different
+// way. Same words where it is the same question (SETUP_COPY), same
+// rule builder (contributionRuleFor), so an account added here and
+// one added during setup produce the same thing.
+//
+// AN OFFER, AND IT SAYS SO. "Not now" is a real button rather than an
+// X in a corner — an offer with no visible way to decline is a
+// demand, and this one arrives unasked for immediately after a save.
+function ContributionPrompt({ category, onSchedule, onClose }) {
+  const [row, setRow] = useState(() => blankContributionRow(todayISO()));
+  const set = (patch) => setRow((r) => ({ ...r, ...patch }));
+  const isDebt = category.kind === "debt";
+  const field = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-800 space-y-3">
+        <h2 className="text-lg font-semibold">{PROMPT.title(category.name)}</h2>
+        <p className="text-sm text-gray-500">{isDebt ? PROMPT.debtSub : PROMPT.sub}</p>
+        <div className="flex gap-2">
+          <label className="flex-1 min-w-0">
+            <span className="block text-[11px] text-gray-400 mb-0.5">
+              {isDebt ? COPY.contributions.owedFor(category.name) : COPY.contributions.amountFor(category.name)}
+            </span>
+            <input
+              className={field} type="number" placeholder="0.00" autoFocus
+              value={row.amount} onChange={(e) => set({ amount: e.target.value })}
+            />
+          </label>
+          <label className="w-32 shrink-0">
+            <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.cadence}</span>
+            <select className={field} value={row.cadence} onChange={(e) => set({ cadence: e.target.value })}>
+              {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </label>
+          {row.cadence === "monthly" && (
+            <label className="shrink-0">
+              <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">
+                {COPY.contributions.dayLabel}
+              </span>
+              <input
+                className={`${field} w-16`} type="number" min="1" max="31"
+                aria-label={`${category.name} payment day`}
+                value={row.day} onChange={(e) => set({ day: e.target.value })}
+              />
+            </label>
+          )}
+        </div>
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">
+            {PROMPT.skip}
+          </button>
+          <button
+            onClick={() => onSchedule(row)}
+            disabled={!(Number(row.amount) > 0)}
+            className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90 disabled:opacity-40"
+          >
+            {PROMPT.add}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

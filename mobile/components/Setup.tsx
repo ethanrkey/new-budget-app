@@ -8,13 +8,13 @@ import DatePicker from "./DatePicker";
 import type { NativeMethods } from "react-native";
 import { T } from "../lib/theme";
 import {
-  STEPS, blankSetupDraft, rulesForStep, canAdvance, accountRowErrors, setupAnswers,
-  scrollToReveal, type SetupDraft, type SetupStepKey,
+  blankSetupDraft, rulesForStep, canAdvance, accountRowErrors, setupAnswers,
+  scrollToReveal, stepsFor, contributionRowAt, type SetupDraft, type SetupStepKey,
 } from "../lib/setup";
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, WEEKDAY_OPTIONS,
 } from "../../src/content/setup.ts";
-import { emptyBillRow } from "../../src/engine/setup.ts";
+import { emptyBillRow, contributionTargets } from "../../src/engine/setup.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
 import type { SetupAnswers, SetupCadence } from "../../src/engine/setup.ts";
 import type { BudgetItem } from "../../src/engine/types.ts";
@@ -73,6 +73,10 @@ export default function Setup({
   const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
   const [i, setI] = useState(0);
+  // The step LIST, not the constant: the contributions step is only
+  // shown when the accounts step produced something to ask about.
+  // It is last, so a list that grows while somebody types on the
+  // accounts step never moves the step they are on.
   const [pickingPayday, setPickingPayday] = useState(false);
   const [d, setD] = useState<SetupDraft>(() => blankSetupDraft(todayISO));
   // Rules collected by the steps already passed. Keyed by step so going
@@ -98,9 +102,12 @@ export default function Setup({
     }, () => {});
   }, []);
 
+  const STEPS = stepsFor(d);
   const step = STEPS[i]!;
   const set = <K extends keyof SetupDraft>(k: K, v: SetupDraft[K]) => setD((p) => ({ ...p, [k]: v }));
   const rules = STEPS.flatMap((s) => collected[s] ?? []);
+  const contributing = contributionTargets(d.accounts);
+  const last = i === STEPS.length - 1;
   const rowErrors = accountRowErrors(d);
 
   function advance(keep: boolean) {
@@ -108,7 +115,12 @@ export default function Setup({
     // line, because the builders already decided what a blank field
     // means — see src/engine/setup.ts.
     setCollected((c) => ({ ...c, [step]: keep ? rulesForStep(step, d, todayISO) : [] }));
-    if (i === STEPS.length - 1) setDone(true);
+    // The contributions step's answers are read off the draft at the
+    // end rather than committed when the step is passed, so Skip has
+    // to clear them — otherwise it would quietly keep what was typed,
+    // which is the one thing Skip must never do.
+    if (step === "contributions" && !keep) set("contributions", {});
+    if (last) setDone(true);
     else setI(i + 1);
   }
 
@@ -317,6 +329,45 @@ export default function Setup({
                   ))}
                 </Question>
               )}
+              {step === "contributions" && (
+                <Question title={COPY.contributions.title} sub={COPY.contributions.sub}>
+                  {contributing.map(({ key, account }) => {
+                    const row = contributionRowAt(d, key, todayISO);
+                    const setRow = (patch: Partial<typeof row>) =>
+                      set("contributions", { ...d.contributions, [key]: { ...row, ...patch } });
+                    return (
+                      <View key={key} style={styles.group}>
+                        <Text style={styles.groupLabel}>{account.name}</Text>
+                        <Money
+                          label={account.group === "debt"
+                            ? COPY.contributions.owedFor(account.name)
+                            : COPY.contributions.amountFor(account.name)}
+                          value={row.amount}
+                          onChange={(v) => setRow({ amount: v })}
+                          accessibilityLabel={`${account.name} contribution amount`}
+                        />
+                        <Cadence
+                          label={COPY.labels.cadence}
+                          value={row.cadence}
+                          onChange={(v) => setRow({ cadence: v })}
+                        />
+                        {/* Only monthly has a day. A weekly transfer on
+                            "the 14th" is not a thing, and a field that
+                            cannot mean anything is a field people
+                            answer anyway. */}
+                        {row.cadence === "monthly" && (
+                          <Day
+                            label={COPY.contributions.dayLabel}
+                            value={row.day}
+                            onChange={(v) => setRow({ day: v })}
+                            accessibilityLabel={`${account.name} payment day`}
+                          />
+                        )}
+                      </View>
+                    );
+                  })}
+                </Question>
+              )}
               </View>
             </ScrollView>
 
@@ -349,10 +400,13 @@ export default function Setup({
                 disabled={!canAdvance(step, d)}
                 onPress={() => advance(true)}
                 accessibilityRole="button"
-                accessibilityLabel={step === "accounts" ? COPY.buttons.finish : COPY.buttons.continue}
+                // The LAST step, not a named one: whether that is
+                // accounts or contributions depends on whether there
+                // was anything to ask about.
+                accessibilityLabel={last ? COPY.buttons.finish : COPY.buttons.continue}
               >
                 <Text style={styles.primaryText}>
-                  {step === "accounts" ? COPY.buttons.finish : COPY.buttons.continue}
+                  {last ? COPY.buttons.finish : COPY.buttons.continue}
                 </Text>
               </Pressable>
             </View>

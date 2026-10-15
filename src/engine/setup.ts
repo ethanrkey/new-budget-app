@@ -25,12 +25,30 @@ import type { BudgetState, BudgetItem, ISODate } from "./types.ts";
 //   2. debt is created with a balance and no terms;
 //   3. unused seeded categories are cleaned up afterward.
 
-/** One savings / investment / debt row from the last setup step. */
+/** One savings / investment / debt row from the accounts step. */
 export type SetupAccount = {
   name: string;
   amount: number;
   /** `savings` and `investment` become assets; `debt` becomes a debt. */
   group: "savings" | "investment" | "debt";
+  /**
+   * What goes IN to it every month, if anything. Optional everywhere.
+   *
+   * It rides on the account rather than arriving as a separate list
+   * because the rule it becomes needs the category's id, and that id
+   * does not exist until applySetup has created the category. A
+   * second list would have to be matched back up by name, which is
+   * the one thing a name is not safe for.
+   */
+  contribution?: SetupContribution | null;
+};
+
+/** A recurring transfer or payment into one account. */
+export type SetupContribution = {
+  amount: number;
+  cadence: SetupCadence;
+  /** Day of the month, for a monthly one. Ignored for the others. */
+  day?: number;
 };
 
 /**
@@ -90,6 +108,7 @@ export function applySetup(
       (c) => c.name.trim().toLowerCase() === a.name.toLowerCase()
         && (next.balanceSnapshots?.[c.id] ?? []).length === 0
     );
+    let categoryId: string;
     if (a.group === "debt") {
       let id = existing?.kind === "debt" ? existing.id : null;
       if (!id) {
@@ -97,12 +116,26 @@ export function applySetup(
         id = next.trackerCategories[next.trackerCategories.length - 1]!.id;
       }
       next = addBalanceSnapshot(next, id, Math.abs(a.amount), today);
+      categoryId = id;
     } else {
       next = setupAsset(next, {
         categoryId: existing?.kind === "asset" ? existing.id : null,
         name: a.name, balance: a.amount, asOf: today, assetKind: a.group,
       });
+      // setupAsset either reused the category it was handed or made a
+      // new one at the end of the list — the same two cases the debt
+      // branch spells out, and the only way to learn the id in the
+      // second one is to look.
+      categoryId = existing?.kind === "asset"
+        ? existing.id
+        : next.trackerCategories[next.trackerCategories.length - 1]!.id;
     }
+
+    // WHAT GOES IN, if the contributions step was answered for this
+    // one. Built here rather than alongside the other rules because
+    // the category it points at was created two lines ago.
+    const rule = contributionRule(a, categoryId, today);
+    if (rule) next = upsertItem(next, rule);
   }
 
   // The seeded defaults that were never used go. A brand-new account
@@ -431,4 +464,155 @@ export function collectAccounts(rows: AccountRows): SetupAccount[] {
   return startedAccountRows(rows)
     .filter((r) => r.name !== "" && r.amount != null && !Number.isNaN(r.amount))
     .map((r) => ({ name: r.name, amount: r.amount as number, group: r.group }));
+}
+
+// =====================================================================
+// SCHEDULING WHAT GOES IN — the step after the accounts step, and the
+// same question the Dashboard asks after one account is added.
+//
+// WHY IT IS A STEP OF ITS OWN rather than two more boxes on the
+// accounts step. The accounts step already shows three groups and up
+// to a dozen fields; adding an amount, a frequency and a day to every
+// row would roughly double it, and that step is already the one
+// somebody quits on. It also asks a different KIND of question: the
+// accounts step is "what do you have", this is "what are you doing
+// about it", and the first is worth answering even if the second is
+// skipped.
+//
+// EVERY PART OF IT IS OPTIONAL. A blank amount is a skipped row, not a
+// zero, and the whole step is skippable like the four before it. It is
+// not shown at all when no savings, investment or debt account was
+// entered, because a step listing nothing is a step that makes the
+// flow look longer than it is.
+
+/** One row of the contributions step, as typed. */
+export type ContributionRow = { amount: string; cadence: SetupCadence; day: string };
+
+/** Rows, keyed by the account row they belong to — see contributionTargets. */
+export type ContributionRows = Record<string, ContributionRow>;
+
+export function blankContributionRow(today: ISODate = todayISO()): ContributionRow {
+  // Monthly, because a transfer to savings or a loan payment is
+  // monthly far more often than it is anything else, and the day
+  // defaults to today for the same reason the bills step's does.
+  return { amount: "", cadence: "monthly", day: defaultBillDay(today) };
+}
+
+/**
+ * The accounts this step asks about, each with the key its row is
+ * held under.
+ *
+ * KEYED BY GROUP AND POSITION, not by index into the finished list
+ * and not by name. A phone flow has a Back button: edit the accounts
+ * step, come forward again, and an index into the finished list has
+ * silently moved every answer onto a different account. Names cannot
+ * be used either — two accounts are allowed to share one.
+ */
+export function contributionTargets(rows: AccountRows): { key: string; account: SetupAccount }[] {
+  return startedAccountRows(rows)
+    .filter((r) => r.name !== "" && r.amount != null && !Number.isNaN(r.amount))
+    .map((r) => ({
+      key: `${r.group}:${r.index}`,
+      account: { name: r.name, amount: r.amount as number, group: r.group },
+    }));
+}
+
+/** What one typed row means. Null for "nothing was entered here". */
+export function contributionOf(row: ContributionRow | undefined): SetupContribution | null {
+  if (!row) return null;
+  const amt = positive(row.amount);
+  if (amt == null) return null;
+  return {
+    amount: amt,
+    cadence: row.cadence,
+    ...(row.cadence === "monthly" ? { day: clampDay(row.day, 1) } : {}),
+  };
+}
+
+/** The finished account rows with their contributions attached. */
+export function collectAccountsWith(
+  rows: AccountRows, contributions: ContributionRows,
+): SetupAccount[] {
+  return contributionTargets(rows).map(({ key, account }) => {
+    const contribution = contributionOf(contributions[key]);
+    return contribution ? { ...account, contribution } : account;
+  });
+}
+
+/**
+ * What a contribution is CALLED in the Ledger.
+ *
+ * Generated rather than asked for: a sixth question per account is
+ * exactly the kind of thing that makes a step feel like paperwork,
+ * and "To Ally Savings" is what somebody would have typed anyway.
+ * Debt says "payment" because that is the word for it, and because
+ * the row has to be legible next to the others in a month's bills.
+ */
+export function contributionName(a: Pick<SetupAccount, "name" | "group">): string {
+  return a.group === "debt" ? `${a.name} payment` : `To ${a.name}`;
+}
+
+/**
+ * The recurring rule one account's contribution becomes, or null.
+ *
+ * `category` is the tracker category's OWN id, which is how this app
+ * says "this money went into that account" — the same value the
+ * Ledger's category chips set. It is an outflow by definition (see
+ * CATEGORIES in model.ts) and the Budget prints it as money kept
+ * rather than money gone.
+ *
+ * A monthly one starts on the next occurrence of its day, today
+ * included, exactly like a bill from setup — the same bug was
+ * available here and it is the same fix. Weekly and biweekly start
+ * today, because this step does not ask for a weekday and inventing
+ * one would be worse than the honest answer of "from now".
+ */
+export function contributionRule(
+  a: SetupAccount, categoryId: string, today: ISODate = todayISO(),
+): BudgetItem | null {
+  const c = a.contribution;
+  if (!c || c.amount <= 0) return null;
+  const start = c.cadence === "monthly" && c.day != null
+    ? firstMonthlyOn(c.day, today)
+    : today;
+  return {
+    id: uid(), name: contributionName(a), amount: c.amount, category: categoryId,
+    cadence: c.cadence, startDate: start, dayOfMonth: dayOf(start),
+  } as BudgetItem;
+}
+
+/**
+ * The setup group a tracker category corresponds to.
+ *
+ * The Dashboard asks the same question setup's contributions step
+ * asks, one account at a time, after an account is added — and it has
+ * a real category rather than a typed row. This is the one conversion
+ * between the two, so "To Ally" and "Car loan payment" come out the
+ * same whichever door the account came in through.
+ */
+export function groupOfCategory(
+  c: { kind: "asset" | "debt"; assetKind?: string | null },
+): SetupGroup {
+  if (c.kind === "debt") return "debt";
+  return c.assetKind === "investment" ? "investment" : "savings";
+}
+
+/**
+ * The rule a contribution row becomes for a category that already
+ * exists. Null when the row is blank.
+ *
+ * The Dashboard's follow-up, and the only difference from setup's
+ * version is that there is nothing to create first.
+ */
+export function contributionRuleFor(
+  category: { id: string; name: string; kind: "asset" | "debt"; assetKind?: string | null },
+  row: ContributionRow | undefined,
+  today: ISODate = todayISO(),
+): BudgetItem | null {
+  const contribution = contributionOf(row);
+  if (!contribution) return null;
+  return contributionRule(
+    { name: category.name, amount: 0, group: groupOfCategory(category), contribution },
+    category.id, today,
+  );
 }

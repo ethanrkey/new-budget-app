@@ -276,8 +276,13 @@ test("a half-filled account row blocks Finish and says which half", async () => 
   await waitFor(() => expect(screen.getByLabelText("Finish")).toBeDisabled());
   expect(screen.getByText("Give this one a name, or clear the amount.")).toBeOnTheScreen();
 
+  // Finishing the row unblocks the step — and turns the button into
+  // Continue, because a finished account is something the
+  // contributions step can ask about and that step is now there.
   await userEvent.type(screen.getByLabelText("Savings 1 name"), "Ally");
-  await waitFor(() => expect(screen.getByLabelText("Finish")).toBeEnabled());
+  await waitFor(() => expect(screen.getByLabelText("Continue")).toBeEnabled());
+  expect(screen.queryByLabelText("Finish")).toBeNull();
+  expect(screen.getByText("Step 6 of 7")).toBeOnTheScreen();
 });
 
 test("what reaches applySetup is what was on the screen", async () => {
@@ -307,6 +312,9 @@ test("what reaches applySetup is what was on the screen", async () => {
   await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
   await userEvent.type(screen.getByLabelText("Debt 1 name"), "Car loan");
   await userEvent.type(screen.getByLabelText("Debt 1 amount"), "9100");
+  // Two finished accounts, so the contributions step is now in the
+  // flow and the accounts step's button is Continue.
+  await press("Continue");
   await press("Finish");
 
   expect(screen.getByText(/We've added 4 recurring items/)).toBeOnTheScreen();
@@ -321,6 +329,85 @@ test("what reaches applySetup is what was on the screen", async () => {
   const out = applySetup(normalize({}), answers, "2026-10-13");
   expect(out.accounts[0]!.balance).toBe(4000);
   expect(out.trackerCategories.map((c) => c.name).sort()).toEqual(["Ally", "Car loan"]);
+});
+
+test("the contributions step is not there when there is nothing to ask about", async () => {
+  // A step listing nothing makes the flow look longer than it is.
+  await mount();
+  await toAccounts();
+  expect(screen.getByText("Step 6 of 6")).toBeOnTheScreen();
+  expect(await screen.findByLabelText("Finish")).toBeEnabled();
+});
+
+test("a contribution becomes a recurring rule in that account's category", async () => {
+  const got: SetupAnswers[] = [];
+  await mount((a) => got.push(a));
+  await toAccounts("4000");
+
+  await userEvent.type(screen.getByLabelText("Savings 1 name"), "Ally");
+  await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
+  await userEvent.type(screen.getByLabelText("Debt 1 name"), "Car loan");
+  await userEvent.type(screen.getByLabelText("Debt 1 amount"), "9100");
+  await press("Continue");
+
+  // Both accounts are listed, and the words differ by what they are.
+  expect(screen.getByText("Into Ally")).toBeOnTheScreen();
+  expect(screen.getByText("Toward Car loan")).toBeOnTheScreen();
+
+  // Answer for one and leave the other blank. A blank row is a
+  // skipped question, not a zero.
+  await userEvent.type(screen.getByLabelText("Ally contribution amount"), "300");
+  await userEvent.clear(screen.getByLabelText("Ally payment day"));
+  await userEvent.type(screen.getByLabelText("Ally payment day"), "15");
+  await press("Finish");
+  await press("Go to my budget");
+
+  const accounts = got[0]!.accounts!;
+  expect(accounts.map((a) => a.name)).toEqual(["Ally", "Car loan"]);
+  expect(accounts[0]!.contribution).toEqual({ amount: 300, cadence: "monthly", day: 15 });
+  expect(accounts[1]!.contribution).toBeUndefined();
+
+  // ...and the end of the chain: a real rule, pointed at the category
+  // that account became, on the 15th.
+  const out = applySetup(normalize({}), got[0]!, "2026-10-13");
+  const ally = out.trackerCategories.find((c) => c.name === "Ally")!;
+  const rule = out.recurring.find((r) => r.name === "To Ally")!;
+  expect(rule.category).toBe(ally.id);
+  expect(rule.amount).toBe(300);
+  expect("cadence" in rule && rule.dayOfMonth).toBe(15);
+  expect("cadence" in rule && rule.startDate).toBe("2026-10-15");
+  // Nothing was invented for the account that was left blank.
+  expect(out.recurring.some((r) => r.name.includes("Car loan"))).toBe(false);
+});
+
+test("Skip on the contributions step discards what was typed into it", async () => {
+  const got: SetupAnswers[] = [];
+  await mount((a) => got.push(a));
+  await toAccounts("4000");
+  await userEvent.type(screen.getByLabelText("Savings 1 name"), "Ally");
+  await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
+  await press("Continue");
+
+  await userEvent.type(screen.getByLabelText("Ally contribution amount"), "300");
+  await press("Skip");
+  await press("Go to my budget");
+
+  // The account survives — it was answered on the step before — and
+  // the contribution does not.
+  expect(got[0]!.accounts!.map((a) => a.name)).toEqual(["Ally"]);
+  expect(got[0]!.accounts![0]!.contribution).toBeUndefined();
+});
+
+test("a weekday cadence drops the payment day, because it cannot mean anything", async () => {
+  await mount();
+  await toAccounts("4000");
+  await userEvent.type(screen.getByLabelText("Savings 1 name"), "Ally");
+  await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
+  await press("Continue");
+
+  expect(screen.getByLabelText("Ally payment day")).toBeOnTheScreen();
+  await userEvent.press(screen.getByLabelText("Every week"));
+  expect(screen.queryByLabelText("Ally payment day")).toBeNull();
 });
 
 test("Skip setup leaves without creating anything", async () => {

@@ -646,6 +646,7 @@ export default function App() {
               onDeleteAccountSnapshot={deleteAcctSnapshot}
               onSetupLoan={setupLoanHandler}
               onSetupAsset={setupAssetHandler}
+              onAddRecurring={saveItem}
               onDeleteCategory={deleteTrackerCategory}
               countTagged={(catId) => countTaggedItems(state, catId)}
               onAddContribution={logContribution}

@@ -13,6 +13,8 @@ import {
   applySetup, paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
   blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
   firstMonthlyOn, defaultBillDay, emptyBillRow, firstWeekdayOn,
+  contributionTargets, contributionOf, collectAccountsWith, contributionName,
+  blankContributionRow,
 } from "../src/engine/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
 import { computeLedger } from "../src/engine/compute.ts";
@@ -379,6 +381,70 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   // A zero is a real balance on this step, unlike an amount field.
   eq("zero in an account row is kept",
     collectAccounts({ ...rows, savings: [{ name: "Emergency", amount: "0" }] })[0].amount, 0);
+}
+
+// ---- scheduling what goes IN to an account ---------------------------
+{
+  const rows = {
+    savings: [{ name: "Ally", amount: "8200" }, { name: "", amount: "" }],
+    investment: [{ name: "Roth IRA", amount: "15400" }],
+    debt: [{ name: "Car loan", amount: "9100" }],
+  };
+
+  // The step asks about the FINISHED rows only, each under a key made
+  // of its group and position — not its place in the finished list,
+  // which moves when somebody goes back and edits, and not its name,
+  // because two accounts are allowed to share one.
+  eq("every finished account is asked about",
+    contributionTargets(rows).map((t) => t.key), ["savings:0", "investment:0", "debt:0"]);
+  eq("...and an unfinished row is not",
+    contributionTargets({ savings: [{ name: "Ally", amount: "" }], investment: [], debt: [] }).length, 0);
+
+  // A blank amount is a skipped question, not a zero.
+  eq("a blank row means nothing was asked for", contributionOf(blankContributionRow(TODAY)), null);
+  eq("a missing row too", contributionOf(undefined), null);
+  eq("zero is not a contribution either",
+    contributionOf({ amount: "0", cadence: "monthly", day: "5" }), null);
+  eq("a monthly one carries its day",
+    contributionOf({ amount: "300", cadence: "monthly", day: "15" }),
+    { amount: 300, cadence: "monthly", day: 15 });
+  // A weekly transfer on "the 14th" is not a thing.
+  eq("a weekly one drops the day",
+    contributionOf({ amount: "50", cadence: "weekly", day: "15" }),
+    { amount: 50, cadence: "weekly" });
+
+  eq("savings and investments are transfers in", contributionName({ name: "Ally", group: "savings" }), "To Ally");
+  eq("debt is a payment", contributionName({ name: "Car loan", group: "debt" }), "Car loan payment");
+
+  const withOne = collectAccountsWith(rows, { "debt:0": { amount: "450", cadence: "monthly", day: "1" } });
+  eq("only the answered account carries one",
+    withOne.map((a) => a.contribution?.amount ?? null), [null, null, 450]);
+
+  // The end of the chain: a real rule, pointed at the category the
+  // account became, in a state that has it.
+  const out = applySetup(blank, { accounts: withOne }, TODAY);
+  const loan = out.trackerCategories.find((c) => c.name === "Car loan");
+  const rule = out.recurring.find((r) => r.name === "Car loan payment");
+  is("the rule exists", !!rule);
+  eq("...and points at that account's own category", rule.category, loan.id);
+  eq("...with the amount typed", rule.amount, 450);
+  // The 1st has gone by 2026-10-12, so the first payment is in
+  // November — the same call firstMonthlyOn makes for a bill.
+  eq("...starting on the next occurrence of its day", rule.startDate, "2026-11-01");
+  eq("...and keeping the day", rule.dayOfMonth, 1);
+  eq("the accounts with nothing scheduled got no rules", out.recurring.length, 1);
+
+  // A savings account's rule, which takes the other branch of
+  // applySetup entirely (setupAsset rather than addCategory).
+  const savingsOut = applySetup(blank, {
+    accounts: collectAccountsWith(rows, { "savings:0": { amount: "300", cadence: "weekly", day: "1" } }),
+  }, TODAY);
+  const ally = savingsOut.trackerCategories.find((c) => c.name === "Ally");
+  const toAlly = savingsOut.recurring.find((r) => r.name === "To Ally");
+  eq("an asset's rule points at the asset's category", toAlly.category, ally.id);
+  eq("...and a weekly one starts today", toAlly.startDate, TODAY);
+  eq("...and it is an outflow that the Budget treats as money kept",
+    savingsOut.trackerCategories.find((c) => c.id === toAlly.category).kind, "asset");
 }
 
 // ---- end to end: the builders feed applySetup ------------------------

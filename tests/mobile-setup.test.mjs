@@ -13,11 +13,11 @@
 // that shows one question at a time has to, and a Back button creates
 // one bug for free — passing a step twice adding its rules twice.
 import { normalize } from "../src/engine/stateShape.ts";
-import { applySetup } from "../src/engine/setup.ts";
+import { applySetup, blankAccountRows } from "../src/engine/setup.ts";
 import { updateAccountBalance, upsertItem } from "../src/engine/mutate.ts";
 import {
   STEPS, blankSetupDraft, rulesForStep, canAdvance, accountRowErrors,
-  setupAnswers, shouldRunSetup, scrollToReveal,
+  setupAnswers, shouldRunSetup, scrollToReveal, stepsFor,
 } from "../mobile/lib/setup.ts";
 
 let failures = 0, checks = 0;
@@ -36,7 +36,18 @@ const blank = normalize({});
 const draft = () => blankSetupDraft(TODAY);
 
 // ---- the questions, and their order ---------------------------------
-eq("six questions", [...STEPS], ["paycheck", "rent", "bills", "groceries", "balance", "accounts"]);
+eq("seven questions", [...STEPS],
+  ["paycheck", "rent", "bills", "groceries", "balance", "accounts", "contributions"]);
+// ...of which the last is conditional. A step listing nothing makes
+// the flow look longer than it is, so it is not in the flow at all
+// until the accounts step has produced something for it to ask about.
+eq("the contributions step is absent with no accounts", stepsFor(draft()).length, 6);
+{
+  const d = { ...draft(), accounts: { ...blankAccountRows(), savings: [{ name: "Ally", amount: "8200" }] } };
+  eq("...and present with one", stepsFor(d).length, 7);
+  eq("...at the end, so adding an account never moves the step you are on",
+    stepsFor(d)[6], "contributions");
+}
 // The ordering decision: accounts last, so quitting there still leaves
 // a working forecast. Worth an assertion rather than a comment, because
 // reordering the list is a one-line change that costs nothing visible.

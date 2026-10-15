@@ -2,7 +2,8 @@ import { useState } from "react";
 import { todayISO } from "../engine/model.ts";
 import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
-  blankAccountRows, incompleteAccountRows, collectAccounts, emptyBillRow,
+  blankAccountRows, incompleteAccountRows, emptyBillRow,
+  contributionTargets, collectAccountsWith, blankContributionRow,
 } from "../engine/setup.ts";
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, SETUP_STEPS, WEEKDAY_OPTIONS,
@@ -53,18 +54,34 @@ export default function Onboarding({ initialBalance, onComplete }) {
 
   const [balanceInput, setBalanceInput] = useState(initialBalance != null ? String(initialBalance) : "");
   const [accounts, setAccounts] = useState(blankAccountRows);
+  // Keyed by account row, not by position in the finished list — see
+  // contributionTargets. Empty until a row is drawn for one.
+  const [contributions, setContributions] = useState({});
   const setAccountRow = (group, i, field, value) =>
     setAccounts((a) => ({ ...a, [group]: a[group].map((r, idx) => (idx === i ? { ...r, [field]: value } : r)) }));
   const addAccountRow = (group) =>
     setAccounts((a) => ({ ...a, [group]: [...a[group], { name: "", amount: "" }] }));
   const step = STEPS[stepIndex];
-  const questionSteps = STEPS.length - 1; // exclude "done" from the progress count
+  // The accounts this run can ask about contributions for. Empty means
+  // that step is not in the flow at all — a step listing nothing makes
+  // the flow look longer than it is.
+  const contributing = contributionTargets(accounts);
+  // Exclude "done" from the progress count, and the contributions step
+  // too when it will be passed over.
+  const questionSteps = STEPS.length - 1 - (contributing.length ? 0 : 1);
 
   function addRule(rule) {
     setRecurring((r) => [...r, rule]);
   }
   function goNext() {
-    setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
+    setStepIndex((i) => {
+      const n = Math.min(i + 1, STEPS.length - 1);
+      // Pass straight over the contributions step when the accounts
+      // step produced nothing for it to list.
+      return STEPS[n] === "contributions" && contributing.length === 0
+        ? Math.min(n + 1, STEPS.length - 1)
+        : n;
+    });
   }
   const [finishNow] = useSubmitOnce(() => {
     // Read the FIELD, not just the committed state: the two can disagree
@@ -72,7 +89,10 @@ export default function Onboarding({ initialBalance, onComplete }) {
     // from. It was silently dropped once already.
     const typed = balanceAnswer(balanceInput);
     const balance = typed != null ? typed : checkInBalance;
-    onComplete({ recurring, oneoffs: [], checkInBalance: balance, accounts: collectAccounts(accounts) });
+    onComplete({
+      recurring, oneoffs: [], checkInBalance: balance,
+      accounts: collectAccountsWith(accounts, contributions),
+    });
   })
 
   // Each step is one shared builder plus one line of this client's
@@ -370,8 +390,76 @@ export default function Onboarding({ initialBalance, onComplete }) {
               disabled={incompleteAccountRows(accounts).length > 0}
               className="w-full py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium hover:opacity-90 disabled:opacity-40"
             >
-              {COPY.buttons.finish}
+              {/* Whether this is the last question depends on whether
+                  anything was entered above it. */}
+              {contributing.length ? COPY.buttons.continue : COPY.buttons.finish}
             </button>
+          </div>
+        )}
+
+        {step === "contributions" && (
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold">{COPY.contributions.title}</h2>
+            <p className="text-sm text-gray-500">{COPY.contributions.sub}</p>
+            {contributing.map(({ key, account }) => {
+              const row = contributions[key] ?? blankContributionRow(todayISO());
+              const setRow = (patch) =>
+                setContributions((c) => ({ ...c, [key]: { ...row, ...patch } }));
+              return (
+                <div key={key} className="border-t border-gray-100 dark:border-gray-800 pt-3">
+                  <div className="text-sm font-medium mb-1">{account.name}</div>
+                  <div className="flex gap-2">
+                    <label className="flex-1 min-w-0">
+                      <span className="block text-[11px] text-gray-400 mb-0.5">
+                        {account.group === "debt"
+                          ? COPY.contributions.owedFor(account.name)
+                          : COPY.contributions.amountFor(account.name)}
+                      </span>
+                      <input
+                        className={field} type="number" placeholder="0.00"
+                        value={row.amount}
+                        onChange={(e) => setRow({ amount: e.target.value })}
+                      />
+                    </label>
+                    <label className="w-32 shrink-0">
+                      <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.cadence}</span>
+                      <select
+                        className={field} value={row.cadence}
+                        onChange={(e) => setRow({ cadence: e.target.value })}
+                      >
+                        {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </label>
+                    {/* Only monthly has a day. A weekly transfer on "the
+                        14th" is not a thing, and a field that cannot
+                        mean anything is a field people answer anyway. */}
+                    {row.cadence === "monthly" && (
+                      <label className="shrink-0">
+                        <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">
+                          {COPY.contributions.dayLabel}
+                        </span>
+                        <input
+                          className={`${field} w-16`} type="number" min="1" max="31"
+                          aria-label={`${account.name} payment day`}
+                          value={row.day}
+                          onChange={(e) => setRow({ day: e.target.value })}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {/* SKIP DISCARDS, like every other step. These answers are
+                read off the fields at the end rather than committed
+                when the step is passed, so skipping has to clear them
+                — otherwise "Skip" would quietly keep what was typed,
+                which is the one thing Skip must never do. */}
+            <StepButtons
+              onSkip={() => { setContributions({}); goNext(); }}
+              onContinue={goNext}
+              continueLabel={COPY.buttons.finish}
+            />
           </div>
         )}
 
