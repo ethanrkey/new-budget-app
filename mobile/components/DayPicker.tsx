@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Picker } from "@react-native-picker/picker";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { T } from "../lib/theme";
@@ -19,37 +20,75 @@ import { DAY_OPTIONS } from "../../src/content/setup.ts";
 // payday question next to it already opens a wheel — two controls
 // asking "which day" should not be two different gestures.
 //
-// SAME CONTRACT AS DatePicker, deliberately: value in, onPick, and an
-// onClose that every dismissal goes through, so a caller cannot build
-// a surface with no way out. That rule was written after the Ledger's
-// horizon chip shipped a picker that could not be closed at all.
+// NOTHING IS COMMITTED UNTIL DONE, SINCE BUILD 9'S DEVICE PASS, and
+// this is the one place where this component DELIBERATELY DIFFERS
+// from DatePicker next to it.
+//
+// Build 9 committed on `onValueChange` and closed the wheel with it,
+// which is the date picker's behavior and the wrong behavior here.
+// A `UIDatePicker` in `inline` mode is a calendar: you tap the 14th,
+// and that tap is an answer. A `UIPickerView` is a WHEEL — it reports
+// whatever row it coasts to a stop on, and scrolling past a number on
+// the way to another one is not a choice. Worse, committing on settle
+// also closed the wheel, so overshooting meant the picker shut on a
+// value nobody picked and had to be reopened to correct.
+//
+// So the wheel moves a DRAFT, Done commits it, and Cancel — or
+// walking away and pressing Continue — leaves the old value exactly
+// where it was. Cancel is a real button rather than a tap-outside,
+// because this picker expands inline underneath its row and there is
+// no scrim to tap.
 export default function DayPicker({
   value, onPick, onClose, label = "Done",
 }: {
-  /** The day, 1-31. */
+  /** The day, 1-31. The COMMITTED one: the wheel's position is local. */
   value: number;
   onPick: (day: number) => void;
   onClose: () => void;
   label?: string;
 }) {
+  const [draft, setDraft] = useState(value);
+  // The wheel opens on whatever the row currently says. A caller that
+  // changes `value` underneath an open picker — nothing does today —
+  // would otherwise leave the wheel showing a stale number.
+  useEffect(() => { setDraft(value); }, [value]);
+
   return (
     <View style={styles.wrap}>
       <Picker
         testID="day-picker"
-        selectedValue={value}
-        // CLOSES ON SELECTION, like the date picker. A UIPickerView
-        // reports a value when the wheel SETTLES, not while it spins,
-        // so one flick is one call and one call is the answer.
-        onValueChange={(v) => { onPick(Number(v)); onClose(); }}
+        selectedValue={draft}
+        // A DRAFT, NOT THE ANSWER. See above: a wheel settling is not
+        // a decision, and this one used to be both the decision and
+        // the dismissal.
+        onValueChange={(v) => setDraft(Number(v))}
         itemStyle={styles.item}
       >
         {DAY_OPTIONS.map((d) => (
           <Picker.Item key={d} label={String(d)} value={d} color={T.text} />
         ))}
       </Picker>
-      <Pressable style={styles.done} onPress={onClose} accessibilityRole="button" accessibilityLabel={label}>
-        <Text style={styles.doneText}>{label}</Text>
-      </Pressable>
+      <View style={styles.actions}>
+        {/* Cancel first and muted, Done last and in the accent: the
+            iOS order, where the dismissive action is the one your
+            thumb does not land on by accident. */}
+        <Pressable
+          style={styles.action}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel"
+        >
+          <Text style={styles.cancelText}>Cancel</Text>
+        </Pressable>
+        <Pressable
+          style={styles.action}
+          onPress={() => { onPick(draft); onClose(); }}
+          accessibilityRole="button"
+          accessibilityLabel={label}
+        >
+          <Text style={styles.doneText}>{label}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -60,6 +99,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: T.border, padding: 12, paddingBottom: 30, marginTop: 6,
   },
   item: { color: T.text, fontSize: 20 },
-  done: { alignSelf: "flex-end", minHeight: 44, minWidth: 64, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 },
+  actions: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  action: { minHeight: 44, minWidth: 64, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 },
+  cancelText: { color: T.dim, fontSize: 15 },
   doneText: { color: T.brass, fontSize: 15, fontWeight: "700" },
 });

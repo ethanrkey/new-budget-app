@@ -39,13 +39,20 @@ async function press(label: string) {
 const dayRow = (label: string) => screen.getByLabelText(new RegExp(`^${label} \\d+\\. Change the day\\.$`));
 const dayOn = (label: string) => dayRow(label).props.accessibilityLabel.match(/ (\d+)\. /)![1];
 
-/** Turn the wheel the way a finger would, and let it close itself. */
+/**
+ * Turn the wheel the way a finger would, then press Done.
+ *
+ * DONE IS NOT OPTIONAL, since build 9's device pass. The wheel used
+ * to commit and close on settle, which is a date picker's behavior
+ * and wrong for a wheel: coasting past a number is not choosing it.
+ */
 async function pickDay(label: string, day: number) {
   await userEvent.press(dayRow(label));
   expect(screen.getByLabelText("Day picker")).toBeOnTheScreen();
   await act(async () => {
     (dayPickerProps.current!.onValueChange as (v: number) => void)(day);
   });
+  await userEvent.press(screen.getByLabelText("Done"));
 }
 
 /** Open a first-contribution row and choose a date `days` out. */
@@ -235,7 +242,7 @@ test("the due day is picked from 1-31, and there is no way to type 50", async ()
   await pickDay(rent, 31);
   expect(dayOn(rent)).toBe("31");
   expect(screen.queryAllByDisplayValue("31")).toHaveLength(0);
-  // ...and it closed on the selection, the way the payday wheel does.
+  // ...and Done closed it.
   expect(screen.queryByLabelText("Day picker")).toBeNull();
 
   // 31 is as far as the wheel goes: the options are 1..31 and nothing
@@ -244,6 +251,48 @@ test("the due day is picked from 1-31, and there is no way to type 50", async ()
   expect(items).toHaveLength(31);
   expect(items[0]!.props.value).toBe(1);
   expect(items[30]!.props.value).toBe(31);
+});
+
+test("the day wheel commits on Done and on nothing else", async () => {
+  // THE BUG THIS WOULD HAVE CAUGHT, reported from the build 9 device
+  // pass: the wheel committed whenever it stopped scrolling, and
+  // closed itself doing it. A UIPickerView reports the row it coasts
+  // to a stop on, so flicking past the 14th on the way to the 20th
+  // set the 14th and shut the picker — and the only way back was to
+  // reopen it and try to land more precisely.
+  //
+  // Three claims, and the second and third are the ones that were
+  // broken: turning the wheel changes nothing, Done commits what the
+  // wheel is showing, and Cancel leaves the old value alone.
+  await mount();
+  await press("Skip");                      // paycheck
+  const rent = "What day of the month is your rent due\\?";
+
+  // 1. The wheel moves and the row does not.
+  await userEvent.press(dayRow(rent));
+  await act(async () => {
+    (dayPickerProps.current!.onValueChange as (v: number) => void)(14);
+  });
+  expect(dayOn(rent)).toBe("1");
+  expect(screen.getByLabelText("Day picker")).toBeOnTheScreen();
+
+  // 2. Cancel throws the draft away, and the row still says 1.
+  await userEvent.press(screen.getByLabelText("Cancel"));
+  expect(screen.queryByLabelText("Day picker")).toBeNull();
+  expect(dayOn(rent)).toBe("1");
+
+  // 3. Reopened, the wheel starts from the committed value rather
+  //    than from the draft that was abandoned — otherwise Cancel
+  //    only looks like it worked.
+  await userEvent.press(dayRow(rent));
+  expect(dayPickerProps.current!.selectedValue).toBe(1);
+
+  // 4. And Done commits.
+  await act(async () => {
+    (dayPickerProps.current!.onValueChange as (v: number) => void)(20);
+  });
+  await userEvent.press(screen.getByLabelText("Done"));
+  expect(dayOn(rent)).toBe("20");
 });
 
 describe("a bill row can be swiped away", () => {

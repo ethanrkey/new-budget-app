@@ -555,9 +555,16 @@ function DateRow({
 //
 // Both go away with a control that cannot express 50. This is the
 // payday question's own pattern, down to the words: the row shows the
-// answer and "Change ›", tapping it opens a wheel, and the wheel
-// closes when a value is chosen. Two "which day" questions on
-// adjacent steps should not be two different gestures.
+// answer and "Change ›", and tapping it opens a wheel. Two "which
+// day" questions on adjacent steps should not be two different
+// gestures.
+//
+// WHERE IT STOPS BEING THE SAME PATTERN is the commit. The payday
+// wheel is a calendar and a tap on a date is an answer; this one is a
+// UIPickerView, which reports whatever row it coasts to a stop on. So
+// DayPicker holds a draft and only Done commits it — see the long
+// note there. Build 9 committed on settle and closed on settle, and
+// overshooting meant the picker shut on a number nobody chose.
 function Day({
   label, value, onChange, accessibilityLabel,
 }: {
