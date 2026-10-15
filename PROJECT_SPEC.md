@@ -620,6 +620,18 @@ written here in the same sitting** — there is no other record of it.
      the same source: `public/google-branding-120.png`. Which flow
      shows the Supabase domain, and why, is recorded above.
 
+  **The audit after it: 165 mutations, all killed, 139 renderer tests,
+  every one dying to at least one.** The first run of that set (164)
+  reported two tests nothing could kill, both written that day. One
+  was real and now has its mutation — the contributions step's
+  first-date row put back behind `cadence === "monthly"`. The other
+  asserted an ABSENCE, that the bottom sheet has no grabber any more,
+  and the only mutation that would have killed it is one adding back
+  the testID it looks for, which tests the marker and not the
+  behavior. **That test was deleted rather than propped up.** Writing
+  a mutation to match a decoration is worse than leaving it
+  unverified, because afterwards the number says otherwise.
+
 - **1.0.0 (8), 2026-10-15** — a slow, careful device pass on build 7,
   twelve items, every one of them diagnosed before it was fixed. The
   ones with a reason worth keeping:

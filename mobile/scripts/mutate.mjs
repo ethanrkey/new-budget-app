@@ -16,7 +16,23 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-15: 136 mutations, 135 killed, 127 renderer tests,
+// Measured 2026-10-15, build 9: 165 mutations, ALL killed, 139
+// renderer tests, every one of them dying to at least one. The first
+// run of that set (164 mutations) reported two tests nothing could
+// kill, both written that day:
+//   - "every cadence asks when the first contribution is" — real, and
+//     now killed by a mutation that puts the first-date row back
+//     behind `row.cadence === "monthly"`, which is exactly the thing
+//     it watches for;
+//   - "the bottom sheet has no grabber to drag any more" — an
+//     ABSENCE, and the only mutation that would have killed it is one
+//     adding back the testID it looks for, which tests the marker and
+//     not the behavior. DELETED rather than propped up. A test
+//     nothing can kill is decoration; propping it up with a mutation
+//     written to match it is worse, because then the number says
+//     otherwise.
+//
+// Earlier that day: 136 mutations, 135 killed, 127 renderer tests,
 // every one of them dying to at least one. The survivor was the date
 // picker's Android branch, and it survived because the TEST was weak
 // rather than because the code was untested: it only ever fired a
@@ -517,6 +533,16 @@ const MUTATIONS = [
   ["a bill row other than the one swiped is removed",
    "../src/engine/setup.ts", "  const left = rows.filter((_, i) => i !== index);",
    "  const left = rows.filter((_, i) => i !== index + 1);"],
+
+  // Written AFTER the first build 9 run, which reported two tests
+  // nothing could kill. This is one of them made honest. The other
+  // asserted an ABSENCE — that the bottom sheet has no grabber any
+  // more — and the only mutation that would have killed it is one
+  // that adds back the testID it looks for, which tests the marker
+  // and not the behavior. That test was deleted instead.
+  ["the first-date row goes back to monthly only", "components/Setup.tsx",
+   "                        <DateRow\n                          label={account.group === \"debt\"\n                            ? COPY.contributions.startLabelDebt\n                            : COPY.contributions.startLabel}\n                          value={row.start}\n                          minimum={todayISO}\n                          onChange={(v) => setRow({ start: v })}\n                          accessibilityLabel={`${account.name} first contribution`}\n                        />\n",
+   "                        {row.cadence === \"monthly\" && (\n                        <DateRow\n                          label={account.group === \"debt\"\n                            ? COPY.contributions.startLabelDebt\n                            : COPY.contributions.startLabel}\n                          value={row.start}\n                          minimum={todayISO}\n                          onChange={(v) => setRow({ start: v })}\n                          accessibilityLabel={`${account.name} first contribution`}\n                        />\n                        )}\n"],
 ];
 
 const killedBy = new Map();

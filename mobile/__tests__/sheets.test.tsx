@@ -527,10 +527,11 @@ describe("the transaction form is presented as a system sheet", () => {
     expect(closed).toHaveLength(1);
   });
 
-  test("the bottom sheet has no grabber to drag any more", async () => {
-    await render(
-      <BottomSheet visible onClose={() => {}}><Text>BODY</Text></BottomSheet>
-    );
-    expect(screen.queryByTestId("sheet-grabber")).toBeNull();
-  });
+  // There was a fifth test here asserting the bottom sheet has no
+  // grabber any more. The audit could not kill it, and the only
+  // mutation that would have is one that adds back the testID it
+  // looks for — which tests the marker rather than the behavior.
+  // Deleted rather than propped up: a test nothing can kill is
+  // decoration, which is this suite's own argument. What the grabber
+  // was for is covered by the four above.
 });
