@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TOUR_STOPS as STOPS } from "../content/tour.ts";
 
 // A walkthrough, as distinct from the reference page About replaced.
@@ -14,8 +14,15 @@ import { TOUR_STOPS as STOPS } from "../content/tour.ts";
 // thing and cannot be broken by a CSS change.
 // ORDER: Ledger first, Dashboard LAST. The thing a new user has to
 // understand is the relationship — the Ledger and Budget are their PLAN,
-// the Dashboard is where they actually STAND — and ending on the
-// Dashboard leaves them on the screen they will open tomorrow.
+// the Dashboard is where they actually STAND.
+//
+// BUT IT LEAVES YOU ON THE LEDGER, since 2026-10-15. "Ending on the
+// Dashboard leaves them on the screen they will open tomorrow" is what
+// this comment used to say, and the owner's own first run disagreed:
+// the Dashboard on day one holds one reading of each account and no
+// trend, and the Ledger is the screen with something to look at. The
+// phone made the same change in the same pass, so the two clients
+// still end the same tour in the same place.
 //
 // Both halves work on day one. What takes time is seeing where they stand
 // OVER time, which needs a few logged balances. So the Dashboard is not
@@ -30,12 +37,16 @@ export default function GuidedTour({ onGoToTab, onClose }) {
   // Take them to the tab the card is talking about, as the card appears.
   useEffect(() => { onGoToTab(stop.tab); }, [i, stop.tab, onGoToTab]);
 
+  // EVERY WAY OUT LANDS ON THE LEDGER — Got it, Skip, Escape and the
+  // scrim. Four doors is three chances to leave somebody on Spending.
+  const leave = useCallback(() => { onGoToTab("ledger"); onClose(); }, [onGoToTab, onClose]);
+
   // Escape dismisses, like every other overlay in the app.
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e) => { if (e.key === "Escape") leave(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [leave]);
 
   const last = i === STOPS.length - 1;
   return (
@@ -46,7 +57,7 @@ export default function GuidedTour({ onGoToTab, onClose }) {
           read. Dimming everything else answers the second question so
           they only have to deal with the first. Still shows the tab
           underneath, because the point is to point AT something. */}
-      <div className="fixed inset-0 bg-black/55 z-40" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 bg-black/55 z-40" onClick={leave} aria-hidden="true" />
 
       <div className="fixed inset-x-0 bottom-0 z-50 p-3 sm:p-6">
         <div className="w-full mx-auto max-w-lg rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-2xl p-5">
@@ -54,7 +65,7 @@ export default function GuidedTour({ onGoToTab, onClose }) {
             <span className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
               Step {i + 1} of {STOPS.length}
             </span>
-            <button onClick={onClose} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            <button onClick={leave} className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
               Skip the tour
             </button>
           </div>
@@ -77,7 +88,7 @@ export default function GuidedTour({ onGoToTab, onClose }) {
               </button>
             )}
             <button
-              onClick={() => (last ? onClose() : setI((n) => n + 1))}
+              onClick={() => (last ? leave() : setI((n) => n + 1))}
               className="text-sm px-5 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 font-semibold"
             >
               {last ? "Got it" : "Next"}

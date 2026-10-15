@@ -15,6 +15,14 @@ const ROUTE: Record<string, string> = {
   spending: "/(tabs)/spending", dashboard: "/(tabs)/dashboard",
 };
 
+// IT STARTS ON THE LEDGER AND IT ENDS THERE, SINCE 2026-10-15. The
+// stops are unchanged — Ledger, Budget, Spending, Dashboard — but
+// finishing or skipping puts you back on the Ledger rather than
+// leaving you wherever the last card was. The owner's call from build
+// 9's device pass: the Ledger is the screen worth landing on after
+// setup, and the Dashboard's value is not obvious on the day it has
+// one reading in it. Done HERE rather than at the two call sites, so
+// a third way to open the tour cannot forget it.
 export default function Tour({ onClose }: { onClose: () => void }) {
   const [i, setI] = useState(() => { router.replace(ROUTE[TOUR_STOPS[0]!.tab]! as never); return 0; });
   const stop = TOUR_STOPS[i]!;
@@ -25,15 +33,20 @@ export default function Tour({ onClose }: { onClose: () => void }) {
     router.replace(ROUTE[TOUR_STOPS[next]!.tab]! as never);
   };
 
+  const leave = () => {
+    router.replace(ROUTE.ledger! as never);
+    onClose();
+  };
+
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+    <Modal transparent animationType="fade" visible onRequestClose={leave}>
       <View style={styles.scrim} pointerEvents="box-none">
         <View style={styles.card}>
           <Text style={styles.step}>{i + 1} of {TOUR_STOPS.length}</Text>
           <Text style={styles.title}>{stop.title}</Text>
           <Text style={styles.body}>{stop.body}</Text>
           <View style={styles.row}>
-            <Pressable onPress={onClose} style={styles.skip} accessibilityRole="button" accessibilityLabel="Skip the tour">
+            <Pressable onPress={leave} style={styles.skip} accessibilityRole="button" accessibilityLabel="Skip the tour">
               <Text style={styles.skipText}>Skip</Text>
             </Pressable>
             {i > 0 && (
@@ -42,7 +55,7 @@ export default function Tour({ onClose }: { onClose: () => void }) {
               </Pressable>
             )}
             <Pressable
-              onPress={() => (last ? onClose() : go(i + 1))}
+              onPress={() => (last ? leave() : go(i + 1))}
               style={[styles.btn, styles.primary]}
               accessibilityRole="button"
               accessibilityLabel={last ? "Done" : "Next"}
