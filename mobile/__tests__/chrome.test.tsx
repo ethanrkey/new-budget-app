@@ -1,4 +1,5 @@
-import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { act, render, screen, userEvent, waitFor, within } from "@testing-library/react-native";
+import { T } from "../lib/theme";
 import { pickerProps } from "./setup";
 import { normalize } from "../../src/engine/stateShape.ts";
 
@@ -167,21 +168,63 @@ test("tapping the balance at the top opens the one Update balance sheet", async 
   expect(screen.getByText(/Transactions dated before this will drop out/)).toBeOnTheScreen();
 });
 
-test("the balance says it can be tapped, and says nothing offline", async () => {
+test("the balance says it can be tapped, in muted gray, and says nothing offline", async () => {
   // It was tappable and gave no sign of it. The web has a plain
   // "Update balance" button; the phone had a line of text that
-  // happened to respond.
+  // happened to respond. Build 8 gave it the words "Update ›" and
+  // build 9 took them back for a pencil, because the words cost 62pt
+  // on a strip that did not have them — see the test below.
   mockLoaded.state = seen;
   await mount();
-  expect(await screen.findByText("Update ›")).toBeOnTheScreen();
+  const cue = await screen.findByTestId("anchor-edit-cue");
+  expect(cue).toBeOnTheScreen();
+  expect(cue.props.name).toBe("pencil.circle");
+  // Muted, NOT the brass accent. Gold is spent on the mark and on
+  // money; an edit affordance for a reference figure is not the most
+  // important thing on the screen.
+  expect(cue.props.tintColor).toBe(T.dim);
+  expect(cue.props.tintColor).not.toBe(T.brass);
+  expect(screen.queryByText("Update ›")).toBeNull();
 
   // Offline is read-only everywhere else, so there is nothing to
   // invite — a cue that opens a form which cannot save is worse than
   // no cue at all.
   mockNet.connected = false;
   await act(async () => { mockNet.listener?.({ isConnected: false }); });
-  expect(screen.queryByText("Update ›")).toBeNull();
+  expect(screen.queryByTestId("anchor-edit-cue")).toBeNull();
   mockNet.connected = true;
+});
+
+test("the verified date has its own line, so no balance can crowd it out", async () => {
+  // THE BUG THIS WOULD HAVE CAUGHT. On a device, at a real balance of
+  // $1,276.57, "verified 2026-10-14" was cut off. Everything sat on
+  // one row — name, amount, date, "Update ›" — and the date was the
+  // only thing carrying `flexShrink`, so the date was what gave way.
+  //
+  // Measured in SF Pro at the strip's own sizes, that row wanted
+  // 316pt inside the 260pt the narrowest supported iPhone (the
+  // 12/13 mini, 360pt wide, less 16pt margin, 60pt for the floating
+  // settings button and 24pt of padding) gives it. No shrink rule
+  // fixes 56pt of overflow; the line has to stop being shared.
+  //
+  // So this does not assert a width, which jest cannot see. It
+  // asserts the STRUCTURE that makes the width irrelevant: the date
+  // is not on the row with the balance. Put it back on that row and
+  // this fails, whatever flex properties it is given.
+  mockLoaded.state = {
+    ...seen,
+    accounts: [{ ...seen.accounts[0]!, balance: 12345.67, balanceAsOf: "2026-10-14" }],
+  };
+  await mount();
+
+  const dated = await screen.findByText("verified 10/14/2026");
+  expect(dated).toBeOnTheScreen();
+  // ...and its own Text is one unbroken string, not two runs that a
+  // parent could have split.
+  expect(within(screen.getByTestId("anchor-line")).queryByText(/verified/)).toBeNull();
+  // The balance is the thing that grew, and it is on the other line.
+  expect(within(screen.getByTestId("anchor-line")).getByText("$12,345.67")).toBeOnTheScreen();
+  mockLoaded.state = seen;
 });
 
 test("...and writes the balance it was given", async () => {
