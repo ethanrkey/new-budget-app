@@ -89,9 +89,16 @@ export const SETUP_COPY = {
   contributions: {
     title: "Are you putting money in regularly?",
     sub: "Set up a transfer or payment for any of these and it will show up in your Ledger and Budget on its own. Leave anything blank to skip it.",
-    // Only shown for a monthly one, because that is the only cadence
-    // where a day of the month means anything.
-    dayLabel: "Payment day",
+    // EVERY CADENCE, since 2026-10-15. This was "Payment day" and was
+    // shown only for a monthly contribution; weekly and biweekly ones
+    // silently started on the day setup was run, which put a $400
+    // savings transfer on the same date as the balance it is counted
+    // forward from. The paycheck step learned this already.
+    startLabel: "First contribution",
+    // Debt says "payment" for the same reason contributionName does:
+    // it is the word for it, and the row has to read next to a
+    // month's other bills.
+    startLabelDebt: "First payment",
     amountFor: (name: string) => `Into ${name}`,
     owedFor: (name: string) => `Toward ${name}`,
   },

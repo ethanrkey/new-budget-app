@@ -1,4 +1,5 @@
-import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { pickerProps } from "./setup";
 import { normalize } from "../../src/engine/stateShape.ts";
 
 // The Dashboard's SHAPE, brought up to the web's on 2026-10-14.
@@ -190,11 +191,47 @@ describe("after a new account is added", () => {
     });
   });
 
-  test("a weekly cadence drops the payment day, because it cannot mean anything", async () => {
+  test("every cadence asks when the first one is, and keeps the answer", async () => {
+    // IT USED TO ASK ONLY FOR A MONTHLY ONE, as a day of the month,
+    // so a weekly or biweekly transfer silently started on the day
+    // the account was added — the same date as the balance it is
+    // counted forward from, which counts it twice. Reported from a
+    // device: a $400 savings transfer on 10/15, the day the balance
+    // was logged.
     await addSavings("Ally");
     await screen.findByText("Put money into Ally regularly?");
-    expect(screen.getByLabelText("Ally payment day")).toBeOnTheScreen();
+
+    const firstRow = () => screen.getByLabelText(/^Ally first contribution .*Change the date\.$/);
+    expect(firstRow()).toBeOnTheScreen();
+    expect(screen.getByText("First contribution")).toBeOnTheScreen();
+
+    // Still there on a weekly one, which is the whole fix.
     await userEvent.press(screen.getByLabelText("Every week"));
-    expect(screen.queryByLabelText("Ally payment day")).toBeNull();
+    expect(firstRow()).toBeOnTheScreen();
+    await userEvent.press(screen.getByLabelText("Every 2 weeks"));
+    expect(firstRow()).toBeOnTheScreen();
+
+    // Pick a date a week out and the rule starts there, not today.
+    const soon = new Date();
+    soon.setDate(soon.getDate() + 7);
+    const iso = soon.toISOString().slice(0, 10);
+    await userEvent.press(firstRow());
+    await act(async () => {
+      (pickerProps.current!.onChange as (e: unknown, d: Date) => void)(
+        { type: "set" }, new Date(iso + "T12:00:00"),
+      );
+    });
+
+    await userEvent.type(screen.getByLabelText("Ally contribution amount"), "400");
+    await userEvent.press(screen.getByLabelText("Schedule it"));
+
+    await waitFor(() => {
+      const last = mockSaved[mockSaved.length - 1] as {
+        recurring: { name: string; startDate: string; cadence: string }[];
+      };
+      expect(last.recurring).toHaveLength(1);
+      expect(last.recurring[0]!.cadence).toBe("biweekly");
+      expect(last.recurring[0]!.startDate).toBe(iso);
+    });
   });
 });

@@ -79,7 +79,6 @@ export default function Setup({
   // shown when the accounts step produced something to ask about.
   // It is last, so a list that grows while somebody types on the
   // accounts step never moves the step they are on.
-  const [pickingPayday, setPickingPayday] = useState(false);
   const [d, setD] = useState<SetupDraft>(() => blankSetupDraft(todayISO));
   // Rules collected by the steps already passed. Keyed by step so going
   // BACK and forward again replaces that step's rules instead of
@@ -92,7 +91,6 @@ export default function Setup({
   // nothing renders differently because of them, and a setState on
   // every scroll frame would re-render the whole wizard.
   const scroll = useRef<ScrollView>(null);
-  const payday = useRef<View>(null);
   const content = useRef<View>(null);
   const window = useRef({ offset: 0, height: 0 });
 
@@ -176,30 +174,13 @@ export default function Setup({
                       is clamped to today and paycheckRule clamps
                       again, because two guards on the one number the
                       whole forecast counts forward from is cheap. */}
-                  <Text style={styles.label}>{COPY.paycheck.paydayLabel}</Text>
-                  <Pressable
-                    ref={payday}
-                    style={[styles.input, styles.pickRow]}
-                    onPress={() => { Keyboard.dismiss(); reveal(payday.current); setPickingPayday(true); }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${COPY.paycheck.paydayLabel} ${fmtDate(d.payday)}. Change the date.`}
-                  >
-                    {/* It LOOKS like a control now. A date in a box that
-                        is the same shape as the text fields above it
-                        reads as something already filled in, which is
-                        half of why it was not tapped. */}
-                    <Text style={styles.inputText}>{fmtDate(d.payday)}</Text>
-                    <Text style={styles.pickCue}>Change ›</Text>
-                  </Pressable>
+                  <DateRow
+                    label={COPY.paycheck.paydayLabel}
+                    value={d.payday}
+                    minimum={todayISO}
+                    onChange={(v) => set("payday", v)}
+                  />
                   <Text style={styles.note}>{COPY.paycheck.paydayHelp}</Text>
-                  {pickingPayday && (
-                    <DatePicker
-                      value={d.payday}
-                      minimum={todayISO}
-                      onPick={(v) => set("payday", v < todayISO ? todayISO : v)}
-                      onClose={() => setPickingPayday(false)}
-                    />
-                  )}
                   {/* The one string that differs between clients, and it
                       differs because the control it names does. */}
                   <Text style={styles.note}>{COPY.paycheck.note.mobile}</Text>
@@ -365,18 +346,24 @@ export default function Setup({
                           value={row.cadence}
                           onChange={(v) => setRow({ cadence: v })}
                         />
-                        {/* Only monthly has a day. A weekly transfer on
-                            "the 14th" is not a thing, and a field that
-                            cannot mean anything is a field people
-                            answer anyway. */}
-                        {row.cadence === "monthly" && (
-                          <Day
-                            label={COPY.contributions.dayLabel}
-                            value={row.day}
-                            onChange={(v) => setRow({ day: v })}
-                            accessibilityLabel={`${account.name} payment day`}
-                          />
-                        )}
+                        {/* EVERY CADENCE GETS A FIRST DATE. It used to
+                            be a day of the month and only for a
+                            monthly one, so a weekly or biweekly
+                            transfer silently started on the day setup
+                            was run — which put it on the same date as
+                            the balance it is counted forward from,
+                            and therefore counted it twice. Same
+                            control as the payday question, one step
+                            earlier, which fixed the same thing. */}
+                        <DateRow
+                          label={account.group === "debt"
+                            ? COPY.contributions.startLabelDebt
+                            : COPY.contributions.startLabel}
+                          value={row.start}
+                          minimum={todayISO}
+                          onChange={(v) => setRow({ start: v })}
+                          accessibilityLabel={`${account.name} first contribution`}
+                        />
                       </View>
                     );
                   })}
@@ -505,6 +492,53 @@ function Money(p: Omit<Parameters<typeof Field>[0], "placeholder">) {
         accessibilityLabel={p.accessibilityLabel ?? p.label}
         autoFocus={p.autoFocus}
       />
+    </>
+  );
+}
+
+// A DATE, PICKED, NOT TYPED — the payday question's pattern, and
+// since build 9 the contributions step's too.
+//
+// The row shows the answer and "Change ›", tapping opens the wheel,
+// and the wheel closes when a date is chosen. It LOOKS like a control:
+// a date sitting in a box the same shape as the text fields above it
+// reads as something already filled in, which is half of why nobody
+// tapped it.
+//
+// `minimum` is enforced twice — the picker refuses an earlier date
+// and this clamps whatever comes back — because the rules built from
+// these dates clamp a third time. Three guards on a date the whole
+// forecast counts forward from is cheap.
+function DateRow({
+  label, value, onChange, minimum, accessibilityLabel,
+}: {
+  label: string; value: string; onChange: (v: string) => void;
+  minimum?: string; accessibilityLabel?: string;
+}) {
+  const reveal = useReveal();
+  const row = useRef<View>(null);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <Pressable
+        ref={row}
+        style={[styles.input, styles.pickRow]}
+        onPress={() => { Keyboard.dismiss(); reveal(row.current); setOpen(true); }}
+        accessibilityRole="button"
+        accessibilityLabel={`${accessibilityLabel ?? label} ${fmtDate(value)}. Change the date.`}
+      >
+        <Text style={styles.inputText}>{fmtDate(value)}</Text>
+        <Text style={styles.pickCue}>Change ›</Text>
+      </Pressable>
+      {open && (
+        <DatePicker
+          value={value}
+          minimum={minimum}
+          onPick={(v) => onChange(minimum && v < minimum ? minimum : v)}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </>
   );
 }

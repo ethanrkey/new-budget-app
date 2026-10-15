@@ -475,19 +475,28 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   eq("a blank row means nothing was asked for", contributionOf(blankContributionRow(TODAY)), null);
   eq("a missing row too", contributionOf(undefined), null);
   eq("zero is not a contribution either",
-    contributionOf({ amount: "0", cadence: "monthly", day: "5" }), null);
-  eq("a monthly one carries its day",
-    contributionOf({ amount: "300", cadence: "monthly", day: "15" }),
-    { amount: 300, cadence: "monthly", day: 15 });
-  // A weekly transfer on "the 14th" is not a thing.
-  eq("a weekly one drops the day",
-    contributionOf({ amount: "50", cadence: "weekly", day: "15" }),
-    { amount: 50, cadence: "weekly" });
+    contributionOf({ amount: "0", cadence: "monthly", start: "2026-11-05" }), null);
+  // EVERY CADENCE CARRIES A FIRST DATE now. It used to be a day of
+  // the month and only for a monthly one; weekly and biweekly
+  // contributions started on whatever day setup was run, which is
+  // the day the balance they are counted forward from was logged.
+  eq("a monthly one carries the date it was given",
+    contributionOf({ amount: "300", cadence: "monthly", start: "2026-11-05" }),
+    { amount: 300, cadence: "monthly", start: "2026-11-05" });
+  eq("...and so does a weekly one",
+    contributionOf({ amount: "50", cadence: "weekly", start: "2026-10-18" }),
+    { amount: 50, cadence: "weekly", start: "2026-10-18" });
+  eq("...and a biweekly one",
+    contributionOf({ amount: "50", cadence: "biweekly", start: "2026-10-18" }, TODAY),
+    { amount: 50, cadence: "biweekly", start: "2026-10-18" });
+  eq("a row with no date at all falls back to today",
+    contributionOf({ amount: "50", cadence: "weekly", start: "" }, TODAY),
+    { amount: 50, cadence: "weekly", start: TODAY });
 
   eq("savings and investments are transfers in", contributionName({ name: "Ally", group: "savings" }), "To Ally");
   eq("debt is a payment", contributionName({ name: "Car loan", group: "debt" }), "Car loan payment");
 
-  const withOne = collectAccountsWith(rows, { "debt:0": { amount: "450", cadence: "monthly", day: "1" } });
+  const withOne = collectAccountsWith(rows, { "debt:0": { amount: "450", cadence: "monthly", start: "2026-11-01" } }, TODAY);
   eq("only the answered account carries one",
     withOne.map((a) => a.contribution?.amount ?? null), [null, null, 450]);
 
@@ -499,21 +508,38 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   is("the rule exists", !!rule);
   eq("...and points at that account's own category", rule.category, loan.id);
   eq("...with the amount typed", rule.amount, 450);
-  // The 1st has gone by 2026-10-12, so the first payment is in
-  // November — the same call firstMonthlyOn makes for a bill.
-  eq("...starting on the next occurrence of its day", rule.startDate, "2026-11-01");
-  eq("...and keeping the day", rule.dayOfMonth, 1);
+  // The date the user picked, not a date derived from a day number.
+  eq("...starting on the date that was picked", rule.startDate, "2026-11-01");
+  eq("...and taking its day of the month from it", rule.dayOfMonth, 1);
   eq("the accounts with nothing scheduled got no rules", out.recurring.length, 1);
 
   // A savings account's rule, which takes the other branch of
   // applySetup entirely (setupAsset rather than addCategory).
   const savingsOut = applySetup(blank, {
-    accounts: collectAccountsWith(rows, { "savings:0": { amount: "300", cadence: "weekly", day: "1" } }),
+    accounts: collectAccountsWith(rows, {
+      "savings:0": { amount: "300", cadence: "weekly", start: "2026-10-18" },
+    }, TODAY),
   }, TODAY);
   const ally = savingsOut.trackerCategories.find((c) => c.name === "Ally");
   const toAlly = savingsOut.recurring.find((r) => r.name === "To Ally");
   eq("an asset's rule points at the asset's category", toAlly.category, ally.id);
-  eq("...and a weekly one starts today", toAlly.startDate, TODAY);
+  // THE REPORT THIS FIXES: a weekly contribution used to start today,
+  // the same date as the logged balance, so the first transfer was
+  // both inside the balance and projected on top of it.
+  eq("...and a weekly one starts on the date it was given, not today",
+    toAlly.startDate, "2026-10-18");
+  eq("...which is NOT today", toAlly.startDate !== TODAY, true);
+
+  // A date in the past is clamped to today, as paycheckRule does: a
+  // rule that starts before the balance it is counted forward from is
+  // never what anybody meant.
+  const backdated = applySetup(blank, {
+    accounts: collectAccountsWith(rows, {
+      "savings:0": { amount: "300", cadence: "weekly", start: "2026-01-01" },
+    }, TODAY),
+  }, TODAY);
+  eq("a backdated contribution is pulled up to today",
+    backdated.recurring.find((r) => r.name === "To Ally").startDate, TODAY);
   eq("...and it is an outflow that the Budget treats as money kept",
     savingsOut.trackerCategories.find((c) => c.id === toAlly.category).kind, "asset");
 }

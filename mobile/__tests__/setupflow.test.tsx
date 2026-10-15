@@ -48,6 +48,20 @@ async function pickDay(label: string, day: number) {
   });
 }
 
+/** Open a first-contribution row and choose a date `days` out. */
+async function pickFirst(label: string, days: number) {
+  const row = screen.getByLabelText(new RegExp(`^${label} .*Change the date\\.$`));
+  await userEvent.press(row);
+  const when = new Date();
+  when.setDate(when.getDate() + days);
+  await act(async () => {
+    (pickerProps.current!.onChange as (e: unknown, d: Date) => void)(
+      { type: "set" }, new Date(when.toISOString().slice(0, 10) + "T12:00:00"),
+    );
+  });
+  return when.toISOString().slice(0, 10);
+}
+
 /** Press Skip n times. The balance step has no Skip, so it is counted. */
 async function skip(times: number) {
   for (let i = 0; i < times; i++) await press("Skip");
@@ -522,24 +536,25 @@ test("a contribution becomes a recurring rule in that account's category", async
   // Answer for one and leave the other blank. A blank row is a
   // skipped question, not a zero.
   await userEvent.type(screen.getByLabelText("Ally contribution amount"), "300");
-  await pickDay("Ally payment day", 15);
+  const first = await pickFirst("Ally first contribution", 7);
   await press("Finish");
   await press("Go to my budget");
 
   const accounts = got[0]!.accounts!;
   expect(accounts.map((a) => a.name)).toEqual(["Ally", "Car loan"]);
-  expect(accounts[0]!.contribution).toEqual({ amount: 300, cadence: "monthly", day: 15 });
+  expect(accounts[0]!.contribution).toEqual({ amount: 300, cadence: "monthly", start: first });
   expect(accounts[1]!.contribution).toBeUndefined();
 
   // ...and the end of the chain: a real rule, pointed at the category
-  // that account became, on the 15th.
+  // that account became, starting on the date that was picked rather
+  // than on the day setup happened to be run.
   const out = applySetup(normalize({}), got[0]!, "2026-10-13");
   const ally = out.trackerCategories.find((c) => c.name === "Ally")!;
   const rule = out.recurring.find((r) => r.name === "To Ally")!;
   expect(rule.category).toBe(ally.id);
   expect(rule.amount).toBe(300);
-  expect("cadence" in rule && rule.dayOfMonth).toBe(15);
-  expect("cadence" in rule && rule.startDate).toBe("2026-10-15");
+  expect("cadence" in rule && rule.startDate).toBe(first);
+  expect("cadence" in rule && rule.dayOfMonth).toBe(Number(first.slice(8)));
   // Nothing was invented for the account that was left blank.
   expect(out.recurring.some((r) => r.name.includes("Car loan"))).toBe(false);
 });
@@ -562,16 +577,37 @@ test("Skip on the contributions step discards what was typed into it", async () 
   expect(got[0]!.accounts![0]!.contribution).toBeUndefined();
 });
 
-test("a weekday cadence drops the payment day, because it cannot mean anything", async () => {
+test("every cadence asks when the first contribution is", async () => {
+  // IT USED TO ASK ONLY FOR A MONTHLY ONE, as a day of the month, so
+  // weekly and biweekly contributions silently started on the day
+  // setup was run — the same date as the balance the step before it
+  // asked for, which counts the first transfer twice. The paycheck
+  // step learned this already; this is the last step that had it.
   await mount();
   await toAccounts("4000");
   await userEvent.type(screen.getByLabelText("Savings 1 name"), "Ally");
   await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
   await press("Continue");
 
-  expect(dayRow("Ally payment day")).toBeOnTheScreen();
-  await userEvent.press(screen.getByLabelText("Every week"));
-  expect(screen.queryByLabelText(/^Ally payment day /)).toBeNull();
+  const row = () => screen.getByLabelText(/^Ally first contribution .*Change the date\.$/);
+  expect(screen.getByText("First contribution")).toBeOnTheScreen();
+  expect(row()).toBeOnTheScreen();
+  for (const cadence of ["Every week", "Every 2 weeks", "Every month"]) {
+    await userEvent.press(screen.getByLabelText(cadence));
+    expect(row()).toBeOnTheScreen();
+  }
+  // And no day-of-month control anywhere on the step.
+  expect(screen.queryByText("Payment day")).toBeNull();
+});
+
+test("a debt row asks for the first PAYMENT, which is the word for it", async () => {
+  await mount();
+  await toAccounts("4000");
+  await userEvent.type(screen.getByLabelText("Debt 1 name"), "Car loan");
+  await userEvent.type(screen.getByLabelText("Debt 1 amount"), "9100");
+  await press("Continue");
+  expect(screen.getByText("First payment")).toBeOnTheScreen();
+  expect(screen.queryByText("First contribution")).toBeNull();
 });
 
 test("Skip setup leaves without creating anything", async () => {

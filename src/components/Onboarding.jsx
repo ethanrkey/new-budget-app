@@ -452,22 +452,25 @@ export default function Onboarding({ initialBalance, onComplete }) {
                         {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                       </select>
                     </label>
-                    {/* Only monthly has a day. A weekly transfer on "the
-                        14th" is not a thing, and a field that cannot
-                        mean anything is a field people answer anyway. */}
-                    {row.cadence === "monthly" && (
-                      <label className="shrink-0">
-                        <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">
-                          {COPY.contributions.dayLabel}
-                        </span>
-                        <input
-                          className={`${field} w-16`} type="number" min="1" max="31"
-                          aria-label={`${account.name} payment day`}
-                          value={row.day}
-                          onChange={(e) => setRow({ day: e.target.value })}
-                        />
-                      </label>
-                    )}
+                    {/* EVERY CADENCE GETS A FIRST DATE. It used to be
+                        a day of the month shown only for a monthly
+                        one, so a weekly or biweekly transfer silently
+                        started on the day setup was run — the same
+                        date as the balance it is counted forward
+                        from, which counts it twice. */}
+                    <label className="shrink-0">
+                      <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">
+                        {account.group === "debt"
+                          ? COPY.contributions.startLabelDebt
+                          : COPY.contributions.startLabel}
+                      </span>
+                      <input
+                        className={field} type="date" min={todayISO()}
+                        aria-label={`${account.name} first contribution`}
+                        value={row.start}
+                        onChange={(e) => setRow({ start: e.target.value || todayISO() })}
+                      />
+                    </label>
                   </div>
                 </div>
               );

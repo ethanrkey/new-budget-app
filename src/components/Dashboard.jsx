@@ -225,18 +225,18 @@ function ContributionPrompt({ category, onSchedule, onClose }) {
               {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </label>
-          {row.cadence === "monthly" && (
-            <label className="shrink-0">
-              <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">
-                {COPY.contributions.dayLabel}
-              </span>
-              <input
-                className={`${field} w-16`} type="number" min="1" max="31"
-                aria-label={`${category.name} payment day`}
-                value={row.day} onChange={(e) => set({ day: e.target.value })}
-              />
-            </label>
-          )}
+          {/* Every cadence, not just monthly — see the setup step
+              this is the one-account version of. */}
+          <label className="shrink-0">
+            <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">
+              {isDebt ? COPY.contributions.startLabelDebt : COPY.contributions.startLabel}
+            </span>
+            <input
+              className={field} type="date" min={todayISO()}
+              aria-label={`${category.name} first contribution`}
+              value={row.start} onChange={(e) => set({ start: e.target.value || todayISO() })}
+            />
+          </label>
         </div>
         <div className="flex gap-3 pt-1">
           <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">

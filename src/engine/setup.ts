@@ -47,8 +47,19 @@ export type SetupAccount = {
 export type SetupContribution = {
   amount: number;
   cadence: SetupCadence;
-  /** Day of the month, for a monthly one. Ignored for the others. */
-  day?: number;
+  /**
+   * The date of the FIRST one, for every cadence.
+   *
+   * It was a day of the month, and only for a monthly contribution;
+   * weekly and biweekly ones silently started on the day setup was
+   * run. Reported from a device on 2026-10-15: a $400 savings
+   * transfer landed on 10/15, the same day the balance it is counted
+   * forward from was logged — so the first transfer is inside the
+   * balance AND projected on top of it. An unasked-for date is the
+   * same mistake the paycheck step made and fixed; this is that fix
+   * applied to the one step that still had it.
+   */
+  start: ISODate;
 };
 
 /**
@@ -535,16 +546,17 @@ export function collectAccounts(rows: AccountRows): SetupAccount[] {
 // flow look longer than it is.
 
 /** One row of the contributions step, as typed. */
-export type ContributionRow = { amount: string; cadence: SetupCadence; day: string };
+export type ContributionRow = { amount: string; cadence: SetupCadence; start: ISODate };
 
 /** Rows, keyed by the account row they belong to — see contributionTargets. */
 export type ContributionRows = Record<string, ContributionRow>;
 
 export function blankContributionRow(today: ISODate = todayISO()): ContributionRow {
   // Monthly, because a transfer to savings or a loan payment is
-  // monthly far more often than it is anything else, and the day
-  // defaults to today for the same reason the bills step's does.
-  return { amount: "", cadence: "monthly", day: defaultBillDay(today) };
+  // monthly far more often than it is anything else, and the first
+  // one defaults to today — shown, though, which is the whole
+  // difference from the version that assumed it.
+  return { amount: "", cadence: "monthly", start: today };
 }
 
 /**
@@ -567,23 +579,21 @@ export function contributionTargets(rows: AccountRows): { key: string; account: 
 }
 
 /** What one typed row means. Null for "nothing was entered here". */
-export function contributionOf(row: ContributionRow | undefined): SetupContribution | null {
+export function contributionOf(
+  row: ContributionRow | undefined, today: ISODate = todayISO(),
+): SetupContribution | null {
   if (!row) return null;
   const amt = positive(row.amount);
   if (amt == null) return null;
-  return {
-    amount: amt,
-    cadence: row.cadence,
-    ...(row.cadence === "monthly" ? { day: clampDay(row.day, 1) } : {}),
-  };
+  return { amount: amt, cadence: row.cadence, start: row.start || today };
 }
 
 /** The finished account rows with their contributions attached. */
 export function collectAccountsWith(
-  rows: AccountRows, contributions: ContributionRows,
+  rows: AccountRows, contributions: ContributionRows, today: ISODate = todayISO(),
 ): SetupAccount[] {
   return contributionTargets(rows).map(({ key, account }) => {
-    const contribution = contributionOf(contributions[key]);
+    const contribution = contributionOf(contributions[key], today);
     return contribution ? { ...account, contribution } : account;
   });
 }
@@ -610,20 +620,26 @@ export function contributionName(a: Pick<SetupAccount, "name" | "group">): strin
  * CATEGORIES in model.ts) and the Budget prints it as money kept
  * rather than money gone.
  *
- * A monthly one starts on the next occurrence of its day, today
- * included, exactly like a bill from setup — the same bug was
- * available here and it is the same fix. Weekly and biweekly start
- * today, because this step does not ask for a weekday and inventing
- * one would be worse than the honest answer of "from now".
+ * IT STARTS ON THE DATE THAT WAS ASKED FOR, whatever the cadence.
+ * Until 2026-10-15 only a monthly one had a date of its own — the
+ * next occurrence of a day of the month — and weekly and biweekly
+ * ones started today, because the step did not ask. That is the same
+ * assumption the paycheck step used to make and for the same cost:
+ * every later date is wrong by however far off the real first one
+ * was, and a transfer dated today is counted twice, since the money
+ * is already inside the balance the previous step asked for.
+ *
+ * A date in the past is clamped to today, as `paycheckRule` does.
+ * The forms do not offer one, but this is the definition, and a rule
+ * that starts before the balance it is counted forward from is never
+ * what anybody meant.
  */
 export function contributionRule(
   a: SetupAccount, categoryId: string, today: ISODate = todayISO(),
 ): BudgetItem | null {
   const c = a.contribution;
   if (!c || c.amount <= 0) return null;
-  const start = c.cadence === "monthly" && c.day != null
-    ? firstMonthlyOn(c.day, today)
-    : today;
+  const start = c.start >= today ? c.start : today;
   return {
     id: uid(), name: contributionName(a), amount: c.amount, category: categoryId,
     cadence: c.cadence, startDate: start, dayOfMonth: dayOf(start),
@@ -658,7 +674,7 @@ export function contributionRuleFor(
   row: ContributionRow | undefined,
   today: ISODate = todayISO(),
 ): BudgetItem | null {
-  const contribution = contributionOf(row);
+  const contribution = contributionOf(row, today);
   if (!contribution) return null;
   return contributionRule(
     { name: category.name, amount: 0, group: groupOfCategory(category), contribution },
