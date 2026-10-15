@@ -1,9 +1,7 @@
+import { fmtDate } from "../shared/dates.ts";
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-function prettyDate(iso) {
-  return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 // Read-only account summary that replaces the old editable "check-in bar."
 // Deliberately NOT an input: the old bar committed a new balance on every
@@ -18,7 +16,7 @@ export default function AccountStrip({ account, onUpdateClick }) {
       <span className="text-gray-300 dark:text-gray-700">·</span>
       <span className="font-semibold text-base">{money(account.balance)}</span>
       <span className="text-gray-500">
-        verified {prettyDate(account.balanceAsOf)}
+        verified {fmtDate(account.balanceAsOf)}
       </span>
       <button
         onClick={onUpdateClick}

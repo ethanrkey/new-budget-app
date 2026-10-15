@@ -3,6 +3,7 @@ import { Alert, LayoutAnimation, Pressable, StyleSheet, Text, View } from "react
 import { T, money } from "../lib/theme";
 import * as feel from "../lib/haptics";
 import type { BalanceSnapshot } from "../../src/engine/types.ts";
+import { fmtDate } from "../../src/shared/dates.ts";
 
 const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
@@ -48,7 +49,7 @@ export default function HistoryList({
     feel.warning();
     return Alert.alert(
       copy.confirmTitle,
-      `${money(e.amount)} on ${e.date}. ${copy.confirmBody}`,
+      `${money(e.amount)} on ${fmtDate(e.date)}. ${copy.confirmBody}`,
       [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: () => onDelete(e) }]
     );
   };
@@ -68,9 +69,9 @@ export default function HistoryList({
                 disabled={!online}
                 onPress={() => onEdit(e)}
                 accessibilityRole="button"
-                accessibilityLabel={`Edit the reading of ${money(e.amount)} on ${e.date}`}
+                accessibilityLabel={`Edit the reading of ${money(e.amount)} on ${fmtDate(e.date)}`}
               >
-                <Text style={styles.histDate}>{e.date}</Text>
+                <Text style={styles.histDate}>{fmtDate(e.date)}</Text>
                 <Text style={styles.histAmt}>{money(e.amount)}</Text>
               </Pressable>
               <Pressable
@@ -78,7 +79,7 @@ export default function HistoryList({
                 disabled={!online}
                 onPress={() => confirmDelete(e)}
                 accessibilityRole="button"
-                accessibilityLabel={`Delete the reading of ${money(e.amount)} on ${e.date}`}
+                accessibilityLabel={`Delete the reading of ${money(e.amount)} on ${fmtDate(e.date)}`}
               >
                 <Text style={[styles.histDelText, !online && { color: T.faint }]}>✕</Text>
               </Pressable>

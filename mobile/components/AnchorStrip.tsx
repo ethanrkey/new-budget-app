@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { T, money } from "../lib/theme";
 import { useBudget } from "./StateProvider";
 import { primaryAccount } from "../../src/engine/model.ts";
+import { fmtDate } from "../../src/shared/dates.ts";
 
 // The verified checking balance, on every tab.
 //
@@ -47,13 +48,13 @@ export default function AnchorStrip({ onPress }: { onPress?: () => void }) {
       accessibilityRole={onPress && online ? "button" : "summary"}
       accessibilityLabel={
         onPress && online
-          ? `${account.name} ${money(account.balance)}, verified ${account.balanceAsOf}. Update the balance.`
+          ? `${account.name} ${money(account.balance)}, verified ${fmtDate(account.balanceAsOf)}. Update the balance.`
           : undefined
       }
     >
       <Text style={styles.name} numberOfLines={1}>{account.name}</Text>
       <Text style={styles.amount}>{money(account.balance)}</Text>
-      <Text style={styles.asOf}>verified {account.balanceAsOf}</Text>
+      <Text style={styles.asOf}>verified {fmtDate(account.balanceAsOf)}</Text>
     </Pressable>
   );
 }

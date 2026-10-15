@@ -197,7 +197,7 @@ test("a balance that would hide rows names them before writing anything", async 
   expect(await screen.findByText("This will hide rows already in your ledger")).toBeOnTheScreen();
   // The row by name, date and amount, so it can be recognized.
   expect(screen.getByText("Electric")).toBeOnTheScreen();
-  expect(screen.getByText("2026-10-03")).toBeOnTheScreen();
+  expect(screen.getByText("10/03/2026")).toBeOnTheScreen();
   // The row that survives is not listed.
   expect(screen.queryByText("Gym")).toBeNull();
   // And the way out for the case that costs money.

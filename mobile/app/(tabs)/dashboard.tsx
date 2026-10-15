@@ -30,6 +30,7 @@ import { computeLoanProgress, computeDebtSummary } from "../../../src/engine/loa
 import { primaryAccount, todayISO } from "../../../src/engine/model.ts";
 import { accountColor, roleOfTrackerCategory, roleSuffix, LOAN_COLOR, DEGRADED_SOLID } from "../../../src/engine/palette.ts";
 import type { BalanceSnapshot, TrackerCategory } from "../../../src/engine/types.ts";
+import { fmtDate } from "../../../src/shared/dates.ts";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -136,7 +137,7 @@ export default function DashboardScreen() {
         onEditEntry={(e) => setEditing({ catId: null, id: e.id, amount: e.amount, date: e.date })}
         onDeleteEntry={(e) => void commit(
           (st) => deleteAccountSnapshot(st, account.id, e.id),
-          `${account.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
+          `${account.name} reading of ${money(e.amount)} on ${fmtDate(e.date)} deleted`)}
       />
 
       {/* THE ACCOUNT'S OWN HUE, stored on the category, so it is the same
@@ -156,7 +157,7 @@ export default function DashboardScreen() {
             `${cat.name} contribution of ${money(e.amount)} deleted`)}
           onDeleteEntry={(e) => void commit(
             (st) => deleteBalanceSnapshot(st, cat.id, e.id),
-            `${cat.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
+            `${cat.name} reading of ${money(e.amount)} on ${fmtDate(e.date)} deleted`)}
         />
       ))}
       {/* The end of the savings section, and the only way to start one
@@ -220,7 +221,7 @@ export default function DashboardScreen() {
           onEditEntry={(e) => setEditing({ catId: cat.id, id: e.id, amount: e.amount, date: e.date })}
           onDeleteEntry={(e) => void commit(
             (st) => deleteBalanceSnapshot(st, cat.id, e.id),
-            `${cat.name} reading of ${money(e.amount)} on ${e.date} deleted`)}
+            `${cat.name} reading of ${money(e.amount)} on ${fmtDate(e.date)} deleted`)}
         />
       ))}
 
@@ -307,7 +308,7 @@ export default function DashboardScreen() {
       {editingContrib && (
         <LogBalance
           title="Edit this contribution"
-          currentLabel={`Currently ${money(editingContrib.amount)}, logged ${editingContrib.date}`}
+          currentLabel={`Currently ${money(editingContrib.amount)}, logged ${fmtDate(editingContrib.date)}`}
           cta="Save"
           busy={saving}
           onClose={() => setEditingContrib(null)}
@@ -325,7 +326,7 @@ export default function DashboardScreen() {
       {editing && (
         <LogBalance
           title="Edit this reading"
-          currentLabel={`Currently ${money(editing.amount)}, logged ${editing.date}`}
+          currentLabel={`Currently ${money(editing.amount)}, logged ${fmtDate(editing.date)}`}
           cta="Save"
           warn={editing.catId === null}
           busy={saving}
@@ -382,7 +383,7 @@ function AccountCard({ name, balance, asOf, history, color, chartW, online, onLo
         </Pressable>
       </View>
       <Text style={styles.cardNum}>{money(balance)}</Text>
-      <Text style={styles.dim}>verified {asOf}</Text>
+      <Text style={styles.dim}>verified {fmtDate(asOf)}</Text>
       <Sparkline points={history} color={color} width={chartW} />
       <HistoryList entries={history} online={online} onEdit={onEditEntry} onDelete={onDeleteEntry} />
     </View>
@@ -421,7 +422,7 @@ function AssetCard({
         {latest ? money(latest.amount) : "—"}
       </Text>
       <Text style={styles.dim}>
-        {latest ? `logged ${latest.date}` : "Add what's in it today and the Dashboard can show you where you stand."}
+        {latest ? `logged ${fmtDate(latest.date)}` : "Add what's in it today and the Dashboard can show you where you stand."}
       </Text>
       <Sparkline points={history.map((h) => ({ date: h.date, amount: h.amount }))} color={color} width={chartW} />
 
@@ -506,7 +507,7 @@ function DebtCard({ cat, today, online, onLog, onEdit, onEditEntry, onDeleteEntr
       </Text>
       <Text style={styles.dim}>
         {p?.outstanding != null && history.length
-          ? `outstanding · logged ${history[history.length - 1]!.date}`
+          ? `outstanding · logged ${fmtDate(history[history.length - 1]!.date)}`
           : "Log what you owe today to see how far along you are."}
       </Text>
 

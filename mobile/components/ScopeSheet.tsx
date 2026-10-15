@@ -2,6 +2,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { T } from "../lib/theme";
 import type { ScopeAction } from "../lib/edit";
 import * as feel from "../lib/haptics";
+import { fmtDate } from "../../src/shared/dates.ts";
 
 // WHAT DO YOU MEAN, asked before the editor opens.
 //
@@ -26,17 +27,15 @@ import * as feel from "../lib/haptics";
 // screen, so that picking "edit" swaps what is inside a sheet that is
 // already up rather than dismissing one modal and presenting another.
 // See BottomSheet for the bug that taught us.
-const prettyDate = (iso: string) =>
-  new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 function labelFor(a: ScopeAction, name: string): { text: string; sub?: string; destructive?: boolean } {
   switch (a.kind) {
     case "edit-occurrence":
-      return { text: `Edit just ${prettyDate(a.date)}`, sub: "Every other date keeps the rule's amount" };
+      return { text: `Edit just ${fmtDate(a.date)}`, sub: "Every other date keeps the rule's amount" };
     case "edit-rule":
       return { text: `Edit every ${name}`, sub: "Changes the rule, and so every date it generates" };
     case "reset-occurrence":
-      return { text: `Reset ${prettyDate(a.date)} to the rule`, sub: "Drops this date's own amount" };
+      return { text: `Reset ${fmtDate(a.date)} to the rule`, sub: "Drops this date's own amount" };
     case "delete-rule":
       return { text: `Delete ${name}`, sub: "Removes the rule and every date it generates", destructive: true };
   }

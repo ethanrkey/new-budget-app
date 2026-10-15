@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { fmtDate } from "../shared/dates.ts";
 
 // The most destructive action in the app, and the one Apple requires to be
 // reachable in-app. Two things it does NOT do:
@@ -31,7 +32,7 @@ export default function DeleteAccount({ email, request, onRequest, onCancel }) {
         <p className="font-semibold text-expense">Your account is scheduled for deletion.</p>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
           Everything is permanently deleted on{" "}
-          <strong>{when.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</strong>
+          <strong>{fmtDate(when.toISOString().slice(0, 10))}</strong>
           {days > 0 ? ` — ${days} day${days === 1 ? "" : "s"} from now.` : " — today."}{" "}
           You can still use the app until then, and canceling undoes this completely.
         </p>

@@ -7,6 +7,7 @@ import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
 import { todayISO } from "../../src/engine/model.ts";
 import { HIDDEN_ROWS_COPY as HIDDEN } from "../../src/content/logBalance.ts";
+import { fmtDate } from "../../src/shared/dates.ts";
 
 // The first write surface on the phone, and the right one to be first:
 // logging a balance is what you do standing in front of your bank app,
@@ -61,7 +62,7 @@ export default function LogBalance({
               <ScrollView style={styles.hiddenList} contentContainerStyle={{ paddingVertical: 4 }}>
                 {confirming.map((r) => (
                   <View key={r.id} style={styles.hiddenRow}>
-                    <Text style={styles.hiddenDate}>{r.date}</Text>
+                    <Text style={styles.hiddenDate}>{fmtDate(r.date)}</Text>
                     <Text style={styles.hiddenName} numberOfLines={1}>{r.name}</Text>
                     <Text style={styles.hiddenAmount}>{money(r.amount)}</Text>
                   </View>
@@ -107,9 +108,9 @@ export default function LogBalance({
             style={styles.field}
             onPress={() => setPicking(true)}
             accessibilityRole="button"
-            accessibilityLabel={`As of ${date}. Change the date.`}
+            accessibilityLabel={`As of ${fmtDate(date)}. Change the date.`}
           >
-            <Text style={{ color: T.text, fontSize: 16 }}>{date}</Text>
+            <Text style={{ color: T.text, fontSize: 16 }}>{fmtDate(date)}</Text>
           </Pressable>
           {picking && (
             <DatePicker value={date} onPick={setDate} onClose={() => setPicking(false)} />
@@ -151,7 +152,7 @@ export default function LogBalance({
 }
 
 export const currently = (balance: number | null, asOf: string | null) =>
-  balance == null ? undefined : `Currently ${money(balance)}, verified ${asOf}`;
+  balance == null ? undefined : `Currently ${money(balance)}, verified ${fmtDate(asOf)}`;
 
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
 import { defaultCategoryFor, categoryOnModeChange } from "../shared/entryDefaults.ts";
+import { fmtDate } from "../shared/dates.ts";
 
 const money = (n) =>
   Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -188,7 +189,7 @@ export default function QuickEntry({ onAdd, onRemove, onClose, trackerCategories
                   {it.name}{" "}
                   <span className="text-gray-400">
                     — {categoryLabel(it.category)}
-                    {it.cadence ? ` · ${CADENCE_LABEL[it.cadence]}` : ` · ${it.date}`}
+                    {it.cadence ? ` · ${CADENCE_LABEL[it.cadence]}` : ` · ${fmtDate(it.date)}`}
                   </span>
                 </span>
                 <span className="flex items-center gap-2 shrink-0 pl-2">

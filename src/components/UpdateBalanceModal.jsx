@@ -2,6 +2,7 @@ import { useState } from "react";
 import { todayISO } from "../engine/model.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 import { HIDDEN_ROWS_COPY as HIDDEN } from "../content/logBalance.ts";
+import { fmtDate } from "../shared/dates.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -66,7 +67,7 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
             <ul className="max-h-52 overflow-y-auto border-y border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
               {confirming.map((r) => (
                 <li key={r.id} className="flex items-baseline gap-3 py-1.5 text-sm">
-                  <span className="w-24 shrink-0 tabular-nums text-gray-500">{r.date}</span>
+                  <span className="w-24 shrink-0 tabular-nums text-gray-500">{fmtDate(r.date)}</span>
                   <span className="grow truncate">{r.name}</span>
                   <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">{money(r.amount)}</span>
                 </li>
@@ -96,7 +97,7 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
               Enter the current balance of your primary checking account and the date you checked it.
               Transactions dated before that date will drop out of the ledger, since the balance
               already accounts for them — make sure none of them are bills you still owe.
-              Currently {money(account.balance)}, verified {account.balanceAsOf}.
+              Currently {money(account.balance)}, verified {fmtDate(account.balanceAsOf)}.
             </>
           )}
         </p>

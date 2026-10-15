@@ -15,6 +15,7 @@ import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, WEEKDAY_OPTIONS,
 } from "../../src/content/setup.ts";
 import { emptyBillRow } from "../../src/engine/setup.ts";
+import { fmtDate } from "../../src/shared/dates.ts";
 import type { SetupAnswers, SetupCadence } from "../../src/engine/setup.ts";
 import type { BudgetItem } from "../../src/engine/types.ts";
 
@@ -167,13 +168,13 @@ export default function Setup({
                     style={[styles.input, styles.pickRow]}
                     onPress={() => { Keyboard.dismiss(); reveal(payday.current); setPickingPayday(true); }}
                     accessibilityRole="button"
-                    accessibilityLabel={`${COPY.paycheck.paydayLabel} ${d.payday}. Change the date.`}
+                    accessibilityLabel={`${COPY.paycheck.paydayLabel} ${fmtDate(d.payday)}. Change the date.`}
                   >
                     {/* It LOOKS like a control now. A date in a box that
                         is the same shape as the text fields above it
                         reads as something already filled in, which is
                         half of why it was not tapped. */}
-                    <Text style={styles.inputText}>{d.payday}</Text>
+                    <Text style={styles.inputText}>{fmtDate(d.payday)}</Text>
                     <Text style={styles.pickCue}>Change ›</Text>
                   </Pressable>
                   <Text style={styles.note}>{COPY.paycheck.paydayHelp}</Text>

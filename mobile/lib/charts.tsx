@@ -3,6 +3,7 @@ import { PanResponder, Text, View } from "react-native";
 import * as feel from "./haptics";
 import Svg, { Circle, Path, Polyline, Rect } from "react-native-svg";
 import { T, money } from "./theme";
+import { fmtDate } from "../../src/shared/dates.ts";
 
 // Charts are HAND-ROLLED on react-native-svg rather than pulled from a
 // library, and the reason is the shapes: a sparkline and a horizontal bar
@@ -228,7 +229,7 @@ export function Sparkline({
             {money(points[shown]!.amount)}
           </Text>
           <Text style={{ color: T.faint, fontSize: 10, lineHeight: 12 }} numberOfLines={1}>
-            {prettyDay(points[shown]!.date)}
+            {fmtDate(points[shown]!.date)}
           </Text>
         </View>
       </View>
@@ -266,9 +267,6 @@ export function Sparkline({
     </View>
   );
 }
-
-const prettyDay = (iso: string) =>
-  new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 export function HBar({ pct, color, width }: { pct: number; color: string; width: number }) {
   const w = Math.max(0, Math.min(1, pct)) * width;

@@ -6,6 +6,7 @@ import InfoTip from "./InfoTip.jsx";
 import SpendingMix from "./SpendingMix.jsx";
 import CalendarView from "./CalendarView.jsx";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
+import { fmtDate } from "../shared/dates.ts";
 
 const money = (n) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -304,7 +305,7 @@ function FragmentGroup({ group, sortedCats, visibleIds, colCount, selectMode, se
               </td>
             )}
             <td className="py-2 sm:py-1.5 pr-3 text-gray-500 whitespace-nowrap">
-              {dayOf(r.date)}
+              {fmtDate(r.date)}
             </td>
             <td className="py-2 sm:py-1.5 pr-3">
               <button
@@ -368,10 +369,6 @@ function FragmentGroup({ group, sortedCats, visibleIds, colCount, selectMode, se
 function stepCell(r, key) {
   if (r.stepped && r.stepped.key === key) return money(r.stepped.value);
   return "";
-}
-function dayOf(iso) {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleString("en-US", { month: "short", day: "numeric" });
 }
 // A ledger row id is "<itemId>@<date>". DELETE strips the date because it
 // removes the whole rule; EDIT must NOT, because the date is what lets the

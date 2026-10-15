@@ -10,6 +10,7 @@
 //
 // Same pattern as the category manager: its own modal, "← Back to Settings"
 // top-left, "Done" top-right. Back returns to Settings; Done closes the lot.
+import { fmtDate } from "../shared/dates.ts";
 const PROVIDER_LABEL = { google: "Google", email: "Email", apple: "Apple", github: "GitHub" };
 
 // Which identity provider actually signed you in. Supabase keeps the list on
@@ -47,7 +48,7 @@ export default function AccountScreen({ email, providers, createdAt, onSignOut, 
           <Fact
             term="Member since"
             value={createdAt
-              ? new Date(createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+              ? fmtDate(new Date(createdAt).toISOString().slice(0, 10))
               : "—"}
           />
         </dl>

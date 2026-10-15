@@ -126,12 +126,12 @@ describe("the scope sheet opens the editor", () => {
     await render(<Host rowId="r-rent@2026-12-01" />);
     expect(screen.getByText("Rent")).toBeTruthy();
 
-    await userEvent.press(screen.getByLabelText("Edit just Dec 1"));
+    await userEvent.press(screen.getByLabelText("Edit just 12/01/2026"));
 
     // Before the one-modal fix this found nothing: the scope sheet went
     // away and no editor arrived.
-    expect(screen.getByText("Rent on Dec 1, 2026")).toBeTruthy();
-    expect(screen.queryByLabelText("Edit just Dec 1")).toBeNull();
+    expect(screen.getByText("Rent on 12/01/2026")).toBeTruthy();
+    expect(screen.queryByLabelText("Edit just 12/01/2026")).toBeNull();
   });
 
   test("picking 'edit every Rent' shows the rule editor", async () => {
@@ -143,7 +143,7 @@ describe("the scope sheet opens the editor", () => {
 
   test("occurrence scope shows ONE field — the rule's fields are not reachable", async () => {
     await render(<Host rowId="r-rent@2026-12-01" />);
-    await userEvent.press(screen.getByLabelText("Edit just Dec 1"));
+    await userEvent.press(screen.getByLabelText("Edit just 12/01/2026"));
     expect(screen.getByLabelText("Amount on this date")).toBeTruthy();
     // The editor has no mode to flip, so these cannot be reached at all.
     expect(screen.queryByLabelText("Name")).toBeNull();
@@ -162,20 +162,20 @@ describe("the scope sheet opens the editor", () => {
 describe("what the scope sheet offers", () => {
   test("a date with its own amount can be reset; delete names the rule", async () => {
     await render(<Host rowId="r-rent@2026-12-01" />);
-    expect(screen.getByLabelText("Edit just Dec 1")).toBeTruthy();
-    expect(screen.getByLabelText("Reset Dec 1 to the rule")).toBeTruthy();
+    expect(screen.getByLabelText("Edit just 12/01/2026")).toBeTruthy();
+    expect(screen.getByLabelText("Reset 12/01/2026 to the rule")).toBeTruthy();
     expect(screen.getByLabelText("Delete Rent")).toBeTruthy();
     expect(screen.getByText("Removes the rule and every date it generates")).toBeTruthy();
   });
 
   test("a date with no override offers no reset", async () => {
     await render(<Host rowId="r-rent@2026-11-01" />);
-    expect(screen.queryByLabelText("Reset Nov 1 to the rule")).toBeNull();
+    expect(screen.queryByLabelText("Reset 11/01/2026 to the rule")).toBeNull();
   });
 
   test("a one-off has no occurrence scope", async () => {
     await render(<Host rowId="o-dent@2026-10-14" />);
-    expect(screen.queryByLabelText("Edit just Oct 14")).toBeNull();
+    expect(screen.queryByLabelText("Edit just 10/14/2026")).toBeNull();
     expect(screen.getByLabelText("Edit every Dentist")).toBeTruthy();
   });
 
@@ -292,10 +292,10 @@ describe("the dashboard", () => {
     await render(<HistoryList entries={snaps} online onEdit={onEdit} onDelete={onDelete} />);
 
     await userEvent.press(screen.getByText("Show history (3)"));
-    await userEvent.press(screen.getByLabelText("Edit the reading of $200.00 on 2026-08-01"));
+    await userEvent.press(screen.getByLabelText("Edit the reading of $200.00 on 08/01/2026"));
     expect(onEdit).toHaveBeenCalledWith(snaps[1]);
 
-    await userEvent.press(screen.getByLabelText("Delete the reading of $100.00 on 2026-07-01"));
+    await userEvent.press(screen.getByLabelText("Delete the reading of $100.00 on 07/01/2026"));
     expect(onDelete).not.toHaveBeenCalled();            // confirmed first
     const buttons = (spy.mock.calls[0] as any)[2];
     expect(buttons.map((b: any) => b.style)).toEqual(["cancel", "destructive"]);
@@ -308,7 +308,7 @@ describe("the dashboard", () => {
     const onEdit = jest.fn();
     await render(<HistoryList entries={snaps} online={false} onEdit={onEdit} onDelete={() => {}} />);
     await userEvent.press(screen.getByText("Show history (3)"));
-    expect(screen.getByLabelText("Edit the reading of $200.00 on 2026-08-01")).toBeDisabled();
+    expect(screen.getByLabelText("Edit the reading of $200.00 on 08/01/2026")).toBeDisabled();
   });
 
   /**
@@ -363,7 +363,7 @@ describe("the dashboard", () => {
     // card. Two tiers since 2026-10-14: the amount at reading size,
     // the date under it.
     expect(screen.getByTestId("sparkline-readout")).toHaveTextContent("$300.00");
-    expect(screen.getByText("Sep 1")).toBeTruthy();
+    expect(screen.getByText("09/01/2026")).toBeTruthy();
   });
 
   test("at rest nothing is dimmed and there is no guide line", async () => {

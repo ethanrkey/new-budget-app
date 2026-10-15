@@ -4,6 +4,7 @@ import { HBar } from "../lib/charts";
 import { T, money } from "../lib/theme";
 import { sliceFill, DEGRADED_SOLID } from "../../src/engine/palette.ts";
 import type { SpendingMix as Mix, SpendingSlice } from "../../src/engine/types.ts";
+import { fmtDate } from "../../src/shared/dates.ts";
 
 // The web panel, same data and same rules, different primitives.
 // Carried over verbatim because they are rules, not layout:
@@ -12,8 +13,6 @@ import type { SpendingMix as Mix, SpendingSlice } from "../../src/engine/types.t
 //   - the pie NEVER re-shapes; Other expands in the legend only
 //   - the bar expands rows in place
 //   - open replaces the Other row rather than nesting under it
-const prettyDate = (iso: string) =>
-  new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export default function SpendingMix({ mix }: { mix: Mix }) {
   const { width } = useWindowDimensions();
@@ -43,7 +42,7 @@ export default function SpendingMix({ mix }: { mix: Mix }) {
       {open && (
         <View style={styles.body}>
           <Text style={styles.caption}>
-            Projected from your rules for {prettyDate(mix.from)} – {prettyDate(mix.to)} — not what
+            Projected from your rules for {fmtDate(mix.from)} – {fmtDate(mix.to)} — not what
             you&apos;ve logged. Income is excluded.
           </Text>
 

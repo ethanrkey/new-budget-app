@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabase";
 import { useBudget } from "./StateProvider";
 import { wipeToNewAccount } from "../../src/engine/mutate.ts";
 import type { Session } from "@supabase/supabase-js";
+import { fmtDate } from "../../src/shared/dates.ts";
 
 // Everything the web header holds, behind ONE affordance.
 //
@@ -41,7 +42,7 @@ export default function Settings({
   const providers = (session.user.app_metadata?.providers ?? []) as string[];
   const via = providers.map((p) => PROVIDER_LABEL[p] ?? p).join(" and ") || "—";
   const since = session.user.created_at
-    ? new Date(session.user.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    ? fmtDate(new Date(session.user.created_at).toISOString().slice(0, 10))
     : "—";
 
   useEffect(() => {
@@ -189,7 +190,7 @@ export default function Settings({
               <Text style={[styles.actionText, styles.danger]}>Deletion scheduled</Text>
               <Text style={styles.rowSub}>
                 Your whole account — the sign-in included — is scheduled for deletion on{" "}
-                {new Date(deletion.purge_after).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.
+                {fmtDate(new Date(deletion.purge_after).toISOString().slice(0, 10))}.
                 You can still cancel.
               </Text>
               <Pressable style={styles.btn} onPress={() => void cancelDeletion()} disabled={deleting}

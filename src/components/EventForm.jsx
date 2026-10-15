@@ -2,11 +2,10 @@ import { useState } from "react";
 import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
 import { initialCategory, categoryOnModeChange } from "../shared/entryDefaults.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
+import { fmtDate } from "../shared/dates.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
-const prettyDate = (iso) =>
-  new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export default function EventForm({
   onSave, onCancel, onDelete, initial, trackerCategories = [], presetCategory,
@@ -154,7 +153,7 @@ export default function EventForm({
             </div>
             <p className="text-xs text-gray-500 mt-1.5">
               {occScope
-                ? <>Changing {initial.name} on {prettyDate(occurrenceDate)} only. Every other date keeps the rule&apos;s amount.</>
+                ? <>Changing {initial.name} on {fmtDate(occurrenceDate)} only. Every other date keeps the rule&apos;s amount.</>
                 : <>Changing the rule for {initial.name} — every date, past and future. Dates you&apos;ve already given their own amount keep it.</>}
             </p>
           </div>
@@ -163,7 +162,7 @@ export default function EventForm({
         {occScope ? (
           <div className="space-y-3">
             <div>
-              <label className={label}>Amount on {prettyDate(occurrenceDate)}</label>
+              <label className={label}>Amount on {fmtDate(occurrenceDate)}</label>
               <input
                 className={field}
                 type="number"
@@ -305,7 +304,7 @@ export default function EventForm({
             </p>
             <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
               An override belongs to a date. Moving the rule means it no longer lands on{" "}
-              {pendingOrphans.slice(0, 3).map(prettyDate).join(", ")}
+              {pendingOrphans.slice(0, 3).map(fmtDate).join(", ")}
               {pendingOrphans.length > 3 && ` and ${pendingOrphans.length - 3} more`}, so{" "}
               {pendingOrphans.length === 1 ? "that date reverts" : "those dates revert"} to the rule&apos;s amount.
             </p>

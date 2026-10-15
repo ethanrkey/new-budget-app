@@ -9,16 +9,11 @@ import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 import UpdateBalanceModal from "./UpdateBalanceModal.jsx";
 import LoanSetupModal from "./LoanSetupModal.jsx";
 import AssetSetupModal from "./AssetSetupModal.jsx";
+import { fmtDate, fmtDay } from "../shared/dates.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-function prettyDate(iso) {
-  return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-function shortDate(iso) {
-  return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric" });
-}
 // `sortedSnaps` used to live here and is gone as of 2026-10-10. It was a
 // local repair for a missing guarantee: the lists arrive sorted now,
 // established in `assembleState` and in `normalize`, with an invariant
@@ -249,7 +244,7 @@ function ChartTip({ active, payload, label, color }) {
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs shadow-lg">
       {/* The ISO date rides along on the datum. `label` is the x value,
           which is a timestamp now that the axis is a real time axis. */}
-      <div className="text-gray-500 mb-1">{prettyDate(payload[0]?.payload?.date ?? label)}</div>
+      <div className="text-gray-500 mb-1">{fmtDate(payload[0]?.payload?.date ?? label)}</div>
       {payload.map((p) => (
         <div key={p.dataKey} className="flex items-center gap-2 tabular-nums">
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.dataKey === "amount" ? color : "#9ca3af" }} />
@@ -272,7 +267,7 @@ function HistoryChart({ data, color, isDark, emptyHint }) {
     return (
       <div className="h-40 rounded-xl bg-gray-50 dark:bg-gray-800/40 flex items-center justify-center text-center px-6">
         <p className="text-xs text-gray-400">
-          {points.length === 1 ? `One point so far (${shortDate(points[0].date)}). ` : ""}
+          {points.length === 1 ? `One point so far (${fmtDay(points[0].date)}). ` : ""}
           {emptyHint}
         </p>
       </div>
@@ -297,7 +292,7 @@ function HistoryChart({ data, color, isDark, emptyHint }) {
         <LineChart data={series} margin={{ top: 8, right: 12, bottom: 0, left: 12 }}>
           <XAxis
             dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]}
-            tickFormatter={(t) => shortDate(new Date(t).toISOString().slice(0, 10))}
+            tickFormatter={(t) => fmtDay(new Date(t).toISOString().slice(0, 10))}
             tick={{ fontSize: 11, fill: axis }} axisLine={false} tickLine={false}
             interval="preserveStartEnd" minTickGap={28}
           />
@@ -361,7 +356,7 @@ function HistoryRow({ entry, onUpdate, onDelete }) {
         </>
       ) : (
         <>
-          <span className="text-gray-400 w-24 shrink-0 text-xs">{entry.date}</span>
+          <span className="text-gray-400 w-24 shrink-0 text-xs">{fmtDate(entry.date)}</span>
           <button onClick={() => { setDraftAmount(entry.amount); setDraftDate(entry.date); setEditing(true); }} title="Edit" className="font-medium tabular-nums hover:underline decoration-dotted underline-offset-2">
             {money(entry.amount)}
           </button>
@@ -391,7 +386,7 @@ function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, 
         <div>
           <div className={LABEL}>{account.name}</div>
           <div className="mt-1 text-2xl font-semibold tabular-nums">{money(account.balance)}</div>
-          <div className="text-xs text-gray-500">verified {prettyDate(account.balanceAsOf)}</div>
+          <div className="text-xs text-gray-500">verified {fmtDate(account.balanceAsOf)}</div>
         </div>
         <button onClick={onUpdate} className={BTN}>Update balance</button>
       </div>
@@ -441,7 +436,7 @@ function AssetCard({ category, color, isDark, history, contributions, today, onL
           </div>
           <div className="text-xs text-gray-500">
             {latest
-              ? `logged ${prettyDate(latest.date)}`
+              ? `logged ${fmtDate(latest.date)}`
               : "Add what's in it today and the Dashboard can show you where you stand."}
           </div>
         </div>
@@ -543,7 +538,7 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
           </div>
           <div className="text-xs text-gray-500">
             {latest
-              ? `outstanding · logged ${prettyDate(latest.date)}`
+              ? `outstanding · logged ${fmtDate(latest.date)}`
               : "Add what you owe today and the Dashboard can show you where you stand."}
           </div>
         </div>
@@ -588,7 +583,7 @@ function LoanCard({ category, isDark, state, today, progress, history, onLog, on
         <div>
           <div className="text-xs text-gray-500">Terms</div>
           <div className="font-medium tabular-nums">{progress.interestRate}% APR · {money(progress.original)}</div>
-          <div className="text-xs text-gray-400">{interestFrom ? `interest from ${prettyDate(interestFrom)}` : "interest accruing"}</div>
+          <div className="text-xs text-gray-400">{interestFrom ? `interest from ${fmtDate(interestFrom)}` : "interest accruing"}</div>
         </div>
         <div>
           {/* "planned $X" is gone with the rest of the projected display.

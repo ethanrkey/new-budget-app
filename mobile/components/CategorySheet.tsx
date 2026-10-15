@@ -8,6 +8,7 @@ import { T } from "../lib/theme";
 import {
   type CategoryDraft, categoryDraftError,
 } from "../lib/categories";
+import { fmtDate } from "../../src/shared/dates.ts";
 
 // Add or edit one savings account, investment or loan.
 //
@@ -168,9 +169,9 @@ export default function CategorySheet({
                       style={styles.field}
                       onPress={() => setPicking("asOf")}
                       accessibilityRole="button"
-                      accessibilityLabel={`As of ${d.asOf}. Change the date.`}
+                      accessibilityLabel={`As of ${fmtDate(d.asOf)}. Change the date.`}
                     >
-                      <Text style={styles.fieldText}>{d.asOf}</Text>
+                      <Text style={styles.fieldText}>{fmtDate(d.asOf)}</Text>
                     </Pressable>
                   </>
                 )}

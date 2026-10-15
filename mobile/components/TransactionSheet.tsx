@@ -9,6 +9,7 @@ import { categoryOnModeChange } from "../../src/shared/entryDefaults.ts";
 import { CADENCES } from "../../src/engine/model.ts";
 import { blankDraft, draftOf, draftError, overrideError, canTrackActuals, type Draft } from "../lib/edit";
 import type { BudgetItem, BudgetState, ISODate, Cadence } from "../../src/engine/types.ts";
+import { fmtDate } from "../../src/shared/dates.ts";
 
 // The editor. It has NO SCOPE CONTROL, which is the point of asking first:
 // in occurrence mode it shows one field, because one field is all that
@@ -25,8 +26,6 @@ import type { BudgetItem, BudgetState, ISODate, Cadence } from "../../src/engine
 const CADENCE_LABEL: Record<Cadence, string> = {
   weekly: "Weekly", biweekly: "Every 2 weeks", monthly: "Monthly", yearly: "Yearly",
 };
-const prettyDate = (iso: string) =>
-  new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 export type SheetMode =
   | { kind: "add" }
@@ -77,7 +76,7 @@ export default function TransactionSheet({
     const err = overrideError(occAmount);
     return (
       <Sheet onClose={onClose}>
-        <Text style={styles.title}>{mode.item.name} on {prettyDate(mode.date)}</Text>
+        <Text style={styles.title}>{mode.item.name} on {fmtDate(mode.date)}</Text>
         <Text style={styles.dim}>
           Only this date. Every other date keeps the rule&apos;s {money(mode.item.amount)}.
         </Text>
@@ -251,7 +250,9 @@ const Field = ({ label, children }: { label: string; children: React.ReactNode }
 
 const DateField = ({ value, onPress }: { value: string; onPress: () => void }) => (
   <Pressable style={styles.field} onPress={onPress} accessibilityRole="button">
-    <Text style={{ color: value.startsWith("No ") ? T.faint : T.text, fontSize: 16 }}>{value}</Text>
+    {/* fmtDate leaves a non-date alone, which is what makes the
+        "No end date" placeholder work through the same path. */}
+    <Text style={{ color: value.startsWith("No ") ? T.faint : T.text, fontSize: 16 }}>{fmtDate(value)}</Text>
   </Pressable>
 );
 

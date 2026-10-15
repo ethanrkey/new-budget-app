@@ -1,5 +1,6 @@
 import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import { pickerProps } from "./setup";
+import { fmtDate } from "../../src/shared/dates.ts";
 import Setup from "../components/Setup";
 import { applySetup } from "../../src/engine/setup.ts";
 import { normalize } from "../../src/engine/stateShape.ts";
@@ -72,7 +73,8 @@ test("the paycheck step asks when the next payday is, and uses it", async () => 
 
   const today = new Date();
   const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  expect(screen.getByLabelText(new RegExp(`next payday\\?* ${iso}`))).toBeOnTheScreen();
+  // The control reads MM/DD/YYYY, like every other date in the app.
+  expect(screen.getByLabelText(new RegExp(`next payday\\?* ${fmtDate(iso).replace(/\//g, "\\/")}`))).toBeOnTheScreen();
 
   await userEvent.type(screen.getByLabelText("Amount"), "2100");
   await userEvent.press(screen.getByLabelText(new RegExp(`next payday`)));

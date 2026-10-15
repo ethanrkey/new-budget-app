@@ -22,9 +22,8 @@ import {
   type Draft, type ScopeAction,
 } from "../../lib/edit";
 import type { BudgetItem } from "../../../src/engine/types.ts";
+import { fmtDate } from "../../../src/shared/dates.ts";
 
-const prettyDate = (iso: string) =>
-  new Date(iso + "T00:00:00Z").toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
 export default function LedgerScreen() {
   const { state, pullToRefresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
@@ -91,7 +90,7 @@ export default function LedgerScreen() {
     // failure modal was presenting — the same race, one layer along, and
     // a conflict comes back fast enough to hit it.
     const ok = a.kind === "reset-occurrence"
-      ? await commit(resetOccurrence(item.id, a.date), `${item.name} on ${prettyDate(a.date)} reset to the rule`)
+      ? await commit(resetOccurrence(item.id, a.date), `${item.name} on ${fmtDate(a.date)} reset to the rule`)
       : await commit(removeItem(item.id), `${item.name} deleted`);
     if (ok) setScopeFor(null);
   }
@@ -105,7 +104,7 @@ export default function LedgerScreen() {
   async function submitOccurrence(amount: string) {
     if (!sheet || sheet.kind !== "occurrence") return;
     const { item, date } = sheet;
-    const ok = await commit(saveOccurrence(item.id, date, amount), `${item.name} on ${prettyDate(date)}`);
+    const ok = await commit(saveOccurrence(item.id, date, amount), `${item.name} on ${fmtDate(date)}`);
     if (ok) setSheet(null);
   }
 
@@ -211,7 +210,7 @@ export default function LedgerScreen() {
               // twice over and only one of them is a buzz.
               onPress={() => { feel.selection(); setScopeFor(item.id); }}
               accessibilityRole="button"
-              accessibilityLabel={`${item.name}, ${prettyDate(item.date)}, ${money(item.amount)}`}
+              accessibilityLabel={`${item.name}, ${fmtDate(item.date)}, ${money(item.amount)}`}
             >
               <Text style={styles.day}>{item.date.slice(8)}</Text>
               <View style={styles.name}>
