@@ -16,7 +16,8 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-15: 113 mutations, 113 killed. (2026-10-13: 94/86.)
+// Measured 2026-10-15: 136 mutations, 136 killed, 127 renderer tests.
+// (Earlier that day: 113/113. 2026-10-13: 94/86.)
 //
 // The 2026-10-13 note, kept because it is this file's whole argument: — one
 // survived and two new tests could not be killed by anything:
@@ -112,7 +113,7 @@ const MUTATIONS = [
   ["history delete fires without confirming", "components/HistoryList.tsx",
    'onPress={() => confirmDelete(e)}', 'onPress={() => onDelete(e)}'],
   ["reset option loses its date", "components/ScopeSheet.tsx",
-   'return { text: `Reset ${prettyDate(a.date)} to the rule`',
+   'return { text: `Reset ${fmtDate(a.date)} to the rule`',
    'return { text: `Reset to the rule`'],
 
   // --- sign-in. Nine tests arrived 2026-10-09 and no mutation could
@@ -230,7 +231,7 @@ const MUTATIONS = [
    'return message || "Google sign-in didn\'t work. Try the emailed code instead.";',
    'return message || "Error.";'],
   ["the Google button is not drawn at all", "components/SignIn.tsx",
-   "{GOOGLE_AVAILABLE && (", "{false && ("],
+   "{GOOGLE_AVAILABLE && <GoogleButton", "{false && <GoogleButton"],
   ["the Google error is swallowed", "components/SignIn.tsx",
    "    if (message) setError(message);", "    // mutated"],
   ["the export goes out as a nameless string again", "components/ExportSheet.tsx",
@@ -354,6 +355,83 @@ const MUTATIONS = [
    "    if (lastTick.current === i) return;", "    // mutated"],
   ["setup ignores the payday it just asked for", "../src/engine/setup.ts",
    "  const start = payday >= today ? payday : today;", "  const start = today;"],
+
+  // ---- the 2026-10-15 device pass, twelve items.
+  // The run before these reported THIRTEEN renderer tests that nothing
+  // could reach — every one of them written that day. Same lesson as
+  // 2026-10-13 and 2026-10-14: a new test file means new entries here,
+  // or the suite is trusted for no reason.
+  ["every bill row inherits the row above's due day again", "components/Setup.tsx",
+   'set("bills", [...d.bills, emptyBillRow(todayISO)])',
+   'set("bills", [...d.bills, { name: "", amount: "", day: d.bills[0]?.day ?? "1" }])'],
+  ["a prefilled due day cannot be retyped, because maxLength swallows the key",
+   "components/Setup.tsx",
+   "        keyboardType=\"number-pad\"\n        selectTextOnFocus",
+   "        keyboardType=\"number-pad\""],
+  ["a new bill row's day is frozen at module load", "../src/engine/setup.ts",
+   "  return String(dayOf(today));", "  return String(dayOf(todayISO()));"],
+
+  ["a setup field stops reporting its focus, so the keyboard can hide it",
+   "components/Setup.tsx",
+   "        onFocus={() => reveal(box.current)}\n        keyboardType=\"decimal-pad\"",
+   "        keyboardType=\"decimal-pad\""],
+  ["the setup scroll view stops making room for the keyboard", "components/Setup.tsx",
+   "              automaticallyAdjustKeyboardInsets\n", ""],
+  ["the payday row stops saying it is a control", "components/Setup.tsx",
+   "<Text style={styles.pickCue}>Change \u203a</Text>", "<Text style={styles.pickCue}></Text>"],
+
+  ["groceries start on the day setup was run again", "../src/engine/setup.ts",
+   "  const start = firstWeekdayOn(weekday, today);", "  const start = today;"],
+  ["the groceries step opens on no particular day", "lib/setup.ts",
+   'groceryCadence: "weekly", groceryDay: 0,', 'groceryCadence: "weekly", groceryDay: 3,'],
+
+  ["the contributions step is offered with nothing to list", "lib/setup.ts",
+   '    (s) => s !== "contributions" || contributionTargets(d.accounts).length > 0',
+   "    () => true"],
+  ["a contribution is named after nothing", "../src/engine/setup.ts",
+   'return a.group === "debt" ? `${a.name} payment` : `To ${a.name}`;', "return a.name;"],
+  ["a contribution lands in the wrong category", "../src/engine/setup.ts",
+   "    id: uid(), name: contributionName(a), amount: c.amount, category: categoryId,",
+   '    id: uid(), name: contributionName(a), amount: c.amount, category: "bill",'],
+  ["Skip on the contributions step keeps what was typed", "components/Setup.tsx",
+   '    if (step === "contributions" && !keep) set("contributions", {});', "    // mutated"],
+  ["the payment day is asked for every cadence", "components/Setup.tsx",
+   '                        {row.cadence === "monthly" && (', "                        {true && ("],
+
+  ["TOTAL OUT loses the tint that separates it from the rows above",
+   "app/(tabs)/budget.tsx",
+   "tone: T.expense, bold: true, fill: T.tintOut, rule: true",
+   "tone: T.expense, bold: true, rule: true"],
+  ["the totals lose the rule above them", "app/(tabs)/budget.tsx",
+   "                  r.rule && styles.ruleAbove,\n                ]}",
+   "                ]}"],
+  ["the rule is drawn in the hairline's own color, which is not a rule",
+   "lib/theme.ts", '  rule: "#374151",', '  rule: "#1f2937",'],
+
+  ["a flick down no longer dismisses the sheet", "components/BottomSheet.tsx",
+   "      if (go) close.current();", "      // mutated"],
+  ["any nudge dismisses the sheet, including an upward one",
+   "components/BottomSheet.tsx",
+   "      const go = g.dy > DISMISS_PX || g.vy > DISMISS_VELOCITY;", "      const go = true;"],
+  ["a clean form is interrupted by a confirm nobody needs", "app/(tabs)/index.tsx",
+   "    if (!sheet || !dirty) { leave(); return; }", "    if (false) { leave(); return; }"],
+  ["leaving a half-typed transaction throws it away silently", "app/(tabs)/index.tsx",
+   "    if (!sheet || !dirty) { leave(); return; }", "    leave(); return;"],
+  ["the form stops reporting whether anything was typed",
+   "components/TransactionSheet.tsx",
+   "  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);", "  // mutated"],
+  ["a typed name does not count as typing", "lib/edit.ts",
+   "    d.name, d.amount, d.category, d.recurring, d.variable,",
+   "    d.amount, d.category, d.recurring, d.variable,"],
+
+  // The one pre-existing test nothing could reach: the picker's
+  // Android branch. Found by the same run, 2026-10-15.
+  ["Android's own cancel is read as a date", "components/DatePicker.tsx",
+   'if (!d || (event as { type?: string })?.type === "dismissed") { onClose(); return; }',
+   "if (!d) { onClose(); return; }"],
+
+  ["a date reaches the screen as ISO again", "../src/shared/dates.ts",
+   "  return `${m}/${d}/${y}`;", "  return iso;"],
 ];
 
 const killedBy = new Map();
