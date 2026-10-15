@@ -143,6 +143,33 @@ describe("the one date picker", () => {
 // away a half-typed transaction by accident, so all four come through
 // one guard — which is why the guard lives on the SCREEN and not in
 // the sheet, and why it is tested here.
+describe("the scope sheet hands over to the editor, on the real screen", () => {
+  // TWO HOSTS SINCE BUILD 9: the form is a system page sheet and the
+  // scope sheet is still the bottom one, which puts the original
+  // two-modal race back on exactly this transition. sheets.test.tsx
+  // checks the same wiring on a copy of it; this one is the screen,
+  // because a copy that has drifted proves nothing.
+  test("picking 'edit every Rent' opens the editor once the scope sheet is gone", async () => {
+    await openLedger();
+    await userEvent.press(screen.getAllByLabelText(/^Rent, /)[0]!);
+    expect(await screen.findByLabelText("Edit every Rent")).toBeOnTheScreen();
+
+    // Held while the sheet is up, because that is what UIKit is
+    // holding — and because under jest the Modal leaves the tree the
+    // moment `visible` is false.
+    const fire = screen.getByTestId("bottom-sheet").props.onDismiss as () => void;
+    await userEvent.press(screen.getByLabelText("Edit every Rent"));
+
+    // NOT YET. Presenting now is the bug: iOS swallows a modal
+    // presented while another is still dismissing.
+    expect(screen.queryByText("Edit Rent")).toBeNull();
+
+    await act(async () => { fire(); });
+    expect(screen.getByText("Edit Rent")).toBeOnTheScreen();
+    expect(screen.getByTestId("native-sheet").props.presentationStyle).toBe("pageSheet");
+  });
+});
+
 describe("closing the transaction form", () => {
   /** Alert.alert, captured with its buttons so a test can press one. */
   function captureAlert() {
@@ -159,10 +186,26 @@ describe("closing the transaction form", () => {
     await screen.findByText("Add transaction");
   };
 
+  /**
+   * The swipe, as UIKit reports it.
+   *
+   * The form is a page sheet since build 9, so "swiped down" is not a
+   * gesture this harness synthesizes — it is
+   * `presentationControllerDidAttemptToDismiss` (when the sheet is
+   * held) or `presentationControllerDidDismiss` (when it is not),
+   * both of which RN surfaces as the Modal's `onRequestClose`.
+   */
+  const swipeDown = async () => {
+    await act(async () => { screen.getByTestId("native-sheet").props.onRequestClose(); });
+  };
+
   test("an untouched form just closes — no prompt to learn to ignore", async () => {
     const { seen, restore } = captureAlert();
     await openAdd();
-    await userEvent.press(screen.getByLabelText("Close"));
+    // ...and UIKit is told it may dismiss on its own, which is what
+    // makes the gesture feel like every other sheet on the phone.
+    expect(screen.getByTestId("native-sheet").props.allowSwipeDismissal).toBe(true);
+    await swipeDown();
     expect(seen).toHaveLength(0);
     expect(screen.queryByLabelText("Name")).toBeNull();
     restore();
@@ -172,7 +215,13 @@ describe("closing the transaction form", () => {
     const { seen, restore } = captureAlert();
     await openAdd();
     await userEvent.type(screen.getByLabelText("Name"), "Gym");
-    await userEvent.press(screen.getByLabelText("Close"));
+
+    // THE GUARD IS UIKIT'S, and it is armed BEFORE the gesture:
+    // allowSwipeDismissal false is isModalInPresentation true, so the
+    // sheet refuses to go and reports the attempt instead of sliding
+    // away and having to be put back.
+    expect(screen.getByTestId("native-sheet").props.allowSwipeDismissal).toBe(false);
+    await swipeDown();
 
     expect(seen).toHaveLength(1);
     expect(seen[0]!.title).toBe("Discard changes?");
@@ -186,7 +235,7 @@ describe("closing the transaction form", () => {
     const { seen, restore } = captureAlert();
     await openAdd();
     await userEvent.type(screen.getByLabelText("Name"), "Gym");
-    await userEvent.press(screen.getByLabelText("Close"));
+    await swipeDown();
 
     const discard = seen[0]!.buttons.find((b) => b.text === "Discard")!;
     expect(discard).toBeTruthy();
@@ -195,7 +244,7 @@ describe("closing the transaction form", () => {
     restore();
   });
 
-  test("Cancel goes through the same guard as the scrim does", async () => {
+  test("Cancel goes through the same guard as the swipe does", async () => {
     // The whole reason the guard is on the screen rather than in the
     // sheet: a "Discard changes?" that only covers the button is not
     // a guard.

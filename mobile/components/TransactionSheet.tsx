@@ -251,13 +251,28 @@ export default function TransactionSheet({
 
 // ---- pieces -------------------------------------------------------------
 
+// THE PAGE SHEET IS THE CARD, since build 9.
+//
+// This used to draw one: `maxHeight: "88%"`, rounded top corners and a
+// hairline, sitting at the bottom of a transparent modal's scrim. The
+// form is hosted in a real iOS page sheet now (NativeSheet), and UIKit
+// draws the card — its corners, its inset from the top, its dimming
+// and its drag. Keeping a second card inside it would be a card in a
+// card, and the percentage height had nothing left to be a percentage
+// OF.
+//
+// So this is just the scroller, filling the sheet it is in. `flex: 1`
+// rather than a height: a ScrollView in a box with no definite height
+// collapses, which is the oldest trap in React Native.
 function Sheet({ children }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <View style={styles.card}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.cardInner}>
-        {children}
-      </ScrollView>
-    </View>
+    <ScrollView
+      style={styles.card}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.cardInner}
+    >
+      {children}
+    </ScrollView>
   );
 }
 
@@ -315,8 +330,11 @@ function Actions({
 }
 
 const styles = StyleSheet.create({
-  card: { maxHeight: "88%", backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: T.border },
-  cardInner: { padding: 20, paddingBottom: 34, gap: 8 },
+  card: { flex: 1, backgroundColor: T.surface },
+  // The top padding is bigger than it was, because the sheet no longer
+  // carries a 24pt grabber strip above the content — UIKit's own
+  // grabber lives in the sheet's chrome.
+  cardInner: { padding: 20, paddingTop: 24, paddingBottom: 34, gap: 8 },
   title: { color: T.text, fontSize: 17, fontWeight: "700" },
   dim: { color: T.faint, fontSize: 12, lineHeight: 17, marginBottom: 2 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8, marginBottom: 4 },

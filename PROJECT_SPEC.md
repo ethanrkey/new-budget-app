@@ -1473,6 +1473,42 @@ The fix is a replacer that drops `_owner`. Worth knowing because the
 failure names a test that is still correct and a component that is
 still fine.
 
+### The gap under the sheet: a percentage that lost its reference
+
+Reported from a device on build 8 and MEASURED here on 2026-10-15, by
+rendering both trees with `react-native-web` (React Native's own style
+semantics compiled to CSS) at 390x844 and reading the card's rect.
+
+Build 8 wrapped the hosted sheet in an `Animated.View` so the whole
+thing could be dragged. The card inside it is `maxHeight: "88%"`, and
+a percentage resolves against the OWNER's height:
+
+- Before: the owner was the scrim — the full screen — so the cap was
+  88% of 844 and it clipped the card from the TOP. Its bottom stayed
+  pinned to the screen's bottom. Gap below: **0**.
+- After: the owner was the wrapper, which has no height of its own.
+  The wrapper sized itself from the card's UNCONSTRAINED height, then
+  the card was capped at 88% OF THAT — and shrank inside a parent
+  that kept the space. The missing 12% became empty scrim at the
+  bottom, with the tab bar showing through it.
+
+Measured gap below the card, by content height:
+
+| content | no wrapper | with wrapper |
+|---|---|---|
+| 400pt | 0 | **34pt** |
+| 700pt | 0 | **70pt** |
+| 1200pt | 0 | **130pt** |
+
+The rule in general: **a percentage dimension is only as good as its
+owner's.** The failure is silent, it does not look like a layout
+error, and it gets worse the more content there is.
+
+Build 9 removes the structure rather than the wrapper: the transaction
+form is a system page sheet (`presentationStyle="pageSheet"`), so
+there is no scrim, no card inside a card, and no percentage to
+resolve.
+
 ## 9. Maintenance rules (standing — apply to every commit)
 
 1. **This spec matches the code.** A change that makes it wrong updates it in

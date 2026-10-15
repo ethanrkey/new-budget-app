@@ -7,6 +7,7 @@ import { useChrome } from "../../components/Chrome";
 import SpendingMix from "../../components/SpendingMix";
 import CalendarView from "../../components/CalendarView";
 import BottomSheet from "../../components/BottomSheet";
+import NativeSheet from "../../components/NativeSheet";
 import DatePicker from "../../components/DatePicker";
 import ScopeSheet from "../../components/ScopeSheet";
 import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
@@ -40,6 +41,10 @@ export default function LedgerScreen() {
   // whole and only split by the named helpers in lib/edit.
   const [scopeFor, setScopeFor] = useState<string | null>(null);
   const [sheet, setSheet] = useState<SheetMode | null>(null);
+  // The editor the scope sheet asked for, waiting for the scope sheet
+  // to be GONE. Two hosts means the original two-modal race is back on
+  // this one transition — see BottomSheet and `onScopePick`.
+  const [queued, setQueued] = useState<SheetMode | null>(null);
   // Whether the open transaction form has anything in it. Lives HERE
   // rather than in the sheet because the host owns every way out of
   // it — the scrim, the hardware back button and the swipe are all
@@ -76,18 +81,19 @@ export default function LedgerScreen() {
     const item = target?.item;
     if (!item) { setScopeFor(null); return; }
 
-    // EDIT: swap the body of the sheet that is already up. `setSheet`
-    // before `setScopeFor(null)` is not load-bearing — they land in one
-    // commit and the host stays visible throughout — but the host's
-    // `visible` must never pass through false, which is what ordering
-    // them this way makes obvious to the next reader.
+    // EDIT: the form lives in a DIFFERENT host now — the system page
+    // sheet — so this is the original bug's exact shape again: unmount
+    // one modal and mount another in one commit, and iOS swallows the
+    // second presentation because the first is still dismissing. So
+    // the editor is QUEUED and opened from the scope sheet's
+    // `onDismissed`, which is UIKit saying it has finished.
     if (a.kind === "edit-occurrence") {
-      setSheet({ kind: "occurrence", item, date: a.date, current: overrideAt(state!, item.id, a.date) });
+      setQueued({ kind: "occurrence", item, date: a.date, current: overrideAt(state!, item.id, a.date) });
       setScopeFor(null);
       return;
     }
     if (a.kind === "edit-rule") {
-      setSheet({ kind: "rule", item });
+      setQueued({ kind: "rule", item });
       setScopeFor(null);
       return;
     }
@@ -105,18 +111,26 @@ export default function LedgerScreen() {
   /**
    * Every way out of the transaction form, and the only one.
    *
-   * The sheet takes most of the screen, so it is now dismissible by
-   * swiping it down as well as by Cancel, the scrim and the hardware
-   * back button. Four doors is three more chances to throw away a
-   * half-typed transaction by accident, so all four come through
-   * here and anything typed is confirmed first.
+   * Cancel, the hardware back button, a tap on UIKit's dimmed area
+   * and the downward swipe all arrive here, and anything typed is
+   * confirmed before it is thrown away. Four doors is three extra
+   * chances to lose a half-typed transaction, so there is one guard
+   * rather than one per door.
+   *
+   * THE SWIPE IS GUARDED BEFORE IT HAPPENS, not after. `swipeToClose`
+   * on the host is `!dirty`, which is UIKit's isModalInPresentation
+   * inverted: a dirty sheet refuses the gesture itself, rubber-bands
+   * back and reports the attempt here. So this is never asking about
+   * a sheet that has already slid away and has to be put back.
    *
    * A clean form closes immediately. A confirm over an untouched
    * sheet is the kind of prompt people learn to dismiss without
    * reading, which is how the next one gets dismissed too.
    */
   function closeSheets() {
-    const leave = () => { setSheet(null); setScopeFor(null); setPicking(false); setDirty(false); };
+    const leave = () => {
+      setSheet(null); setScopeFor(null); setPicking(false); setDirty(false); setQueued(null);
+    };
     if (!sheet || !dirty) { leave(); return; }
     Alert.alert(DISCARD.title, DISCARD.body, [
       { text: DISCARD.keep, style: "cancel" },
@@ -260,16 +274,16 @@ export default function LedgerScreen() {
         />
       )}
 
-      {/* ONE sheet. Choosing a scope swaps what is inside it; it never
-          dismisses one modal to present another, which is the thing iOS
-          swallows. See components/BottomSheet.tsx. */}
-      {/* EVERY transient surface on this screen goes through the one
-          host, the date picker included — that is what makes "tap outside
-          to dismiss" true of all of them rather than of whichever ones
-          someone remembered. */}
+      {/* THE SMALL SURFACES: a list of scopes and a date wheel, both
+          of which are a few rows tall and belong at the bottom of the
+          screen rather than in a sheet that covers it. One host for
+          both, so neither can present while the other dismisses.
+          `onDismissed` is how the editor gets opened afterward — see
+          onScopePick. */}
       <BottomSheet
-        visible={!!sheet || !!target || picking}
+        visible={!!target || picking}
         onClose={closeSheets}
+        onDismissed={() => { if (queued) { setSheet(queued); setQueued(null); } }}
       >
         {picking ? (
           <DatePicker
@@ -277,7 +291,29 @@ export default function LedgerScreen() {
             onPick={setHorizon}
             onClose={() => setPicking(false)}
           />
-        ) : sheet ? (
+        ) : target ? (
+          <ScopeSheet
+            name={target.name}
+            actions={scopeActions(state!, scopeFor!, target.recurring)}
+            onPick={(a) => { void onScopePick(a); }}
+            onClose={() => setScopeFor(null)}
+          />
+        ) : null}
+      </BottomSheet>
+
+      {/* THE FORM, in the system's own page sheet: it takes most of
+          the screen, so it should BE the screen's top layer rather
+          than a card drawn at the bottom of a transparent one.
+          `swipeToClose` is the guard, and it is UIKit's — a dirty
+          form sets isModalInPresentation, so the gesture is refused
+          and reported rather than performed and undone. See
+          components/NativeSheet.tsx. */}
+      <NativeSheet
+        visible={!!sheet}
+        onClose={closeSheets}
+        swipeToClose={!dirty}
+      >
+        {sheet ? (
           <TransactionSheet
             mode={sheet}
             state={state!}
@@ -289,15 +325,8 @@ export default function LedgerScreen() {
             onClose={closeSheets}
             onDirtyChange={setDirty}
           />
-        ) : target ? (
-          <ScopeSheet
-            name={target.name}
-            actions={scopeActions(state!, scopeFor!, target.recurring)}
-            onPick={(a) => { void onScopePick(a); }}
-            onClose={() => setScopeFor(null)}
-          />
         ) : null}
-      </BottomSheet>
+      </NativeSheet>
     </View>
   );
 }

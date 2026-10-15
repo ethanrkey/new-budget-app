@@ -3,6 +3,7 @@ import { haptics } from "./setup";
 import { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import BottomSheet from "../components/BottomSheet";
+import NativeSheet from "../components/NativeSheet";
 import ScopeSheet from "../components/ScopeSheet";
 import TransactionSheet, { type SheetMode } from "../components/TransactionSheet";
 import { scopeActions, rowTarget, type ScopeAction } from "../lib/edit";
@@ -81,21 +82,30 @@ const state = normalize({
   overrides: { "r-rent": { "2026-12-01": 1600 } },
 });
 
-/** The Ledger's sheet plumbing, exactly as the screen wires it: one host,
- *  body swapped. If this component can be made to swallow the editor, so
- *  can the screen. */
+/**
+ * The Ledger's sheet plumbing, exactly as the screen wires it.
+ *
+ * TWO HOSTS SINCE BUILD 9, and that is the whole reason this harness
+ * exists: the form moved into a system page sheet while the scope
+ * sheet stayed in the bottom one, which puts the original bug back on
+ * this one transition — unmount one modal, mount another in the same
+ * commit, and iOS swallows the second presentation. So the editor is
+ * queued and opened from the scope sheet's `onDismissed`. If this
+ * component can be made to swallow the editor, so can the screen.
+ */
 function Host({ rowId, onCommit }: { rowId: string; onCommit?: (kind: string) => void }) {
   const [scopeFor, setScopeFor] = useState<string | null>(rowId);
   const [sheet, setSheet] = useState<SheetMode | null>(null);
+  const [queued, setQueued] = useState<SheetMode | null>(null);
   const target = scopeFor ? rowTarget(state, scopeFor) : null;
 
   const pick = (a: ScopeAction) => {
     const item = target!.item;
     if (a.kind === "edit-occurrence") {
-      setSheet({ kind: "occurrence", item, date: a.date, current: null });
+      setQueued({ kind: "occurrence", item, date: a.date, current: null });
       setScopeFor(null);
     } else if (a.kind === "edit-rule") {
-      setSheet({ kind: "rule", item });
+      setQueued({ kind: "rule", item });
       setScopeFor(null);
     } else {
       onCommit?.(a.kind);
@@ -103,32 +113,66 @@ function Host({ rowId, onCommit }: { rowId: string; onCommit?: (kind: string) =>
   };
 
   return (
-    <BottomSheet visible={!!sheet || !!target} onClose={() => { setSheet(null); setScopeFor(null); }}>
-      {sheet ? (
-        <TransactionSheet
-          mode={sheet} state={state} busy={false} orphanCount={() => 0}
-          onSaveDraft={() => {}} onSaveOccurrence={() => {}} onClose={() => setSheet(null)}
-        />
-      ) : target ? (
-        <ScopeSheet
-          name={target.name}
-          actions={scopeActions(state, scopeFor!, target.recurring)}
-          onPick={pick}
-          onClose={() => setScopeFor(null)}
-        />
-      ) : null}
-    </BottomSheet>
+    <>
+      <BottomSheet
+        visible={!!target}
+        onClose={() => { setScopeFor(null); setQueued(null); }}
+        onDismissed={() => { if (queued) { setSheet(queued); setQueued(null); } }}
+      >
+        {target ? (
+          <ScopeSheet
+            name={target.name}
+            actions={scopeActions(state, scopeFor!, target.recurring)}
+            onPick={pick}
+            onClose={() => setScopeFor(null)}
+          />
+        ) : null}
+      </BottomSheet>
+      <NativeSheet visible={!!sheet} onClose={() => setSheet(null)} swipeToClose>
+        {sheet ? (
+          <TransactionSheet
+            mode={sheet} state={state} busy={false} orphanCount={() => 0}
+            onSaveDraft={() => {}} onSaveOccurrence={() => {}} onClose={() => setSheet(null)}
+          />
+        ) : null}
+      </NativeSheet>
+    </>
   );
+}
+
+/**
+ * UIKit finishing with the bottom sheet.
+ *
+ * `Modal.onDismiss` is routed through a native event, so nothing in
+ * jest fires it — this stands in for the OS. It is also the honest
+ * shape of the dependency: the editor opens when the other sheet is
+ * GONE, not when a flag flips.
+ *
+ * The handler is TAKEN WHILE THE SHEET IS UP and called afterwards,
+ * because that is what UIKit does — it is holding the function from
+ * before the dismissal started. Under jest the Modal also leaves the
+ * tree the moment `visible` is false, so there would be nothing to
+ * read it off later. BottomSheet's handler is stable and reads the
+ * current one through a ref, which is what makes both of those
+ * harmless.
+ */
+function dismissalOf(testID = "bottom-sheet") {
+  const fire = screen.getByTestId(testID).props.onDismiss as (() => void) | undefined;
+  return async () => { await act(async () => { fire?.(); }); };
 }
 
 describe("the scope sheet opens the editor", () => {
   test("THE BUG: picking 'edit just this date' actually shows the editor", async () => {
     await render(<Host rowId="r-rent@2026-12-01" />);
     expect(screen.getByText("Rent")).toBeTruthy();
+    const sheetGone = dismissalOf();
 
     await userEvent.press(screen.getByLabelText("Edit just 12/01/2026"));
+    // Nothing yet, and that is the point: presenting now is the bug.
+    expect(screen.queryByText("Rent on 12/01/2026")).toBeNull();
+    await sheetGone();
 
-    // Before the one-modal fix this found nothing: the scope sheet went
+    // Before the sequencing this found nothing: the scope sheet went
     // away and no editor arrived.
     expect(screen.getByText("Rent on 12/01/2026")).toBeTruthy();
     expect(screen.queryByLabelText("Edit just 12/01/2026")).toBeNull();
@@ -136,14 +180,18 @@ describe("the scope sheet opens the editor", () => {
 
   test("picking 'edit every Rent' shows the rule editor", async () => {
     await render(<Host rowId="r-rent@2026-12-01" />);
+    const sheetGone = dismissalOf();
     await userEvent.press(screen.getByLabelText("Edit every Rent"));
+    await sheetGone();
     expect(screen.getByText("Edit Rent")).toBeTruthy();
     expect(screen.getByText("Changes every date this rule generates.")).toBeTruthy();
   });
 
   test("occurrence scope shows ONE field — the rule's fields are not reachable", async () => {
     await render(<Host rowId="r-rent@2026-12-01" />);
+    const sheetGone = dismissalOf();
     await userEvent.press(screen.getByLabelText("Edit just 12/01/2026"));
+    await sheetGone();
     expect(screen.getByLabelText("Amount on this date")).toBeTruthy();
     // The editor has no mode to flip, so these cannot be reached at all.
     expect(screen.queryByLabelText("Name")).toBeNull();
@@ -152,7 +200,9 @@ describe("the scope sheet opens the editor", () => {
 
   test("rule scope shows the rule's fields", async () => {
     await render(<Host rowId="r-rent@2026-12-01" />);
+    const sheetGone = dismissalOf();
     await userEvent.press(screen.getByLabelText("Edit every Rent"));
+    await sheetGone();
     expect(screen.getByLabelText("Name")).toBeTruthy();
     expect(screen.getByText("Repeats")).toBeTruthy();
     expect(screen.getByText("Starts")).toBeTruthy();
@@ -429,92 +479,58 @@ describe("the dashboard", () => {
   });
 });
 
-// ---- swipe down to dismiss ------------------------------------------
+// ---- the form is a system page sheet --------------------------------
 //
-// The transaction form takes most of the screen and Cancel is at the
-// bottom of it, so the sheet is now dismissible by dragging it away.
-// The gesture lives on the grabber in BottomSheet; what it CALLS is
-// the host's onClose, which is the same door Cancel uses.
-describe("the sheet can be dragged away", () => {
-  /**
-   * A vertical touch complete enough for PanResponder.
-   *
-   * Same shape as the sparkline's `touch` above and for the same
-   * reason — PanResponder reads event.touchHistory.touchBank and
-   * throws on the bare `{ nativeEvent }` a component would see, and
-   * it ignores a move whose timestamp it has already accounted for,
-   * so the clock has to advance.
-   */
-  let clock = 0;
-  let prevY = 0;
-  const at = (pageY: number) => {
-    clock += 16;
-    const e = {
-      nativeEvent: {
-        pageX: 100, pageY, locationX: 100, locationY: pageY, identifier: 1, timestamp: clock,
-        touches: [{ identifier: 1, pageX: 100, pageY, locationX: 100, locationY: pageY, timestamp: clock }],
-        changedTouches: [],
-        target: 1,
-      },
-      touchHistory: {
-        touchBank: [
-          undefined,
-          { touchActive: true, startPageX: 100, startPageY: 0, startTimeStamp: 0,
-            currentPageX: 100, currentPageY: pageY, currentTimeStamp: clock,
-            // PREVIOUS, and it has to actually be the previous one.
-            // PanResponder accumulates dy as a sum of
-            // (current - previous) per move, so a touchBank whose
-            // previousPageY equals its currentPageY reports a gesture
-            // that went nowhere — the first version of this helper
-            // dragged 200pt and measured dy 0.
-            previousPageX: 100, previousPageY: prevY, previousTimeStamp: clock - 16 },
-        ],
-        numberActiveTouches: 1,
-        indexOfSingleActiveTouch: 1,
-        mostRecentTimeStamp: clock,
-      },
-    };
-    prevY = pageY;
-    return e;
-  };
-
-  /** Drag the grabber by `dy` in three steps and let go. */
-  async function drag(dy: number) {
-    const grab = screen.getByTestId("sheet-grabber");
-    await act(async () => {
-      grab.props.onStartShouldSetResponder?.(at(0));
-      grab.props.onResponderGrant?.(at(0));
-      grab.props.onResponderMove?.(at(dy / 3));
-      grab.props.onResponderMove?.(at((dy * 2) / 3));
-      grab.props.onResponderMove?.(at(dy));
-      grab.props.onResponderRelease?.(at(dy));
-    });
+// Build 8 gave BottomSheet a grabber and a PanResponder; build 9 takes
+// both back. On a device the drag only started from the grab bar — a
+// responder on the body would fight the ScrollView inside it — and the
+// wrapper it needed left a gap under the sheet with the tab bar
+// showing through.
+//
+// UIKit's page sheet does the whole job, so what is left to test is
+// that the right thing is ASKED FOR. These are props rather than
+// pixels on purpose: `presentationStyle` and `allowSwipeDismissal` are
+// instructions to UIKit, and whether they are the right instructions
+// is the part this harness can actually answer.
+describe("the transaction form is presented as a system sheet", () => {
+  function Host({ dirty, onClose }: { dirty: boolean; onClose: () => void }) {
+    return <NativeSheet visible onClose={onClose} swipeToClose={!dirty}><Text>BODY</Text></NativeSheet>;
   }
 
-  function Plain({ onClose }: { onClose: () => void }) {
-    return <BottomSheet visible onClose={onClose}><Text>BODY</Text></BottomSheet>;
-  }
+  test("it is a page sheet, which is what covers the tab bar", async () => {
+    await render(<Host dirty={false} onClose={() => {}} />);
+    const modal = screen.getByTestId("native-sheet");
+    expect(modal.props.presentationStyle).toBe("pageSheet");
+    // NOT transparent. A page sheet IS the card; RN warns if you ask
+    // for both, and the scrim-plus-card structure is what left the gap.
+    expect(modal.props.transparent).toBeFalsy();
+  });
 
-  beforeEach(() => { clock = 0; prevY = 0; });
+  test("a clean form may be swiped away", async () => {
+    await render(<Host dirty={false} onClose={() => {}} />);
+    expect(screen.getByTestId("native-sheet").props.allowSwipeDismissal).toBe(true);
+  });
 
-  test("a long drag down closes it", async () => {
+  test("a dirty one may not, so UIKit refuses the gesture itself", async () => {
+    // `allowSwipeDismissal: false` is isModalInPresentation: true.
+    // The sheet rubber-bands back without going anywhere and the
+    // attempt arrives as onRequestClose — which is why the guard
+    // never has to put a sheet back that already slid away.
+    await render(<Host dirty onClose={() => {}} />);
+    expect(screen.getByTestId("native-sheet").props.allowSwipeDismissal).toBe(false);
+  });
+
+  test("either way the attempt comes through the one door", async () => {
     const closed: number[] = [];
-    await render(<Plain onClose={() => closed.push(1)} />);
-    await drag(200);
+    await render(<Host dirty onClose={() => closed.push(1)} />);
+    await act(async () => { screen.getByTestId("native-sheet").props.onRequestClose(); });
     expect(closed).toHaveLength(1);
   });
 
-  test("a short drag does not — a sheet you nudged is a sheet you kept", async () => {
-    const closed: number[] = [];
-    await render(<Plain onClose={() => closed.push(1)} />);
-    await drag(20);
-    expect(closed).toHaveLength(0);
-  });
-
-  test("dragging UP does nothing at all", async () => {
-    const closed: number[] = [];
-    await render(<Plain onClose={() => closed.push(1)} />);
-    await drag(-200);
-    expect(closed).toHaveLength(0);
+  test("the bottom sheet has no grabber to drag any more", async () => {
+    await render(
+      <BottomSheet visible onClose={() => {}}><Text>BODY</Text></BottomSheet>
+    );
+    expect(screen.queryByTestId("sheet-grabber")).toBeNull();
   });
 });
