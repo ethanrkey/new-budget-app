@@ -299,6 +299,32 @@ export function emptyBillRow(today: ISODate = todayISO()): BillRow {
 }
 
 /**
+ * Drop a bill row, and never leave the step with nothing on it.
+ *
+ * Added 2026-10-15: "+ Add another bill" rows could not be removed on
+ * the phone at all, and the web's ✕ was hidden whenever one row was
+ * left — so the last row could be emptied by hand but not cleared.
+ *
+ * REMOVING THE LAST ONE LEAVES AN EMPTY ONE. A bills step showing no
+ * rows has no way back to a row except the "+ Add another bill" link
+ * below it, which reads as the wrong control for the first one; and a
+ * blank row is what the step opens with anyway, so clearing the last
+ * row and arriving fresh look the same. The alternative — hiding the
+ * remove control at one row, which is what the web did — means the
+ * user cannot clear a row they typed into without selecting the text
+ * in two fields.
+ *
+ * Shared so the two clients cannot disagree about the edge case,
+ * which is the only part of this with a decision in it.
+ */
+export function removeBillRow(
+  rows: BillRow[], index: number, today: ISODate = todayISO(),
+): BillRow[] {
+  const left = rows.filter((_, i) => i !== index);
+  return left.length ? left : [emptyBillRow(today)];
+}
+
+/**
  * The paycheck step. Null when nothing usable was typed.
  *
  * `payday` IS THE WHOLE REASON THIS TAKES A FOURTH ARGUMENT. Setup

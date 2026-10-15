@@ -14,7 +14,7 @@ import {
   blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
   firstMonthlyOn, defaultBillDay, emptyBillRow, firstWeekdayOn,
   contributionTargets, contributionOf, collectAccountsWith, contributionName,
-  blankContributionRow, clampDay,
+  blankContributionRow, clampDay, removeBillRow,
 } from "../src/engine/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
 import { computeLedger } from "../src/engine/compute.ts";
@@ -227,6 +227,39 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   eq("...but the rule still remembers the 31st", rentRule("1450", "31", "2026-11-05").dayOfMonth, 31);
   eq("a nonsense day falls back to the 1st", rentRule("1450", "", TODAY).dayOfMonth, 1);
   eq("...and 99 is clamped, not stored", rentRule("1450", "99", TODAY).dayOfMonth, 31);
+}
+
+// ---- A BILL ROW CAN GO, AND THE STEP IS NEVER EMPTY -------------------
+//
+// Reported 2026-10-15: "+ Add another bill" rows could not be removed
+// on the phone, and the web hid its ✕ whenever one row was left — so
+// the last row could be emptied by hand but never cleared.
+//
+// The edge case is the only part of this with a decision in it, which
+// is why it is shared: removing the last row leaves a BLANK one, not
+// none. A step showing no rows offers only "+ Add another bill" as a
+// way back, which is the wrong words for the first one.
+{
+  const rows = [
+    { name: "Spotify", amount: "11.99", day: "10" },
+    { name: "Gym", amount: "40", day: "20" },
+    { name: "HBO", amount: "16", day: "14" },
+  ];
+  eq("the middle row goes and the others close up",
+    removeBillRow(rows, 1, TODAY).map((r) => r.name), ["Spotify", "HBO"]);
+  eq("the first row goes", removeBillRow(rows, 0, TODAY).map((r) => r.name), ["Gym", "HBO"]);
+  eq("the last row goes", removeBillRow(rows, 2, TODAY).map((r) => r.name), ["Spotify", "Gym"]);
+
+  const alone = removeBillRow([rows[0]], 0, TODAY);
+  eq("removing the only row leaves one row, not none", alone.length, 1);
+  eq("...and it is blank", [alone[0].name, alone[0].amount], ["", ""]);
+  // Blank, but with today's day on it, exactly like the row the step
+  // opens with — clearing the last row and arriving fresh look the
+  // same because they ARE the same.
+  eq("...with today's day, like a fresh one", alone[0].day, defaultBillDay(TODAY));
+
+  eq("an index that is not there changes nothing",
+    removeBillRow(rows, 9, TODAY).map((r) => r.name), ["Spotify", "Gym", "HBO"]);
 }
 
 // ---- 1 TO 31, WHOEVER IS ASKING ---------------------------------------

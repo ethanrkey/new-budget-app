@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DatePicker from "./DatePicker";
 import DayPicker from "./DayPicker";
+import SwipeToDelete from "./SwipeToDelete";
 import type { NativeMethods } from "react-native";
 import { T } from "../lib/theme";
 import {
@@ -15,7 +16,7 @@ import {
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, WEEKDAY_OPTIONS,
 } from "../../src/content/setup.ts";
-import { emptyBillRow, contributionTargets } from "../../src/engine/setup.ts";
+import { emptyBillRow, removeBillRow, contributionTargets } from "../../src/engine/setup.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
 import type { SetupAnswers, SetupCadence } from "../../src/engine/setup.ts";
 import type { BudgetItem } from "../../src/engine/types.ts";
@@ -221,7 +222,12 @@ export default function Setup({
                       needs the width to say what it shows and that it
                       can be changed. */}
                   {d.bills.map((b, idx) => (
-                    <View key={idx} style={styles.billCard}>
+                    <SwipeToDelete
+                      key={idx}
+                      label={`Bill ${idx + 1}`}
+                      onDelete={() => set("bills", removeBillRow(d.bills, idx, todayISO))}
+                    >
+                    <View style={styles.billCard}>
                       <View style={styles.billRow}>
                         <View style={styles.grow}>
                           <Field
@@ -248,6 +254,7 @@ export default function Setup({
                         accessibilityLabel={`Bill ${idx + 1} due day`}
                       />
                     </View>
+                    </SwipeToDelete>
                   ))}
                   <Pressable
                     onPress={() => set("bills", [...d.bills, emptyBillRow(todayISO)])}

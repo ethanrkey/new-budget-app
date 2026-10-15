@@ -232,6 +232,112 @@ test("the due day is picked from 1-31, and there is no way to type 50", async ()
   expect(items[30]!.props.value).toBe(31);
 });
 
+describe("a bill row can be swiped away", () => {
+  // Reported from the build 8 device pass: "+ Add another bill" rows
+  // could not be removed. The web had an ✕ from the start; the phone
+  // had nothing, so a row added by mistake was a row you finished
+  // setup with.
+  //
+  // A HORIZONTAL TOUCH COMPLETE ENOUGH FOR PanResponder, which is the
+  // same shape sheets.test.tsx needs and for the same two reasons:
+  // PanResponder reads event.touchHistory.touchBank rather than the
+  // event, and it ignores a move whose timestamp it has already
+  // accounted for. See PROJECT_SPEC.md section 8.
+  let clock = 0;
+  let prevX = 0;
+  const at = (pageX: number) => {
+    clock += 16;
+    const e = {
+      nativeEvent: {
+        pageX, pageY: 200, locationX: pageX, locationY: 200, identifier: 1, timestamp: clock,
+        touches: [{ identifier: 1, pageX, pageY: 200, locationX: pageX, locationY: 200, timestamp: clock }],
+        changedTouches: [],
+        target: 1,
+      },
+      touchHistory: {
+        touchBank: [
+          undefined,
+          { touchActive: true, startPageX: 0, startPageY: 200, startTimeStamp: 0,
+            currentPageX: pageX, currentPageY: 200, currentTimeStamp: clock,
+            previousPageX: prevX, previousPageY: 200, previousTimeStamp: clock - 16 },
+        ],
+        numberActiveTouches: 1,
+        indexOfSingleActiveTouch: 1,
+        mostRecentTimeStamp: clock,
+      },
+    };
+    prevX = pageX;
+    return e;
+  };
+
+  async function swipe(label: string, dx: number) {
+    const row = screen.getByTestId(`swipe-${label}`);
+    await act(async () => {
+      row.props.onMoveShouldSetResponder?.(at(0));
+      row.props.onResponderGrant?.(at(0));
+      row.props.onResponderMove?.(at(dx / 3));
+      row.props.onResponderMove?.(at((dx * 2) / 3));
+      row.props.onResponderMove?.(at(dx));
+      row.props.onResponderRelease?.(at(dx));
+    });
+  }
+
+  async function threeBills() {
+    await mount();
+    await press("Skip");                    // paycheck
+    await press("Skip");                    // rent
+    await userEvent.type(screen.getByLabelText("Bill 1 name"), "Spotify");
+    await press("+ Add another bill");
+    await userEvent.type(screen.getByLabelText("Bill 2 name"), "Gym");
+    await press("+ Add another bill");
+    await userEvent.type(screen.getByLabelText("Bill 3 name"), "HBO");
+  }
+
+  beforeEach(() => { clock = 0; prevX = 0; });
+
+  test("a long swipe left deletes the row, and the rest close up", async () => {
+    await threeBills();
+    await swipe("Bill 2", -240);
+
+    expect(screen.getByLabelText("Bill 1 name").props.value).toBe("Spotify");
+    expect(screen.getByLabelText("Bill 2 name").props.value).toBe("HBO");
+    expect(screen.queryByLabelText("Bill 3 name")).toBeNull();
+  });
+
+  test("a nudge keeps it — a row you brushed is a row you kept", async () => {
+    await threeBills();
+    await swipe("Bill 2", -20);
+    expect(screen.getByLabelText("Bill 2 name").props.value).toBe("Gym");
+  });
+
+  test("swiping RIGHT does nothing: there is nothing over there", async () => {
+    await threeBills();
+    await swipe("Bill 2", 240);
+    expect(screen.getByLabelText("Bill 2 name").props.value).toBe("Gym");
+  });
+
+  test("the destructive button is reachable without a gesture", async () => {
+    // Behind the row rather than conditionally rendered, so VoiceOver
+    // can reach it at all — a swipe is not an affordance a screen
+    // reader has.
+    await threeBills();
+    await userEvent.press(screen.getByLabelText("Remove Bill 1"));
+    expect(screen.getByLabelText("Bill 1 name").props.value).toBe("Gym");
+  });
+
+  test("removing the last row leaves one empty row, not none", async () => {
+    await mount();
+    await press("Skip");                    // paycheck
+    await press("Skip");                    // rent
+    await userEvent.type(screen.getByLabelText("Bill 1 name"), "Spotify");
+
+    await userEvent.press(screen.getByLabelText("Remove Bill 1"));
+    // Still a row, and it is blank — the same row the step opens with.
+    expect(screen.getByLabelText("Bill 1 name").props.value).toBe("");
+    expect(dayOn("Bill 1 due day")).toBe(String(new Date().getDate()));
+  });
+});
+
 test("groceries ask which day of the week, and the rule starts on it", async () => {
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { todayISO } from "../engine/model.ts";
 import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
-  blankAccountRows, incompleteAccountRows, emptyBillRow,
+  blankAccountRows, incompleteAccountRows, emptyBillRow, removeBillRow,
   contributionTargets, collectAccountsWith, blankContributionRow,
 } from "../engine/setup.ts";
 import {
@@ -137,8 +137,10 @@ export default function Onboarding({ initialBalance, onComplete }) {
   function addBillRow() {
     setBills((bs) => [...bs, emptyBillRow(todayISO())]);
   }
-  function removeBillRow(i) {
-    setBills((bs) => bs.filter((_, idx) => idx !== i));
+  // Removing the last row leaves an empty one rather than none — the
+  // rule lives in the engine so the phone cannot disagree about it.
+  function dropBillRow(i) {
+    setBills((bs) => removeBillRow(bs, i, todayISO()));
   }
 
   const field = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
@@ -261,9 +263,15 @@ export default function Onboarding({ initialBalance, onComplete }) {
                       {DAY_OPTIONS.map((n) => <option key={n} value={String(n)}>{n}</option>)}
                     </select>
                   </label>
-                  {bills.length > 1 && (
-                    <button onClick={() => removeBillRow(i)} className="text-gray-300 hover:text-expense px-1" title="Remove">✕</button>
-                  )}
+                  {/* ALWAYS, not only past one row. Hiding it at the
+                      last row meant a row you had typed into could be
+                      emptied by hand but never cleared. */}
+                  <button
+                    onClick={() => dropBillRow(i)}
+                    className="text-gray-300 hover:text-expense px-1"
+                    title="Remove"
+                    aria-label={`Remove bill ${i + 1}`}
+                  >✕</button>
                 </div>
               ))}
             </div>
