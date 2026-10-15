@@ -428,3 +428,93 @@ describe("the dashboard", () => {
     expect(screen.queryByText(/\$/)).toBeNull();
   });
 });
+
+// ---- swipe down to dismiss ------------------------------------------
+//
+// The transaction form takes most of the screen and Cancel is at the
+// bottom of it, so the sheet is now dismissible by dragging it away.
+// The gesture lives on the grabber in BottomSheet; what it CALLS is
+// the host's onClose, which is the same door Cancel uses.
+describe("the sheet can be dragged away", () => {
+  /**
+   * A vertical touch complete enough for PanResponder.
+   *
+   * Same shape as the sparkline's `touch` above and for the same
+   * reason — PanResponder reads event.touchHistory.touchBank and
+   * throws on the bare `{ nativeEvent }` a component would see, and
+   * it ignores a move whose timestamp it has already accounted for,
+   * so the clock has to advance.
+   */
+  let clock = 0;
+  let prevY = 0;
+  const at = (pageY: number) => {
+    clock += 16;
+    const e = {
+      nativeEvent: {
+        pageX: 100, pageY, locationX: 100, locationY: pageY, identifier: 1, timestamp: clock,
+        touches: [{ identifier: 1, pageX: 100, pageY, locationX: 100, locationY: pageY, timestamp: clock }],
+        changedTouches: [],
+        target: 1,
+      },
+      touchHistory: {
+        touchBank: [
+          undefined,
+          { touchActive: true, startPageX: 100, startPageY: 0, startTimeStamp: 0,
+            currentPageX: 100, currentPageY: pageY, currentTimeStamp: clock,
+            // PREVIOUS, and it has to actually be the previous one.
+            // PanResponder accumulates dy as a sum of
+            // (current - previous) per move, so a touchBank whose
+            // previousPageY equals its currentPageY reports a gesture
+            // that went nowhere — the first version of this helper
+            // dragged 200pt and measured dy 0.
+            previousPageX: 100, previousPageY: prevY, previousTimeStamp: clock - 16 },
+        ],
+        numberActiveTouches: 1,
+        indexOfSingleActiveTouch: 1,
+        mostRecentTimeStamp: clock,
+      },
+    };
+    prevY = pageY;
+    return e;
+  };
+
+  /** Drag the grabber by `dy` in three steps and let go. */
+  async function drag(dy: number) {
+    const grab = screen.getByTestId("sheet-grabber");
+    await act(async () => {
+      grab.props.onStartShouldSetResponder?.(at(0));
+      grab.props.onResponderGrant?.(at(0));
+      grab.props.onResponderMove?.(at(dy / 3));
+      grab.props.onResponderMove?.(at((dy * 2) / 3));
+      grab.props.onResponderMove?.(at(dy));
+      grab.props.onResponderRelease?.(at(dy));
+    });
+  }
+
+  function Plain({ onClose }: { onClose: () => void }) {
+    return <BottomSheet visible onClose={onClose}><Text>BODY</Text></BottomSheet>;
+  }
+
+  beforeEach(() => { clock = 0; prevY = 0; });
+
+  test("a long drag down closes it", async () => {
+    const closed: number[] = [];
+    await render(<Plain onClose={() => closed.push(1)} />);
+    await drag(200);
+    expect(closed).toHaveLength(1);
+  });
+
+  test("a short drag does not — a sheet you nudged is a sheet you kept", async () => {
+    const closed: number[] = [];
+    await render(<Plain onClose={() => closed.push(1)} />);
+    await drag(20);
+    expect(closed).toHaveLength(0);
+  });
+
+  test("dragging UP does nothing at all", async () => {
+    const closed: number[] = [];
+    await render(<Plain onClose={() => closed.push(1)} />);
+    await drag(-200);
+    expect(closed).toHaveLength(0);
+  });
+});

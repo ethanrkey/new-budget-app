@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Platform, Pressable, ScrollView,
   StyleSheet, Text, TextInput, View,
@@ -7,7 +7,7 @@ import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
 import { categoryOnModeChange } from "../../src/shared/entryDefaults.ts";
 import { CADENCES } from "../../src/engine/model.ts";
-import { blankDraft, draftOf, draftError, overrideError, canTrackActuals, type Draft } from "../lib/edit";
+import { blankDraft, draftOf, draftError, overrideError, canTrackActuals, draftTouched, type Draft } from "../lib/edit";
 import type { BudgetItem, BudgetState, ISODate, Cadence } from "../../src/engine/types.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
 
@@ -33,7 +33,7 @@ export type SheetMode =
   | { kind: "occurrence"; item: BudgetItem; date: ISODate; current: number | null };
 
 export default function TransactionSheet({
-  mode, state, busy, orphanCount, onSaveDraft, onSaveOccurrence, onClose,
+  mode, state, busy, orphanCount, onSaveDraft, onSaveOccurrence, onClose, onDirtyChange,
 }: {
   mode: SheetMode;
   state: BudgetState;
@@ -44,13 +44,33 @@ export default function TransactionSheet({
   onSaveDraft: (d: Draft) => void;
   onSaveOccurrence: (amount: string) => void;
   onClose: () => void;
+  /**
+   * Has anything been typed? Reported UPWARD because the host owns
+   * every way out of this sheet — Cancel is in here, but the scrim,
+   * the hardware back button and the swipe are the host's, and a
+   * "Discard changes?" that only guards one of the four is not a
+   * guard. See the Ledger screen's closeSheet.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const existing = mode.kind === "add" ? null : mode.item;
-  const [draft, setDraft] = useState<Draft>(() => (existing ? draftOf(existing) : blankDraft()));
-  const [occAmount, setOccAmount] = useState(
-    mode.kind === "occurrence" ? String(mode.current ?? mode.item.amount) : ""
-  );
+  // What the form arrived holding, built ONCE and used both as the
+  // starting value and as the thing "has anything been typed?" is
+  // measured against. Two calls to blankDraft() would agree today and
+  // disagree across midnight, which is the kind of bug that is only
+  // ever seen by somebody filling in a form at midnight.
+  const initial = useRef({
+    draft: existing ? draftOf(existing) : blankDraft(),
+    occAmount: mode.kind === "occurrence" ? String(mode.current ?? mode.item.amount) : "",
+  });
+  const [draft, setDraft] = useState<Draft>(initial.current.draft);
+  const [occAmount, setOccAmount] = useState(initial.current.occAmount);
   const [picking, setPicking] = useState<null | "date" | "start" | "end">(null);
+
+  const dirty = mode.kind === "occurrence"
+    ? occAmount !== initial.current.occAmount
+    : draftTouched(draft, initial.current.draft);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setDraft((d) => ({ ...d, [k]: v }));

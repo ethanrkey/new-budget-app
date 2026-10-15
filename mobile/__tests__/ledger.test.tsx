@@ -1,4 +1,5 @@
 import { act, render, screen, userEvent } from "@testing-library/react-native";
+import { Alert } from "react-native";
 import { pickerProps } from "./setup";
 import { normalize } from "../../src/engine/stateShape.ts";
 
@@ -121,5 +122,79 @@ describe("the one date picker", () => {
     });
     expect(onClose).toHaveBeenCalled();
     expect(onPick).not.toHaveBeenCalled();
+  });
+});
+
+// ---- leaving a half-typed transaction --------------------------------
+//
+// The form takes most of the screen, so as of 2026-10-15 it can be
+// dismissed by dragging it down as well as by Cancel, the scrim and
+// the hardware back button. Four doors is three more chances to throw
+// away a half-typed transaction by accident, so all four come through
+// one guard — which is why the guard lives on the SCREEN and not in
+// the sheet, and why it is tested here.
+describe("closing the transaction form", () => {
+  /** Alert.alert, captured with its buttons so a test can press one. */
+  function captureAlert() {
+    const seen: { title: string; body: string; buttons: { text?: string; onPress?: () => void }[] }[] = [];
+    const spy = jest.spyOn(Alert, "alert").mockImplementation((title, body, buttons) => {
+      seen.push({ title: String(title), body: String(body), buttons: (buttons ?? []) as never });
+    });
+    return { seen, restore: () => spy.mockRestore() };
+  }
+
+  const openAdd = async () => {
+    await openLedger();
+    await userEvent.press(screen.getByLabelText("Add transaction"));
+    await screen.findByText("Add transaction");
+  };
+
+  test("an untouched form just closes — no prompt to learn to ignore", async () => {
+    const { seen, restore } = captureAlert();
+    await openAdd();
+    await userEvent.press(screen.getByLabelText("Close"));
+    expect(seen).toHaveLength(0);
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    restore();
+  });
+
+  test("a form with something typed in it asks first, and Keep editing keeps it", async () => {
+    const { seen, restore } = captureAlert();
+    await openAdd();
+    await userEvent.type(screen.getByLabelText("Name"), "Gym");
+    await userEvent.press(screen.getByLabelText("Close"));
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.title).toBe("Discard changes?");
+    // Nothing has happened yet: the sheet is still up and still holds
+    // what was typed.
+    expect(screen.getByLabelText("Name").props.value).toBe("Gym");
+    restore();
+  });
+
+  test("...and Discard is what actually closes it", async () => {
+    const { seen, restore } = captureAlert();
+    await openAdd();
+    await userEvent.type(screen.getByLabelText("Name"), "Gym");
+    await userEvent.press(screen.getByLabelText("Close"));
+
+    const discard = seen[0]!.buttons.find((b) => b.text === "Discard")!;
+    expect(discard).toBeTruthy();
+    await act(async () => { discard.onPress?.(); });
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    restore();
+  });
+
+  test("Cancel goes through the same guard as the scrim does", async () => {
+    // The whole reason the guard is on the screen rather than in the
+    // sheet: a "Discard changes?" that only covers the button is not
+    // a guard.
+    const { seen, restore } = captureAlert();
+    await openAdd();
+    await userEvent.type(screen.getByLabelText("Name"), "Gym");
+    await userEvent.press(screen.getByText("Cancel"));
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.title).toBe("Discard changes?");
+    restore();
   });
 });

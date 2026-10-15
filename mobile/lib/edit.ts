@@ -71,6 +71,27 @@ const isMoney = (s: string) => s.trim() !== "" && !Number.isNaN(num(s)) && Numbe
 
 /** Why a draft cannot be saved, or null. A string so the sheet can show it
  *  rather than only disabling a button with no explanation. */
+/**
+ * Has anything in the form been touched?
+ *
+ * SWIPE-TO-DISMISS NEEDS AN ANSWER TO THIS. A sheet that can be
+ * flicked away has to know whether flicking it away throws work out,
+ * because an accidental swipe over a half-filled form is a much
+ * cheaper mistake to make than an accidental press of Cancel.
+ *
+ * The fields that matter are ONLY the ones the current mode shows.
+ * A one-off carries a `cadence` and a `startDate` it never displays,
+ * both prefilled by blankDraft, and comparing them would call a form
+ * dirty for answers the user was never asked.
+ */
+export function draftTouched(now: Draft, was: Draft): boolean {
+  const shown = (d: Draft): unknown[] => [
+    d.name, d.amount, d.category, d.recurring, d.variable,
+    ...(d.recurring ? [d.cadence, d.startDate, d.endDate] : [d.date]),
+  ];
+  return JSON.stringify(shown(now)) !== JSON.stringify(shown(was));
+}
+
 export function draftError(d: Draft): string | null {
   if (!d.name.trim()) return "Give it a name.";
   if (!isMoney(d.amount)) return "Enter an amount.";

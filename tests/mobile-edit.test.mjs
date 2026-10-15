@@ -16,6 +16,7 @@ import {
   itemIdOf, dateOf, rowTarget, scopeActions, overrideAt, orphansIfSaved,
   saveItem, saveOccurrence, resetOccurrence, removeItem,
   blankDraft, draftOf, draftError, overrideError, itemFrom, canTrackActuals,
+  draftTouched,
 } from "../mobile/lib/edit.ts";
 import { defaultCategoryFor, categoryOnModeChange, initialCategory } from "../src/shared/entryDefaults.ts";
 import { backendKind, backendNotice } from "../mobile/lib/backend.ts";
@@ -31,6 +32,7 @@ function eq(label, got, want) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}${ok ? "" : `\n        got  ${show(got)}\n        want ${show(want)}`}`);
 }
 const is = (label, cond) => eq(label, !!cond, true);
+const not = (label, cond) => eq(label, !!cond, false);
 
 // A real state: one rule with an override on a specific date, one one-off,
 // a debt category and a savings category.
@@ -145,6 +147,37 @@ eq("adding a brand-new item can orphan nothing at all",
 
 // ---------- 6. Adding ----------
 console.log("\n== adding ==");
+// ---- has anything been typed? ---------------------------------------
+// Swipe-to-dismiss needs an answer: a sheet that can be flicked away
+// has to know whether flicking it away throws work out.
+{
+  const fresh = blankDraft("2026-11-20");
+  not("an untouched form is not dirty", draftTouched(fresh, fresh));
+  is("a name is", draftTouched({ ...fresh, name: "G" }, fresh));
+  is("an amount is", draftTouched({ ...fresh, amount: "1" }, fresh));
+  is("a category is", draftTouched({ ...fresh, category: "bill" }, fresh));
+  is("so is switching to recurring", draftTouched({ ...fresh, recurring: true }, fresh));
+  is("and the variable flag", draftTouched({ ...fresh, variable: true }, fresh));
+
+  // ONLY THE FIELDS THE MODE SHOWS. blankDraft prefills a cadence and a
+  // start date that a one-off never displays, and treating those as
+  // typed would make every sheet dirty on arrival — which is the same
+  // as having no guard at all, because people stop reading a confirm
+  // that always fires.
+  not("a one-off ignores the recurring fields it never showed",
+    draftTouched({ ...fresh, cadence: "yearly", startDate: "2027-01-01", endDate: "2027-06-01" }, fresh));
+  const rec = { ...fresh, recurring: true };
+  is("...and a recurring form does not ignore them",
+    draftTouched({ ...rec, cadence: "yearly" }, rec));
+  not("a recurring form ignores the one-off date it never showed",
+    draftTouched({ ...rec, date: "2027-01-01" }, rec));
+
+  // Editing an existing item starts from that item, not from blank.
+  const was = draftOf(rent);
+  not("opening an existing rule is not already dirty", draftTouched(was, was));
+  is("...and changing its amount is", draftTouched({ ...was, amount: "1500" }, was));
+}
+
 const add = { ...blankDraft("2026-11-20"), name: "  Gym  ", amount: "32", category: "bill" };
 const added = saveItem(add, null)(base);
 const gym = added.oneoffs.find((o) => o.name === "Gym");
