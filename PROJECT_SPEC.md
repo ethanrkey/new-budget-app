@@ -510,6 +510,95 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **1.0.0 (8), 2026-10-15** — a slow, careful device pass on build 7,
+  twelve items, every one of them diagnosed before it was fixed. The
+  ones with a reason worth keeping:
+
+  1. **The bills step's due day defaulted to the row above it.** The
+     step's own copy says "it defaults to today", and the first row's
+     did; "+ Add another bill" seeded every later row from
+     `bills[0].day`, so a second bill offered whatever had just been
+     typed into the first — the 8th if the first was set to the 8th,
+     the 4th if it was set to the 4th. Deterministic, invisible, and
+     contradicting the sentence directly above it. The web broke the
+     same promise differently: a module-level
+     `const defaultBillDay = new Date().getDate()` is "today" frozen
+     when the bundle was evaluated, so a tab left open past midnight
+     offered yesterday. One builder now (`emptyBillRow(today)`), and
+     the day is an argument rather than a moment closed over.
+     Separately: the field holds two digits and `maxLength` is 2, so
+     tapping it and pressing a number did nothing at all — the
+     keypress was swallowed. `selectTextOnFocus` makes one tap and one
+     digit enough.
+  2. **The payday control was under the keyboard.** On a 390x844
+     screen that row ends 508pt down and the decimal pad leaves 457.
+     It was never reachable without scrolling and the step gave no
+     sign there was anywhere to scroll to. Every field on every step
+     now reports its focus and the step scrolls it clear
+     (`scrollToReveal`, checked without a device); picking a frequency
+     puts the keyboard away, because it is the last typed answer on
+     both steps that have one; and the payday row says "Change" and
+     carries a chevron.
+  3. **Groceries happen on a day of the week.** The rule started on
+     whatever day setup was run, so a Sunday shopper who set up on a
+     Wednesday got a Wednesday series for good. Seven chips, Sunday
+     default, `firstWeekdayOn` — today counts, the same call
+     `firstMonthlyOn` makes.
+  4. **Setup never asked what goes INTO the accounts it collected.** A
+     new step after the accounts step, and the same question on the
+     Dashboard after one account is added. See the long note in
+     `src/engine/setup.ts` for why it is a step of its own and why a
+     contribution rides on its account rather than arriving as a
+     separate list.
+  5. **Every user-facing date is MM/DD/YYYY**, from
+     `src/shared/dates.ts`. There were NINE private formatters and the
+     raw ISO string went through wherever none of them was called —
+     the phone's top bar said "verified 2026-10-14". Two deliberate
+     exceptions, both argued in that file: the CSV export stays ISO
+     (it is re-importable, it sorts as text, and MM/DD/YYYY is what
+     Excel mangles), and chart axis ticks drop the year.
+  6. **The phone's checking balance says it can be tapped.** It opened
+     the sheet since build 6 and looked like a line of text. Surface,
+     hairline border, "Update ›" — and none of it when offline, where
+     the app is read-only.
+  7. **The Budget's totals read as a block on the phone**, matching
+     the web: tinted TOTAL IN and TOTAL OUT, a two-point rule above
+     every total. The tints are the web's, flattened, because a phone
+     cell is opaque.
+  8. **The web's Saving/Debt amounts are gray.** This SUPERSEDES the
+     2026-10-03 "white, not red" call — still not red, but white put
+     them at the same weight as the item names and louder than the
+     bills. `gray-400` is #9ca3af is the phone's `T.dim`, so the two
+     clients now agree by number.
+  9. **The transaction form can be swiped away**, and asks first if
+     anything was typed. The guard lives on the screen rather than in
+     the sheet, because the scrim, the back button and the swipe are
+     all the screen's and a confirm that covers only Cancel is not a
+     guard.
+  10. **"Continue with Google" wears Google's branding** — the
+      four-color G, the light theme by its numbers, approved wording.
+      It was a bordered rectangle sitting under a real
+      AppleAuthenticationButton.
+  11. **Appearance left Settings.** The app is dark only, and a
+      setting with no choice in it reads as a broken control. The
+      shared About copy described it, so `AboutOnly` exists now — the
+      per-block platform variant the 2026-09-24 audit asked for, built
+      for the first line that needed it.
+  12. **The key's junctions are filleted.** Three strokes unioned by
+      overlap met in four unfilleted concave corners; at 60pt, with
+      iOS 26 tracing its own specular pass along the silhouette, a
+      highlight that stops dead at a corner reads as a cropped bevel.
+      Four computed arcs, and the icon check probes each old corner
+      from both sides.
+
+      Two things that fix broke and the script now catches: a wrapping
+      group truncated the generator's non-greedy capture, so the
+      layer shipped with an unclosed tag that Chrome repaired and
+      actool refused; and that actool failure was being reported as
+      "this machine has no Xcode", because the skip branch matched
+      the word "actool" anywhere in the error. The check that exists
+      to catch exactly that was swallowing it.
+
 - **1.0.0 (7) was built and submitted 2026-10-15.** The Sunday-priority
   setup fixes plus the ledger, form and Budget-order work, and two
   things from testing build 6 on a device: the icon's key back to
@@ -1308,6 +1397,33 @@ harness that blames the next test. In each case the tool was trusted
 because it was green, and in each case the fix was to reproduce the
 tool's own behavior on something with a known answer.
 
+### A harness landmine: a synthetic PanResponder drag that measures zero
+
+Found 2026-10-15 while testing swipe-to-dismiss on the sheet.
+
+PanResponder does not read the gesture off the event. It keeps its own
+state and accumulates `dy` as a running sum of
+`currentCentroidY − previousCentroidY`, both read out of
+`event.touchHistory.touchBank`. So a synthetic touch whose `previousPageY`
+equals its `currentPageY` reports a gesture that went nowhere: the first
+version of the drag helper moved the finger 200 points across three
+moves and `gestureState.dy` came back 0, and the dismissal never fired.
+
+Two things a synthetic touch needs, and both are easy to get wrong:
+
+- `previousPageY` must be the PREVIOUS move's position, not this one's.
+  The sparkline's helper gets away with repeating the current position
+  because that component reads `nativeEvent.locationX` directly and
+  never looks at `gestureState`.
+- `mostRecentTimeStamp` must increase. PanResponder ignores a move it
+  has already accounted for, so a fixed clock makes every move after
+  the grant a no-op — which is the same landmine recorded for the
+  scrub test on 2026-10-14, hit again from the other direction.
+
+The shape is the standing one: **a verification tool that fails
+somewhere other than the fault.** The helper was wrong and the
+component looked broken.
+
 ## 9. Maintenance rules (standing — apply to every commit)
 
 1. **This spec matches the code.** A change that makes it wrong updates it in
@@ -1853,6 +1969,19 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
     keybudget.app. Raised 2026-10-11.
 
 **F. Product, further out and deliberately vague**
+
+18a. **Link Apple and Google sign-ins to one account, from Settings.**
+    Asked for 2026-10-15. Two accounts with the SAME email already
+    auto-link — that is Supabase identity linking, and it is what lets
+    a Google-created account receive an emailed code (see A1). Hide My
+    Email defeats it: Apple hands over a
+    `...@privaterelay.appleid.com` address, which is a different email,
+    so the same person gets a second account with an empty budget in
+    it. Nothing is lost and nothing is corrupted; it just looks like
+    the app forgot them. The fix is `linkIdentity` from a signed-in
+    session, offered in Settings beside the provider list that is
+    already there. Not urgent: it needs somebody to have hit it, and
+    the first external testers will say whether anyone does.
 
 19. Multi-account model (payment method per transaction, credit cards
     with limits). The one deliberate architectural step still ahead.
