@@ -1,4 +1,5 @@
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { Keyboard } from "react-native";
 import SignIn from "../components/SignIn";
 import { authCalls, googleCalls, appleCalls } from "./setup";
 import { loadPrefs } from "../lib/prefs";
@@ -160,7 +161,14 @@ test("Google's button wears Google's branding, not a plain rectangle", async () 
   // way this goes wrong, and it would still look like a button.
   // react-native-svg stores a fill as opaque ARGB, so that is what the
   // tree holds rather than the hex string.
-  const tree = JSON.stringify(screen.toJSON());
+  //
+  // `_owner` IS DROPPED, and it has to be. A rendered tree that holds
+  // a React element in a prop — SymbolView's `fallback`, here — has a
+  // FiberNode on that element's `_owner`, and a plain
+  // JSON.stringify of the tree throws "Converting circular
+  // structure". Nothing about this screen changed to cause that; the
+  // Apple mark simply arrived with a fallback.
+  const tree = JSON.stringify(screen.toJSON(), (k, v) => (k === "_owner" ? undefined : v));
   for (const hue of ["EA4335", "4285F4", "FBBC05", "34A853"]) {
     expect(tree).toContain(String(0xff000000 + parseInt(hue, 16)));
   }
@@ -168,6 +176,89 @@ test("Google's button wears Google's branding, not a plain rectangle", async () 
   // And the approved wording, which is also the word Apple's CONTINUE
   // button uses, so the two read as a pair rather than as two makes.
   expect(screen.getByText("Continue with Google")).toBeOnTheScreen();
+});
+
+test("the two brand buttons are the same button", async () => {
+  // Reported from a device on build 8: "the text sizes differ and the
+  // logos sit in different spots."
+  //
+  // They did, because only one of the two was ours. Google's was a
+  // Pressable with a 15pt label centered in the whole button and the
+  // G pinned absolutely at the leading edge; Apple's was
+  // ASAuthorizationAppleIDButton, which draws its own title in a font
+  // sized from its own frame and exposes no way to read or set it.
+  // Both are BrandButton now, so this asserts they came out of the
+  // same mold — change one of these numbers on one button and there
+  // is nowhere to change it.
+  await render(<SignIn />);
+  const apple = await screen.findByLabelText("Continue with Apple");
+  const google = screen.getByLabelText("Continue with Google");
+
+  // THE LITERALS, not BRAND_BUTTON's own values. Asserting a
+  // component's constant against itself passes whatever the constant
+  // says, which is how a test for "these numbers" ends up testing
+  // nothing: retuning fontSize to 15 would still be green. These are
+  // the layout that was reasoned out against both sets of
+  // guidelines, so they are written down twice on purpose.
+  for (const button of [apple, google]) {
+    expect(button).toHaveStyle({
+      height: 50,
+      borderRadius: 12,
+      // Centered as a GROUP — the mark in the flow, not pinned to an
+      // edge. This is the layout Apple's own button uses and the one
+      // Google's rendered button uses when it is wider than its
+      // content, which is why it is the one both can wear.
+      flexDirection: "row",
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 12,
+    });
+  }
+  for (const label of ["Continue with Apple", "Continue with Google"]) {
+    expect(screen.getByText(label)).toHaveStyle({ fontSize: 17, fontWeight: "500" });
+  }
+
+  // ...and they agree with EACH OTHER, which is the property the
+  // report was actually about. This one survives a deliberate change
+  // to the layout above; what it will not survive is changing one
+  // button and not the other.
+  const box = (el: { props: Record<string, unknown> }) => {
+    const flat = Object.assign({}, ...[el.props.style].flat(9).filter(Boolean));
+    // Colors are each brand's and are meant to differ.
+    const { backgroundColor, borderColor, borderWidth, ...rest } = flat;
+    return rest;
+  };
+  expect(box(apple)).toEqual(box(google));
+
+  // The mark comes FIRST inside each button, which is the other half
+  // of "same logo placement": a trailing mark would still pass every
+  // style assertion above.
+  for (const button of [apple, google]) {
+    const kids = button.children as unknown[];
+    expect(kids).toHaveLength(2);
+    expect(String((kids[1] as { props: { children: string } }).props.children)).toMatch(/^Continue with/);
+  }
+
+  // And Apple's mark is APPLE'S mark — the system's own artwork, not
+  // a path somebody traced. Drawing one is the thing the guidelines
+  // forbid outright.
+  expect(screen.getByTestId("apple-mark").props.name).toBe("apple.logo");
+});
+
+test("tapping off the field puts the keyboard away", async () => {
+  // The email field autofocuses, so the keyboard is up before
+  // anything is typed — and neither keyboard here has a key that
+  // dismisses it: the email step asks for "go" and the code step is a
+  // number pad with no return key at all. Until build 9 the only way
+  // off this screen was to submit.
+  const dismiss = jest.spyOn(Keyboard, "dismiss").mockImplementation(() => {});
+  try {
+    await render(<SignIn />);
+    await userEvent.press(screen.getByTestId("signin-backdrop"));
+    expect(dismiss).toHaveBeenCalled();
+  } finally {
+    dismiss.mockRestore();
+  }
 });
 
 test("a dismissed Google sheet says nothing at all", async () => {

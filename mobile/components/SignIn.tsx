@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, KeyboardAvoidingView, Platform, Pressable,
+  ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable,
   StyleSheet, Text, TextInput, View,
 } from "react-native";
+import { SymbolView } from "expo-symbols";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import Svg, { Path } from "react-native-svg";
@@ -12,7 +13,7 @@ import {
   resendIn, sendFailureMessage, verifyFailureMessage,
 } from "../lib/signin";
 import { GOOGLE_AVAILABLE, signInWithGoogle } from "../lib/google";
-import { APPLE_POSSIBLE, appleAvailable, signInWithApple } from "../lib/apple";
+import { appleAvailable, signInWithApple } from "../lib/apple";
 import * as feel from "../lib/haptics";
 
 // Sign in by emailed code. Two steps, because a code you have not been
@@ -37,10 +38,20 @@ import * as feel from "../lib/haptics";
 // which means it has one. So the two ship together or Google does not
 // ship.
 //
-// APPLE'S BUTTON IS APPLE'S BUTTON — `AppleAuthenticationButton`, the
-// real native one, not a black rectangle with a glyph on it. Apple's
-// Human Interface Guidelines are specific about its appearance and a
-// hand-drawn copy is a review risk for no gain.
+// THE TWO BRAND BUTTONS ARE ONE COMPONENT, since 2026-10-15. See
+// BrandButton below for why that meant giving up Apple's native
+// `AppleAuthenticationButton`, and what both sets of guidelines
+// actually require.
+//
+// TAPPING ANYWHERE ELSE PUTS THE KEYBOARD AWAY. The email field
+// autofocuses, so the keyboard is up before anything is typed, and
+// neither keyboard here has a key that dismisses it — the email step
+// asks for "go" and the code step is a number pad, which has no
+// return key at all. Until now the only way off the screen was to
+// submit. The whole sheet is a Pressable whose press is
+// `Keyboard.dismiss`; a child that takes the touch (a field, a
+// button) never lets it reach here, which is exactly the rule
+// wanted.
 export default function SignIn() {
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState<"email" | "code">("email");
@@ -183,8 +194,17 @@ export default function SignIn() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={[styles.wrap, { paddingTop: insets.top + 80, paddingBottom: insets.bottom }]}
+      style={styles.flex}
     >
+      {/* The backdrop. `accessible={false}` so VoiceOver does not
+          announce the whole screen as one button, and no pressed
+          style, because nothing should look like it was pressed. */}
+      <Pressable
+        accessible={false}
+        onPress={Keyboard.dismiss}
+        testID="signin-backdrop"
+        style={[styles.wrap, { paddingTop: insets.top + 80, paddingBottom: insets.bottom }]}
+      >
       <Text style={styles.brand}>Key Budget</Text>
       <Text style={styles.sub}>Plan your future while viewing the present</Text>
 
@@ -283,36 +303,118 @@ export default function SignIn() {
           </Text>
         </>
       )}
+      </Pressable>
     </KeyboardAvoidingView>
   );
 }
 
 /**
- * GOOGLE'S BUTTON IS GOOGLE'S BUTTON, the way Apple's is Apple's.
+ * ONE BUTTON, WORN TWICE.
  *
- * It was a bordered surface rectangle with the words in it and no
- * mark at all, next to a real AppleAuthenticationButton — which is
- * both off-brand and, on the screen, visibly the lesser of the two
- * options. Google's Identity branding guidelines are specific and
- * this follows them:
+ * Reported from a device on build 8: "the text sizes differ and the
+ * logos sit in different spots." Both were true, and the root cause
+ * is that only one of the two buttons was ours.
  *
- *   - the official four-color G, unaltered, never recolored and never
- *     redrawn as a single-color glyph;
- *   - an approved theme — LIGHT here (#FFFFFF, #747775 border,
- *     #1F1F1F label), which is also what sits beside Apple's WHITE
- *     button without one of them looking like a mistake;
- *   - approved wording. "Continue with Google" is on the list, and it
- *     is the word Apple's CONTINUE button uses, so the two read as a
- *     pair;
- *   - the mark at the leading edge with its own clearance, the label
- *     centered in the button.
+ * Google's was a Pressable: 15pt semibold label centered in the whole
+ * button, with the G pinned by `position: absolute` at the leading
+ * edge. Apple's was `AppleAuthenticationButton`, which is
+ * `ASAuthorizationAppleIDButton` — it draws its own title in a font
+ * SIZED FROM ITS OWN FRAME, with the glyph and the title centered
+ * together as a group. Nothing on that view sets a font: the only
+ * properties it exposes are type, style and corner radius (see
+ * expo-apple-authentication's AppleAuthenticationButton.swift). So
+ * "make the two match" and "keep Apple's native view" cannot both be
+ * true — the native view's size is unreadable from here and unsettable
+ * from anywhere.
  *
- * The corner radius is 12 to match Apple's, which the guidelines
- * allow; everything inside the mark is Google's and is not touched.
+ * SO BOTH ARE CUSTOM NOW, and that is a deliberate trade worth
+ * stating: a native button is compliant by construction, and a custom
+ * one is compliant because somebody read the rules. Apple's
+ * guidelines do allow it — they publish the logo artwork for exactly
+ * this, permit adjusting the title's font weight and size, and set
+ * the floor at a 140pt minimum width, a 30pt minimum height, and a
+ * margin of at least one tenth of the button's height. What they do
+ * NOT allow is a redrawn Apple logo, so this does not draw one: the
+ * mark is `apple.logo` from SF Symbols, which is Apple's own artwork
+ * rendered by the system, and the wording is one of the three
+ * approved titles.
+ *
+ * THE LAYOUT, which is the thing both guidelines had to agree on:
+ *
+ *     [ 20pt mark ][ 12pt ][ 17pt/500 label ]   centered as a group
+ *     50pt tall, full width, 12pt corner radius
+ *
+ * - Centered as a group is what Apple's own button does, and it is
+ *   what Google's rendered SDK button does whenever the button is
+ *   wider than its content. The old leading-edge G was the other
+ *   reading of Google's diagram, and it is the one that does not
+ *   match Apple.
+ * - Google's iOS spec gives 16pt before the mark, 12pt between mark
+ *   and label, 16pt after the label. Those are minimums for a button
+ *   sized to its content; centering a group inside 50x(full width)
+ *   leaves far more than 16 at each end and exactly 12 in the middle.
+ * - Apple's minimum margin is height/10 = 5pt; the 20pt content in a
+ *   50pt box leaves 15.
+ * - 17pt at weight 500 ("Medium") is Google's 14/20 Google Sans
+ *   Medium scaled to this button's height, and within what Apple
+ *   permits for a custom title.
+ *
+ * COLORS STAY EACH BRAND'S, because that is the one thing neither
+ * will bend on: Google's light theme is #FFFFFF with a 1pt #747775
+ * border and a #1F1F1F label beside the unaltered four-color G;
+ * Apple's white style is #FFFFFF with no border and the mark and
+ * title both black. Written as literals, never theme tokens — these
+ * belong to Google and to Apple, and a token someone later retunes
+ * would take a button off-brand with nothing noticing.
+ */
+export const BRAND_BUTTON = {
+  height: 50,
+  radius: 12,
+  mark: 20,
+  gap: 12,
+  fontSize: 17,
+  fontWeight: "500",
+} as const;
+
+function BrandButton({
+  mark, label, onPress, busy, surface, borderColor, labelColor,
+}: {
+  mark: React.ReactNode;
+  label: string;
+  onPress: () => void;
+  busy: boolean;
+  surface: string;
+  borderColor?: string;
+  labelColor: string;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.brandButton,
+        { backgroundColor: surface },
+        borderColor ? { borderWidth: 1, borderColor } : null,
+        pressed && styles.brandPressed,
+        busy && styles.disabled,
+      ]}
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {mark}
+      <Text style={[styles.brandLabel, { color: labelColor }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Google's four-color G, unaltered. Never recolored, never redrawn as
+ * a single-color glyph — that is the usual way this goes wrong, and
+ * the result still looks like a button.
  */
 function GoogleMark() {
   return (
-    <Svg width={18} height={18} viewBox="0 0 48 48">
+    <Svg width={BRAND_BUTTON.mark} height={BRAND_BUTTON.mark} viewBox="0 0 48 48">
       <Path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
       <Path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
       <Path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
@@ -323,49 +425,56 @@ function GoogleMark() {
 
 function GoogleButton({ onPress, busy }: { onPress: () => void; busy: boolean }) {
   return (
-    <Pressable
-      style={({ pressed }) => [styles.google, pressed && styles.googlePressed, busy && styles.disabled]}
+    <BrandButton
+      mark={<GoogleMark />}
+      label="Continue with Google"
       onPress={onPress}
-      disabled={busy}
-      accessibilityRole="button"
-      accessibilityLabel="Continue with Google"
-    >
-      {/* Absolutely positioned so the label is centered in the WHOLE
-          button, which is what Google's layout specifies — a mark in
-          the flow would push the words off-center. */}
-      <View style={styles.googleMark}><GoogleMark /></View>
-      <Text style={styles.googleText}>Continue with Google</Text>
-    </Pressable>
+      busy={busy}
+      surface="#FFFFFF"
+      borderColor="#747775"
+      labelColor="#1F1F1F"
+    />
   );
 }
 
 /**
- * Apple's own button, required lazily.
+ * Apple's mark is APPLE'S MARK: `apple.logo` out of SF Symbols, drawn
+ * by the system from Apple's own artwork. Not an SVG path somebody
+ * traced — the guidelines forbid a custom Apple logo, and SF Symbols
+ * is where Apple puts this one for sign-in buttons to use.
  *
- * A top-level import of expo-apple-authentication is evaluated in Expo
- * Go, where the native view does not exist — and the import, not the
- * press, is what fails. `appleReady` is false there, so this component
- * is never rendered and the require never runs.
+ * The symbol's box is square while the glyph is taller than it is
+ * wide, so it is given the label's own size rather than the mark size
+ * the G uses; at 17pt the glyph stands about as tall as a capital.
  */
-function AppleButton({ onPress, busy }: { onPress: () => void; busy: boolean }) {
-  const AppleAuthentication = require("expo-apple-authentication");
+function AppleMark() {
   return (
-    <View style={[styles.appleWrap, busy && styles.disabled]} pointerEvents={busy ? "none" : "auto"}>
-      <AppleAuthentication.AppleAuthenticationButton
-        buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-        // WHITE on a dark app, because the app is dark. Apple allows
-        // black, white and white-with-outline; black on #030712 is a
-        // button you cannot see.
-        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-        cornerRadius={12}
-        style={styles.apple}
-        onPress={onPress}
-      />
-    </View>
+    <SymbolView
+      name="apple.logo"
+      size={BRAND_BUTTON.fontSize}
+      type="monochrome"
+      tintColor="#000000"
+      testID="apple-mark"
+      fallback={<Text style={{ fontSize: BRAND_BUTTON.fontSize, color: "#000000" }} testID="apple-mark"></Text>}
+    />
+  );
+}
+
+function AppleButton({ onPress, busy }: { onPress: () => void; busy: boolean }) {
+  return (
+    <BrandButton
+      mark={<AppleMark />}
+      label="Continue with Apple"
+      onPress={onPress}
+      busy={busy}
+      surface="#FFFFFF"
+      labelColor="#000000"
+    />
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   wrap: { flex: 1, paddingHorizontal: 24, gap: 12 },
   brand: { color: T.brass, fontSize: 30, fontWeight: "700", letterSpacing: -0.5 },
   sub: { color: T.dim, marginBottom: 20 },
@@ -390,20 +499,19 @@ const styles = StyleSheet.create({
   orRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 18 },
   rule: { flex: 1, height: 1, backgroundColor: T.border },
   or: { color: T.faint, fontSize: 12 },
-  appleWrap: { marginTop: 12 },
-  // 50pt to match the other two buttons exactly. Apple's button draws
-  // itself; only its box is ours.
-  apple: { height: 50, width: "100%" },
-  // Google's LIGHT theme, by the numbers in its branding guidelines:
-  // #FFFFFF surface, #747775 one-point border, #1F1F1F label. Not
-  // theme tokens — these belong to Google, and a token that someone
-  // later retunes would quietly take the button off-brand.
-  google: {
-    marginTop: 12, minHeight: 50, borderRadius: 12, alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "#747775", backgroundColor: "#FFFFFF",
+  // ONE SET OF METRICS FOR BOTH BRAND BUTTONS. See BrandButton.
+  // `height`, not `minHeight`: a minimum is a different number on two
+  // buttons whose contents differ, which is how they stopped matching.
+  brandButton: {
+    marginTop: 12,
+    height: BRAND_BUTTON.height,
+    borderRadius: BRAND_BUTTON.radius,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: BRAND_BUTTON.gap,
   },
-  googlePressed: { opacity: 0.85 },
-  googleMark: { position: "absolute", left: 16, top: 0, bottom: 0, justifyContent: "center" },
-  googleText: { color: "#1F1F1F", fontSize: 15, fontWeight: "600" },
+  brandPressed: { opacity: 0.85 },
+  brandLabel: { fontSize: BRAND_BUTTON.fontSize, fontWeight: BRAND_BUTTON.fontWeight },
   note: { color: T.faint, fontSize: 12, textAlign: "center", marginTop: 10, lineHeight: 17 },
 });

@@ -1450,6 +1450,23 @@ The shape is the standing one: **a verification tool that fails
 somewhere other than the fault.** The helper was wrong and the
 component looked broken.
 
+### A harness landmine: `JSON.stringify(screen.toJSON())` can be circular
+
+Found 2026-10-15, the first time a rendered tree held a React element
+inside a prop — `SymbolView`'s `fallback`, on the sign-in screen's
+Apple mark.
+
+A tree snapshot is plain data until a prop value is itself an element.
+That element carries `_owner`, a FiberNode, and the fiber graph loops
+straight back, so `JSON.stringify` throws **"Converting circular
+structure to JSON"**. The test that broke was asserting Google's four
+hues by searching the serialized tree, and nothing about Google's
+button had changed.
+
+The fix is a replacer that drops `_owner`. Worth knowing because the
+failure names a test that is still correct and a component that is
+still fine.
+
 ## 9. Maintenance rules (standing — apply to every commit)
 
 1. **This spec matches the code.** A change that makes it wrong updates it in
