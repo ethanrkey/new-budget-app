@@ -924,12 +924,21 @@ Conventions worth knowing before touching numbers:
   purpose.** The LEDGER reds every outflow, savings transfers and loan
   payments included: it is a running balance read down a column, and what
   matters there is that the money left the account. The BUDGET prints
-  saving and debt rows plain: it answers where the month's money WENT, and
-  "saved" and "spent" are genuinely different answers to that question.
-  One rule was tried across both from 2026-10-06 and the Ledger half was
-  reverted on 2026-10-08 after living with it — a plain $300 beside a red
-  $112 made the plain one look like it was not coming out.
+  saving and debt rows in a MUTED GRAY: it answers where the month's money
+  WENT, and "saved" and "spent" are genuinely different answers to that
+  question. One rule was tried across both from 2026-10-06 and the Ledger
+  half was reverted on 2026-10-08 after living with it — a plain $300
+  beside a red $112 made the plain one look like it was not coming out.
   `isRetainedOutflow` is the Budget's rule only, and says so.
+
+  The gray **supersedes the 2026-10-03 call of "white, not red"**
+  (2026-10-15, after a device pass). Still not red. But white put those
+  rows at the same weight as the item names beside them and louder than
+  the bills, which is the opposite of what the distinction is for. The
+  phone had drawn them in `T.dim` (#9ca3af) all along, and Tailwind's
+  `gray-400` is the same value, so the two clients now agree by number.
+  Light mode uses `gray-500`, because `gray-400` on white is not
+  readable.
 
   **The gate enforces the thresholds under every vision type, with no
   exemptions.** Adjacent steps of the brass ramp >= 8.0, every pair of card

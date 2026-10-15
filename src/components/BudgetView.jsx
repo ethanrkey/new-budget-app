@@ -260,10 +260,22 @@ function DataRow({
         const v = pick(c);
         const show = hideZero ? v !== 0 : true;
         // Direction OWNS the amounts, and since 2026-10-06 it is the only
-        // thing color says here: green in, red out, plain for an outflow
-        // that was saved rather than spent. Saving/debt rows pass no tone,
-        // which is how they stay plain.
-        const colorClass = muted ? "text-gray-400" : tone === "income" ? "text-income" : tone === "expense" ? "text-expense" : "";
+        // thing color says here: green in, red out, and a MUTED GRAY for
+        // an outflow that was saved rather than spent. Saving/debt rows
+        // pass no tone, which is how they land in the last case.
+        //
+        // That gray supersedes the 2026-10-03 call of "white, not red".
+        // Still not red — red is money gone and these rows are money
+        // kept — but white put them at the same weight as the item
+        // names beside them and louder than the bills, which is the
+        // opposite of what the distinction is for. The phone has drawn
+        // them in #9ca3af all along (T.dim), so this is also the two
+        // clients agreeing: gray-400 IS #9ca3af. Light mode steps one
+        // stop darker, because gray-400 on white is not readable.
+        const colorClass = muted ? "text-gray-400"
+          : tone === "income" ? "text-income"
+          : tone === "expense" ? "text-expense"
+          : "text-gray-500 dark:text-gray-400";
         return (
           <td key={c.key} className={`py-2 sm:py-1.5 px-3 text-right ${colorClass}`}>
             {show && v !== 0 ? money(v) : muted && v === 0 ? "$0.00" : ""}
