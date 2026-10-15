@@ -1,5 +1,5 @@
 import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
-import { pickerProps } from "./setup";
+import { dayPickerProps, pickerProps } from "./setup";
 import { fmtDate } from "../../src/shared/dates.ts";
 import Setup from "../components/Setup";
 import { applySetup } from "../../src/engine/setup.ts";
@@ -25,6 +25,27 @@ async function press(label: string) {
   const button = await screen.findByLabelText(label);
   await waitFor(() => expect(button).toBeEnabled());
   await userEvent.press(button);
+}
+
+/**
+ * The due-day row for a question, by the label it carries.
+ *
+ * Since build 9 this is a Pressable, not a TextInput: it announces
+ * itself as "<label> <day>. Change the day." so VoiceOver says what
+ * it shows AND that it can be changed, which is the whole point of
+ * the pattern. Matching on the prefix is what lets a test ask for the
+ * row without restating the day it currently holds.
+ */
+const dayRow = (label: string) => screen.getByLabelText(new RegExp(`^${label} \\d+\\. Change the day\\.$`));
+const dayOn = (label: string) => dayRow(label).props.accessibilityLabel.match(/ (\d+)\. /)![1];
+
+/** Turn the wheel the way a finger would, and let it close itself. */
+async function pickDay(label: string, day: number) {
+  await userEvent.press(dayRow(label));
+  expect(screen.getByLabelText("Day picker")).toBeOnTheScreen();
+  await act(async () => {
+    (dayPickerProps.current!.onValueChange as (v: number) => void)(day);
+  });
 }
 
 /** Press Skip n times. The balance step has no Skip, so it is counted. */
@@ -128,11 +149,13 @@ test("the keyboard cannot hide a control: every field reports its focus", async 
 
   await press("Skip");
   reports("Amount");                                    // rent
-  reports("Due on day");
+  // The due day is a picker row rather than a field, so like the
+  // payday control it cannot take focus — it says it is a control.
+  expect(dayRow("What day of the month is your rent due\\?")).toBeOnTheScreen();
   await press("Skip");
   reports("Bill 1 name");                               // bills
   reports("Bill 1 amount");
-  reports("Bill 1 due day");
+  expect(dayRow("Bill 1 due day")).toBeOnTheScreen();
   await press("Skip");
   reports("Amount");                                    // groceries
   await press("Skip");
@@ -155,21 +178,58 @@ test("every bill row's due day defaults to today, not to the row above", async (
   const today = new Date();
   const todayDay = String(today.getDate());
 
-  const first = screen.getByLabelText("Bill 1 due day");
-  expect(first.props.value).toBe(todayDay);
-  // And it can be RETYPED. maxLength is 2 and the field arrives holding
-  // two digits, so without selectTextOnFocus the first keypress is
-  // swallowed and nothing happens at all.
-  expect(first.props.selectTextOnFocus).toBe(true);
+  expect(dayOn("Bill 1 due day")).toBe(todayDay);
 
-  await userEvent.clear(first);
-  await userEvent.type(first, "8");
-  expect(screen.getByLabelText("Bill 1 due day").props.value).toBe("8");
+  await pickDay("Bill 1 due day", 8);
+  expect(dayOn("Bill 1 due day")).toBe("8");
 
   await press("+ Add another bill");
-  expect(screen.getByLabelText("Bill 2 due day").props.value).toBe(todayDay);
-  // ...and the first row kept what was typed into it.
-  expect(screen.getByLabelText("Bill 1 due day").props.value).toBe("8");
+  expect(dayOn("Bill 2 due day")).toBe(todayDay);
+  // ...and the first row kept what was chosen in it.
+  expect(dayOn("Bill 1 due day")).toBe("8");
+});
+
+test("the due day is picked from 1-31, and there is no way to type 50", async () => {
+  // THE BUG, from the build 8 device pass: the due day was a
+  // two-character number pad field and you could enter 50. The engine
+  // clamped it to 31 (tests/setup.test.mjs proves it still does) and
+  // said nothing, so the field quietly meant something other than
+  // what was in it.
+  //
+  // The fix is a control that cannot express 50, which is also why
+  // this asserts there is no text input left to type into: a picker
+  // added BESIDE the old field would pass every other check here.
+  await mount();
+  await press("Skip");                      // paycheck
+
+  // Rent's label is a question now. "Due on day" beside a number box
+  // was a column heading; above a row that already shows a day it
+  // reads as something already answered.
+  const rent = "What day of the month is your rent due\\?";
+  expect(screen.getByText("What day of the month is your rent due?")).toBeOnTheScreen();
+  expect(screen.queryByText("Due on day")).toBeNull();
+
+  // Closed until asked for.
+  expect(screen.queryByLabelText("Day picker")).toBeNull();
+  // And the day is not in a text field. `queryAllByDisplayValue` only
+  // ever finds a TextInput, so this fails the moment a typeable day
+  // exists — including a picker added BESIDE the old field, which
+  // every other assertion here would happily pass.
+  expect(dayOn(rent)).toBe("1");
+  expect(screen.queryAllByDisplayValue("1")).toHaveLength(0);
+
+  await pickDay(rent, 31);
+  expect(dayOn(rent)).toBe("31");
+  expect(screen.queryAllByDisplayValue("31")).toHaveLength(0);
+  // ...and it closed on the selection, the way the payday wheel does.
+  expect(screen.queryByLabelText("Day picker")).toBeNull();
+
+  // 31 is as far as the wheel goes: the options are 1..31 and nothing
+  // else, so 50 is not a value this control can produce.
+  const items = (dayPickerProps.current!.children as { props: { value: number } }[]);
+  expect(items).toHaveLength(31);
+  expect(items[0]!.props.value).toBe(1);
+  expect(items[30]!.props.value).toBe(31);
 });
 
 test("groceries ask which day of the week, and the rule starts on it", async () => {
@@ -294,8 +354,7 @@ test("what reaches applySetup is what was on the screen", async () => {
   await press("Continue");
 
   await userEvent.type(screen.getByLabelText("Amount"), "1450");
-  await userEvent.clear(screen.getByLabelText("Due on day"));
-  await userEvent.type(screen.getByLabelText("Due on day"), "5");
+  await pickDay("What day of the month is your rent due\\?", 5);
   await press("Continue");
 
   await userEvent.type(screen.getByLabelText("Bill 1 name"), "Spotify");
@@ -357,8 +416,7 @@ test("a contribution becomes a recurring rule in that account's category", async
   // Answer for one and leave the other blank. A blank row is a
   // skipped question, not a zero.
   await userEvent.type(screen.getByLabelText("Ally contribution amount"), "300");
-  await userEvent.clear(screen.getByLabelText("Ally payment day"));
-  await userEvent.type(screen.getByLabelText("Ally payment day"), "15");
+  await pickDay("Ally payment day", 15);
   await press("Finish");
   await press("Go to my budget");
 
@@ -405,9 +463,9 @@ test("a weekday cadence drops the payment day, because it cannot mean anything",
   await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
   await press("Continue");
 
-  expect(screen.getByLabelText("Ally payment day")).toBeOnTheScreen();
+  expect(dayRow("Ally payment day")).toBeOnTheScreen();
   await userEvent.press(screen.getByLabelText("Every week"));
-  expect(screen.queryByLabelText("Ally payment day")).toBeNull();
+  expect(screen.queryByLabelText(/^Ally payment day /)).toBeNull();
 });
 
 test("Skip setup leaves without creating anything", async () => {

@@ -43,6 +43,11 @@ export const SETUP_COPY = {
   rent: {
     title: "What's your rent or mortgage?",
     sub: "This becomes a recurring bill so it shows up every month without re-entering it.",
+    // A QUESTION, not a two-word column heading. "Due on day" beside a
+    // number box was the label when the box was a number box; now that
+    // it is a picker with the day already in it, the row has to say
+    // what the day is FOR or it reads as something already answered.
+    dayLabel: "What day of the month is your rent due?",
   },
   bills: {
     title: "Any other monthly bills?",
@@ -132,6 +137,14 @@ export const WEEKDAY_OPTIONS: readonly { value: number; label: string; full: str
   { value: 5, label: "Fri", full: "Friday" },
   { value: 6, label: "Sat", full: "Saturday" },
 ];
+
+// 1 to 31, and the engine clamps anything else — see clampDay in
+// src/engine/setup.ts. Both clients draw a control that cannot express
+// a 50th of the month, which is the reason this list exists rather
+// than a `min`/`max` pair on a number box: build 8 let somebody type
+// 50, clamped it to 31 behind their back, and said nothing.
+export const DAY_OPTIONS: readonly number[] =
+  Array.from({ length: 31 }, (_, i) => i + 1);
 
 export const CADENCE_OPTIONS: readonly { value: "weekly" | "biweekly" | "monthly"; label: string }[] = [
   { value: "weekly", label: "Every week" },

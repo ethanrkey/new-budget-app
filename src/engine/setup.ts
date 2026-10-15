@@ -202,7 +202,30 @@ function positive(raw: string): number | null {
   return Number.isNaN(n) || n <= 0 ? null : n;
 }
 
-const clampDay = (raw: string, fallback: number) =>
+/**
+ * A day of the month, forced into 1..31. THE BACKSTOP, not the guard.
+ *
+ * Both clients draw a 1-31 picker since build 9, so nothing they can
+ * produce needs clamping — which is exactly why this stays and is
+ * tested. The engine is called by the CSV importers, by the phone and
+ * by the web, and "the UI cannot send a bad one" is a property of
+ * three callers rather than of this function. Build 8 let somebody
+ * type 50 into a number box; it arrived here and became 31 with
+ * nothing said, and the lesson was about the control, not about the
+ * clamp.
+ *
+ *   "50" -> 31, "40" -> 31      above the range, pulled down
+ *   "0", "" , "abc" -> fallback  not a day at all
+ *   "-3" -> 1                    below the range, pulled up
+ *   "31" -> 31                   kept; a short month is handled where
+ *                                the date is BUILT, by firstMonthlyOn
+ *                                and by occurrenceDates, both of which
+ *                                clamp to the month's own length
+ *
+ * `Number(raw) || fallback` catches NaN and 0 in one step, and 0 is
+ * not a loss: there is no zeroth of the month.
+ */
+export const clampDay = (raw: string, fallback: number) =>
   Math.min(31, Math.max(1, Number(raw) || fallback));
 
 /**

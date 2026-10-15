@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DatePicker from "./DatePicker";
+import DayPicker from "./DayPicker";
 import type { NativeMethods } from "react-native";
 import { T } from "../lib/theme";
 import {
@@ -207,39 +208,45 @@ export default function Setup({
               {step === "rent" && (
                 <Question title={COPY.rent.title} sub={COPY.rent.sub}>
                   <Money label={COPY.labels.amount} value={d.rentAmount} onChange={(v) => set("rentAmount", v)} autoFocus />
-                  <Day label={COPY.labels.dueDay} value={d.rentDay} onChange={(v) => set("rentDay", v)} />
+                  <Day label={COPY.rent.dayLabel} value={d.rentDay} onChange={(v) => set("rentDay", v)} />
                 </Question>
               )}
 
               {step === "bills" && (
                 <Question title={COPY.bills.title} sub={COPY.bills.sub}>
+                  {/* TWO LINES PER BILL since build 9, and the due day
+                      owns the second one. It used to be a 62pt column
+                      holding a two-character number pad field, which
+                      is the field somebody typed 50 into; a picker row
+                      needs the width to say what it shows and that it
+                      can be changed. */}
                   {d.bills.map((b, idx) => (
-                    <View key={idx} style={styles.billRow}>
-                      <View style={styles.grow}>
-                        <Field
-                          label={COPY.labels.name}
-                          placeholder="e.g. Spotify"
-                          value={b.name}
-                          onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, name: v } : r)))}
-                          accessibilityLabel={`Bill ${idx + 1} name`}
-                        />
+                    <View key={idx} style={styles.billCard}>
+                      <View style={styles.billRow}>
+                        <View style={styles.grow}>
+                          <Field
+                            label={COPY.labels.name}
+                            placeholder="e.g. Spotify"
+                            value={b.name}
+                            onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, name: v } : r)))}
+                            accessibilityLabel={`Bill ${idx + 1} name`}
+                          />
+                        </View>
+                        <View style={styles.amountCol}>
+                          <Money
+                            label={COPY.labels.amount}
+                            value={b.amount}
+                            onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, amount: v } : r)))}
+                            accessibilityLabel={`Bill ${idx + 1} amount`}
+                          />
+                        </View>
                       </View>
-                      <View style={styles.amountCol}>
-                        <Money
-                          label={COPY.labels.amount}
-                          value={b.amount}
-                          onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, amount: v } : r)))}
-                          accessibilityLabel={`Bill ${idx + 1} amount`}
-                        />
-                      </View>
-                      <View style={styles.dayCol}>
-                        <Day
-                          label={COPY.labels.dueDayShort}
-                          value={b.day}
-                          onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, day: v } : r)))}
-                          accessibilityLabel={`Bill ${idx + 1} due day`}
-                        />
-                      </View>
+                      <Day
+                        label={COPY.labels.dueDay}
+                        value={b.day}
+                        onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, day: v } : r)))}
+                        accessibilityLabel={`Bill ${idx + 1} due day`}
+                      />
                     </View>
                   ))}
                   <Pressable
@@ -495,30 +502,49 @@ function Money(p: Omit<Parameters<typeof Field>[0], "placeholder">) {
   );
 }
 
-// `selectTextOnFocus` IS NOT POLISH. The field arrives holding two
-// digits and `maxLength` is 2, so tapping it and pressing a number does
-// NOTHING — the keypress is silently swallowed and the only way to
-// change the day is to notice that you have to delete first. Selecting
-// the value on focus makes one tap and one digit enough, which is what
-// a prefilled two-character field has to do.
-function Day(p: Omit<Parameters<typeof Field>[0], "placeholder">) {
+// A DAY OF THE MONTH, PICKED, NOT TYPED.
+//
+// Until build 8 this was a number pad field holding two characters,
+// and build 8's device pass found two things wrong with it. The first
+// was that a prefilled two-character field with `maxLength={2}`
+// swallows the first keystroke — fixed then with `selectTextOnFocus`.
+// The second is the one that matters: YOU COULD ENTER 50. The engine
+// clamped it to 31 and said nothing, so the field quietly meant
+// something other than what was in it.
+//
+// Both go away with a control that cannot express 50. This is the
+// payday question's own pattern, down to the words: the row shows the
+// answer and "Change ›", tapping it opens a wheel, and the wheel
+// closes when a value is chosen. Two "which day" questions on
+// adjacent steps should not be two different gestures.
+function Day({
+  label, value, onChange, accessibilityLabel,
+}: {
+  label: string; value: string; onChange: (v: string) => void; accessibilityLabel?: string;
+}) {
   const reveal = useReveal();
-  const box = useRef<TextInput>(null);
+  const row = useRef<View>(null);
+  const [open, setOpen] = useState(false);
   return (
     <>
-      <Text style={styles.label}>{p.label}</Text>
-      <TextInput
-        ref={box}
-        style={styles.input}
-        value={p.value}
-        onChangeText={p.onChange}
-        onFocus={() => reveal(box.current)}
-        keyboardType="number-pad"
-        selectTextOnFocus
-        maxLength={2}
-        placeholderTextColor={T.faint}
-        accessibilityLabel={p.accessibilityLabel ?? p.label}
-      />
+      <Text style={styles.label}>{label}</Text>
+      <Pressable
+        ref={row}
+        style={[styles.input, styles.pickRow]}
+        onPress={() => { Keyboard.dismiss(); reveal(row.current); setOpen(true); }}
+        accessibilityRole="button"
+        accessibilityLabel={`${accessibilityLabel ?? label} ${value}. Change the day.`}
+      >
+        <Text style={styles.inputText}>{value}</Text>
+        <Text style={styles.pickCue}>Change ›</Text>
+      </Pressable>
+      {open && (
+        <DayPicker
+          value={Number(value) || 1}
+          onPick={(day) => onChange(String(day))}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </>
   );
 }
@@ -625,10 +651,10 @@ const styles = StyleSheet.create({
   chipText: { color: T.dim, fontSize: 12, textAlign: "center" },
   chipTextOn: { color: T.bg, fontWeight: "700" },
   row: { flexDirection: "row", gap: 8, alignItems: "flex-end" },
+  billCard: { marginTop: 10 },
   billRow: { flexDirection: "row", gap: 8, alignItems: "flex-end" },
   grow: { flex: 1 },
   amountCol: { width: 104 },
-  dayCol: { width: 62 },
   acctRow: { marginTop: 2 },
   rowErr: { color: T.expense, fontSize: 12, marginTop: 6 },
   group: { marginTop: 22 },

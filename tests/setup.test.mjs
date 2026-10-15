@@ -14,7 +14,7 @@ import {
   blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
   firstMonthlyOn, defaultBillDay, emptyBillRow, firstWeekdayOn,
   contributionTargets, contributionOf, collectAccountsWith, contributionName,
-  blankContributionRow,
+  blankContributionRow, clampDay,
 } from "../src/engine/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
 import { computeLedger } from "../src/engine/compute.ts";
@@ -227,6 +227,44 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   eq("...but the rule still remembers the 31st", rentRule("1450", "31", "2026-11-05").dayOfMonth, 31);
   eq("a nonsense day falls back to the 1st", rentRule("1450", "", TODAY).dayOfMonth, 1);
   eq("...and 99 is clamped, not stored", rentRule("1450", "99", TODAY).dayOfMonth, 31);
+}
+
+// ---- 1 TO 31, WHOEVER IS ASKING ---------------------------------------
+//
+// Reported from a device on build 8: the due day was a number pad
+// field and you could enter 50. The engine clamped it to 31 and said
+// nothing, which is worse than a rejection — the field quietly meant
+// something other than what was in it.
+//
+// Build 9 makes both clients draw a 1-31 picker, so nothing they can
+// produce needs clamping. THAT IS NOT WHY THIS STAYS. The engine is
+// also called by the CSV importers and by anything written next, and
+// "the UI cannot send a bad one" is a property of the callers rather
+// than of the function. So the backstop is tested in its own right,
+// on top of the rent and bill rules that use it.
+{
+  eq("50 becomes the 31st", clampDay("50", 1), 31);
+  eq("...and so does 31", clampDay("31", 1), 31);
+  eq("a negative day becomes the 1st", clampDay("-3", 9), 1);
+  eq("zero is not a day, so the fallback stands", clampDay("0", 9), 9);
+  eq("neither is an empty field", clampDay("", 9), 9);
+  eq("neither is a word", clampDay("abc", 9), 9);
+  eq("a real day is left alone", clampDay("15", 9), 15);
+
+  // The two callers, so a future edit that drops the clamp from one of
+  // them fails here rather than in somebody's ledger.
+  eq("a bill row asking for the 50th is stored as the 31st",
+    billRules([{ name: "Gym", amount: "40", day: "50" }], TODAY)[0].dayOfMonth, 31);
+  eq("...and rent asking for the 50th is too",
+    rentRule("1450", "50", TODAY).dayOfMonth, 31);
+
+  // THE 31st IN A SHORT MONTH still lands on the last day. The rule
+  // keeps 31; where it CHARGES is clamped per month, by firstMonthlyOn
+  // for the first occurrence and by occurrenceDates for the rest.
+  eq("the 31st in February starts on the 28th",
+    billRules([{ name: "Gym", amount: "40", day: "31" }], "2027-02-01")[0].startDate, "2027-02-28");
+  eq("...and the rule still says 31",
+    billRules([{ name: "Gym", amount: "40", day: "31" }], "2027-02-01")[0].dayOfMonth, 31);
 }
 
 // ---- THE DUE DAY IS THE FIRST CHARGE, not the day setup was run -----

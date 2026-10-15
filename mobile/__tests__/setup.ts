@@ -25,6 +25,24 @@ jest.mock("@react-native-community/datetimepicker", () => {
   };
 });
 
+// The day-of-month wheel, same treatment as the date picker above and
+// for the same reason: a UIPickerView cannot be turned under jest, so
+// the thing worth asserting is whether it is ON SCREEN and what it
+// does when a value comes back. `dayPickerProps` captures the last
+// props so a test can fire the selection the wheel would have fired.
+export const dayPickerProps: { current: Record<string, unknown> | null } = { current: null };
+jest.mock("@react-native-picker/picker", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  const { dayPickerProps: slot } = require("./setup");
+  const Picker = (props: Record<string, unknown>) => {
+    slot.current = props;
+    return React.createElement(View, { accessibilityLabel: "Day picker", testID: props.testID });
+  };
+  Picker.Item = () => null;
+  return { Picker };
+});
+
 // Supabase auth, recorded rather than stubbed silently. The sign-in tests
 // assert WHAT REACHED the client, so the mock keeps every call and lets a
 // test arm the next failure — which is the only way to exercise the

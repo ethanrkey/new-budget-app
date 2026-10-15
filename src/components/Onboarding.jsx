@@ -7,6 +7,7 @@ import {
 } from "../engine/setup.ts";
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, SETUP_STEPS, WEEKDAY_OPTIONS,
+  DAY_OPTIONS,
 } from "../content/setup.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 
@@ -202,10 +203,22 @@ export default function Onboarding({ initialBalance, onComplete }) {
                 <label className={label}>{COPY.labels.amount}</label>
                 <input className={field} type="number" placeholder="0.00" value={rentAmount} onChange={(e) => setRentAmount(e.target.value)} autoFocus />
               </div>
-              <div className="w-24">
-                <label className={label}>{COPY.labels.dueDay}</label>
-                <input className={field} type="number" min="1" max="31" value={rentDay} onChange={(e) => setRentDay(e.target.value)} />
-              </div>
+            </div>
+            {/* A SELECT, NOT A NUMBER BOX. `min`/`max` on a number
+                input are advisory — the browser will not stop a typed
+                50, and build 8's device pass found exactly that on the
+                phone's twin of this field. The engine clamped it to 31
+                silently. A list of 31 options cannot express 50. */}
+            <div>
+              <label className={label} htmlFor="setup-rent-day">{COPY.rent.dayLabel}</label>
+              <select
+                id="setup-rent-day"
+                className={field}
+                value={rentDay}
+                onChange={(e) => setRentDay(e.target.value)}
+              >
+                {DAY_OPTIONS.map((n) => <option key={n} value={String(n)}>{n}</option>)}
+              </select>
             </div>
             <StepButtons onSkip={goNext} onContinue={submitRent} />
           </div>
@@ -239,13 +252,14 @@ export default function Onboarding({ initialBalance, onComplete }) {
                       running balance. Defaults to today, visibly. */}
                   <label className="shrink-0">
                     <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">{COPY.labels.dueDayShort}</span>
-                    <input
-                      className={`${field} w-16`}
-                      type="number" min="1" max="31"
-                      aria-label="Day of month"
+                    <select
+                      className={`${field} w-[4.5rem]`}
+                      aria-label={`Bill ${i + 1} due day`}
                       value={b.day ?? emptyBillRow(todayISO()).day}
                       onChange={(e) => updateBill(i, "day", e.target.value)}
-                    />
+                    >
+                      {DAY_OPTIONS.map((n) => <option key={n} value={String(n)}>{n}</option>)}
+                    </select>
                   </label>
                   {bills.length > 1 && (
                     <button onClick={() => removeBillRow(i)} className="text-gray-300 hover:text-expense px-1" title="Remove">✕</button>

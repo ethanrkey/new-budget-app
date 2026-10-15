@@ -534,7 +534,13 @@ written here in the same sitting** — there is no other record of it.
      Separately: the field holds two digits and `maxLength` is 2, so
      tapping it and pressing a number did nothing at all — the
      keypress was swallowed. `selectTextOnFocus` makes one tap and one
-     digit enough.
+     digit enough. **SUPERSEDED in build 9**, deliberately: the field
+     also accepted 50, which the engine clamped to 31 without saying
+     so, and the fix for that is a control that cannot express 50. The
+     due day is a 1-31 picker on both clients now — a wheel on the
+     phone, a select on the web — so the prefilled-field problem is
+     gone rather than worked around. `clampDay` stays as the engine's
+     backstop, because the CSV importers also call it.
   2. **The payday control was under the keyboard.** On a 390x844
      screen that row ends 508pt down and the decimal pad leaves 457.
      It was never reachable without scrolling and the step gave no
