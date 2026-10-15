@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
+import Svg, { Path } from "react-native-svg";
 import { T } from "../lib/theme";
 import {
   CODE_LENGTH, codeReady, isPlausibleEmail, normalizeCode, normalizeEmail,
@@ -224,17 +225,7 @@ export default function SignIn() {
               Guideline 4.8 asks for an equivalent option, and an
               option listed last reads as the lesser one. */}
           {appleReady && <AppleButton onPress={apple} busy={busy} />}
-          {GOOGLE_AVAILABLE && (
-            <Pressable
-              style={({ pressed }) => [styles.google, pressed && styles.ctaPressed, busy && styles.disabled]}
-              onPress={google}
-              disabled={busy}
-              accessibilityRole="button"
-              accessibilityLabel="Continue with Google"
-            >
-              <Text style={styles.googleText}>Continue with Google</Text>
-            </Pressable>
-          )}
+          {GOOGLE_AVAILABLE && <GoogleButton onPress={google} busy={busy} />}
 
           <Text style={styles.note}>
             No password. We email a six-digit code to the address on your account — the same account as
@@ -297,6 +288,58 @@ export default function SignIn() {
 }
 
 /**
+ * GOOGLE'S BUTTON IS GOOGLE'S BUTTON, the way Apple's is Apple's.
+ *
+ * It was a bordered surface rectangle with the words in it and no
+ * mark at all, next to a real AppleAuthenticationButton — which is
+ * both off-brand and, on the screen, visibly the lesser of the two
+ * options. Google's Identity branding guidelines are specific and
+ * this follows them:
+ *
+ *   - the official four-color G, unaltered, never recolored and never
+ *     redrawn as a single-color glyph;
+ *   - an approved theme — LIGHT here (#FFFFFF, #747775 border,
+ *     #1F1F1F label), which is also what sits beside Apple's WHITE
+ *     button without one of them looking like a mistake;
+ *   - approved wording. "Continue with Google" is on the list, and it
+ *     is the word Apple's CONTINUE button uses, so the two read as a
+ *     pair;
+ *   - the mark at the leading edge with its own clearance, the label
+ *     centered in the button.
+ *
+ * The corner radius is 12 to match Apple's, which the guidelines
+ * allow; everything inside the mark is Google's and is not touched.
+ */
+function GoogleMark() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 48 48">
+      <Path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <Path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <Path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <Path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </Svg>
+  );
+}
+
+function GoogleButton({ onPress, busy }: { onPress: () => void; busy: boolean }) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.google, pressed && styles.googlePressed, busy && styles.disabled]}
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityLabel="Continue with Google"
+    >
+      {/* Absolutely positioned so the label is centered in the WHOLE
+          button, which is what Google's layout specifies — a mark in
+          the flow would push the words off-center. */}
+      <View style={styles.googleMark}><GoogleMark /></View>
+      <Text style={styles.googleText}>Continue with Google</Text>
+    </Pressable>
+  );
+}
+
+/**
  * Apple's own button, required lazily.
  *
  * A top-level import of expo-apple-authentication is evaluated in Expo
@@ -351,10 +394,16 @@ const styles = StyleSheet.create({
   // 50pt to match the other two buttons exactly. Apple's button draws
   // itself; only its box is ours.
   apple: { height: 50, width: "100%" },
+  // Google's LIGHT theme, by the numbers in its branding guidelines:
+  // #FFFFFF surface, #747775 one-point border, #1F1F1F label. Not
+  // theme tokens — these belong to Google, and a token that someone
+  // later retunes would quietly take the button off-brand.
   google: {
     marginTop: 12, minHeight: 50, borderRadius: 12, alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    borderWidth: 1, borderColor: "#747775", backgroundColor: "#FFFFFF",
   },
-  googleText: { color: T.text, fontSize: 15, fontWeight: "600" },
+  googlePressed: { opacity: 0.85 },
+  googleMark: { position: "absolute", left: 16, top: 0, bottom: 0, justifyContent: "center" },
+  googleText: { color: "#1F1F1F", fontSize: 15, fontWeight: "600" },
   note: { color: T.faint, fontSize: 12, textAlign: "center", marginTop: 10, lineHeight: 17 },
 });

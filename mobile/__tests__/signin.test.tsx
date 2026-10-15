@@ -142,6 +142,34 @@ test("Google is offered on the email step, and pressing it calls through", async
   expect(screen.queryByPlaceholderText("000000")).toBeNull();
 });
 
+test("Google's button wears Google's branding, not a plain rectangle", async () => {
+  // It was a bordered surface rectangle with the words in it and no
+  // mark at all, sitting next to a real AppleAuthenticationButton —
+  // off-brand, and visibly the lesser of the two options.
+  await render(<SignIn />);
+  const button = screen.getByLabelText("Continue with Google");
+
+  // Google's LIGHT theme, by the numbers in its branding guidelines.
+  // Asserted as literals on purpose: these colors belong to Google,
+  // and a theme token someone later retunes would take the button
+  // off-brand without anything noticing.
+  expect(button).toHaveStyle({ backgroundColor: "#FFFFFF", borderColor: "#747775", borderWidth: 1 });
+
+  // The four-color G, unaltered. All four of Google's hues have to be
+  // on screen: redrawing the mark as a single-color glyph is the usual
+  // way this goes wrong, and it would still look like a button.
+  // react-native-svg stores a fill as opaque ARGB, so that is what the
+  // tree holds rather than the hex string.
+  const tree = JSON.stringify(screen.toJSON());
+  for (const hue of ["EA4335", "4285F4", "FBBC05", "34A853"]) {
+    expect(tree).toContain(String(0xff000000 + parseInt(hue, 16)));
+  }
+
+  // And the approved wording, which is also the word Apple's CONTINUE
+  // button uses, so the two read as a pair rather than as two makes.
+  expect(screen.getByText("Continue with Google")).toBeOnTheScreen();
+});
+
 test("a dismissed Google sheet says nothing at all", async () => {
   // The one that is easy to get wrong. A cancel returns no message, and
   // red text under the button would call a deliberate choice a failure.
