@@ -113,15 +113,25 @@ describe("the one date picker", () => {
   });
 
   test("Android's own cancel closes without picking", async () => {
-    const onPick = jest.fn();
-    const onClose = jest.fn();
+    // BOTH SHAPES. The mutation audit found this test could not tell
+    // the two guards apart: it only ever fired a dismissal with no
+    // date, which the `!d` branch catches on its own, so deleting the
+    // `type === "dismissed"` check killed nothing. The dismissal that
+    // CARRIES a date is the one that check exists for — without it,
+    // canceling an Android picker silently picks whatever the wheel
+    // happened to be showing.
     const DatePicker = require("../components/DatePicker").default;
-    await render(<DatePicker value="2026-10-01" onPick={onPick} onClose={onClose} />);
-    await act(async () => {
-      (pickerProps.current!.onChange as (e: unknown, d?: Date) => void)({ type: "dismissed" }, undefined);
-    });
-    expect(onClose).toHaveBeenCalled();
-    expect(onPick).not.toHaveBeenCalled();
+
+    for (const date of [undefined, new Date("2027-03-09T00:00:00Z")]) {
+      const onPick = jest.fn();
+      const onClose = jest.fn();
+      await render(<DatePicker value="2026-10-01" onPick={onPick} onClose={onClose} />);
+      await act(async () => {
+        (pickerProps.current!.onChange as (e: unknown, d?: Date) => void)({ type: "dismissed" }, date);
+      });
+      expect(onClose).toHaveBeenCalled();
+      expect(onPick).not.toHaveBeenCalled();
+    }
   });
 });
 

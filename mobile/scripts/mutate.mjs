@@ -16,7 +16,15 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-15: 136 mutations, 136 killed, 127 renderer tests.
+// Measured 2026-10-15: 136 mutations, 135 killed, 127 renderer tests,
+// every one of them dying to at least one. The survivor was the date
+// picker's Android branch, and it survived because the TEST was weak
+// rather than because the code was untested: it only ever fired a
+// dismissal with no date, which the `!d` guard catches on its own, so
+// deleting the `type === "dismissed"` check killed nothing. The
+// dismissal that CARRIES a date is the one that check exists for —
+// cancel an Android picker and it hands back whatever the wheel was
+// showing. The test fires both shapes now and the mutation dies.
 // (Earlier that day: 113/113. 2026-10-13: 94/86.)
 //
 // The 2026-10-13 note, kept because it is this file's whole argument: — one
