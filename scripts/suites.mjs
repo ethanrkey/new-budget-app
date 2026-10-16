@@ -26,4 +26,5 @@ export const SUITES = [
   "tests/dates.test.mjs",
   "tests/mobile-securestore.test.mjs",
   "tests/personal-gate.test.mjs",
+  "tests/mobile-chart.test.mjs",
 ];

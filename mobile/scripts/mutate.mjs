@@ -677,6 +677,19 @@ const MUTATIONS = [
    "        onPress={() => { feel.selection(); setScreen(\"settings\"); }}",
    "        onPress={() => { setScreen(\"settings\"); }}"],
 
+  // 5 (build 13) — the readout sits over its point.
+  ["the readout is clamped to the view instead of the plot",
+   "../mobile/lib/readout.ts", "  const min = pad;\n  const max = width - pad - textW;",
+   "  const min = 0;\n  const max = width - textW;"],
+  ["the readout is positioned by its left edge, not its center",
+   "../mobile/lib/readout.ts", "  return Math.max(min, Math.min(max, pointX - textW / 2));",
+   "  return Math.max(min, Math.min(max, pointX));"],
+  ["a readout wider than the plot inverts the clamp and goes off the other side",
+   "../mobile/lib/readout.ts", "  if (max <= min) return min;", "  // mutated"],
+  ["the readout goes back to a fixed box the text floats inside",
+   "lib/charts.tsx", "  const left = readoutLeft(sx, readoutW, width, PAD);",
+   "  const left = Math.max(0, Math.min(width - 150, sx - 75));"],
+
   // ---- build 12's device pass ----------------------------------------
   //
   // Items 3 and 6 have no entry here and that is not an oversight.

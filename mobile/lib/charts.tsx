@@ -3,6 +3,7 @@ import { PanResponder, Text, View } from "react-native";
 import * as feel from "./haptics";
 import Svg, { Circle, Path, Polyline, Rect } from "react-native-svg";
 import { T, money } from "./theme";
+import { readoutLeft } from "./readout";
 import { fmtDate } from "../../src/shared/dates.ts";
 
 // Charts are HAND-ROLLED on react-native-svg rather than pulled from a
@@ -87,6 +88,10 @@ export function Sparkline({
   // belongs to the gesture; they simply now end together.
   const [active, setActive] = useState<number | null>(null);
   const [touching, setTouching] = useState(false);
+  // The readout's measured width. Setting it from onLayout cannot
+  // loop: moving the thing does not resize it, so the next layout
+  // reports the same number and React bails out of the re-render.
+  const [readoutW, setReadoutW] = useState(0);
   const PAD = 8;
   const plotH = height - READOUT_H;     // room for the readout above
 
@@ -201,10 +206,11 @@ export function Sparkline({
     pts.length < 2 ? null
       : `M${pts[0]!.split(",")[0]},${plotH} L${pts.join(" L")} L${pts[pts.length - 1]!.split(",")[0]},${plotH} Z`;
 
-  // The readout is clamped inside the chart, so the first and last
-  // points do not push their own label off the edge.
-  const readoutW = 150;
-  const left = Math.max(0, Math.min(width - readoutW, sx - readoutW / 2));
+  // Clamped by its OWN width, which is why it has to be measured —
+  // see lib/readout.ts for what was wrong with clamping a fixed box
+  // around it. 0 until the first layout, and the readout is invisible
+  // for that one frame rather than drawn in the wrong place first.
+  const left = readoutLeft(sx, readoutW, width, PAD);
   const scrubbed = active != null;
 
   return (
@@ -216,7 +222,13 @@ export function Sparkline({
           horizontally — that is what ties it to the point — and gets
           brighter while the finger is down. */}
       <View style={{ height: READOUT_H }}>
-        <View style={{ position: "absolute", left, width: readoutW, alignItems: "center" }}>
+        {/* NO `width`, so it shrink-wraps its two lines — that
+            measured width is the thing being clamped. */}
+        <View
+          testID="sparkline-readout-box"
+          onLayout={(e) => setReadoutW(Math.round(e.nativeEvent.layout.width))}
+          style={{ position: "absolute", left, opacity: readoutW ? 1 : 0, alignItems: "center" }}
+        >
           <Text
             testID="sparkline-readout"
             style={{
