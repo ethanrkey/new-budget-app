@@ -6,7 +6,7 @@ import {
 } from "./storage.js";
 import { downloadFile } from "./downloadFile.js";
 import { isStale } from "./engine/syncGuard.ts";
-import { getSession, onAuthChange, signOut } from "./auth.js";
+import { getSession, onAuthChange, signOut, takeInvoluntarySignOut } from "./auth.js";
 import { getDeviceTheme, setDeviceTheme } from "./theme.js";
 import { computeLedger, computeBudget, rowsHiddenByAnchor } from "./engine/compute.ts";
 import {
@@ -71,6 +71,10 @@ export default function App() {
   const [syncNotice, setSyncNotice] = useState(null);
   const [deletionRequest, setDeletionRequest] = useState(null);
   const [tourOpen, setTourOpen] = useState(false);
+  // The last sign-out was not asked for — the session stopped being
+  // usable. Shown on the sign-in screen so a returning user is told
+  // what happened instead of guessing.
+  const [expired, setExpired] = useState(false);
   // Mirrors `state` for listeners that are registered once and would
   // otherwise close over a stale value.
   const stateRef = useRef(null);
@@ -305,9 +309,25 @@ export default function App() {
   }, [state?.settings?.hasSeenOnboarding]);
 
   // resolve the auth session once, then keep listening for sign-in/out
+  //
+  // `expired` is the one thing worth remembering about a sign-out:
+  // whether anybody asked for it. A session that stopped working puts
+  // you on the same screen as pressing Sign out, which is why "the
+  // web signs me out every so often" has never had any evidence
+  // attached to it. See takeInvoluntarySignOut in auth.js.
   useEffect(() => {
     getSession().then(setSession);
-    return onAuthChange(setSession);
+    return onAuthChange((next, event) => {
+      if (event === "SIGNED_OUT" && takeInvoluntarySignOut()) {
+        setExpired(true);
+        // Logged as well as shown. A tester who reports "it signed me
+        // out again" can be asked for this line, and it carries the
+        // timestamp the console will not otherwise have.
+        console.warn(`[auth] session ended without a sign-out at ${new Date().toISOString()}`);
+      }
+      if (next) setExpired(false);
+      setSession(next);
+    });
   }, []);
 
   // Load this user's state once signed in; clear it again on sign-out. Keyed
@@ -478,7 +498,7 @@ export default function App() {
   );
 
   if (session === undefined) return <Splash />;
-  if (!session) return <SignIn />;
+  if (!session) return <SignIn expired={expired} />;
   if (loadError) return <LoadError message={loadError.message} onRetry={() => setRetryTick((t) => t + 1)} />;
   if (!state) return <Splash />;
 

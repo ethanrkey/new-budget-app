@@ -1,6 +1,7 @@
 // @ts-check
 // ---- Auth: Google OAuth (primary) + email magic link (fallback) ----
 import { supabase } from "./supabase.js";
+import { markDeliberateSignOut } from "./shared/signOutReason.ts";
 
 // Where OAuth and magic links come back to. NOT window.location.origin:
 // since 2026-10-02 that is the public landing page, and a user who just
@@ -48,9 +49,16 @@ export function verifyEmailCode(email, token) {
   return supabase.auth.verifyOtp({ email, token, type: "email" });
 }
 
+// The deliberate sign-out is flagged so the involuntary one can be
+// told apart from it — see src/shared/signOutReason.ts, which is a
+// separate module precisely so it can be tested without this one's
+// Supabase client.
 export function signOut() {
+  markDeliberateSignOut();
   return supabase.auth.signOut();
 }
+
+export { takeInvoluntarySignOut } from "./shared/signOutReason.ts";
 
 // The current session, once, at load — null if signed out.
 export async function getSession() {
@@ -60,10 +68,14 @@ export async function getSession() {
 }
 
 // Fires on sign-in, sign-out, and token refresh. Returns an unsubscribe fn.
-/** @param {(session: import("@supabase/supabase-js").Session | null) => void} callback */
+//
+// The EVENT is passed on as well as the session, because SIGNED_OUT
+// is the one that needs telling apart from "there was never a
+// session" — see takeInvoluntarySignOut.
+/** @param {(session: import("@supabase/supabase-js").Session | null, event: string) => void} callback */
 export function onAuthChange(callback) {
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-    callback(session);
+  const { data } = supabase.auth.onAuthStateChange((event, session) => {
+    callback(session, event);
   });
   return () => data.subscription.unsubscribe();
 }

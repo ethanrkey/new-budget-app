@@ -22,6 +22,7 @@ import {
   CODE_LENGTH, RESEND_COOLDOWN_SECONDS, normalizeEmail, isPlausibleEmail,
   normalizeCode, codeReady, resendIn, sendFailureMessage, verifyFailureMessage,
 } from "../src/shared/signin.ts";
+import { markDeliberateSignOut, takeInvoluntarySignOut } from "../src/shared/signOutReason.ts";
 // The two that stayed on the phone, because they read error codes only
 // a native SDK produces.
 import { googleFailureMessage, appleFailureMessage } from "../mobile/lib/signin.ts";
@@ -193,6 +194,33 @@ const not = (label, cond) => eq(label, !!cond, false);
   is("every spoken Apple failure offers the way out that works",
     [{ message: "" }, null, { message: "Unacceptable audience" }]
       .map(appleFailureMessage).every((m) => /emailed code/i.test(m)));
+}
+
+// ---- WHICH KIND OF SIGN-OUT JUST HAPPENED ---------------------------
+//
+// "The web signs me out every so often" arrived with no evidence
+// attached, because pressing Sign out and having a session stop
+// working land on the identical screen. This is what tells them
+// apart — and it has to be right in BOTH directions, since a flag
+// that failed to clear would label every later sign-in as an expiry
+// and send somebody hunting a bug that is a button.
+{
+  // Nobody asked: the session went away on its own.
+  eq("an unflagged sign-out is involuntary", takeInvoluntarySignOut(), true);
+
+  markDeliberateSignOut();
+  eq("a sign-out we performed is not", takeInvoluntarySignOut(), false);
+
+  // READ ONCE. The next sign-out is a new question, and a sticky
+  // "deliberate" would hide a real expiry straight after a real
+  // sign-out — which is exactly the sequence a tester produces.
+  eq("...and the flag does not survive being read", takeInvoluntarySignOut(), true);
+
+  // Marking twice and reading once must not leave it armed either.
+  markDeliberateSignOut();
+  markDeliberateSignOut();
+  eq("marking twice still clears on one read", takeInvoluntarySignOut(), false);
+  eq("...and the one after it is involuntary again", takeInvoluntarySignOut(), true);
 }
 
 // A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a

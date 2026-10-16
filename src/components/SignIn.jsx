@@ -19,7 +19,11 @@ import {
 // browser the mail app hands it to, which is routinely not the one
 // that asked for it, and the session lands in the wrong browser.
 
-export default function SignIn() {
+/**
+ * @param {{ expired?: boolean }} props `expired` when the last session
+ *   ended without anybody pressing Sign out.
+ */
+export default function SignIn({ expired = false }) {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -116,6 +120,19 @@ export default function SignIn() {
       <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-xl border border-gray-200 dark:border-gray-800">
         <h1 className="text-xl font-semibold tracking-tight text-center mb-1">Budget</h1>
         <p className="text-sm text-gray-500 text-center mb-6">Sign in to load your ledger &amp; budget.</p>
+
+        {/* SAY WHICH OF THE TWO THINGS HAPPENED. Pressing Sign out and
+            having a session stop working land on this identical
+            screen, and the second one is the whole of the report
+            "the web signs me out every so often" — a sentence nobody
+            could have written with more detail, because the app gave
+            them none. */}
+        {expired && (
+          <p className="text-sm text-center mb-6 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-gray-600 dark:text-gray-300">
+            Your session ended and you were signed out. Nothing was lost — sign in again to pick up
+            where you left off.
+          </p>
+        )}
 
         <button
           onClick={handleGoogle}
