@@ -18,7 +18,7 @@
 //
 // Measured 2026-10-15, build 10: 180 mutations, ALL killed, 147
 // renderer tests, every one of them dying to at least one. The first
-// run of that set (177 mutations) reported THREE tests nothing could
+// run of that set (178 mutations) reported THREE tests nothing could
 // kill, all three written that day, and all three gaps were real:
 //   - "it opens on the Ledger and walks the stops in order" — nothing
 //     in the list moved the tour's ROUTES, only where it leaves you.

@@ -554,7 +554,7 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
-- **1.0.0 (10), 2026-10-15** — a device pass on build 9. Eight items.
+- **1.0.0 (11), 2026-10-15** — a device pass on build 9. Eight items.
   Confirmed good and untouched, which is most of what build 9 changed:
   the native page sheet on the transaction form (swipe from anywhere,
   no gap, the dirty-form bounce and the discard prompt — "this is the
@@ -578,6 +578,16 @@ written here in the same sitting** — there is no other record of it.
      `AppIcon60x60@2x.png` out of its IPA, and app.json's two icon
      keys. See band G item 24. **The icon does not change again until
      the owner redraws the key** (backlog 18b).
+
+     **PROVED FROM THE IPA, not from the SVG.** Build 11's bundle
+     against build 5's: `AppIcon60x60@2x.png` byte-identical,
+     `AppIcon76x76@2x~ipad.png` byte-identical, and the compiled
+     `Assets.car` byte-identical (`e236cfb3…`). `CFBundleIconName` is
+     `AppIcon` in both. Build 9's bundle, for contrast, has NO
+     `AppIcon*.png` in it at all, `CFBundleIconName` is `KeyBudget`
+     and its `Assets.car` is a different file (`fb7a05b8…`) — which
+     is the pipeline difference, stated in artifacts rather than in
+     reasoning.
   2. **"verified" became "as of"** on the checking bar, both clients.
      Savings and investment cards keep "logged" — a different kind of
      reading, and now asserted positively on both sides so a sweep of
@@ -623,6 +633,41 @@ written here in the same sitting** — there is no other record of it.
   8. **The settings button ticks like a tab.** The one navigation
      control outside the tab bar was silent. Same `selection`, not a
      sixth word.
+
+  **BUILD 10 WAS A CANARY AND IS NOT THE ONE TO TEST.** It was
+  started from `83e3b03` before the mutation audit, to find out early
+  whether removing `ios.icon` broke prebuild and to get a real IPA to
+  compare against build 5's. It finished and it is the build the
+  icon comparison above was first run on, but the audit then changed
+  a component (a dead `useEffect` in `DayPicker`), so **1.0.0 (11)**
+  — build `a055b148…`, commit `0158d5a4`, runtime
+  `22e2fe1691a017a06a1843095feff9c4d46c7aa3` — is what went to
+  TestFlight, submission `c2164ede-9538-42f0-ac5d-d2a870d2a290`. A
+  binary that is not the commit on main is a thing to explain later;
+  a burned build number is not. Build 11's icon artifacts were
+  checked again and match build 5's byte for byte.
+
+  **The mutation audit: 180 mutations, all caught, and all 147
+  renderer tests die to at least one.** The first run of the set (178)
+  reported three tests nothing could kill, all three written that day
+  and all three gaps real — nothing moved the tour's ROUTES, nothing
+  hid the bill ✕ at one row, and the entry written for the Dashboard
+  stop's copy was replacing the opening clause of the body and
+  leaving the sentence dangling, so `tour.ts` failed to PARSE. **jest
+  reports a parse error as a suite-level failure with no per-test "✕"
+  lines**, so the runner had nothing to attribute a kill to and the
+  test came back unverified while the entry sat in the list looking
+  like coverage. A mutation must break the BEHAVIOR; one that breaks
+  the file is worse than none.
+
+  **Verified in a real browser**, driven from the actual entry point
+  with a fresh `hasSeenOnboarding: false`: the accounts step's order
+  and its three ✕ buttons (removing savings row 1 leaves row 2's
+  typing, the other two groups untouched, removing the last leaves
+  one blank row), no placeholder naming a bank, "You've added 3
+  recurring items" on a run that actually added three, the strip's
+  "as of" with no "verified" anywhere, and the tour ending with
+  `ledger` as the only selected tab.
 
 - **1.0.0 (9), 2026-10-15** — a device pass on build 8. Nine items.
   Confirmed good and untouched: the payday flow, the groceries weekday
