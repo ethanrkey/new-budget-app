@@ -11,7 +11,7 @@ import BottomSheet from "../../components/BottomSheet";
 import LoanSheet from "../../components/LoanSheet";
 import CategorySheet from "../../components/CategorySheet";
 import ContributionPrompt from "../../components/ContributionPrompt";
-import { blankCategoryDraft, applyCategoryDraft, type CategoryDraft } from "../../lib/categories";
+import { blankCategoryDraft, draftOfCategory, applyCategoryDraft, type CategoryDraft } from "../../lib/categories";
 import { DASHBOARD_COPY as COPY } from "../../../src/content/dashboard.ts";
 import {
   addBalanceSnapshot, addContribution,
@@ -56,6 +56,10 @@ export default function DashboardScreen() {
   // The dashed add-cards. Which KIND is the whole difference between
   // them, so one slot rather than two booleans that can both be true.
   const [adding, setAdding] = useState<"asset" | "debt" | null>(null);
+  // The account whose DETAILS are being edited — its name, its kind,
+  // its hue. Separate from `editing`, which is a logged reading, and
+  // from `editingLoan`, which is a loan's terms.
+  const [editingCat, setEditingCat] = useState<TrackerCategory | null>(null);
   // THE FOLLOW-UP, after a NEW account is added: the same question
   // setup's contributions step asks, about the one just created.
   //
@@ -167,6 +171,7 @@ export default function DashboardScreen() {
           key={cat.id} cat={cat} color={accountColor(cat.hue, true) ?? DEGRADED_SOLID.dark} chartW={chartW} today={today}
           online={online}
           onLog={() => setLogging(cat.id)}
+          onEdit={() => setEditingCat(cat)}
           onLogContribution={() => setContributing(cat.id)}
           onEditEntry={(e) => setEditing({ catId: cat.id, id: e.id, amount: e.amount, date: e.date })}
           onEditContrib={(e) => setEditingContrib({ catId: cat.id, id: e.id, amount: e.amount, date: e.date })}
@@ -265,6 +270,27 @@ export default function DashboardScreen() {
             const before = new Set(cats.map((c) => c.id));
             const ok = await commit((st) => applyCategoryDraft(st, d, null), `${d.name.trim()} added`);
             if (ok) { setAdding(null); setAddedAfter(before); }
+          }}
+        />
+      )}
+
+      {/* THE SAME SHEET, in its editing mode — see the note on the one
+          above. `creating={false}` is what drops the opening-balance
+          field, because a balance on an account that already has a
+          history is a logged reading rather than a starting point. */}
+      {editingCat && (
+        <CategorySheet
+          title="Edit account"
+          draft={draftOfCategory(editingCat, today)}
+          creating={false}
+          busy={saving}
+          onClose={() => setEditingCat(null)}
+          onSave={async (d: CategoryDraft) => {
+            const ok = await commit(
+              (st) => applyCategoryDraft(st, d, editingCat.id),
+              `${d.name.trim()} updated`
+            );
+            if (ok) setEditingCat(null);
           }}
         />
       )}
@@ -430,11 +456,11 @@ function AccountCard({ name, balance, asOf, history, color, chartW, online, onLo
 }
 
 function AssetCard({
-  cat, color, chartW, today, online, onLog, onLogContribution,
+  cat, color, chartW, today, online, onLog, onEdit, onLogContribution,
   onEditEntry, onDeleteEntry, onEditContrib, onDeleteContrib,
 }: {
   cat: TrackerCategory; color: string; chartW: number; today: string; online: boolean;
-  onLog: () => void; onLogContribution: () => void;
+  onLog: () => void; onEdit: () => void; onLogContribution: () => void;
   onEditEntry: (e: BalanceSnapshot) => void; onDeleteEntry: (e: BalanceSnapshot) => void;
   onEditContrib: (e: BalanceSnapshot) => void; onDeleteContrib: (e: BalanceSnapshot) => void;
 }) {
@@ -453,8 +479,18 @@ function AssetCard({
           <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
         )}
         <View style={{ flex: 1 }} />
-        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}>
+        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
+          accessibilityRole="button" accessibilityLabel={`Log a balance for ${cat.name}`}>
           <Text style={styles.logText}>{online ? "Log" : "Offline"}</Text>
+        </Pressable>
+        {/* EDIT, which the web has had on every account card and the
+            phone had only on loans. Renaming an account meant going
+            Settings -> Accounts you track, which is a detour from the
+            screen the name is wrong on. Same sheet Settings opens, so
+            there is one editor rather than two that agree. */}
+        <Pressable onPress={onEdit} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
+          accessibilityRole="button" accessibilityLabel={`Edit ${cat.name}`}>
+          <Text style={styles.logText}>Edit</Text>
         </Pressable>
       </View>
       <Text style={[styles.cardNum, !latest && { color: T.faint }]}>

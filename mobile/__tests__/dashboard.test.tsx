@@ -89,6 +89,43 @@ test("the savings section ends with a card that starts one", async () => {
   expect(await screen.findByText("Add an account")).toBeOnTheScreen();
 });
 
+test("every account card has an Edit, opening the editor Settings opens", async () => {
+  // Reported from the build 12 device pass: renaming an account on
+  // the phone meant Settings -> Accounts you track, a detour from the
+  // screen the name is wrong on. The web has had Edit on every
+  // account card since the Dashboard was built, and the phone had it
+  // only on loans.
+  mockLoaded.state = fixture([{ name: "Car loan", owed: 9100 }]);
+  await mount();
+
+  await userEvent.press(screen.getByLabelText("Edit Ally Savings"));
+
+  // THE SAME SHEET SETTINGS USES, not a second editor that agrees
+  // with it. It opens on the account's real name, and in editing
+  // mode, which is what drops the opening-balance field: a balance
+  // on an account that already has a history is a logged reading,
+  // not a starting point.
+  expect(await screen.findByText("Edit account")).toBeOnTheScreen();
+  expect(screen.getByLabelText("Name").props.value).toBe("Ally Savings");
+  expect(screen.queryByLabelText("Current balance")).toBeNull();
+});
+
+test("...and renaming from the card writes the new name", async () => {
+  mockLoaded.state = fixture([]);
+  await mount();
+  await userEvent.press(screen.getByLabelText("Edit Ally Savings"));
+  await screen.findByText("Edit account");
+
+  const name = screen.getByLabelText("Name");
+  await userEvent.clear(name);
+  await userEvent.type(name, "Everyday savings");
+  await userEvent.press(screen.getByLabelText("Save"));
+
+  await waitFor(() => expect(mockSaved).toHaveLength(1));
+  const out = mockSaved[0] as { trackerCategories: { id: string; name: string }[] };
+  expect(out.trackerCategories.find((c) => c.id === "sav")!.name).toBe("Everyday savings");
+});
+
 test("with no loans there is nothing to collapse, so there is no overview", async () => {
   mockLoaded.state = fixture([]);
   await mount();
