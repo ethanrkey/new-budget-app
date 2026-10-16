@@ -187,6 +187,19 @@ export interface Settings {
   visibleTrackerCategoryIds: string[];
   tabOrder: TabId[];
   hasSeenOnboarding: boolean;
+  /** The guided tour has run itself once for this account.
+   *
+   *  ON THE ACCOUNT, not the device, and that is the whole point of
+   *  it: the tour used to be started by "setup just finished" with
+   *  nothing remembering it, so re-running Setup from the header
+   *  replayed it — and anything device-local would have replayed it
+   *  on a new phone or a second browser instead. Added 2026-10-16.
+   *
+   *  Set when a setup COMPLETES, not when the tour is dismissed: the
+   *  question it answers is "has this account been offered the tour",
+   *  and someone who skips it on the first screen has been. The tour
+   *  stays reachable by hand afterwards — About on both clients. */
+  hasSeenTour: boolean;
 }
 
 // ---- The state blob ------------------------------------------------------

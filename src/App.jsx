@@ -279,11 +279,20 @@ export default function App() {
   // call the same function instead of reimplementing fifty lines of
   // decisions. This is the wiring; the decisions are there, with their
   // reasons. Moved 2026-10-12.
+  //
+  // THE TOUR RUNS ITSELF ONCE PER ACCOUNT, since 2026-10-16. It used
+  // to start on every completion, so re-running Setup from the header
+  // replayed it — reported on build 11. The flag is read BEFORE the
+  // write, because the write sets it.
   function completeOnboarding(answers) {
+    const firstTime = !state.settings.hasSeenTour;
     setState((s) => applySetup(s, answers));
-    setSettings({ hasSeenOnboarding: true });
+    setSettings({ hasSeenOnboarding: true, hasSeenTour: true });
     setShowOnboarding(false);
-    setTourOpen(true);
+    // Nothing device-local decides this: a new browser or a second
+    // machine must not replay a tour this account has already had.
+    // It stays reachable by hand from About → "Take the tour".
+    if (firstTime) setTourOpen(true);
   }
 
   // Auto-show once per account: only when hasSeenOnboarding is false, which

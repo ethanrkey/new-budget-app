@@ -18,7 +18,7 @@ import { primaryAccount, ledgerHorizonOf } from "../../src/engine/model.ts";
 import { rowsHiddenByAnchor } from "../../src/engine/compute.ts";
 import Setup from "./Setup";
 import { shouldRunSetup } from "../lib/setup";
-import { applySetup, markSetupSeen, type SetupAnswers } from "../../src/engine/setup.ts";
+import { applySetup, markSetupSeen, markTourSeen, type SetupAnswers } from "../../src/engine/setup.ts";
 
 // WHERE THE WEB'S FIVE HEADER ITEMS LIVE ON A PHONE.
 //
@@ -64,15 +64,23 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   const runSetup = setupAgain || (!!state && shouldRunSetup(state, prefs.setupDismissed));
 
   async function finishSetup(answers: SetupAnswers) {
+    // READ BEFORE THE WRITE, because the write is what sets it. The
+    // tour runs itself once per ACCOUNT, since 2026-10-16: it used to
+    // start on every completion, so re-running Setup from Settings
+    // replayed it — reported on build 11 — and a device flag would
+    // have replayed it on a new phone instead.
+    const firstTime = !state?.settings.hasSeenTour;
     // One commit, so a half-applied setup cannot exist: the rules, the
-    // anchor, the accounts and the flag land together or not at all.
-    const ok = await commit((s) => markSetupSeen(applySetup(s, answers)), "Setup");
+    // anchor, the accounts and BOTH flags land together or not at all.
+    const ok = await commit((s) => markTourSeen(markSetupSeen(applySetup(s, answers))), "Setup");
     if (!ok) return;          // the Done screen stays up; the failure modal explains
     setPref("setupDismissed", true);
     setSetupAgain(false);
-    // The web shows the tour straight after setup, and the phone has
-    // the same four stops in the same words (src/content/tour.ts).
-    setTouring(true);
+    // The web shows the tour straight after the first setup, and the
+    // phone has the same four stops in the same words
+    // (src/content/tour.ts). Afterwards it is About -> "Take the tour"
+    // on both clients.
+    if (firstTime) setTouring(true);
   }
 
   function leaveSetup() {

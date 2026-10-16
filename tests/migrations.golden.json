@@ -11,7 +11,8 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": true
+   "hasSeenOnboarding": true,
+   "hasSeenTour": true
   },
   "accounts": [
    {
@@ -102,7 +103,90 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": true
+   "hasSeenOnboarding": true,
+   "hasSeenTour": true
+  },
+  "accounts": [
+   {
+    "id": "checking",
+    "name": "Checking",
+    "kind": "checking",
+    "balance": 500,
+    "balanceAsOf": "2026-03-01",
+    "order": 0
+   }
+  ],
+  "recurring": [
+   {
+    "id": "r",
+    "name": "Rent",
+    "amount": 1500,
+    "category": "bill",
+    "cadence": "monthly",
+    "startDate": "2026-03-02",
+    "order": 0,
+    "accountId": "checking"
+   }
+  ],
+  "oneoffs": [],
+  "trackerCategories": [
+   {
+    "id": "roth",
+    "name": "Roth",
+    "order": 0,
+    "kind": "asset",
+    "hue": 0
+   },
+   {
+    "id": "saved",
+    "name": "Saved",
+    "order": 1,
+    "kind": "asset",
+    "hue": 1
+   },
+   {
+    "id": "brokerage",
+    "name": "Brokerage",
+    "order": 2,
+    "kind": "asset",
+    "hue": 2
+   },
+   {
+    "id": "loans",
+    "name": "Loans",
+    "order": 3,
+    "kind": "debt",
+    "hue": 3
+   }
+  ],
+  "accountSnapshots": {
+   "checking": [
+    {
+     "id": "seed-checking",
+     "date": "2026-03-01",
+     "amount": 500
+    }
+   ]
+  },
+  "contributionLog": {},
+  "balanceSnapshots": {},
+  "monthlyActuals": {},
+  "overrides": {}
+ },
+ "tourNotSeenYet": {
+  "settings": {
+   "budgetHorizon": "2027-06-25",
+   "ledgerHorizon": "2027-09-25",
+   "theme": "light",
+   "visibleTrackerCategoryIds": [],
+   "tabOrder": [
+    "dashboard",
+    "ledger",
+    "budget",
+    "spending"
+   ],
+   "hasSeenOnboarding": true,
+   "hasSeenTour": false
   },
   "accounts": [
    {
@@ -183,7 +267,8 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": true
+   "hasSeenOnboarding": true,
+   "hasSeenTour": true
   },
   "accounts": [
    {
@@ -264,7 +349,8 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": true
+   "hasSeenOnboarding": true,
+   "hasSeenTour": true
   },
   "accounts": [
    {
@@ -338,7 +424,8 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": true
+   "hasSeenOnboarding": true,
+   "hasSeenTour": true
   },
   "accounts": [
    {
@@ -429,7 +516,8 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": true
+   "hasSeenOnboarding": true,
+   "hasSeenTour": true
   },
   "accounts": [
    {
@@ -501,7 +589,8 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": true
+   "hasSeenOnboarding": true,
+   "hasSeenTour": true
   },
   "accounts": [
    {
@@ -601,7 +690,8 @@
     "ledger",
     "budget"
    ],
-   "hasSeenOnboarding": false
+   "hasSeenOnboarding": false,
+   "hasSeenTour": false
   },
   "accounts": [
    {
@@ -668,7 +758,8 @@
     "dashboard",
     "spending"
    ],
-   "hasSeenOnboarding": true
+   "hasSeenOnboarding": true,
+   "hasSeenTour": true
   },
   "accounts": [
    {
@@ -753,7 +844,8 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": true
+   "hasSeenOnboarding": true,
+   "hasSeenTour": true
   },
   "accounts": [
    {
@@ -825,7 +917,8 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": false
+   "hasSeenOnboarding": false,
+   "hasSeenTour": false
   },
   "accounts": [
    {
@@ -887,7 +980,8 @@
     "budget",
     "spending"
    ],
-   "hasSeenOnboarding": false
+   "hasSeenOnboarding": false,
+   "hasSeenTour": false
   },
   "accounts": [
    {

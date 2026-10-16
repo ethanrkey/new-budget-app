@@ -147,6 +147,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
         visibleTrackerCategoryIds: [], // which savings/debt columns show on the Ledger; default none
         tabOrder: [...TABS],           // drag-reorderable on desktop; see sanitizeTabOrder()
         hasSeenOnboarding: false, // one-time welcome wizard; see storage.js's migration
+        hasSeenTour: false,       // the guided tour, once per ACCOUNT; see markTourSeen
       },
       // primaryAccount() is the single source of truth for the anchor
       // balance/date. (Phase 1 briefly mirrored it back into settings as a

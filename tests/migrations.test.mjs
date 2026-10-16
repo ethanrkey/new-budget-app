@@ -77,6 +77,15 @@ const FIXTURES = {
     settings: { checkInBalance: 500, checkInDate: "2026-03-01" },
     recurring: [{ id: "r", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-03-02", order: 0 }], oneoffs: [] } },
 
+  // 2b. hasSeenTour absent -> inherits hasSeenOnboarding, so an account
+  //     that already finished setup is never walked through the tour
+  //     again. An EXPLICIT false survives, which is the case that
+  //     matters: a new account that skipped the wizard has not been
+  //     offered the tour and must still get it when it finishes one.
+  tourNotSeenYet: { data: true, state: {
+    settings: { checkInBalance: 500, checkInDate: "2026-03-01", hasSeenOnboarding: true, hasSeenTour: false },
+    recurring: [{ id: "r", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-03-02", order: 0 }], oneoffs: [] } },
+
   // 3. trackerCategories absent + data -> the legacy four, same ids
   legacyFourCategories: { data: true, state: {
     settings: { checkInBalance: 200, checkInDate: "2026-04-01" },

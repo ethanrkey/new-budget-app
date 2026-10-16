@@ -81,6 +81,24 @@ export function markSetupSeen(state: BudgetState): BudgetState {
   return { ...state, settings: { ...state.settings, hasSeenOnboarding: true } };
 }
 
+/**
+ * This account has been offered the guided tour.
+ *
+ * SEPARATE FROM markSetupSeen, because the two answer different
+ * questions and one of them is set by Skip. `hasSeenOnboarding` means
+ * "do not meet this account with the wizard"; Skip writes it, and
+ * Skip is not an offer of the tour. This means "the tour has run
+ * itself once", and only a COMPLETED setup writes it.
+ *
+ * Both clients call it in the same commit as markSetupSeen, so an
+ * account cannot end up having finished setup without this set —
+ * which would replay the tour the next time Setup is opened from the
+ * header, which is the bug it exists for (reported on build 11).
+ */
+export function markTourSeen(state: BudgetState): BudgetState {
+  return { ...state, settings: { ...state.settings, hasSeenTour: true } };
+}
+
 export type SetupAnswers = {
   recurring?: BudgetItem[];
   oneoffs?: BudgetItem[];

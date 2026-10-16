@@ -15,6 +15,7 @@ import {
   firstMonthlyOn, defaultBillDay, emptyBillRow, firstWeekdayOn,
   contributionTargets, contributionOf, collectAccountsWith, contributionName,
   blankContributionRow, clampDay, removeBillRow, removeAccountRow, SETUP_GROUPS,
+  markSetupSeen, markTourSeen,
 } from "../src/engine/setup.ts";
 import { ACCOUNT_GROUPS } from "../src/content/setup.ts";
 import { addBalanceSnapshot } from "../src/engine/mutate.ts";
@@ -290,6 +291,33 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
 
   eq("an index that is not there changes nothing",
     removeAccountRow(rows, 9).map((r) => r.name), ["Emergency fund", "Vacation", "Roth IRA"]);
+}
+
+// ---- TWO FLAGS, AND ONLY ONE OF THEM IS WRITTEN BY SKIP --------------
+//
+// `hasSeenOnboarding` means "do not meet this account with the
+// wizard", and Skip writes it. `hasSeenTour` means "the tour has run
+// itself once", and only a COMPLETED setup writes it. Keeping them
+// apart is the whole fix for the build 11 report, so a test that
+// confuses them is worse than none.
+{
+  const fresh = normalize({});
+  eq("a new account has seen neither",
+    [fresh.settings.hasSeenOnboarding, fresh.settings.hasSeenTour], [false, false]);
+
+  const skipped = markSetupSeen(fresh);
+  eq("Skip marks the wizard seen and says nothing about the tour",
+    [skipped.settings.hasSeenOnboarding, skipped.settings.hasSeenTour], [true, false]);
+
+  const finished = markTourSeen(skipped);
+  eq("finishing marks both",
+    [finished.settings.hasSeenOnboarding, finished.settings.hasSeenTour], [true, true]);
+
+  // Idempotent, and it touches nothing else — both clients call it
+  // inside the same commit as applySetup.
+  eq("marking twice changes nothing", markTourSeen(finished), finished);
+  eq("...and no other setting moves",
+    { ...finished.settings, hasSeenTour: false }, skipped.settings);
 }
 
 // ---- THE STEP'S ORDER AND THE ENGINE'S ARE ONE ORDER -----------------

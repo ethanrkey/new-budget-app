@@ -226,6 +226,18 @@ export function normalize(parsed: any): BudgetState {
     settings.hasSeenOnboarding = true;
   }
 
+  // Migration: hasSeenTour arrived 2026-10-16, after the tour had been
+  // running for weeks. An account that is genuinely missing the field
+  // inherits hasSeenOnboarding — which is the honest answer, because
+  // completing setup is the only thing that ever started the tour, and
+  // skipping setup is a decision not to be walked through the app. The
+  // alternative, defaulting to false, springs the tour on every
+  // existing account the next time they open Setup from the header,
+  // which is exactly the replay this field exists to stop.
+  if (parsed.settings?.hasSeenTour === undefined) {
+    settings.hasSeenTour = settings.hasSeenOnboarding;
+  }
+
   // Migration: trackerCategories predates this account (genuinely absent,
   // not an empty array they deliberately cleared) — an existing user gets
   // their legacy 4 preserved as real, editable categories (same ids, so no

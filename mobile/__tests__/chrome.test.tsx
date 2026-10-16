@@ -2,6 +2,7 @@ import { act, render, screen, userEvent, waitFor, within } from "@testing-librar
 import { T } from "../lib/theme";
 import { haptics, pickerProps } from "./setup";
 import { normalize } from "../../src/engine/stateShape.ts";
+import { TOUR_STOPS } from "../../src/content/tour.ts";
 
 // PHASE 3: who is met with the six questions, and what happens to the
 // ones who leave.
@@ -120,6 +121,49 @@ test("finishing writes the rules, the anchor and the flag in ONE save", async ()
   expect(out.recurring.map((r) => r.name)).toEqual(["Paycheck"]);
   expect(out.accounts[0]!.balance).toBe(4000);
   expect(out.settings.hasSeenOnboarding).toBe(true);
+  // BOTH flags, in the same save. A setup that finished without
+  // hasSeenTour set is an account that replays the tour the next time
+  // Setup is opened from Settings, which is the build 11 report.
+  expect((out.settings as { hasSeenTour: boolean }).hasSeenTour).toBe(true);
+});
+
+test("...and the tour comes up once, after the FIRST setup", async () => {
+  await mount();
+  await screen.findByText("What's your take-home pay?");
+  for (const _ of [0, 1, 2, 3]) await userEvent.press(screen.getByLabelText("Skip"));
+  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
+  await userEvent.press(screen.getByLabelText("Continue"));
+  await userEvent.press(screen.getByLabelText("Finish"));
+  await userEvent.press(await screen.findByLabelText("Go to my budget"));
+
+  expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
+});
+
+test("...and NOT again when Setup is re-run from Settings", async () => {
+  // THE BUG THIS WOULD HAVE CAUGHT, reported on build 11: the tour was
+  // started by "a setup just finished" and nothing remembered it, so
+  // re-running Setup from the header walked you round the app again.
+  //
+  // The flag is on the ACCOUNT, which is the other half of the report:
+  // anything device-local would replay it on a new phone instead. So
+  // this state is one that has finished setup before — exactly what a
+  // returning account's rows say.
+  mockLoaded.state = { ...seen, settings: { ...seen.settings, hasSeenTour: true } };
+  await mount();
+  await userEvent.press(await screen.findByLabelText("Settings, about and export"));
+  await userEvent.press(await screen.findByLabelText("Set up your budget"));
+
+  await screen.findByText("What's your take-home pay?");
+  for (const _ of [0, 1, 2, 3]) await userEvent.press(screen.getByLabelText("Skip"));
+  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
+  await userEvent.press(screen.getByLabelText("Continue"));
+  await userEvent.press(screen.getByLabelText("Finish"));
+  await userEvent.press(await screen.findByLabelText("Go to my budget"));
+
+  await waitFor(() => expect(mockSaved).toHaveLength(1));
+  // Straight back into the app.
+  expect(screen.queryByText(TOUR_STOPS[0]!.title)).toBeNull();
+  mockLoaded.state = blank;
 });
 
 
