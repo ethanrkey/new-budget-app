@@ -71,13 +71,26 @@ const first = PAD, last = W - PAD;
     if (prev != null) maxStep = Math.max(maxStep, Math.abs(l - prev));
     prev = l;
   }
-  is(`it never crosses the left edge of the plot (min ${worstLeft})`, worstLeft >= PAD - 1e-9);
-  is(`it never crosses the right edge (max ${worstRight}, plot ends ${last})`, worstRight <= last + 1e-9);
+  // THE LABEL CARRIES NO MEASUREMENT, and that is not a style
+  // preference. The mutation runner keys its kill map by test NAME,
+  // and compares the names that died against the names from an
+  // unmutated baseline run — so a label with a number in it is a
+  // DIFFERENT test under every mutation that moves the number, and
+  // the baseline's version comes back reported as one nothing could
+  // kill. The first version of these two interpolated `worstLeft`
+  // and `worstRight`; the diff-scoped run on 2026-10-16 shows them
+  // under their mutated names ("min 0", "max 330"), which is what
+  // gave it away. Failures print the numbers instead.
+  if (!(worstLeft >= PAD - 1e-9)) console.log(`      left edge reached ${worstLeft}, plot starts ${PAD}`);
+  is("it never crosses the left edge of the plot", worstLeft >= PAD - 1e-9);
+  if (!(worstRight <= last + 1e-9)) console.log(`      right edge reached ${worstRight}, plot ends ${last}`);
+  is("it never crosses the right edge of the plot", worstRight <= last + 1e-9);
   // CONTINUITY is the thing a two-branch fix would have broken: an
   // alignment that flips from centered to right-aligned makes the
   // readout jump by half its width mid-drag. Clamping one number
   // cannot.
-  is(`it moves at most as fast as the finger (max step ${maxStep} for a 0.5 step)`, maxStep <= 0.5 + 1e-9);
+  if (!(maxStep <= 0.5 + 1e-9)) console.log(`      biggest jump was ${maxStep} for a 0.5 step`);
+  is("it moves at most as fast as the finger", maxStep <= 0.5 + 1e-9);
 }
 
 // ---- the cases nobody tries -----------------------------------------

@@ -38,6 +38,17 @@
 // thing to try is worktrees: `git worktree add` per shard, one
 // process each, and merge the kill maps.
 //
+// A TEST LABEL MUST NOT CARRY A MEASURED NUMBER, and this file is
+// why. The kill map is keyed by test NAME, and the "nothing could
+// kill this" report diffs those names against an unmutated baseline
+// run — so a label built like `(worst ${measured})` is a DIFFERENT
+// test under every mutation that moves the number, and the
+// baseline's version comes back listed as unverified. Found
+// 2026-10-16 in the build 13 scoped run, which printed
+// "it never crosses the left edge of the plot (min 0)" where the
+// baseline says "(min 8)". A loop PARAMETER in a label is fine — it
+// is the same string every run. Failures print the number instead.
+//
 // Measured 2026-10-15, build 10: 180 mutations, ALL killed, 147
 // renderer tests, every one of them dying to at least one. The first
 // run of that set (178 mutations) reported THREE tests nothing could

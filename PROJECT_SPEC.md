@@ -656,6 +656,17 @@ written here in the same sitting** — there is no other record of it.
   6. **The Budget's third section is INVESTING / SAVING / DEBT**,
      because it holds investments. The old header still imports.
 
+  **The audit for this batch was DIFF-SCOPED: 42 of 208 mutations,
+  all caught, in about twenty minutes.** It also found a flaw in two
+  tests written the same day. A test label that interpolates a
+  MEASURED number — `(worst ${n})`, `(min ${n})` — is a different
+  test name under every mutation that moves the number, and the kill
+  map is keyed by name, so the baseline's version of that test would
+  come back reported as one nothing could kill in the next FULL run.
+  A loop parameter in a label is fine; a measurement is not, and
+  failures print it instead. Recorded at the top of
+  `mobile/scripts/mutate.mjs`.
+
   **DELIBERATE, NOT A BUG — today's rows are counted twice after a
   balance log, and that stays for v1.** Logging a balance dated today
   does not drop rows dated today, so a bill already inside the new

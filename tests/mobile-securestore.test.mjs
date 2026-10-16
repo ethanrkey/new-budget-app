@@ -49,7 +49,14 @@ for (const [name, unit] of worst) {
   const value = unit.repeat(5000);
   const parts = splitChunks(value);
   const biggest = Math.max(...parts.map(utf8Bytes));
-  is(`${name}: every chunk fits in ${LIMIT} bytes (worst ${biggest})`, biggest <= LIMIT);
+  // `${name}` is a loop parameter and stays in the label; `biggest`
+  // is MEASURED and does not. The mutation runner keys its kill map
+  // by test name and diffs it against an unmutated baseline, so a
+  // measured number in a label makes the test a different test under
+  // every mutation that moves it — and the baseline's version is then
+  // reported as one nothing could kill.
+  if (!(biggest <= LIMIT)) console.log(`      worst chunk was ${biggest} bytes, limit ${LIMIT}`);
+  is(`${name}: every chunk fits in ${LIMIT} bytes`, biggest <= LIMIT);
   eq(`${name}: it joins back to exactly what went in`, parts.join("") === value, true);
 }
 
