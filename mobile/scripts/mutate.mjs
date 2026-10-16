@@ -16,10 +16,31 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
-// Measured 2026-10-15, build 9: 165 mutations, ALL killed, 139
+// Measured 2026-10-15, build 10: 180 mutations, ALL killed, 147
 // renderer tests, every one of them dying to at least one. The first
-// run of that set (164 mutations) reported two tests nothing could
-// kill, both written that day:
+// run of that set (177 mutations) reported THREE tests nothing could
+// kill, all three written that day, and all three gaps were real:
+//   - "it opens on the Ledger and walks the stops in order" — nothing
+//     in the list moved the tour's ROUTES, only where it leaves you.
+//     Now killed by a mutation that stops `go()` routing at all;
+//   - "...and it is on EVERY bill row, including the blank one" —
+//     nothing hid the ✕ at one row, which is precisely the behavior
+//     the web had until build 10 and the thing this test exists for.
+//     Now killed by a mutation that puts `d.bills.length > 1` back;
+//   - "the Dashboard stop names the four things on the Dashboard" —
+//     this one was the HARNESS's fault, and it is the lesson of the
+//     run. The mutation written for it replaced the opening clause
+//     of the body and left the rest of the sentence dangling, so
+//     tour.ts failed to PARSE. jest reports a parse error as a
+//     suite-level failure with no per-test "✕" lines, the runner had
+//     nothing to attribute the kill to, and the test came back
+//     unverified. A mutation must break the BEHAVIOR; one that
+//     breaks the file is worse than none, because it reads as
+//     coverage while proving nothing.
+//
+// Before that, 2026-10-15, build 9: 165 mutations, ALL killed, 139
+// renderer tests. The first run of that set (164 mutations) reported
+// two tests nothing could kill, both written that day:
 //   - "every cadence asks when the first contribution is" — real, and
 //     now killed by a mutation that puts the first-date row back
 //     behind `row.cadence === "monthly"`, which is exactly the thing
@@ -392,10 +413,9 @@ const MUTATIONS = [
    "components/Setup.tsx",
    "      {open && (\n        <DayPicker",
    "      {false && (\n        <DayPicker"],
-  ["the day wheel does not close when a day is chosen",
-   "components/DayPicker.tsx",
-   "        onValueChange={(v) => { onPick(Number(v)); onClose(); }}",
-   "        onValueChange={(v) => { onPick(Number(v)); }}"],
+  // "the day wheel does not close when a day is chosen" was here from
+  // build 9. Build 10 made closing-on-settle the BUG — see the build
+  // 10 block below, where the mutation runs the other way.
   ["the wheel offers a 32nd of the month", "../src/content/setup.ts",
    "  Array.from({ length: 31 }, (_, i) => i + 1);",
    "  Array.from({ length: 32 }, (_, i) => i + 1);"],
@@ -501,9 +521,9 @@ const MUTATIONS = [
    "            tintColor={T.dim}", "            tintColor={T.brass}"],
   ["the edit cue is offered offline, where it cannot save",
    "components/AnchorStrip.tsx", "  const live = !!onPress && online;", "  const live = !!onPress;"],
-  ["the verified date goes back on the row with the balance",
+  ["the as-of date goes back on the row with the balance",
    "components/AnchorStrip.tsx",
-   "      <Text style={styles.asOf}>verified {fmtDate(account.balanceAsOf)}</Text>",
+   "      <Text style={styles.asOf}>as of {fmtDate(account.balanceAsOf)}</Text>",
    "      <Text />"],
 
   ["the two brand buttons stop sharing a height", "components/SignIn.tsx",
@@ -520,14 +540,9 @@ const MUTATIONS = [
   ["tapping off the field no longer puts the keyboard away",
    "components/SignIn.tsx", "        onPress={Keyboard.dismiss}", "        onPress={() => {}}"],
 
-  ["a swiped bill row is not removed", "components/SwipeToDelete.tsx",
-   "        if (at <= -FULL) { remove(); return; }", "        if (false) { remove(); return; }"],
-  ["any sideways nudge removes a bill row", "components/SwipeToDelete.tsx",
-   "        if (at <= -FULL) { remove(); return; }", "        { remove(); return; }"],
-  ["the destructive button cannot be reached without a gesture",
-   "components/SwipeToDelete.tsx", "          onPress={remove}", "          onPress={() => {}}"],
-  ["the swipe handler keeps the row list it was built with",
-   "components/SwipeToDelete.tsx", "    latest.current();", "    onDelete();"],
+  // The four SwipeToDelete entries that used to sit here went with the
+  // component in build 10 — the gesture was replaced by a visible ✕
+  // (see below), so there is nothing left for them to break.
   ["removing the last bill row leaves the step with none",
    "../src/engine/setup.ts", "  return left.length ? left : [emptyBillRow(today)];", "  return left;"],
   ["a bill row other than the one swiped is removed",
@@ -543,6 +558,111 @@ const MUTATIONS = [
   ["the first-date row goes back to monthly only", "components/Setup.tsx",
    "                        <DateRow\n                          label={account.group === \"debt\"\n                            ? COPY.contributions.startLabelDebt\n                            : COPY.contributions.startLabel}\n                          value={row.start}\n                          minimum={todayISO}\n                          onChange={(v) => setRow({ start: v })}\n                          accessibilityLabel={`${account.name} first contribution`}\n                        />\n",
    "                        {row.cadence === \"monthly\" && (\n                        <DateRow\n                          label={account.group === \"debt\"\n                            ? COPY.contributions.startLabelDebt\n                            : COPY.contributions.startLabel}\n                          value={row.start}\n                          minimum={todayISO}\n                          onChange={(v) => setRow({ start: v })}\n                          accessibilityLabel={`${account.name} first contribution`}\n                        />\n                        )}\n"],
+
+  // ---- build 10's device pass ----------------------------------------
+  //
+  // One per behavior the pass changed, and the two with no renderer
+  // test are deliberately absent rather than faked: the icon's gates
+  // live in scripts/make_app_icon.mjs and are proved by running it
+  // (an ios.icon put back, and the build 6 gradient rendered), and
+  // the web's half of items 4, 5, 6 and 7 is driven in a real browser
+  // because this repo has no DOM renderer suite.
+
+  // 2 — the owner's word on the checking bar.
+  ["the checking bar says \"verified\" again", "components/AnchorStrip.tsx",
+   "      <Text style={styles.asOf}>as of {fmtDate(account.balanceAsOf)}</Text>",
+   "      <Text style={styles.asOf}>verified {fmtDate(account.balanceAsOf)}</Text>"],
+  ["a savings card stops saying when it was logged",
+   "../mobile/app/(tabs)/dashboard.tsx",
+   "{latest ? `logged ${fmtDate(latest.date)}`",
+   "{latest ? `as of ${fmtDate(latest.date)}`"],
+
+  // 3 — the wheel commits on Done and on nothing else.
+  ["the day wheel commits the moment it stops scrolling",
+   "components/DayPicker.tsx",
+   "        onValueChange={(v) => setDraft(Number(v))}",
+   "        onValueChange={(v) => { setDraft(Number(v)); onPick(Number(v)); onClose(); }}"],
+  ["Cancel commits the draft it was meant to throw away",
+   "components/DayPicker.tsx",
+   "          onPress={onClose}\n          accessibilityRole=\"button\"\n          accessibilityLabel=\"Cancel\"",
+   "          onPress={() => { onPick(draft); onClose(); }}\n          accessibilityRole=\"button\"\n          accessibilityLabel=\"Cancel\""],
+  ["Done closes without committing", "components/DayPicker.tsx",
+   "          onPress={() => { onPick(draft); onClose(); }}\n          accessibilityRole=\"button\"\n          accessibilityLabel={label}",
+   "          onPress={onClose}\n          accessibilityRole=\"button\"\n          accessibilityLabel={label}"],
+
+  // 4 — a visible ✕ on every row of both lists.
+  ["the remove control does nothing", "components/Setup.tsx",
+   "      onPress={() => { Keyboard.dismiss(); onPress(); }}\n      hitSlop={8}",
+   "      onPress={() => {}}\n      hitSlop={8}"],
+  ["removing an account row leaves the group with none",
+   "../src/engine/setup.ts",
+   "  const left = rows.filter((_, i) => i !== index);\n  return left.length ? left : [emptyAccountRow()];",
+   "  const left = rows.filter((_, i) => i !== index);\n  return left;"],
+  ["an account row other than the one pressed is removed",
+   "../src/engine/setup.ts",
+   "export function removeAccountRow(rows: AccountRow[], index: number): AccountRow[] {\n  const left = rows.filter((_, i) => i !== index);",
+   "export function removeAccountRow(rows: AccountRow[], index: number): AccountRow[] {\n  const left = rows.filter((_, i) => i !== index + 1);"],
+  ["the account ✕ always removes from savings, whichever group it is in",
+   "components/Setup.tsx",
+   "                                  [g.key]: removeAccountRow(d.accounts[g.key], idx),",
+   "                                  savings: removeAccountRow(d.accounts.savings, idx),"],
+
+  // 5 — the step's order, the engine's order, and no brands.
+  ["the accounts step goes back to savings first",
+   "../src/content/setup.ts",
+   "  { key: \"investment\", label: \"Investments\", kindNote: \"Value the market moves — saved as Investment\", placeholder: \"e.g. Roth IRA, 401k, HSA\" },\n  { key: \"savings\", label: \"Savings\", kindNote: \"Cash you control — saved as Savings\", placeholder: \"e.g. Emergency fund\" },",
+   "  { key: \"savings\", label: \"Savings\", kindNote: \"Cash you control — saved as Savings\", placeholder: \"e.g. Emergency fund\" },\n  { key: \"investment\", label: \"Investments\", kindNote: \"Value the market moves — saved as Investment\", placeholder: \"e.g. Roth IRA, 401k, HSA\" },"],
+  ["the engine collects savings first, against the step's order",
+   "../src/engine/setup.ts",
+   'export const SETUP_GROUPS = ["investment", "savings", "debt"] as const;',
+   'export const SETUP_GROUPS = ["savings", "investment", "debt"] as const;'],
+  ["the savings placeholder names a bank again",
+   "../src/content/setup.ts",
+   'placeholder: "e.g. Emergency fund"', 'placeholder: "e.g. First National"'],
+
+  // 6 — who did the work.
+  ["the finish screen takes the credit back",
+   "../src/content/setup.ts", "`You've added ${n} recurring item", "`We've added ${n} recurring item"],
+
+  // 7 — where the tour puts you down.
+  ["Done leaves you on whichever tab the last card was over",
+   "components/Tour.tsx",
+   "              onPress={() => (last ? leave() : go(i + 1))}",
+   "              onPress={() => (last ? onClose() : go(i + 1))}"],
+  ["Skip leaves you wherever you quit",
+   "components/Tour.tsx",
+   "<Pressable onPress={leave} style={styles.skip}",
+   "<Pressable onPress={onClose} style={styles.skip}"],
+  // THE WHOLE STRING, not a prefix of it. The first version of this
+  // entry replaced the opening clause and left the rest of the
+  // sentence dangling, so `tour.ts` failed to PARSE — jest reported a
+  // suite-level error with no per-test lines, the runner saw no "✕"
+  // to attribute, and the test this was written for came back as one
+  // nothing could kill. A mutation has to break the behavior, not the
+  // file.
+  ["the Dashboard stop stops naming what is on the Dashboard",
+   "../src/content/tour.ts",
+   "    body: \"Everything you have and everything you owe, on one screen: checking, savings, investments and debt, and what they come to together. Nothing here is projected — it's what's true today, built only from balances you've logged. Log them again next month and the same screen starts showing which way each one is going.\",",
+   "    body: \"Not a forecast: what's actually true right now. Your net position, your checking balance, and each account's balance as you log it.\","],
+
+  // Written AFTER the first build 10 run, which reported three tests
+  // nothing could kill. All three were written that day, and all
+  // three gaps were real: nothing moved the tour's ROUTES, nothing
+  // hid the ✕ at one row, and the Dashboard-body entry above was
+  // breaking the parser rather than the copy.
+  ["the tour stops routing to the tab each card is about",
+   "components/Tour.tsx",
+   "  const go = (next: number) => {\n    setI(next);\n    router.replace(ROUTE[TOUR_STOPS[next]!.tab]! as never);\n  };",
+   "  const go = (next: number) => {\n    setI(next);\n  };"],
+  ["the bill ✕ is hidden at one row, the way the web's used to be",
+   "components/Setup.tsx",
+   "                        <Remove\n                          label={`Remove bill ${idx + 1}`}\n                          onPress={() => set(\"bills\", removeBillRow(d.bills, idx, todayISO))}\n                        />",
+   "                        {d.bills.length > 1 && (<Remove\n                          label={`Remove bill ${idx + 1}`}\n                          onPress={() => set(\"bills\", removeBillRow(d.bills, idx, todayISO))}\n                        />)}"],
+
+  // 8 — the one navigation control outside the tab bar.
+  ["the settings button is silent again", "components/Chrome.tsx",
+   "        onPress={() => { feel.selection(); setScreen(\"settings\"); }}",
+   "        onPress={() => { setScreen(\"settings\"); }}"],
 ];
 
 const killedBy = new Map();

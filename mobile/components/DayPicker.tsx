@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Picker } from "@react-native-picker/picker";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { T } from "../lib/theme";
@@ -47,11 +47,13 @@ export default function DayPicker({
   onClose: () => void;
   label?: string;
 }) {
+  // The wheel opens on whatever the row currently says, and it is
+  // only ever mounted while it is open — the caller renders it behind
+  // `{open && ...}` — so this initial value IS the reopen behavior.
+  // An effect syncing `draft` to a changing `value` was here briefly
+  // and was removed: nothing changes `value` underneath an open
+  // picker, so no test could reach it and no mutation could kill it.
   const [draft, setDraft] = useState(value);
-  // The wheel opens on whatever the row currently says. A caller that
-  // changes `value` underneath an open picker — nothing does today —
-  // would otherwise leave the wheel showing a stale number.
-  useEffect(() => { setDraft(value); }, [value]);
 
   return (
     <View style={styles.wrap}>
