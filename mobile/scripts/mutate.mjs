@@ -663,6 +663,108 @@ const MUTATIONS = [
   ["the settings button is silent again", "components/Chrome.tsx",
    "        onPress={() => { feel.selection(); setScreen(\"settings\"); }}",
    "        onPress={() => { setScreen(\"settings\"); }}"],
+
+  // ---- build 12's device pass ----------------------------------------
+  //
+  // Items 3 and 6 have no entry here and that is not an oversight.
+  // Item 3 is the WEB's tour ending, and this repo has no DOM
+  // renderer suite — it is driven in a real browser instead. Item 6
+  // is a shell-level gate with its own plain-node suite
+  // (tests/personal-gate.test.mjs), which this runner already
+  // executes as part of NODE_SUITES, so breaking it here would be
+  // caught by that rather than by anything renderer-shaped.
+
+  // 1 — the checking bar hugs its balance and stops at the button.
+  ["the checking bar runs the full width again", "components/AnchorStrip.tsx",
+   "    maxWidth: \"100%\",", "    marginRight: 0,"],
+  ["the slot stretches its child instead of letting it be narrow",
+   "components/AnchorStrip.tsx",
+   "  slot: { marginLeft: 16, marginRight: 60, marginBottom: 8, alignItems: \"flex-start\" },",
+   "  slot: { marginLeft: 16, marginRight: 60, marginBottom: 8 },"],
+  ["the box carries its own margin, so the cap and the edge disagree",
+   "components/AnchorStrip.tsx",
+   "    maxWidth: \"100%\",\n    paddingHorizontal: 12,",
+   "    maxWidth: \"100%\", marginLeft: 16,\n    paddingHorizontal: 12,"],
+  ["nothing reserves the space the settings button floats in",
+   "components/AnchorStrip.tsx",
+   "  slot: { marginLeft: 16, marginRight: 60,", "  slot: { marginLeft: 16, marginRight: 0,"],
+
+  // 2 — the picker panels match the fields.
+  ["the calendar panel is cut off at the bottom again",
+   "components/DatePicker.tsx",
+   "  wrap: { backgroundColor: T.surface, borderRadius: 12,",
+   "  wrap: { backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,"],
+  ["the day wheel's panel is cut off at the bottom again",
+   "components/DayPicker.tsx",
+   "    backgroundColor: T.surface, borderRadius: 12,",
+   "    backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,"],
+  ["the panels are rounder than the fields they sit between",
+   "components/DayPicker.tsx",
+   "    backgroundColor: T.surface, borderRadius: 12,",
+   "    backgroundColor: T.surface, borderRadius: 20,"],
+
+  // 4 — the tour runs once per ACCOUNT.
+  ["finishing setup does not record that the tour has run",
+   "../src/engine/setup.ts",
+   "export function markTourSeen(state: BudgetState): BudgetState {\n  return { ...state, settings: { ...state.settings, hasSeenTour: true } };",
+   "export function markTourSeen(state: BudgetState): BudgetState {\n  return state;"],
+  ["Skip marks the tour seen, so skipping the wizard loses it for good",
+   "../src/engine/setup.ts",
+   "export function markSetupSeen(state: BudgetState): BudgetState {\n  return { ...state, settings: { ...state.settings, hasSeenOnboarding: true } };",
+   "export function markSetupSeen(state: BudgetState): BudgetState {\n  return { ...state, settings: { ...state.settings, hasSeenOnboarding: true, hasSeenTour: true } };"],
+  ["the tour replays every time Setup is re-run", "components/Chrome.tsx",
+   "    if (firstTime) setTouring(true);", "    setTouring(true);"],
+  ["the flag is read after the write that sets it", "components/Chrome.tsx",
+   "    const firstTime = !state?.settings.hasSeenTour;",
+   "    const firstTime = !state?.settings.hasSeenOnboarding;"],
+  ["an existing account is sprung with the tour on its next Setup",
+   "../src/engine/stateShape.ts",
+   "    settings.hasSeenTour = settings.hasSeenOnboarding;",
+   "    settings.hasSeenTour = false;"],
+  ["a deliberate 'not yet' is overwritten by the migration",
+   "../src/engine/stateShape.ts",
+   "  if (parsed.settings?.hasSeenTour === undefined) {",
+   "  if (true) {"],
+
+  // 5 — the session lives in the Keychain.
+  ["the chunk size stops clearing the Keychain's byte limit",
+   "lib/chunks.ts", "export const CHUNK_CHARS = 600;", "export const CHUNK_CHARS = 2000;"],
+  // Written after the first build 12 run, which reported "a session
+  // too big for one Keychain item round-trips through several" as a
+  // test nothing could kill. It was real: the test expected
+  // `ceil(length / CHUNK_CHARS)` chunks, so raising CHUNK_CHARS moved
+  // the expectation with it — the constant checked against itself.
+  // The byte bound is a literal now, and THIS is the mutation for the
+  // other half of that test: a split that does not split.
+  ["the session is written whole, over the Keychain's limit",
+   "lib/chunks.ts",
+   "  const out: string[] = [];\n  for (let i = 0; i < value.length; i += CHUNK_CHARS) out.push(value.slice(i, i + CHUNK_CHARS));\n  return out;",
+   "  return [value];"],
+  ["a half-written manifest reads as zero chunks instead of nothing",
+   "lib/chunks.ts", "  return Number.isInteger(n) && n > 0 && n < 10000 ? n : null;",
+   "  return Number.isInteger(n) && n >= 0 && n < 10000 ? n : null;"],
+  ["an empty value stops being distinguishable from no value",
+   "lib/chunks.ts", '  if (value.length === 0) return [""];', "  if (value.length === 0) return [];"],
+  ["the update signs everybody out: no fallback to the old store",
+   "lib/secureStorage.ts",
+   "    const legacy = await AsyncStorage.getItem(key);\n    if (legacy == null) return null;",
+   "    const legacy = null as string | null;\n    if (legacy == null) return null;"],
+  ["the plaintext copy is left behind after the session moves",
+   "lib/secureStorage.ts", "    await AsyncStorage.removeItem(key);\n    return legacy;", "    return legacy;"],
+  ["a shrinking session leaves orphan chunks for the next read",
+   "lib/secureStorage.ts",
+   "    for (let i = parts.length; i < before; i++) {\n      await SecureStore.deleteItemAsync(chunkKey(key, i), opts);\n    }",
+   "    // mutated"],
+  ["a torn write hands supabase-js half a session",
+   "lib/secureStorage.ts", "        if (part == null) return null;", "        if (part == null) continue;"],
+  ["signing out leaves the old plaintext session on the device",
+   "lib/secureStorage.ts",
+   "    // AsyncStorage too, always: an install that signs out before it\n    // ever reads must not leave the old plaintext copy behind.\n    await AsyncStorage.removeItem(key);",
+   "    // mutated"],
+  ["a platform with no Keychain takes the whole client down",
+   "lib/secureStorage.ts",
+   "    if (!(await secureAvailable())) return AsyncStorage.getItem(key);",
+   "    if (false) return AsyncStorage.getItem(key);"],
 ];
 
 const killedBy = new Map();

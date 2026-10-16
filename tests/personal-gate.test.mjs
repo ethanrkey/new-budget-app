@@ -66,8 +66,15 @@ console.log("== the personal-terms gate ==");
 }
 
 // ---- and the direction that must not be noisy -------------------------
+//
+// THE SENTINEL IS ASSEMBLED AT RUNTIME, which is not cleverness. This
+// file is tracked, so a term written here as a literal is a term the
+// gate finds IN THIS FILE — the first version of these two checks
+// failed for exactly that reason, which is a small, exact
+// demonstration that the gate reads what it says it reads.
+const ABSENT = ["zzz", "no", "such", "term", "anywhere", "zzz"].join("-");
 {
-  const r = run("zzz-no-such-term-anywhere-zzz\n");
+  const r = run(`${ABSENT}\n`);
   eq("a term that is absent passes", r.code, 0);
   is("...and says so", /PERSONAL TERMS OK/.test(r.out));
 }
@@ -79,7 +86,7 @@ console.log("== the personal-terms gate ==");
   is("...and an all-comment list says there is nothing to check",
     /nothing to check/.test(run("# Spotify\n").out));
   eq("matching is case-insensitive", run("sPoTiFy\n").code, 1);
-  eq("a trailing newline is not a term", run("zzz-nope-zzz\n\n").code, 0);
+  eq("a trailing newline is not a term", run(`${ABSENT}\n\n`).code, 0);
 }
 
 // ---- THE CI CASE: no list, no noise, no failure ----------------------

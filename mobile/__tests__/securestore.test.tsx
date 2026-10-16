@@ -1,4 +1,4 @@
-import { CHUNK_CHARS } from "../lib/chunks";
+import { CHUNK_CHARS, utf8Bytes } from "../lib/chunks";
 
 // THE SESSION'S STORAGE, and the migration that stops the update from
 // signing everyone out.
@@ -59,17 +59,46 @@ beforeEach(async () => {
 });
 const load = (): Store => (store = require("../lib/secureStorage").secureSessionStorage);
 
+// expo-secure-store's documented limit, as a LITERAL. The first
+// version of the test below expected `ceil(length / CHUNK_CHARS)`
+// chunks, which is the constant checked against itself: the mutation
+// audit took CHUNK_CHARS to 2000 and the test still passed, because
+// its expectation moved with the thing it was meant to pin.
+const KEYCHAIN_LIMIT = 2048;
+
 test("a session too big for one Keychain item round-trips through several", async () => {
   load();
   const value = session();
   await store.setItem(KEY, value);
 
   expect(await store.getItem(KEY)).toBe(value);
-  // It really was split — one item would have been over the limit.
-  expect(mockKeychain.get(KEY)).toBe(String(Math.ceil(value.length / CHUNK_CHARS)));
+  // It really was split: more than one chunk, and more than the
+  // manifest plus one item.
+  expect(Number(mockKeychain.get(KEY))).toBeGreaterThan(1);
   expect(mockKeychain.size).toBeGreaterThan(2);
   // And nothing landed in the plaintext store.
   expect(await AsyncStorage.getItem(KEY)).toBeNull();
+});
+
+test("...and no chunk exceeds the Keychain's limit, in BYTES", async () => {
+  // THE CLAIM THAT ACTUALLY MATTERS, and the one a character count
+  // cannot make on its own: the limit is 2048 BYTES and the split is
+  // counted in UTF-16 code units. A Supabase session carries a user
+  // object, and a name or an email in it can be far from ASCII.
+  load();
+  for (const value of [
+    session(),                                  // a realistic ASCII session
+    JSON.stringify({ user: { name: "\u20ac".repeat(2500) } }),   // 3 bytes per code unit
+    JSON.stringify({ user: { name: "\u{1F511}".repeat(2000) } }), // surrogate pairs
+  ]) {
+    mockKeychain.clear();
+    await store.setItem(KEY, value);
+    expect(await store.getItem(KEY)).toBe(value);
+    for (const [k, v] of mockKeychain) {
+      if (k === KEY) continue;                  // the manifest is a number
+      expect(utf8Bytes(v)).toBeLessThanOrEqual(KEYCHAIN_LIMIT);
+    }
+  }
 });
 
 test("an existing AsyncStorage session is moved across on its first read", async () => {
