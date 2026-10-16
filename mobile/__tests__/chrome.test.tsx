@@ -114,7 +114,7 @@ test("finishing writes the rules, the anchor and the flag in ONE save", async ()
   // other way round — must not be a state this app can be in.
   await waitFor(() => expect(mockSaved).toHaveLength(1));
   const out = mockSaved[0] as {
-    settings: { hasSeenOnboarding: boolean };
+    settings: { hasSeenOnboarding: boolean; hasSeenTour: boolean };
     recurring: { name: string }[];
     accounts: { balance: number }[];
   };
@@ -124,7 +124,7 @@ test("finishing writes the rules, the anchor and the flag in ONE save", async ()
   // BOTH flags, in the same save. A setup that finished without
   // hasSeenTour set is an account that replays the tour the next time
   // Setup is opened from Settings, which is the build 11 report.
-  expect((out.settings as { hasSeenTour: boolean }).hasSeenTour).toBe(true);
+  expect(out.settings.hasSeenTour).toBe(true);
 });
 
 test("...and the tour comes up once, after the FIRST setup", async () => {

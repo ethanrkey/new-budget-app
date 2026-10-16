@@ -431,6 +431,71 @@ balance updates). Nothing is append-only.
   boundary. No secrets are in git (history swept 2026-09-13).
 - Financial CSVs are gitignored (`*.csv`). Never commit user data.
 
+### What the phone keeps on the device, and where (audited 2026-10-16)
+
+Three things, and only three. Asked for on build 11's device pass,
+before this is on anyone else's phone for real.
+
+1. **The Supabase session — IN THE KEYCHAIN since build 12.** It was
+   in AsyncStorage in plain text, behind a comment of ours saying the
+   move was "worth doing before this is on anyone else's phone". A
+   session is not budget data; it is the CREDENTIAL that reaches the
+   budget data on the server, and it refreshes itself, so one copy
+   taken off a device keeps working. That is why it went first.
+
+   `mobile/lib/secureStorage.ts` is a supabase-js storage adapter that
+   splits the value across several Keychain items, because
+   expo-secure-store documents a 2048-byte limit per value and a
+   session is several kilobytes. **Not** Supabase's own
+   "LargeSecureStore" pattern (AES-encrypt the session, ciphertext in
+   AsyncStorage, key in the Keychain): chunking keeps the secret
+   itself in the Keychain, and costs no cipher and no CSPRNG
+   polyfill. `mobile/lib/chunks.ts` holds the arithmetic, separately,
+   so it can be tested in plain node — **600 UTF-16 code units can
+   never exceed 2048 UTF-8 bytes**, because the worst case is 3 bytes
+   per code unit (a 4-byte code point costs two units to reach), and
+   600 x 3 = 1800. Measured worst chunk in the suite: 1800 bytes.
+
+   `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`. After-first-unlock because
+   `autoRefreshToken` can fire with the screen off and a refresh that
+   cannot read the session signs somebody out for no visible reason;
+   this-device-only so the credential is never carried to a new phone
+   by an encrypted backup or iCloud Keychain. **Restoring to a new
+   device therefore means signing in again**, which is correct for a
+   credential and is a thing to say rather than discover.
+
+   **The migration is in `getItem`.** Every installed build has its
+   session in AsyncStorage under the same key; the first read after
+   the update finds nothing in the Keychain, falls back, moves it,
+   and hands it over. No launch step, no migration flag. The
+   AsyncStorage copy is deleted only after the Keychain write
+   resolves — a crash in between leaves two copies, which the next
+   read collapses; the other order loses the session.
+
+2. **The recovery stash (`budget-app-stash-v1`, AsyncStorage) — STAYS,
+   and this is the deliberate part.** It holds a FULL `BudgetState`:
+   every balance, every rule, every account name. It is the most
+   financial thing on the device and it is not moving, for two
+   reasons. It is written before EVERY commit and awaited before the
+   optimistic apply (see `lib/stash.ts`), so chunking it into the
+   Keychain would put dozens of Keychain writes on the critical path
+   of every edit. And its life is already bounded: cleared on a
+   successful save, on dismissing the failure notice, and on
+   discarding it at relaunch — the only way it persists is an
+   unresolved failed write. On iOS it sits in the app sandbox under
+   the default data protection, which is the disk-level encryption
+   this project settled on (E2E was ruled out). **If that trade ever
+   stops looking right, the cheaper half is to stash a DIFF rather
+   than the whole state.**
+
+3. **Device preferences (`budget-app-prefs-v1`, AsyncStorage) — five
+   booleans.** Two panels collapsed, the guide dismissed, the wizard
+   dismissed, and whether the last Apple sign-in failed to file its
+   token. Nothing financial, nothing identifying.
+
+   There is **no on-device cache of the budget itself**: `loadState`
+   reads Supabase on every launch and the phone is read-only offline.
+
 ## 5a. Live configuration that is not in this repo
 
 Settings that live in a dashboard, that no test can read, and that the

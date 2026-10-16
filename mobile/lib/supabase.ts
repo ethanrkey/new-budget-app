@@ -1,7 +1,7 @@
 // The same Supabase project as the web app, same anon key, same RLS.
 import "react-native-url-polyfill/auto";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
+import { secureSessionStorage } from "./secureStorage";
 import { backendKind, backendNotice } from "./backend";
 
 // EXPO_PUBLIC_* is inlined at build time, exactly like Vite's VITE_*. The
@@ -36,11 +36,18 @@ if (!url || !anon) {
 
 export const supabase = createClient(url, anon, {
   auth: {
-    // AsyncStorage, not SecureStore: a Supabase session exceeds iOS
-    // SecureStore's 2048-byte per-value limit and would need chunking.
-    // Worth doing before this is on anyone else's phone; not worth it for
-    // a build whose question is "does it feel like an app".
-    storage: AsyncStorage,
+    // THE KEYCHAIN, since build 12. This used to read "AsyncStorage,
+    // not SecureStore: a Supabase session exceeds iOS SecureStore's
+    // 2048-byte per-value limit and would need chunking. Worth doing
+    // before this is on anyone else's phone" — and it is on other
+    // people's phones now, so the chunking got written. See
+    // lib/secureStorage.ts for the split and for why it is not the
+    // encrypt-into-AsyncStorage pattern, and lib/chunks.ts for why
+    // 600 characters can never exceed 2048 bytes.
+    //
+    // Existing sessions migrate on their first read, so the update
+    // does not sign anybody out.
+    storage: secureSessionStorage,
     persistSession: true,
     autoRefreshToken: true,
     // Nothing to catch in a URL: sign-in is an emailed six-digit code,
