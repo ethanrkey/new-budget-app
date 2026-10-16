@@ -152,7 +152,7 @@ export default function LogBalance({
 }
 
 export const currently = (balance: number | null, asOf: string | null) =>
-  balance == null ? undefined : `Currently ${money(balance)}, verified ${fmtDate(asOf)}`;
+  balance == null ? undefined : `Currently ${money(balance)}, as of ${fmtDate(asOf)}`;
 
 const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },

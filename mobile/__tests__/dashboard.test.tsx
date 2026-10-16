@@ -70,15 +70,21 @@ test("the savings section ends with a card that starts one", async () => {
   // The explanation of what the section is FOR, shared with the web
   // so it cannot drift (src/content/dashboard.ts).
   expect(screen.getByText(/a Roth IRA, a brokerage/)).toBeOnTheScreen();
-  // A SAVINGS CARD SAYS "logged", AND THAT IS NOT THE WORD THE
-  // CHECKING BAR USES. The checking bar said "verified" until
-  // 2026-10-15 and says "as of" now; these two readings are different
-  // in kind, which is the owner's point — a balance you typed in off
-  // a statement is logged, and the one the whole forecast counts
-  // forward from is simply true as of a date. Asserted on both sides
-  // so a sweep of one word cannot quietly take the other with it.
+  // A SAVINGS CARD SAYS "logged", AND THE CHECKING CARD SAYS "as of",
+  // on the same screen and on the same date. Two readings, different
+  // in kind, which is the owner's point: a balance you typed in off a
+  // statement is logged, and the one the whole forecast counts
+  // forward from is simply true as of a date.
+  //
+  // Both are asserted because they are a PAIR. Sweeping "verified" to
+  // "as of" across the app on 2026-10-16 hit the checking card and
+  // had to leave the savings card alone, and the only thing that
+  // makes that a decision rather than an oversight is a test that
+  // names both words on one screen. Scoped to the cards, since the
+  // same date appears in both.
   expect(screen.getByText("logged 10/01/2026")).toBeOnTheScreen();
-  expect(screen.queryByText(/as of 10\/01\/2026/)).toBeNull();
+  expect(screen.getByText("as of 10/01/2026")).toBeOnTheScreen();
+  expect(screen.queryByText(/verified/i)).toBeNull();
   await userEvent.press(screen.getByLabelText("+ Add account"));
   expect(await screen.findByText("Add an account")).toBeOnTheScreen();
 });

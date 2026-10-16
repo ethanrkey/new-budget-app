@@ -119,7 +119,13 @@ export default function DashboardScreen() {
         )}
         {heroOpen && (
           <View style={styles.heroRows}>
-            <Line k="Checking (verified)" v={money(net.cash)} />
+            {/* "Checking balance", not "Checking (verified)". There
+                is no date on this line, so "(as of)" would say
+                nothing — and the web's own sentence for this sum
+                already calls it the checking balance. The two rows
+                below still say "Logged", which is the distinction
+                the parenthetical was carrying. */}
+            <Line k="Checking balance" v={money(net.cash)} />
             <Line k="Logged assets" v={money(net.assets)} />
             <Line k="Logged debt" v={`−${money(net.debt).replace("-", "")}`} tone={T.expense} />
             {(net.unloggedAssets > 0 || net.unloggedDebts > 0) && (
@@ -412,7 +418,11 @@ function AccountCard({ name, balance, asOf, history, color, chartW, online, onLo
         </Pressable>
       </View>
       <Text style={styles.cardNum}>{money(balance)}</Text>
-      <Text style={styles.dim}>verified {fmtDate(asOf)}</Text>
+      {/* "as of", not "verified" — the owner's word, and the same
+          word the checking bar uses. Every DATED label says it; the
+          conceptual "verified balance" wording on About and in the
+          wipe/delete confirmations is left for the voice pass. */}
+      <Text style={styles.dim}>as of {fmtDate(asOf)}</Text>
       <Sparkline points={history} color={color} width={chartW} />
       <HistoryList entries={history} online={online} onEdit={onEditEntry} onDelete={onDeleteEntry} />
     </View>

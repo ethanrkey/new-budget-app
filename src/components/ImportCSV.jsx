@@ -154,7 +154,7 @@ export default function ImportCSV({ onImport, onRestoreBackup, onClose, trackerC
                   <p><span className="font-medium">{restoreState.trackerCategories.length}</span> savings/debt categor{restoreState.trackerCategories.length === 1 ? "y" : "ies"}</p>
                   <p><span className="font-medium">{countSnapshots(restoreState.balanceSnapshots)}</span> logged balance snapshot{countSnapshots(restoreState.balanceSnapshots) === 1 ? "" : "s"}</p>
                   <p><span className="font-medium">{countMonthlyActuals(restoreState.monthlyActuals)}</span> logged variable-bill actual{countMonthlyActuals(restoreState.monthlyActuals) === 1 ? "" : "s"}</p>
-                  <p>{primaryAccount(restoreState).name} balance: <span className="font-medium">{money(primaryAccount(restoreState).balance)}</span> verified {fmtDate(primaryAccount(restoreState).balanceAsOf)}</p>
+                  <p>{primaryAccount(restoreState).name} balance: <span className="font-medium">{money(primaryAccount(restoreState).balance)}</span> as of {fmtDate(primaryAccount(restoreState).balanceAsOf)}</p>
                 </div>
 
                 <label className="flex items-start gap-2 text-sm bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-lg p-3 cursor-pointer">

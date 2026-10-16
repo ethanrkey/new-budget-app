@@ -491,7 +491,7 @@ function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, 
         <div>
           <div className={LABEL}>{account.name}</div>
           <div className="mt-1 text-2xl font-semibold tabular-nums">{money(account.balance)}</div>
-          <div className="text-xs text-gray-500">verified {fmtDate(account.balanceAsOf)}</div>
+          <div className="text-xs text-gray-500">as of {fmtDate(account.balanceAsOf)}</div>
         </div>
         <button onClick={onUpdate} className={BTN}>Update balance</button>
       </div>

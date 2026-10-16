@@ -97,7 +97,7 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
               Enter the current balance of your primary checking account and the date you checked it.
               Transactions dated before that date will drop out of the ledger, since the balance
               already accounts for them — make sure none of them are bills you still owe.
-              Currently {money(account.balance)}, verified {fmtDate(account.balanceAsOf)}.
+              Currently {money(account.balance)}, as of {fmtDate(account.balanceAsOf)}.
             </>
           )}
         </p>
