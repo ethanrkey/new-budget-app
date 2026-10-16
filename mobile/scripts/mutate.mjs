@@ -16,6 +16,28 @@
 // tests, not instead of thinking about them — the list only covers what
 // someone thought to break, which is its own limit and worth saying.
 //
+// HOW THIS IS RUN, set by the owner on 2026-10-16 and not
+// negotiable:
+//
+//   - PER BATCH, only the mutations whose FILE changed in that batch.
+//     `node scripts/mutate.mjs --changed <base>` does that off a git
+//     diff. Minutes, not hours.
+//   - THE FULL LIST only before a build goes to external testers or
+//     the App Store, or when he asks for it.
+//   - A HARD 30-MINUTE CAP on any run. At the cap it stops and
+//     reports what it finished, because a number from half the list
+//     is worth more than a run nobody waited for.
+//
+// The rule exists because two batches in a row were spent waiting on
+// a full run: build 12's took eight hours of wall clock, across two
+// laptop sleeps, while nothing was blocked on it — the build had
+// already been tested on a phone. It reached 103 of 202 with no
+// survivors before it was stopped.
+//
+// If the full run is needed at release and an hour is too long, the
+// thing to try is worktrees: `git worktree add` per shard, one
+// process each, and merge the kill maps.
+//
 // Measured 2026-10-15, build 10: 180 mutations, ALL killed, 147
 // renderer tests, every one of them dying to at least one. The first
 // run of that set (178 mutations) reported THREE tests nothing could
@@ -86,6 +108,7 @@
 // break, but still wrong.
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
 import { SUITES } from "../../scripts/suites.mjs";
 
 // Every plain-node suite, from the one list — see scripts/suites.mjs
@@ -831,7 +854,43 @@ if (stale.length) {
   process.exit(1);
 }
 
-for (const [label, file, find, repl] of MUTATIONS) {
+// DIFF-SCOPED, and the default. `--changed <base>` keeps only the
+// mutations whose target file differs from `base` — the batch's own
+// blast radius — and `--all` is the full list. A run with no argument
+// is the full list too, so a release run is the plain command.
+//
+// A path is compared after resolving it, because an entry's file is
+// relative to mobile/ and git reports repo-relative paths.
+const arg = process.argv.indexOf("--changed");
+let selected = MUTATIONS;
+if (arg !== -1) {
+  const base = process.argv[arg + 1];
+  if (!base) { console.log("--changed needs a base, e.g. --changed origin/main"); process.exit(1); }
+  const out = execSync(`git -C .. diff --name-only ${base}`, { encoding: "utf8" });
+  const changed = new Set(out.split("\n").filter(Boolean));
+  const inDiff = (f) => {
+    const abs = resolve(process.cwd(), f);
+    const repo = relative(resolve(process.cwd(), ".."), abs);
+    return changed.has(repo);
+  };
+  selected = MUTATIONS.filter(([, file]) => inDiff(file));
+  console.log(`${selected.length} of ${MUTATIONS.length} mutations touch files changed since ${base}\n`);
+  if (selected.length === 0) {
+    console.log("Nothing to break. Either the batch changed no file a mutation points at —");
+    console.log("which means the batch's new behavior has no mutation yet — or the base is wrong.");
+    process.exit(1);
+  }
+}
+
+// THE CAP. A run that outlives the reason for it gets stopped and
+// says where it got to; a partial number that arrives is worth more
+// than a complete one nobody waited for.
+const CAP_MS = 30 * 60 * 1000;
+const startedAt = Date.now();
+let cappedAfter = null;
+
+for (const [label, file, find, repl] of selected) {
+  if (Date.now() - startedAt > CAP_MS) { cappedAfter = label; break; }
   const orig = readFileSync(file, "utf8");
   writeFileSync(file, orig.replace(find, repl));
   let out = "";
@@ -852,25 +911,43 @@ for (const [label, file, find, repl] of MUTATIONS) {
   else console.log(`killed ${String(dead.length).padStart(2)}  ${label}`);
 }
 
-// THE OTHER DIRECTION, and the more useful one: a test that nothing can
-// kill. Every name in the suite, diffed against the ones that died.
-let baseline = "";
-try { baseline = execSync("npx jest --verbose 2>&1", { encoding: "utf8" }); }
-catch (e) { baseline = e.stdout || ""; }
-const allTests = [...baseline.matchAll(/[\u2713\u2715] (.+?)(?: \(\d+ ms\))?$/gm)].map((m) => m[1].trim());
-
-const neverKilled = allTests.filter((t) => !killedBy.has(t));
+// A PARTIAL RUN MUST NOT ANSWER THE SECOND QUESTION, and getting this
+// wrong would be the worst thing in the file. "Which tests can nothing
+// kill" is computed by diffing every test name against the ones that
+// died — which is only meaningful if every mutation ran. A scoped or
+// capped run would list almost the whole suite as unverified, and a
+// report that cries wolf is a report nobody reads.
+const partial = selected.length !== MUTATIONS.length || cappedAfter != null;
 
 console.log("\nkilled, with how many mutations each test caught:");
 for (const [t, n] of [...killedBy].sort((a, b) => a[0].localeCompare(b[0]))) {
   console.log(`  ${String(n).padStart(2)}x  ${t}`);
 }
-if (neverKilled.length) {
-  console.log("\nNO MUTATION KILLED THESE — each is unverified until one is written:");
-  neverKilled.forEach((t) => console.log(`  ${t}`));
+
+let neverKilled = [];
+if (partial) {
+  console.log(`\n${selected.length} of ${MUTATIONS.length} mutations ran, so "which tests can nothing kill"`);
+  console.log("is not answered here — that needs the full list. Run it before external testers.");
 } else {
-  console.log(`\nAll ${allTests.length} tests die to at least one mutation.`);
+  // THE OTHER DIRECTION, and the more useful one: a test that nothing
+  // can kill. Every name in the suite, diffed against the ones that died.
+  let baseline = "";
+  try { baseline = execSync("npx jest --verbose 2>&1", { encoding: "utf8" }); }
+  catch (e) { baseline = e.stdout || ""; }
+  const allTests = [...baseline.matchAll(/[\u2713\u2715] (.+?)(?: \(\d+ ms\))?$/gm)].map((m) => m[1].trim());
+  neverKilled = allTests.filter((t) => !killedBy.has(t));
+  if (neverKilled.length) {
+    console.log("\nNO MUTATION KILLED THESE — each is unverified until one is written:");
+    neverKilled.forEach((t) => console.log(`  ${t}`));
+  } else {
+    console.log(`\nAll ${allTests.length} tests die to at least one mutation.`);
+  }
 }
 
-console.log(survived.length ? `\n${survived.length} MUTATION(S) SURVIVED` : "\nEvery mutation was caught.");
+if (cappedAfter) {
+  const reached = selected.findIndex(([l]) => l === cappedAfter);
+  console.log(`\nSTOPPED AT THE 30-MINUTE CAP after ${reached} of ${selected.length}.`);
+  console.log(`The next one would have been: ${cappedAfter}`);
+}
+console.log(survived.length ? `\n${survived.length} MUTATION(S) SURVIVED` : "\nEvery mutation that ran was caught.");
 process.exit(survived.length === 0 && neverKilled.length === 0 ? 0 : 1);

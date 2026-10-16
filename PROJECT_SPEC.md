@@ -619,6 +619,53 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **1.0.0 (13), 2026-10-16** — a device pass on build 12. Six items.
+  Build 12 confirmed good on a device: still signed in after the
+  Keychain migration, the top bar's width, the picker corners, the
+  tour running only on a first setup on both clients, and the web
+  landing on and ending its tour on the Dashboard.
+
+  1. **Edit on every mobile account card**, opening the same
+     CategorySheet Settings opens. Renaming meant Settings ->
+     Accounts you track, a detour from the screen the name is wrong
+     on. Loans already had it.
+  2. **The phone's emailed code creates an account.** It passed
+     `shouldCreateUser: false` on the reasoning that signing up
+     happens on the web where setup lives — and the phone then grew
+     the same setup, so the premise expired and the flag stayed.
+     GoTrue refuses an unknown address with the one error this
+     screen hides on purpose, so a new address got a code field and
+     no email, silently, by design, for a design that no longer
+     applied. The copy on both screens said "if that address has an
+     account", which is what a new user read seconds before nothing
+     arrived.
+  3. **An unasked-for sign-out says so.** See §5's note.
+  4. **Every dated balance label says "as of"** — the Dashboard
+     checking card on each client, both log-balance lines, the
+     phone's net-position breakdown ("Checking balance", since
+     there is no date on that line) and the CSV restore summary.
+     The conceptual "verified balance" in the wipe and delete
+     confirmations has no date and is left for the voice pass.
+  5. **The chart readout sits over its point at rest too.** It was a
+     fixed 150pt box with centered text, clamped as a box, so at the
+     right edge the text landed 67pt short of the point it labels.
+     Measured and clamped by its own width now, which gives
+     right-aligned at the last point, left-aligned at the first and
+     centered between them from one rule, with no jump mid-drag. The
+     web uses Recharts' own tooltip and has no resting readout.
+  6. **The Budget's third section is INVESTING / SAVING / DEBT**,
+     because it holds investments. The old header still imports.
+
+  **DELIBERATE, NOT A BUG — today's rows are counted twice after a
+  balance log, and that stays for v1.** Logging a balance dated today
+  does not drop rows dated today, so a bill already inside the new
+  figure is also still projected. It errs PESSIMISTIC (the forecast
+  shows less money than there is) and self-corrects the next day.
+  Owner's call, 2026-10-16. The fix is to decide what "as of today"
+  means for same-day rows, which is a question about intent rather
+  than arithmetic — somebody who logs at 9am has not paid the rent
+  that leaves at 5pm.
+
 - **1.0.0 (12), 2026-10-16** — a device pass on build 11. Six items.
   Confirmed good and untouched: the icon, the wheels committing on
   Done, the ✕ on rows, the tour, the settings haptic. The calendar
@@ -2943,9 +2990,15 @@ a port.
       `eas build` ("git found, but git --help exited with status
       undefined") and `npm test` (check_spelling shells out to
       `git ls-files`, so the chain died before jest ran, silently,
-      for who knows how long). **Remove that Homebrew, or at least
-      that symlink.** Everything here was run with
-      `PATH=/usr/bin:/bin:$PATH` as a stopgap.
+      for who knows how long).
+
+      **CLEARED 2026-10-16: the owner removed the symlink.** From a
+      bare `/bin/sh`, `command -v git` is `/usr/bin/git` (Apple Git
+      157, a universal binary) and `pod` is `/opt/homebrew/bin/pod`.
+      `npm test` passes with no prefix. **The
+      `PATH=/usr/bin:/bin:$PATH` stopgap is retired — stop writing
+      it.** If "Bad CPU type in executable" ever comes back, this is
+      the paragraph it came from.
     - **The remaining local failure is macOS, not Expo.** With a
       working git the build reaches codesign and dies on
       `ExpoModulesJSI.framework: resource fork, Finder information, or
