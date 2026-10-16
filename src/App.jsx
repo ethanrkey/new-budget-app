@@ -698,11 +698,19 @@ export default function App() {
         />
       )}
 
-      {/* Fires once, right after the wizard; re-triggerable from About.
-          Not persisted as "seen" separately — finishing the wizard is the
-          only thing that starts it, and that already happens once. */}
+      {/* Fires after the FIRST setup this account completes, and after
+          that only from About — see completeOnboarding and
+          settings.hasSeenTour.
+
+          `landingTab` is the same expression the load effect uses to
+          pick the opening tab, so "where the tour ends" and "where
+          this app lands" are one thing rather than two that agree. */}
       {tourOpen && (
-        <GuidedTour onGoToTab={setTab} onClose={() => setTourOpen(false)} />
+        <GuidedTour
+          onGoToTab={setTab}
+          landingTab={sanitizeTabOrder(state.settings.tabOrder)[0]}
+          onClose={() => setTourOpen(false)}
+        />
       )}
 
       {showOnboarding && (

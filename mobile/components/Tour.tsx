@@ -15,14 +15,22 @@ const ROUTE: Record<string, string> = {
   spending: "/(tabs)/spending", dashboard: "/(tabs)/dashboard",
 };
 
-// IT STARTS ON THE LEDGER AND IT ENDS THERE, SINCE 2026-10-15. The
-// stops are unchanged — Ledger, Budget, Spending, Dashboard — but
-// finishing or skipping puts you back on the Ledger rather than
-// leaving you wherever the last card was. The owner's call from build
-// 9's device pass: the Ledger is the screen worth landing on after
-// setup, and the Dashboard's value is not obvious on the day it has
-// one reading in it. Done HERE rather than at the two call sites, so
-// a third way to open the tour cannot forget it.
+// IT STARTS ON THE LEDGER AND IT ENDS THERE. The stops are unchanged —
+// Ledger, Budget, Spending, Dashboard — but finishing or skipping puts
+// you back on the Ledger rather than leaving you wherever the last
+// card was. The owner's call from build 9's device pass: the Ledger is
+// the screen worth landing on after setup, and the Dashboard's value
+// is not obvious on the day it has one reading in it.
+//
+// THE RULE IS "EACH TOUR ENDS WHERE ITS APP LANDS", set 2026-10-16,
+// and it is NOT "both clients end in the same place" — which is what
+// this was briefly changed to mean, taking the web's ending to the
+// Ledger with it. The web opens on `tabOrder[0]` and ends there; this
+// client opens on the Ledger and ends there. See
+// src/components/GuidedTour.jsx.
+//
+// Done HERE rather than at the two call sites, so a third way to open
+// the tour cannot forget it.
 export default function Tour({ onClose }: { onClose: () => void }) {
   const [i, setI] = useState(() => { router.replace(ROUTE[TOUR_STOPS[0]!.tab]! as never); return 0; });
   const stop = TOUR_STOPS[i]!;

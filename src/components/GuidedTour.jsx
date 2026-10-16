@@ -14,15 +14,18 @@ import { TOUR_STOPS as STOPS } from "../content/tour.ts";
 // thing and cannot be broken by a CSS change.
 // ORDER: Ledger first, Dashboard LAST. The thing a new user has to
 // understand is the relationship — the Ledger and Budget are their PLAN,
-// the Dashboard is where they actually STAND.
+// the Dashboard is where they actually STAND — and ending on the
+// Dashboard leaves them on the screen this client opens on.
 //
-// BUT IT LEAVES YOU ON THE LEDGER, since 2026-10-15. "Ending on the
-// Dashboard leaves them on the screen they will open tomorrow" is what
-// this comment used to say, and the owner's own first run disagreed:
-// the Dashboard on day one holds one reading of each account and no
-// trend, and the Ledger is the screen with something to look at. The
-// phone made the same change in the same pass, so the two clients
-// still end the same tour in the same place.
+// IT ENDS WHERE THE APP LANDS, and `landingTab` is that tab rather than
+// a string spelled "dashboard". The rule, set 2026-10-16, is not "both
+// clients end in the same place" — that was the mistake the day before,
+// when this was changed to end on the Ledger because the PHONE now does.
+// Each client ends its tour wherever that client opens: the web on
+// `tabOrder[0]`, which is the Dashboard unless the tabs have been
+// dragged, and the phone on its Ledger. So App.jsx passes the same
+// expression it uses to pick the opening tab, and the two cannot drift
+// into disagreeing about where "home" is on this client.
 //
 // Both halves work on day one. What takes time is seeing where they stand
 // OVER time, which needs a few logged balances. So the Dashboard is not
@@ -30,16 +33,19 @@ import { TOUR_STOPS as STOPS } from "../content/tour.ts";
 // copy says exactly that rather than leaving an empty chart to be read as
 // a defect.
 
-export default function GuidedTour({ onGoToTab, onClose }) {
+export default function GuidedTour({ onGoToTab, landingTab, onClose }) {
   const [i, setI] = useState(0);
   const stop = STOPS[i];
 
   // Take them to the tab the card is talking about, as the card appears.
   useEffect(() => { onGoToTab(stop.tab); }, [i, stop.tab, onGoToTab]);
 
-  // EVERY WAY OUT LANDS ON THE LEDGER — Got it, Skip, Escape and the
-  // scrim. Four doors is three chances to leave somebody on Spending.
-  const leave = useCallback(() => { onGoToTab("ledger"); onClose(); }, [onGoToTab, onClose]);
+  // EVERY WAY OUT LANDS ON THE TAB THIS CLIENT OPENS ON — Got it, Skip,
+  // Escape and the scrim. Got it would get there anyway, since the last
+  // stop is the Dashboard and that is the default landing tab; the other
+  // three are why this exists, because quitting on Spending used to
+  // leave you on Spending.
+  const leave = useCallback(() => { onGoToTab(landingTab); onClose(); }, [onGoToTab, landingTab, onClose]);
 
   // Escape dismisses, like every other overlay in the app.
   useEffect(() => {
