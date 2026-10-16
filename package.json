@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node scripts/run_suites.mjs && node scripts/validate_palette.mjs && node scripts/check_spelling.mjs && npm --prefix mobile test",
+    "test": "node scripts/run_suites.mjs && node scripts/validate_palette.mjs && node scripts/check_spelling.mjs && node scripts/check_personal.mjs && npm --prefix mobile test",
     "typecheck": "tsc --noEmit",
     "palette": "node scripts/validate_palette.mjs",
     "screenshots": "node scripts/screenshots.mjs",

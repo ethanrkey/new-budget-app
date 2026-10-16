@@ -49,3 +49,13 @@ mobile/android/
 mobile-preview.html
 src/mobile-preview-entry.jsx
 .tmp-*.mjs
+
+# THE PERSONAL TERM LIST, and the most important line in this file.
+# `.personal-terms` is what scripts/check_personal.mjs greps tracked
+# files for: bank names, account names, real balances, the names of
+# people in this person's life. A committed list of things that must
+# never be committed is the thing it exists to prevent — it would put
+# all of them in one convenient file, for ever. It stays local, every
+# machine keeps its own, and the check skips quietly where there is
+# none. Never remove this line.
+.personal-terms

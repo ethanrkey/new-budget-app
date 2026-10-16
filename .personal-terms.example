@@ -1,0 +1,35 @@
+# Things that must never appear in a tracked file in this repo.
+#
+# COPY THIS TO `.personal-terms`, which is gitignored and stays on your
+# own machine, and fill it in. scripts/check_personal.mjs greps every
+# tracked file for these; the pre-commit hook checks the staged ones
+# and `npm test` sweeps the lot. A machine with no `.personal-terms`
+# skips the check and says so, so CI and anyone who clones this are
+# unaffected.
+#
+# FORMAT: one term per line. Blank lines and lines starting with # are
+# ignored. Matching is case-insensitive and is a plain substring, not
+# a regular expression — so "everbank" catches "EverBank savings", and
+# a short term like "key" would catch half the repo. Prefer the
+# longest form that is still unique.
+#
+# The failure names the file, the line and the TERM, and deliberately
+# does not print the matching line: copying it into a terminal, a CI
+# log and a screenshot of the failure is most of the way to committing
+# it anyway.
+#
+# WHAT BELONGS IN IT, from the sweep that caused this (2026-10-15):
+#
+#   - your bank and brokerage names, in every spelling you use
+#   - the names you give your own accounts
+#   - real balances and amounts you have pasted in as examples,
+#     including the formatted form: both 1276.57 and "1,276.57"
+#   - the names of people in your life, and their email addresses
+#   - your street, your employer, your account numbers
+#
+# None of what it found was malicious. A bank name sat inside a CSV
+# category guesser that shipped to every user and matched nothing for
+# anyone else; a real checking balance was the "measured example" in
+# two files; a partner's name was a test fixture. Each of them read
+# perfectly naturally while it was being written, which is the whole
+# problem and the whole reason for a list.

@@ -1914,7 +1914,40 @@ resolve.
    a page you can click. Use it rather than reaching for the author's
    signed-in browser.
 
-6. Data-shape changes are migration-safe: **idempotent always**,
+6. **Nothing is named after one real person's finances**, and a gate
+   enforces it rather than a habit. A placeholder, an example, a test
+   fixture or a comment names a KIND OF THING — never a brand, never
+   an account somebody actually has, never a real amount. The sweep
+   that caused this rule is band G item 24a; what it found is the
+   point, because none of it was malicious and none of it was noticed
+   for weeks.
+
+   `scripts/check_personal.mjs` greps every tracked file for the terms
+   in **`.personal-terms`**, which is **gitignored and local to each
+   machine** — a committed list of things that must never be committed
+   would be the thing it is preventing. `.personal-terms.example`
+   documents the format: one term per line, `#` comments, blank lines
+   ignored, case-insensitive plain substrings (so prefer the longest
+   unique form — a short term like "key" matches half the repo).
+
+   Two places run it: the **pre-commit hook** over the STAGED files
+   (`npm run hooks:install`, alongside the pre-push spelling gate) and
+   **`npm test`** over everything tracked. **A machine with no
+   `.personal-terms` skips it and says so** — CI, a second machine and
+   anyone who clones this have nothing to protect, and a check that
+   fails there would just be turned off.
+
+   The failure names the file, the line and the TERM, and deliberately
+   **does not print the matching line**: copying it into a terminal, a
+   CI log and a screenshot of the failure is most of the way to
+   committing it anyway. **Git history is not rewritten for what is
+   already there** — owner's call, 2026-10-16: low risk, not worth it.
+
+   It earned its keep before it shipped: the first real run found the
+   bank name still sitting in two lines of this spec's own item 24a,
+   which the 2026-10-15 sweep had missed.
+
+7. Data-shape changes are migration-safe: **idempotent always**,
    **deterministic for any state that carries data**, asserted before/after
    on legacy-shaped fixtures, never fabricating values the user didn't enter.
    `tests/migrations.test.mjs` is the standing guard — every migration path
@@ -2380,12 +2413,11 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
     white flash on launch in a dark-only app.
 24a. **Nothing in the app is named after one real person's finances.**
     **DONE 2026-10-15**, from build 9's device pass — the savings
-    placeholder on the accounts step said "e.g. Everbank", which is
-    the owner's own bank. A sweep for the rest found seven more, and
-    one of them shipped:
+    placeholder on the accounts step named the owner's own bank. A
+    sweep for the rest found seven more, and one of them shipped:
 
     - `src/engine/ledgerCsvImport.ts` guessed a CSV row's category
-      with `/everbank|emergency|\bsaving/` — a named bank hardcoded
+      from an alternation that included that bank by name — hardcoded
       into a heuristic that runs for every user and matches nothing
       for anyone but one. Removed; a row called "<bank> savings"
       still lands on `\bsaving`.

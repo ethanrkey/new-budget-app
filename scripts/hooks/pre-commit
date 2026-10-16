@@ -1,0 +1,25 @@
+#!/bin/sh
+# Nothing named after one real person's finances gets committed.
+#
+# The sweep on 2026-10-15 found a bank name shipping inside a category
+# guesser, a real checking balance used as a "measured example" four
+# times, and a real person's name in a test fixture — none of it
+# malicious, none of it noticed for weeks. See scripts/check_personal.mjs
+# for why the term list lives outside git, and why this does nothing at
+# all on a machine that has no .personal-terms.
+#
+# STAGED FILES ONLY, so the hook stays fast and so a match somewhere
+# else in the tree cannot block an unrelated commit. The gate in
+# `npm test` sweeps everything tracked.
+#
+# Install with `npm run hooks:install`.
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+# shellcheck disable=SC2086
+if ! node scripts/check_personal.mjs $staged; then
+  echo ""
+  echo "Commit refused. To override once: git commit --no-verify"
+  exit 1
+fi
+exit 0
