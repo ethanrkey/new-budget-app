@@ -29,8 +29,23 @@ export type SectionKey = "bill" | "saving" | "oneoff";
 export const BUDGET_SECTIONS: ReadonlyArray<{ key: SectionKey; label: string }> = [
   { key: "bill", label: "FIXED / RECURRING" },
   { key: "oneoff", label: "ONE-OFF / SEASONAL" },
-  { key: "saving", label: "SAVING / DEBT" },
+  { key: "saving", label: "INVESTING / SAVING / DEBT" },
 ];
+
+/**
+ * What this section was called before 2026-10-16: "SAVING / DEBT".
+ *
+ * It holds investments too — a Roth IRA lands here, because
+ * `sectionFor` sends every tracker category that is not a bill or a
+ * one-off to this section — and the heading did not say so. Renamed
+ * on the owner's call, in setup's own order: investing, saving, debt.
+ * The rows inside it already cluster in that order.
+ *
+ * THE OLD LABEL IS KEPT, not deleted, because it is in every CSV
+ * anybody has already exported. The importer accepts both (see
+ * `csvImport.ts`); the exporter only ever writes the new one.
+ */
+export const LEGACY_SAVING_SECTION_LABEL = "SAVING / DEBT";
 
 export interface BudgetLayout {
   otherIncomeNames: string[];
@@ -56,7 +71,8 @@ function sectionFor(category: CategoryRef): SectionKey {
 // - otherIncomeNames: non-paycheck income rows, in manual order
 // - sectionItems: { bill, saving, oneoff } -> names in display order
 // - savingGroups: sectionItems.saving split into one array per tracker
-//   category, in the user's own category order (SAVING / DEBT clusters by
+//   category, in the user's own category order (the investing/saving/debt
+//   section clusters by
 //   category first per the spec; `order` only breaks ties within a
 //   cluster, and reordering never crosses a cluster boundary). An orphaned
 //   category (deleted, or absent for any reason) gets its own trailing

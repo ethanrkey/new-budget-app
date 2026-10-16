@@ -177,7 +177,8 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
               place. The order now lives in one list and neither client
               can have an opinion about it.
 
-              SAVING / DEBT still renders differently, because its rows
+              The investing/saving/debt section still renders differently,
+              because its rows
               are clustered by category and a reorder must never cross
               a cluster. Different rendering, same position in the
               sequence. No dot: color stopped encoding role on

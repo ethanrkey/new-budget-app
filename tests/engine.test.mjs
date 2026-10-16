@@ -318,7 +318,32 @@ const budgetCSV = budgetToCSV(budgetK, stateK.trackerCategories);
 const budgetLines = budgetCSV.split("\r\n");
 eq("budget CSV header row = blank + month labels", budgetLines[0], "," + budgetK.map((c) => c.label).join(","));
 eq("budget CSV has an INCOME section marker", budgetLines.includes("INCOME"), true);
-eq("budget CSV has a SAVING / DEBT section marker", budgetLines.includes("SAVING / DEBT"), true);
+// The section holds investments too — a Roth IRA lands in it — so it
+// says so from 2026-10-16, in setup's own order.
+eq("budget CSV has an INVESTING / SAVING / DEBT section marker",
+  budgetLines.includes("INVESTING / SAVING / DEBT"), true);
+eq("...and the old label is not written any more",
+  budgetLines.includes("SAVING / DEBT"), false);
+
+// A CSV EXPORTED BEFORE THE RENAME STILL IMPORTS. An unrecognized
+// section header makes the importer skip its rows rather than fail,
+// so dropping the old name would quietly lose a third of an old
+// export rather than complain about it.
+{
+  const oldStyle = budgetCSV.replace("INVESTING / SAVING / DEBT", "SAVING / DEBT");
+  const newRows = parseBudgetCSV(budgetCSV, stateK.trackerCategories);
+  const oldRows = parseBudgetCSV(oldStyle, stateK.trackerCategories);
+  eq("the old header yields the same rows as the new one",
+    oldRows.recurring.map((r) => r.name).sort(),
+    newRows.recurring.map((r) => r.name).sort());
+  eq("...and it really did find some", newRows.recurring.length > 0, true);
+  // The "we guessed the sub-category" warning fires for both, which
+  // is the branch that used to compare against the literal label.
+  eq("...and both warn that the sub-category was guessed",
+    [oldRows.warnings.some((w) => w.includes("is a guess")),
+     newRows.warnings.some((w) => w.includes("is a guess"))],
+    [true, true]);
+}
 
 // ---- ONE ORDER, read by everything that draws the grid ---------------
 //

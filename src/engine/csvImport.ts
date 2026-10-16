@@ -6,6 +6,7 @@
 // reconstruction it can and returns `warnings` describing every guess, so
 // the caller can show them before committing anything to state.
 import { uid } from "./model.ts";
+import { BUDGET_SECTIONS, LEGACY_SAVING_SECTION_LABEL } from "./budgetLayout.ts";
 import type { CategoryRef, ISODate, MonthKey, OneOffItem, RecurringItem, TrackerCategory } from "./types.ts";
 
 /**
@@ -22,7 +23,18 @@ export interface ParsedImport {
   totalRows?: number;
 }
 
-const SECTION_HEADERS = new Set(["INCOME", "FIXED / RECURRING", "SAVING / DEBT", "ONE-OFF / SEASONAL"]);
+// BOTH LABELS FOR THE SAVING SECTION, and that is the point of
+// importing a file somebody exported months ago. It was renamed to
+// "INVESTING / SAVING / DEBT" on 2026-10-16 because it holds
+// investments; every CSV written before then says "SAVING / DEBT",
+// and an unrecognized section header makes the importer skip rows
+// rather than fail, so dropping the old name would quietly lose a
+// third of an old export.
+const SAVING_SECTION = BUDGET_SECTIONS.find((s) => s.key === "saving")!.label;
+const SAVING_SECTION_HEADERS = new Set([SAVING_SECTION, LEGACY_SAVING_SECTION_LABEL]);
+const SECTION_HEADERS = new Set([
+  "INCOME", "FIXED / RECURRING", "ONE-OFF / SEASONAL", ...SAVING_SECTION_HEADERS,
+]);
 const SKIP_ROWS = new Set(["Starting point", "TOTAL IN", "TOTAL OUT", "MONTHLY NET", "CUMULATIVE NET"]);
 // Indexed by a parsed string, so keyed by string — the `in` guard in
 // monthLabelToKey is what proves a hit.
@@ -130,8 +142,8 @@ export function parseBudgetCSV(text: string, trackerCategories: TrackerCategory[
       section === "ONE-OFF / SEASONAL" ? "oneoff" :
       guessSavingCategory(name, trackerCategories);
 
-    if (section === "SAVING / DEBT") {
-      warnings.push(`"${name}" → category "${category}" is a guess (the CSV doesn't record which Saving/Debt sub-category a row was) — please verify.`);
+    if (SAVING_SECTION_HEADERS.has(section)) {
+      warnings.push(`"${name}" → category "${category}" is a guess (the CSV doesn't record which investing/saving/debt sub-category a row was) — please verify.`);
     }
 
     const isContiguous = occurrences.every(
