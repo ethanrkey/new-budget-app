@@ -56,7 +56,7 @@ export default function DayPicker({
   const [draft, setDraft] = useState(value);
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} testID="day-picker-panel">
       <Picker
         testID="day-picker"
         selectedValue={draft}
@@ -96,8 +96,17 @@ export default function DayPicker({
 }
 
 const styles = StyleSheet.create({
+  // ALL FOUR CORNERS, AT THE FIELDS' OWN RADIUS, since 2026-10-16.
+  // Reported from a device on build 11: the top two were rounded at 20
+  // and the bottom two were square, so the panel read as cut off
+  // rather than as a thing sitting on the form. Top-only rounding is
+  // right for the bottom SHEETS in this app — their bottom corners are
+  // off the screen — and wrong for a panel that floats inline between
+  // two text fields. 12 is `styles.input`'s radius in Setup.tsx, which
+  // is what it has to match: a panel rounder than the field above it
+  // reads as a different family of object.
   wrap: {
-    backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    backgroundColor: T.surface, borderRadius: 12,
     borderWidth: 1, borderColor: T.border, padding: 12, paddingBottom: 30, marginTop: 6,
   },
   item: { color: T.text, fontSize: 20 },

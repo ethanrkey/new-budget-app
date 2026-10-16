@@ -29,7 +29,7 @@ export default function DatePicker({
   minimum?: string;
 }) {
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} testID="date-picker-panel">
       <DateTimePicker
         value={new Date(value + "T00:00:00")}
         mode="date"
@@ -56,7 +56,16 @@ export default function DatePicker({
 }
 
 const styles = StyleSheet.create({
-  wrap: { backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: T.border, padding: 12, paddingBottom: 30 },
+  // ALL FOUR CORNERS, AT THE FIELDS' OWN RADIUS, since 2026-10-16.
+  // Reported from a device on build 11: the top two were rounded at 20
+  // and the bottom two were square, so the panel read as cut off
+  // rather than as a thing sitting on the form. Top-only rounding is
+  // right for the bottom SHEETS in this app — their bottom corners are
+  // off the screen — and wrong for a panel that floats inline between
+  // two text fields. 12 is `styles.input`'s radius in Setup.tsx, which
+  // is what it has to match: a panel rounder than the field above it
+  // reads as a different family of object.
+  wrap: { backgroundColor: T.surface, borderRadius: 12, borderWidth: 1, borderColor: T.border, padding: 12, paddingBottom: 30 },
   done: { alignSelf: "flex-end", minHeight: 44, minWidth: 64, alignItems: "center", justifyContent: "center", paddingHorizontal: 14 },
   doneText: { color: T.brass, fontSize: 15, fontWeight: "700" },
 });

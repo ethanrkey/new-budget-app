@@ -253,6 +253,43 @@ test("the due day is picked from 1-31, and there is no way to type 50", async ()
   expect(items[30]!.props.value).toBe(31);
 });
 
+test("a picker panel is rounded like the field above it, on all four corners", async () => {
+  // Reported from a device on build 11: both panels had rounded top
+  // corners and square bottom ones, so they read as cut off. That
+  // shape belongs to the bottom SHEETS in this app, whose bottom
+  // corners are off the screen; these two float inline between text
+  // fields.
+  //
+  // Asserted BOTH ways on purpose. The literal 12 catches a panel
+  // that drifts on its own; the comparison against the field catches
+  // the two drifting apart. Matching is the requirement — "match,
+  // don't over-round" — so rounding both to 20 together would be a
+  // different decision, not this bug coming back.
+  await mount();
+  const flat = (st: unknown): Record<string, unknown> =>
+    Object.assign({}, ...[st].flat(Infinity).filter(Boolean) as object[]);
+  const fieldRadius = flat(screen.getByLabelText("Amount").props.style).borderRadius;
+  expect(fieldRadius).toBe(12);
+
+  // The payday calendar, on step one.
+  await userEvent.press(screen.getByLabelText(/^When's your next payday\? .*Change the date\.$/));
+  for (const id of ["date-picker-panel"]) {
+    const st = flat(screen.getByTestId(id).props.style);
+    expect(st.borderRadius).toBe(fieldRadius);
+    expect(st.borderTopLeftRadius).toBeUndefined();
+    expect(st.borderTopRightRadius).toBeUndefined();
+  }
+  await userEvent.press(screen.getByLabelText("Done"));
+
+  // The day wheel, on step two.
+  await press("Skip");
+  await userEvent.press(dayRow("What day of the month is your rent due\\?"));
+  const wheel = flat(screen.getByTestId("day-picker-panel").props.style);
+  expect(wheel.borderRadius).toBe(fieldRadius);
+  expect(wheel.borderTopLeftRadius).toBeUndefined();
+  expect(wheel.borderTopRightRadius).toBeUndefined();
+});
+
 test("the day wheel commits on Done and on nothing else", async () => {
   // THE BUG THIS WOULD HAVE CAUGHT, reported from the build 9 device
   // pass: the wheel committed whenever it stopped scrolling, and
