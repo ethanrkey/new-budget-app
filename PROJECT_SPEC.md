@@ -619,6 +619,46 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **1.0.0 (12), 2026-10-16** — a device pass on build 11. Six items.
+  Confirmed good and untouched: the icon, the wheels committing on
+  Done, the ✕ on rows, the tour, the settings haptic. The calendar
+  stays the system's default blue.
+
+  1. **The checking bar hugs its balance.** At $4,500.00 it ran the
+     full width. `alignSelf: "flex-start"` is the obvious one-liner
+     and is NOT the fix — measured with react-native-web, it hugs at
+     every normal balance and then overflows to 356pt in a 314pt slot
+     on a long account name, because nothing constrains a
+     content-sized child and the name's `flexShrink` never engages.
+     The margins moved to a slot and the box is capped against it
+     with `maxWidth: "100%"`.
+  2. **Both picker panels are rounded on all four corners**, at 12 —
+     `styles.input`'s own radius in Setup.tsx. Top-only rounding
+     belongs to the bottom sheets, whose bottom corners are off the
+     screen; these two float inline between text fields.
+  3. **Each tour ends where its own app lands**, which un-does the
+     web half of build 10's item 7. "Both clients end in the same
+     place" was the wrong rule: the web opens on `tabOrder[0]` and
+     the phone opens on its Ledger. App.jsx passes the SAME
+     expression it uses to choose the opening tab, so the two cannot
+     drift.
+  4. **The tour runs once per ACCOUNT** — `settings.hasSeenTour`,
+     synced, not a device flag. Re-running Setup from the header
+     replayed it; a device flag would have replayed it on a new
+     phone. It is NOT `hasSeenOnboarding`, which Skip writes:
+     skipping the wizard is not being offered a tour. Migration: an
+     account missing the field inherits `hasSeenOnboarding`, and an
+     explicit false survives. **On demand afterwards: About →
+     "Take the tour", on both clients.**
+  5. **The Supabase session moved into the Keychain**, chunked, with
+     the migration in `getItem` so nobody is signed out by the
+     update. Full note in §5, including what else the phone keeps on
+     the device and why the recovery stash deliberately stays where
+     it is.
+  6. **A gate against personal terms**, with the list gitignored —
+     maintenance rule 6. It found the bank name still in two lines of
+     this spec on its first real run.
+
 - **1.0.0 (11), 2026-10-15** — a device pass on build 9. Eight items.
   Confirmed good and untouched, which is most of what build 9 changed:
   the native page sheet on the transaction form (swipe from anywhere,
