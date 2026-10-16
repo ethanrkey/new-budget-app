@@ -75,10 +75,40 @@ test("pressing the button sends the address the field was showing", async () => 
   await waitFor(() => expect(authCalls.otp).toHaveLength(1));
   // Trimmed and lowercased: the address that reaches Supabase must match
   // the stored one, and iOS keyboards capitalize the first letter.
-  expect(authCalls.otp[0]).toEqual({
-    email: "ethan@example.com",
-    options: { shouldCreateUser: false },
-  });
+  expect(authCalls.otp[0]).toEqual({ email: "ethan@example.com" });
+});
+
+test("the emailed code creates an account, the way Apple and Google do", async () => {
+  // THE BUG THIS WOULD HAVE CAUGHT, reported from a real new address:
+  // this screen passed `shouldCreateUser: false`, GoTrue refused the
+  // unknown address with a signup error, and that is precisely the
+  // one error this screen hides — so a new user got "a code is on its
+  // way", a code field, and no email, with nothing on screen saying
+  // otherwise. The phone grew its own six-step setup months ago; the
+  // flag outlived the reason for it.
+  await render(<SignIn />);
+  await askForCode("brand.new@example.com");
+
+  await waitFor(() => expect(authCalls.otp).toHaveLength(1));
+  const sent = authCalls.otp[0] as { options?: { shouldCreateUser?: boolean } };
+  // Asserted as an ABSENCE as well as a value: passing `true`
+  // explicitly would be fine, passing `false` is the bug, and leaving
+  // it off is what the web does.
+  expect(sent.options?.shouldCreateUser).not.toBe(false);
+});
+
+test("...and neither screen of copy implies you need an account already", async () => {
+  await render(<SignIn />);
+  // Before the send: the hint under the buttons.
+  expect(screen.getByText(/signs you in, or starts you off if you're new/)).toBeOnTheScreen();
+  expect(screen.queryByText(/the address on your account/)).toBeNull();
+
+  await askForCode("brand.new@example.com");
+  // After it: the confirmation. "If X has an account" was written for
+  // a send that refused unknown addresses, and what it did in
+  // practice was reassure a new user seconds before nothing arrived.
+  expect(screen.getByText(/code is on its way to/)).toBeOnTheScreen();
+  expect(screen.queryByText(/has an account/)).toBeNull();
 });
 
 test("the code step appears after a send, and names the address", async () => {

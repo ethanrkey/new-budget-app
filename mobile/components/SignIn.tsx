@@ -91,14 +91,25 @@ export default function SignIn() {
     if (busy || !isPlausibleEmail(clean)) return;
     setBusy(true);
     setError(null);
-    // shouldCreateUser false: this is a sign-IN screen. Signing up happens
-    // on the web, where the first-run setup lives, and a phone that
-    // silently minted an account for a typo'd address would strand data
-    // under a user nobody can reach.
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email: clean,
-      options: { shouldCreateUser: false },
-    });
+    // THE CODE SIGNS YOU UP TOO, since 2026-10-16. This used to pass
+    // `shouldCreateUser: false` on the reasoning that signing up
+    // happens on the web, where first-run setup lives — and then the
+    // phone grew the same six-step setup, so the premise expired
+    // while the flag stayed.
+    //
+    // What it produced was the worst kind of failure. GoTrue refuses
+    // an unknown address with a signup error; this screen HIDES that
+    // one on purpose (see sendFailureMessage — it is the only error
+    // that would tell a stranger which addresses have accounts here),
+    // so a new user got "a code is on its way", a code field, and no
+    // email, for ever. Reported from a real new address.
+    //
+    // The enumeration worry it was built around is now structural
+    // rather than a concealment: an unknown address and a known one
+    // get the same answer because both get an account and a code.
+    // Apple and Google already created accounts from this screen, so
+    // email was the one door that did not.
+    const { error: err } = await supabase.auth.signInWithOtp({ email: clean });
     const blocked = sendFailureMessage(err);
     setBusy(false);
     if (blocked) { setError(blocked); return; }
@@ -247,16 +258,23 @@ export default function SignIn() {
           {appleReady && <AppleButton onPress={apple} busy={busy} />}
           {GOOGLE_AVAILABLE && <GoogleButton onPress={google} busy={busy} />}
 
+          {/* The hint said "the address on your account", which reads
+              as "existing accounts only" — and was, until the code
+              started creating them. */}
           <Text style={styles.note}>
-            No password. We email a six-digit code to the address on your account — the same account as
-            the web.
+            No password. We email you a six-digit code — it signs you in, or starts you off if you're
+            new. Same account as the web.
           </Text>
         </>
       ) : (
         <>
+          {/* NOT "if that address has an account". It was true while
+              the send refused unknown addresses and it is a plain
+              statement now — and as a hedge it was doing real harm:
+              it is what a new user saw just before nothing arrived. */}
           <Text style={styles.sent}>
-            If <Text style={styles.strong}>{clean}</Text> has an account, a {CODE_LENGTH}-digit code is on
-            its way. It expires in an hour.
+            A {CODE_LENGTH}-digit code is on its way to <Text style={styles.strong}>{clean}</Text>.
+            It expires in an hour.
           </Text>
           <TextInput
             ref={codeField}

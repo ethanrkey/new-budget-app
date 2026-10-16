@@ -79,9 +79,18 @@ export type AuthError = { message?: string; status?: number; code?: string } | n
 
 /** The one failure that means "there is no account at that address". */
 function isUnknownAccount(error: NonNullable<AuthError>): boolean {
-  // With `shouldCreateUser: false`, GoTrue refuses an address it does not
-  // know with this specific signup error. It is the ONLY failure that is
-  // about who the user is rather than about whether the request worked.
+  // GoTrue refuses to create an account with this specific signup
+  // error. It is the ONLY failure that is about who the user is
+  // rather than about whether the request worked.
+  //
+  // NEITHER CLIENT ASKS FOR IT ANY MORE — both let the code create an
+  // account (2026-10-16), so an unknown address gets one and the
+  // error does not arise. This stays because the OTHER way to
+  // produce it is a server-side setting no code here controls:
+  // turning "Allow new users to sign up" off in the Supabase
+  // dashboard makes GoTrue answer every unknown address this way
+  // again, and a visible "no account for that address" would then be
+  // an enumeration oracle. Cheap insurance against a toggle.
   return error.code === "otp_disabled" || /signups not allowed/i.test(error.message ?? "");
 }
 
@@ -103,15 +112,22 @@ function isUnreachable(error: NonNullable<AuthError>): boolean {
  * What to say when the SEND fails. Returns a message to show INSTEAD of
  * advancing to the code step, or null to advance.
  *
- * ONE failure is hidden, and only one: the address has no account.
- * Supabase does distinguish that case — with `shouldCreateUser: false` it
- * answers with a signup error naming it — so the concealment is this
- * app's choice, not the server's. The reason to make it: an error that
- * distinguishes "no account here" from "code sent" is an
- * account-enumeration oracle, and someone with a list of addresses can
- * learn which of them bank here by typing them in. So that one advances
- * to the code step and says a code is on its way IF the address has an
- * account, which is true.
+ * ONE failure is hidden, and only one: the server refused to create an
+ * account for the address. An error that distinguishes "no account
+ * here" from "code sent" is an account-enumeration oracle, and someone
+ * with a list of addresses can learn which of them bank here by typing
+ * them in.
+ *
+ * SINCE 2026-10-16 NEITHER CLIENT PROVOKES IT: both let the emailed
+ * code create an account, so an unknown address and a known one get
+ * the same answer for the same reason, and the protection is
+ * structural rather than a hedge in the copy. The branch survives for
+ * the case code here does not control — signups turned off in the
+ * Supabase dashboard — which is also why the copy on the code step no
+ * longer says "if that address has an account": that sentence was
+ * written for a send that refused unknown addresses, and what it
+ * actually did was reassure a new user seconds before nothing
+ * arrived.
  *
  * EVERY OTHER FAILURE IS SPOKEN, and the first version of this function
  * got that wrong: it hid anything that was not a rate limit, so a dead

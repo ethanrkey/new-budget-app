@@ -187,8 +187,21 @@ const MUTATIONS = [
    'onPress={() => { setStep("email"); setError(null); attempted.current = null; }}', 'onPress={() => { setStep("email"); setError(null); attempted.current = null; setEmail(""); }}'],
   ["resend is pressable during the cooldown", "components/SignIn.tsx",
    "disabled={busy || cooldown > 0}", "disabled={busy}"],
-  ["sign-in creates an account for a typo", "components/SignIn.tsx",
-   "options: { shouldCreateUser: false },", "options: { shouldCreateUser: true },"],
+  // Was "sign-in creates an account for a typo", which inverted the
+  // flag. The flag is gone (2026-10-16): the emailed code creates an
+  // account, like Apple and Google already did, and the version that
+  // refused dead-ended every new user. The mutation runs the other
+  // way now.
+  ["the emailed code refuses an address it does not know", "components/SignIn.tsx",
+   "    const { error: err } = await supabase.auth.signInWithOtp({ email: clean });",
+   "    const { error: err } = await supabase.auth.signInWithOtp({ email: clean, options: { shouldCreateUser: false } });"],
+  ["the code step tells a new user it may have done nothing",
+   "components/SignIn.tsx",
+   "            A {CODE_LENGTH}-digit code is on its way to <Text style={styles.strong}>{clean}</Text>.",
+   "            If <Text style={styles.strong}>{clean}</Text> has an account, a {CODE_LENGTH}-digit code is on its way."],
+  ["the hint says you need an account already", "components/SignIn.tsx",
+   "            No password. We email you a six-digit code — it signs you in, or starts you off if you're\n            new. Same account as the web.",
+   "            No password. We email a six-digit code to the address on your account."],
   ["the sixth digit does not submit on its own", "components/SignIn.tsx",
    "    if (next.length === CODE_LENGTH && !busy && next !== attempted.current) {\n      void verify(next);\n    }",
    "    // mutated"],
