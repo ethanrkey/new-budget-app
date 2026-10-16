@@ -27,8 +27,16 @@
 // failure either.
 import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
-const TERMS_FILE = new URL("../.personal-terms", import.meta.url);
+// `.personal-terms` at the repo root, unless something points
+// elsewhere. The override exists so this script can be TESTED —
+// tests/personal-gate.test.mjs drives it with a temp list, because a
+// gate nobody can test is a gate that rots silently, and "always
+// exits 0" is exactly the failure that would never be noticed.
+const TERMS_FILE = process.env.PERSONAL_TERMS
+  ? pathToFileURL(process.env.PERSONAL_TERMS)
+  : new URL("../.personal-terms", import.meta.url);
 
 if (!existsSync(TERMS_FILE)) {
   console.log("PERSONAL TERMS: no .personal-terms on this machine — skipped (see scripts/check_personal.mjs)");

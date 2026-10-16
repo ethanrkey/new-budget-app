@@ -1983,9 +1983,21 @@ resolve.
    committing it anyway. **Git history is not rewritten for what is
    already there** — owner's call, 2026-10-16: low risk, not worth it.
 
-   It earned its keep before it shipped: the first real run found the
-   bank name still sitting in two lines of this spec's own item 24a,
-   which the 2026-10-15 sweep had missed.
+   `tests/personal-gate.test.mjs` drives the real script as a process
+   with a temp list, through `PERSONAL_TERMS`, because the way a gate
+   like this rots is the way nobody notices: it starts exiting 0 for
+   everything and reads green for ever. It asserts both directions,
+   the CI skip, the scoping the hook uses, and that the failure does
+   NOT print the matching line.
+
+   It earned its keep three times before it shipped. The first real
+   run found the bank name still sitting in two lines of this spec's
+   own item 24a, which the 2026-10-15 sweep had missed; then it found
+   the owner's real balance used as the illustration in
+   `.personal-terms.example`, and then the bank name used as the
+   illustration in the same file. Both of those were written while
+   documenting the rule against them — which is the best argument for
+   a gate there is, and why nothing in that file is real.
 
 7. Data-shape changes are migration-safe: **idempotent always**,
    **deterministic for any state that carries data**, asserted before/after

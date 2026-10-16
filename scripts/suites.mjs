@@ -25,4 +25,5 @@ export const SUITES = [
   "tests/apple-secret.test.mjs",
   "tests/dates.test.mjs",
   "tests/mobile-securestore.test.mjs",
+  "tests/personal-gate.test.mjs",
 ];

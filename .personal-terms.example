@@ -9,9 +9,15 @@
 #
 # FORMAT: one term per line. Blank lines and lines starting with # are
 # ignored. Matching is case-insensitive and is a plain substring, not
-# a regular expression — so "everbank" catches "EverBank savings", and
-# a short term like "key" would catch half the repo. Prefer the
-# longest form that is still unique.
+# a regular expression — so "northgate" would catch "NorthGate
+# savings", and a short term like "key" would catch half the repo.
+# Prefer the longest form that is still unique.
+#
+# NOTHING IN THIS FILE IS REAL. It is tracked, so a real bank or a
+# real figure written here as an ILLUSTRATION is the leak it warns
+# about. Both of the first two drafts of this file did exactly that,
+# and the gate caught both — which is the best argument for it there
+# is.
 #
 # The failure names the file, the line and the TERM, and deliberately
 # does not print the matching line: copying it into a terminal, a CI
@@ -22,8 +28,13 @@
 #
 #   - your bank and brokerage names, in every spelling you use
 #   - the names you give your own accounts
-#   - real balances and amounts you have pasted in as examples,
-#     including the formatted form: both 1276.57 and "1,276.57"
+#   - real balances and amounts you have pasted in as examples, in
+#     every form they appear in: the bare number AND the formatted
+#     one, because a comment quotes "$9,999.99" and a fixture holds
+#     9999.99. (Those two are made up. This file is tracked, so a
+#     real figure written here as an ILLUSTRATION would be the leak
+#     it is warning about — which is how the first draft of this line
+#     was written.)
 #   - the names of people in your life, and their email addresses
 #   - your street, your employer, your account numbers
 #
