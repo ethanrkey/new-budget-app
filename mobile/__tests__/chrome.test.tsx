@@ -217,6 +217,40 @@ test("the balance says it can be tapped, in muted gray, and says nothing offline
   mockNet.connected = true;
 });
 
+test("the checking bar hugs its content and cannot reach the settings button", async () => {
+  // Reported from a device on build 11: at $4,500.00 the surface ran
+  // the full width and left a wide empty right-hand side.
+  //
+  // jest cannot measure a layout, so this asserts the MECHANISM, the
+  // way the two-line test below asserts a structure. Measured with
+  // react-native-web at 390pt, which is where the mechanism came
+  // from: `alignSelf: "flex-start"` on its own — the obvious
+  // one-liner — hugs correctly at every normal balance and then
+  // OVERFLOWS to 356pt in a 314pt slot on a long account name,
+  // pushing the box 42pt under the settings button, because nothing
+  // constrains a content-sized child. So the margins live on the slot
+  // and the box is capped against it.
+  mockLoaded.state = seen;
+  await mount();
+
+  const flat = (st: unknown): Record<string, unknown> =>
+    Object.assign({}, ...[st].flat(Infinity).filter(Boolean) as object[]);
+
+  // The slot owns the space, and lets its child be narrower than it.
+  const slot = flat(screen.getByTestId("anchor-slot").props.style);
+  expect(slot.alignItems).toBe("flex-start");
+  expect(slot.marginRight).toBe(60);           // room for the settings button
+
+  // The box is capped against the slot, and carries no horizontal
+  // margin of its own — a margin here would put the cap and the edge
+  // in different places, which is the bug.
+  const boxStyle = screen.getByTestId("anchor-box").props.style;
+  const boxed = flat(typeof boxStyle === "function" ? boxStyle({ pressed: false }) : boxStyle);
+  expect(boxed.maxWidth).toBe("100%");
+  expect(boxed.marginLeft).toBeUndefined();
+  expect(boxed.marginRight).toBeUndefined();
+});
+
 test("the checking bar says AS OF, and never the word verified", async () => {
   // The owner's word, 2026-10-15. "Verified" is a claim about an act;
   // this line is saying when the number was true. The savings and

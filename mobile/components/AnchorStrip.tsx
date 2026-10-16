@@ -84,7 +84,9 @@ export default function AnchorStrip({ onPress }: { onPress?: () => void }) {
   const live = !!onPress && online;
 
   return (
+    <View style={styles.slot} testID="anchor-slot">
     <Pressable
+      testID="anchor-box"
       style={({ pressed }) => [styles.wrap, live && styles.live, pressed && styles.pressed]}
       onPress={onPress}
       disabled={!live}
@@ -126,16 +128,46 @@ export default function AnchorStrip({ onPress }: { onPress?: () => void }) {
           this line, with no sibling to be squeezed by. */}
       <Text style={styles.asOf}>as of {fmtDate(account.balanceAsOf)}</Text>
     </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    // Room for the settings button, which floats at top-right.
-    marginLeft: 16, marginRight: 60, marginBottom: 8,
+    // IT HUGS ITS CONTENT AND IT IS CAPPED, since 2026-10-16.
+    //
+    // Reported from a device on build 11: at $4,500.00 the surface ran
+    // the full width and left a wide empty right-hand side, which
+    // reads as a bar rather than as the control it is.
+    //
+    // `alignSelf: "flex-start"` ALONE IS NOT THE FIX, and that is
+    // worth stating because it is the obvious one-liner. A cross-axis
+    // flex-start child sizes to its content and is then free to
+    // OVERFLOW its parent — measured with react-native-web at 390pt:
+    // a long account name took the box to 356pt in a 314pt slot,
+    // pushing its right edge 58pt under the settings button, and the
+    // name's `flexShrink` never engaged because nothing was
+    // constraining the row.
+    //
+    // So the margins moved OUT to `slot`, which owns the space, and
+    // this owns `maxWidth: "100%"` — a percentage of the slot's
+    // content box, which is exactly "everything left of the settings
+    // button". Hug, grow, stop: content-sized up to the cap, and at
+    // the cap the name shrinks, because now something is constraining
+    // the row.
+    //
+    // The box hugs the WIDER of its two lines, which is the first one:
+    // the date is 87.7pt and name + amount + pencil is about 181
+    // before padding. So the width tracks the balance, which is what
+    // was asked for.
+    maxWidth: "100%",
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
     gap: 1,
   },
+  // The space the strip may occupy: everything left of the floating
+  // settings button. `alignItems: "flex-start"` is what lets the child
+  // be narrower than this.
+  slot: { marginLeft: 16, marginRight: 60, marginBottom: 8, alignItems: "flex-start" },
   // A surface and a border only when there is something to press. A
   // control-shaped thing that does nothing is its own kind of lie.
   live: { backgroundColor: T.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: T.border },
