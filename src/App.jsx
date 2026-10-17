@@ -518,24 +518,11 @@ export default function App() {
           Key Budget
         </h1>
         <div className="flex items-center gap-1.5 sm:gap-3">
-          {/* The Tutorial is not a thing you DO with your data, it is a
-              thing you read once — so it sits in the header beside the
-              other read-and-leave controls, not in the action row next to
-              Add transaction. */}
-          <button
-            onClick={() => setShowOnboarding(true)}
-            title="Re-run the setup wizard"
-            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
-          >
-            🚀<span className="hidden sm:inline"> Setup</span>
-          </button>
-          <button
-            onClick={() => setTutorialOpen(true)}
-            title="How everything works"
-            className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
-          >
-            ?<span className="hidden sm:inline"> About</span>
-          </button>
+          {/* SETUP AND ABOUT ARE IN SETTINGS, from 2026-10-17, where
+              the phone has always kept them — they are read-or-run
+              once and were taking two of five header slots. Import
+              and Export stayed: they are the file controls, used
+              repeatedly and mid-task. See SettingsModal's note. */}
           <button
             onClick={() => setImportOpen(true)}
             title="Import a CSV, or restore a full JSON backup"
@@ -546,7 +533,7 @@ export default function App() {
           <ExportMenu ledger={ledger} budget={budget} trackerCategories={state.trackerCategories} state={state} />
           <button
             onClick={() => setSettingsOpen(true)}
-            title="Settings — appearance, categories, sign out, wipe data"
+            title="Settings — setup, about, the tour, appearance, categories, sign out, wipe data"
             className="text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
           >
             ⚙<span className="hidden sm:inline"> Settings</span>
@@ -752,6 +739,9 @@ export default function App() {
           onToggleTheme={toggleTheme}
           onOpenCategories={() => { setSettingsOpen(false); setCategoryManagerFrom("settings"); }}
           onOpenAccount={() => { setSettingsOpen(false); setAccountOpen(true); }}
+          onOpenSetup={() => { setSettingsOpen(false); setShowOnboarding(true); }}
+          onOpenAbout={() => { setSettingsOpen(false); setTutorialOpen(true); }}
+          onStartTour={() => { setSettingsOpen(false); setTourOpen(true); }}
           onWipe={wipeData}
           email={session?.user?.email}
           deletionRequest={deletionRequest}

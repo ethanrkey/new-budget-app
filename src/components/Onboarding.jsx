@@ -302,7 +302,9 @@ export default function Onboarding({ initialBalance, onComplete }) {
                 </div>
               ))}
             </div>
-            <button onClick={addBillRow} className="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
+            {/* Already hugs — a button is inline-block — but at 20px
+                tall it was barely a target. Padding, not width. */}
+            <button onClick={addBillRow} className="-ml-1.5 px-1.5 py-1.5 rounded text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-800">
               {COPY.bills.add}
             </button>
             <StepButtons onSkip={goNext} onContinue={submitBills} />
@@ -439,7 +441,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
                 </div>
                 <button
                   onClick={() => addAccountRow(g.key)}
-                  className="text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mt-1"
+                  className="-ml-1.5 px-1.5 py-1.5 rounded text-xs text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-800 mt-1"
                 >
                   {COPY.accounts.add}
                 </button>

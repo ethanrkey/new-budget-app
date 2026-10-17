@@ -12,6 +12,7 @@ import AssetSetupModal from "./AssetSetupModal.jsx";
 import { fmtDate, fmtDay } from "../shared/dates.ts";
 import { blankContributionRow, contributionRuleFor } from "../engine/setup.ts";
 import { SETUP_COPY as COPY, CADENCE_OPTIONS, CONTRIBUTION_PROMPT as PROMPT } from "../content/setup.ts";
+import { LOG_BALANCE_TITLE } from "../content/logBalance.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -124,6 +125,11 @@ export default function Dashboard({
       {logCat && (
         <UpdateBalanceModal
           account={{ name: logCat.name, balance: logLatest?.amount ?? 0, balanceAsOf: logLatest?.date ?? "never" }}
+          // The same title the phone shows, from the same place. It
+          // used to fall through to "Update <name> balance", which is
+          // the CHECKING bar's verb for a different thing — see
+          // LOG_BALANCE_TITLE.
+          title={LOG_BALANCE_TITLE(logCat.name)}
           onConfirm={(amount, date) => { onAddSnapshot(logCat.id, amount, date); setLogFor(null); }}
           onClose={() => setLogFor(null)}
         />

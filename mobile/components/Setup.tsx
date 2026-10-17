@@ -252,6 +252,7 @@ export default function Setup({
                     </View>
                   ))}
                   <Pressable
+                    style={styles.addMoreBtn}
                     onPress={() => set("bills", [...d.bills, emptyBillRow(todayISO)])}
                     accessibilityRole="button" accessibilityLabel={COPY.bills.add} hitSlop={8}
                   >
@@ -342,6 +343,7 @@ export default function Setup({
                         );
                       })}
                       <Pressable
+                        style={styles.addMoreBtn}
                         onPress={() => set("accounts", { ...d.accounts, [g.key]: [...d.accounts[g.key], emptyAccountRow()] })}
                         accessibilityRole="button" accessibilityLabel={`${COPY.accounts.add} ${g.label.toLowerCase()}`} hitSlop={8}
                       >
@@ -833,7 +835,13 @@ const styles = StyleSheet.create({
   group: { marginTop: 22 },
   groupLabel: { color: T.text, fontSize: 15, fontWeight: "700" },
   groupNote: { color: T.faint, fontSize: 12, marginTop: 2 },
-  addMore: { color: T.brass, fontSize: 13, marginTop: 12, minHeight: 32, lineHeight: 30 },
+  // HUGS ITS TEXT, from 2026-10-17. A Pressable in a column stretches
+  // to the container by default, so "+ Add another bill" was a target
+  // the full width of the screen — press anywhere in that band, miles
+  // from the words, and a row appeared. The padding keeps it past
+  // Apple's 44pt with the hitSlop the caller adds.
+  addMoreBtn: { alignSelf: "flex-start", marginTop: 8, paddingVertical: 8, paddingHorizontal: 2 },
+  addMore: { color: T.brass, fontSize: 13, lineHeight: 18 },
   footer: {
     flexDirection: "row", gap: 10, paddingHorizontal: 20, paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: T.border, backgroundColor: T.bg,

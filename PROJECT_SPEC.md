@@ -900,7 +900,8 @@ written here in the same sitting** — there is no other record of it.
      expression it uses to choose the opening tab, so the two cannot
      drift.
   4. **The tour runs once per ACCOUNT** — `settings.hasSeenTour`,
-     synced, not a device flag. Re-running Setup from the header
+     synced, not a device flag. Re-running Setup (then a header
+     button on the web, now a Settings row on both clients)
      replayed it; a device flag would have replayed it on a new
      phone. It is NOT `hasSeenOnboarding`, which Skip writes:
      skipping the wizard is not being offered a tour. Migration: an
@@ -4825,11 +4826,21 @@ the web does not need because its wizard is always one click away.
   has already paid that bill twice with screenshots and a README.
 
 - **Five header items, one corner button** (2026-10-09,
-  `components/Chrome.tsx`). The web header holds Setup, About, Import,
+  `components/Chrome.tsx`). The web header held Setup, About, Import,
   Export and Settings. Five do not fit at 390px and the tab bar belongs
   to the four things you DO, so everything you configure or read once
   sits behind one control in the corner — where iOS has trained people
   to look — and the tabs stay navigation rather than administration.
+
+  **THE WEB CAME HALFWAY TO MEET IT, 2026-10-17.** Setup and About are
+  Settings rows there too now, joined by a Tour row, because they are
+  read-or-run once and were taking two of five header slots. Import
+  and Export stayed in the web header, and that is a judgment rather
+  than an oversight: they are the two controls that involve a FILE,
+  they are used repeatedly and mid-task, the web has the room a
+  390px header does not, and the phone has no Import at all. Copying
+  the phone's Export placement would be copying a compromise instead
+  of a decision.
 
   **The danger zone is on the Settings root, not behind Account.**
   Apple looks for in-app account deletion specifically, and three taps

@@ -21,6 +21,10 @@ import type { RecurringItem } from "../../src/engine/types.ts";
 // NEXT test's render() returns null. Reproduced on a four-line
 // component; see mobile/AGENTS.md.
 
+/** One object out of a style array, the way RN resolves it. */
+const flatStyle = (style: unknown): Record<string, unknown> =>
+  Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
+
 /** Press a button once it is actually pressable. */
 async function press(label: string) {
   const button = await screen.findByLabelText(label);
@@ -816,4 +820,23 @@ test("...and there is nothing to tick when no paycheck was entered", async () =>
   expect(screen.queryByLabelText("Emergency fund on my payday")).toBeNull();
   // ...and the two controls it would have replaced are still there.
   expect(screen.getByText("First contribution")).toBeOnTheScreen();
+});
+
+test("the add-another buttons hug their text instead of spanning the screen", async () => {
+  // A Pressable in a column stretches to its container, so both of
+  // these were targets the full width of the screen: press anywhere
+  // in that band, miles from the words, and a row appeared.
+  await mount();
+  await skip(2);
+  const bills = screen.getByLabelText("+ Add another bill");
+  expect(flatStyle(bills.props.style).alignSelf).toBe("flex-start");
+
+  await press("Continue");
+  await skip(1);
+  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
+  await press("Continue");
+  for (const group of ["investments", "savings", "debt"]) {
+    const btn = screen.getByLabelText(`+ Add another ${group}`);
+    expect(flatStyle(btn.props.style).alignSelf).toBe("flex-start");
+  }
 });

@@ -118,7 +118,7 @@ export default function SignIn({ expired = false }) {
       </button>
 
       <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-xl border border-gray-200 dark:border-gray-800">
-        <h1 className="text-xl font-semibold tracking-tight text-center mb-1">Budget</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-center mb-1">Key Budget</h1>
         <p className="text-sm text-gray-500 text-center mb-6">Sign in to load your ledger &amp; budget.</p>
 
         {/* SAY WHICH OF THE TWO THINGS HAPPENED. Pressing Sign out and

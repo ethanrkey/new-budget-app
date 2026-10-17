@@ -207,7 +207,9 @@ test("Settings starts the tour in one tap, without going through About", async (
   mockLoaded.state = { ...seen, settings: { ...seen.settings, hasSeenTour: true } };
   await mount();
   await userEvent.press(await screen.findByLabelText("Settings, about and export"));
-  await userEvent.press(await screen.findByLabelText("Take the tour"));
+  // The row is "Tour" since 2026-10-17; About's own button inside it
+  // is still "Take the tour", which is a sentence rather than a label.
+  await userEvent.press(await screen.findByLabelText("Tour"));
 
   expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
   // Straight to the tour: About never came up on the way.

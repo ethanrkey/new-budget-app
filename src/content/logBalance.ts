@@ -15,6 +15,25 @@
 // So the copy does three things in order: names what disappears, says
 // why that is usually correct, and gives the out for when it is not.
 
+/**
+ * The sheet that logs a reading on a tracked account.
+ *
+ * NAMES THE ACCOUNT, from 2026-10-17. The phone's title was "Log a
+ * balance" — three words that say what the sheet does and not what it
+ * is about, over a form that could belong to any of five cards. The
+ * web fell through to "Update <name> balance", which names the
+ * account but uses the checking bar's verb for a different thing: the
+ * checking balance is the anchor the whole forecast counts forward
+ * from and you UPDATE it, while a savings reading is one more point
+ * on a history and you LOG it.
+ *
+ * "current" is doing work too — it is the number the bank is showing
+ * you right now, which is the question the date field underneath is
+ * about.
+ */
+export const LOG_BALANCE_TITLE = (account: string) =>
+  `Log the current balance of ${account}`;
+
 export const HIDDEN_ROWS_COPY = {
   title: "This will hide rows already in your ledger",
   /** "3 rows dated before Oct 14 will drop off:" */

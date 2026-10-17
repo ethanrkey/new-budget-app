@@ -23,7 +23,7 @@ import { applySetup, markSetupSeen, markTourSeen, type SetupAnswers } from "../.
 
 // WHERE THE WEB'S FIVE HEADER ITEMS LIVE ON A PHONE.
 //
-// Setup, About, Import, Export, Settings do not fit a header at 390px,
+// Setup, About, Import, Export, Settings did not fit a header at 390px,
 // and the tab bar is spoken for by the four things you DO. So: one
 // corner button, and everything you configure or read once sits behind
 // it. That is where iOS has trained people to look, and it keeps the
@@ -33,9 +33,10 @@ import { applySetup, markSetupSeen, markTourSeen, type SetupAnswers } from "../.
 // and import is where the duplicate-snapshot bug lived.
 //
 // SETUP IS NOT BEHIND THE BUTTON FOR A NEW ACCOUNT, it is in front of
-// one — see the Setup block below. It is also IN the list, because the
-// web keeps a Setup button in its header and somebody who skipped has
-// to be able to come back to it. Same flow either way.
+// one — see the Setup block below. It is also IN the list, because
+// somebody who skipped has to be able to come back to it. Same flow
+// either way, and since 2026-10-17 the same PLACE either way: the web
+// moved Setup and About off its header into its own Settings.
 type Screen = "settings" | "about" | "categories" | null;
 
 const ChromeCtx = createContext<{ open: () => void; logChecking: () => void }>({

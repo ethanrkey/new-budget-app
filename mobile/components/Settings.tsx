@@ -36,7 +36,7 @@ export default function Settings({
   onOpenSetup: () => void;
   onClose: () => void;
 }) {
-  const { state, commit, online, saving, prefs, setPref } = useBudget();
+  const { commit, online, saving, prefs, setPref } = useBudget();
   const [deletion, setDeletion] = useState<{ purge_after: string } | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -156,12 +156,14 @@ export default function Settings({
             sub="Savings, investments and loans — add, rename, reorder, or set a loan's terms."
             onPress={onOpenCategories}
           />
-          {/* The web keeps a Setup button in its header for the same
-              reason: somebody who skipped the six questions, or who
-              wiped their data, needs a way back to them. It adds what
-              you answer — it does not replace what is already there —
-              so it is described as adding rather than as starting
-              over. */}
+          {/* The web has the same row, in its own Settings, for the
+              same reason: somebody who skipped the six questions, or
+              who wiped their data, needs a way back to them. It adds
+              what you answer — it does not replace what is already
+              there — so it is described as adding rather than as
+              starting over. (It was a header button on the web until
+              2026-10-17, when Setup and About moved behind Settings
+              the way they are here.) */}
           <Row
             label="Set up your budget"
             sub="The six questions a new account is asked. Answers are added to what you already have."
@@ -174,8 +176,8 @@ export default function Settings({
               things and does one of them is a row that is wrong about
               itself. */}
           <Row label="About" sub="What every screen does, and why it works the way it does." onPress={onOpenAbout} />
-          <Row label="Take the tour" sub="A walk through the four tabs. Takes a minute." onPress={onStartTour} />
-          <Row label="Export" sub="Ledger or Budget as CSV, or the whole account as a JSON backup." onPress={onOpenExport} />
+          <Row label="Tour" sub="A walk through the four tabs. Takes a minute." onPress={onStartTour} />
+          <Row label="Export" sub="Ledger or Budget as a CSV file, or the whole account as a JSON backup." onPress={onOpenExport} />
           {/* NO APPEARANCE ROW. There was one, stating "Dark. The phone
               has one theme on purpose." — a setting with no choice in
               it, which reads as a control that is broken rather than
@@ -191,7 +193,7 @@ export default function Settings({
             accessibilityRole="button" accessibilityLabel="Wipe all data">
             <Text style={[styles.actionText, styles.danger]}>Wipe all data</Text>
             <Text style={styles.rowSub}>
-              Resets this account to brand new. {state ? `${state.recurring.length + state.oneoffs.length} transactions and ${state.trackerCategories.length} categories` : "Everything"} goes.
+              Erases all transactions and balances tracked on this account.
             </Text>
           </Pressable>
 

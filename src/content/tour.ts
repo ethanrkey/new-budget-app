@@ -34,6 +34,6 @@ export const TOUR_STOPS: TourStop[] = [
   {
     tab: "dashboard",
     title: "And the Dashboard is your whole picture",
-    body: "Everything you have and everything you owe, on one screen: checking, savings, investments and debt, and what they come to together. Nothing here is projected — it's what's true today, built only from balances you've logged. Log them again whenever and over time the Dashboard screen will show you how these balances have been trending.",
+    body: "Everything you have and everything you owe: checking, savings, investments and debt. Nothing here is projected — it's what's true today, built only from balances you've logged. Log them again whenever and over time the Dashboard screen will show you how these balances have been trending.",
   },
 ];

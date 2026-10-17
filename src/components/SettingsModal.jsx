@@ -2,9 +2,25 @@ import WipeData from "./WipeData.jsx";
 import DeleteAccount from "./DeleteAccount.jsx";
 
 // Everything that used to be scattered across the header and the old
-// check-in bar, in one place: appearance, category management, the account,
-// and — deliberately last, visually separated — the destructive actions.
-// The header itself is now just Import / Export / Settings.
+// check-in bar, in one place: appearance, category management, setup,
+// about, the tour, the account, and — deliberately last, visually
+// separated — the destructive actions. The header itself is now just
+// Import / Export / Settings.
+//
+// SETUP, ABOUT AND THE TOUR MOVED HERE on 2026-10-17, which is where
+// the phone has always kept them. They are things you read or run
+// once, and they were taking two of the five slots in a header whose
+// other three are things you do repeatedly.
+//
+// IMPORT AND EXPORT STAYED IN THE HEADER, and that is a judgment
+// rather than an oversight. They are the two controls here that
+// involve a FILE — a download the browser has to start, a picker it
+// has to open — and they are used repeatedly and mid-task: export a
+// CSV, fix it, restore it. The phone keeps Export behind the gear
+// because a 390px header has no room and has no Import at all; the
+// web has room, and burying a repeated action to match a layout
+// constraint the web does not have would be copying the compromise
+// instead of the decision.
 //
 // A SHORT LIST OF SECTIONS, not a long scroll. Each row is one line of what
 // it is, one line of what you can do there, and a Manage button; the detail
@@ -12,7 +28,8 @@ import DeleteAccount from "./DeleteAccount.jsx";
 // rather than three facts printed here — not because the facts are long
 // today, but because every section that prints itself inline makes the one
 // below it harder to find.
-export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories, onOpenAccount, onWipe, onClose,
+export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories, onOpenAccount,
+  onOpenSetup, onOpenAbout, onStartTour, onWipe, onClose,
   email, deletionRequest, onRequestDeletion, onCancelDeletion }) {
   const row = "flex items-center justify-between gap-3 py-3";
   const btn = "text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition";
@@ -47,6 +64,38 @@ export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories,
               <div className="text-xs text-gray-500">Rename, reorder, mark as asset or debt.</div>
             </div>
             <button onClick={onOpenCategories} className={btn}>Manage</button>
+          </div>
+
+          {/* The phone's "Set up your budget" row, in the phone's
+              words: it ADDS what you answer rather than replacing
+              what is there, and the row says so. */}
+          <div className={row}>
+            <div>
+              <div className="text-sm font-medium">Set up your budget</div>
+              <div className="text-xs text-gray-500">
+                The questions a new account is asked. Answers are added to what you already have.
+              </div>
+            </div>
+            <button onClick={onOpenSetup} className={btn}>Open</button>
+          </div>
+
+          <div className={row}>
+            <div>
+              <div className="text-sm font-medium">About</div>
+              <div className="text-xs text-gray-500">What every screen does, and why it works the way it does.</div>
+            </div>
+            <button onClick={onOpenAbout} className={btn}>Open</button>
+          </div>
+
+          {/* TWO ROWS, not one, matching the phone since 2026-10-17:
+              the tour was a button inside About, which is two taps
+              behind a label that does not mention it. */}
+          <div className={row}>
+            <div>
+              <div className="text-sm font-medium">Tour</div>
+              <div className="text-xs text-gray-500">A walk through the four tabs. Takes a minute.</div>
+            </div>
+            <button onClick={onStartTour} className={btn}>Start</button>
           </div>
 
           <div className={row}>
