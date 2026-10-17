@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 import { T, money } from "../lib/theme";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, cellAmountCompact,
-  type CalendarDay,
+  netAmountCompact, type CalendarDay,
 } from "../../src/engine/calendar.ts";
 import { CALENDAR_COPY as COPY } from "../../src/content/calendar.ts";
 import { fmtDate, fmtLongDay, fmtMonthYear } from "../../src/shared/dates.ts";
@@ -116,7 +116,7 @@ export default function CalendarView({
               onPress={() => setPicked(c.date)}
               style={[
                 styles.cell,
-                { width: cell, height: cell + 8 },
+                { width: cell, height: cell + 20 },
                 c.dim && styles.cellDim,
                 picked === c.date && styles.cellOn,
               ]}
@@ -128,10 +128,36 @@ export default function CalendarView({
                   border, today is a bold number with a rule under it. */}
               <View style={styles.dayRow}>
                 <Text style={[styles.dayNum, c.isToday && styles.dayToday]}>{c.day}</Text>
-                {c.busy && <View style={styles.dot} />}
+                {/* ONE DOT PER DIRECTION, colored by what moved —
+                    red out, green in, both on a payday that also pays
+                    a bill. The same two colors every amount in this
+                    app already wears, so it is a fact rather than a
+                    verdict; see netAmountFull in engine/calendar.ts
+                    for why that is not the rule about warning tints.
+                    Identity never rests on color: the VoiceOver label
+                    says it in words and the panel below lists them. */}
+                {c.hasOut && <View style={[styles.dot, { backgroundColor: T.expense }]} />}
+                {c.hasIn && <View style={[styles.dot, { backgroundColor: T.income }]} />}
               </View>
               {c.balance != null && (
-                <Text style={styles.bal} numberOfLines={1}>{cellAmountCompact(c.balance)}</Text>
+                <Text
+                  // BRIGHT ON A DAY SOMETHING HAPPENS, dim on a day
+                  // nothing does — the dim one is a number carried
+                  // over from the last day that moved, and saying so
+                  // by weight costs no room.
+                  style={[styles.bal, !c.busy && styles.balQuiet]}
+                  numberOfLines={1}
+                >
+                  {cellAmountCompact(c.balance)}
+                </Text>
+              )}
+              {c.net != null && (
+                <Text
+                  style={[styles.net, { color: c.net < 0 ? T.expense : T.income }]}
+                  numberOfLines={1}
+                >
+                  {netAmountCompact(c.net)}
+                </Text>
               )}
             </Pressable>
           ))}
@@ -179,7 +205,14 @@ function ariaFor(c: CalendarDay): string {
   const parts = [fmtLongDay(c.date)];
   if (c.isToday) parts.push("today");
   if (c.balance != null) parts.push(`${COPY.balanceAfter} ${money(c.balance)}`);
-  if (c.rows.length) parts.push(`${c.rows.length} transaction${c.rows.length === 1 ? "" : "s"}`);
+  if (c.net != null) parts.push(`${c.net < 0 ? "down" : "up"} ${money(Math.abs(c.net))}`);
+  if (c.rows.length) {
+    parts.push(`${c.rows.length} transaction${c.rows.length === 1 ? "" : "s"}`);
+    // THE DOTS' MEANING, IN WORDS. They are the one mark in the cell
+    // that carries information by color alone.
+    if (c.hasIn) parts.push("money in");
+    if (c.hasOut) parts.push("money out");
+  }
   return parts.join(", ");
 }
 
@@ -196,11 +229,15 @@ const styles = StyleSheet.create({
   cellDim: { opacity: 0.4 },
   cellOn: { backgroundColor: T.surfaceAlt, borderColor: T.brass, borderWidth: 1 },
   dayRow: { flexDirection: "row", alignItems: "center", gap: 3 },
-  dayNum: { color: T.dim, fontSize: 11, lineHeight: 14 },
+  // MUTED. The day number is how you find the cell; the balance is
+  // what you came to read, so the balance is the white one.
+  dayNum: { color: T.faint, fontSize: 11, lineHeight: 14 },
   dayToday: { color: T.text, fontWeight: "700", borderBottomWidth: 2, borderBottomColor: T.text },
-  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: T.faint },
+  dot: { width: 4, height: 4, borderRadius: 2 },
   // 11pt, measured — see the note at the top of the file.
-  bal: { color: T.dim, fontSize: 11, lineHeight: 15, marginTop: 2, fontVariant: ["tabular-nums"] },
+  bal: { color: T.text, fontSize: 11, lineHeight: 14, marginTop: 1, fontVariant: ["tabular-nums"] },
+  balQuiet: { color: T.dim },
+  net: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"] },
   detail: { margin: 16, padding: 14, backgroundColor: T.surface, borderRadius: 14, borderWidth: 1, borderColor: T.border, gap: 8 },
   detailHead: { color: T.text, fontWeight: "700" },
   balanceLine: { flexDirection: "row", alignItems: "baseline", gap: 8 },

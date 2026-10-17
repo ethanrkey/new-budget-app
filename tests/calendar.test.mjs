@@ -18,7 +18,7 @@ import { computeLedger } from "../src/engine/compute.ts";
 import { upsertItem, updateAccountBalance } from "../src/engine/mutate.ts";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, daysInMonth,
-  cellAmountCompact, cellAmountFull,
+  cellAmountCompact, cellAmountFull, netAmountCompact, netAmountFull,
 } from "../src/engine/calendar.ts";
 
 let failures = 0, checks = 0;
@@ -169,6 +169,62 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
   // 2026-10-01 is a Thursday, so four blanks lead the grid.
   eq("the first of the month lands on its own weekday",
     cells("2026-10").findIndex((c) => c !== null), 4);
+}
+
+// ---- which way the money moved, which the dots say in color --------
+{
+  // Rent out on the 10th, a paycheck in on the 16th, and the 16th is
+  // the one that has to carry BOTH kinds of dot in the general case.
+  eq("a day that only spends is out and not in",
+    [at("2026-10", 10).hasOut, at("2026-10", 10).hasIn], [true, false]);
+  eq("a day that only earns is in and not out",
+    [at("2026-10", 16).hasIn, at("2026-10", 16).hasOut], [true, false]);
+
+  let both = updateAccountBalance(normalize({}), "checking", 1000, ANCHOR);
+  both = upsertItem(both, { id: "a", name: "Bill", amount: 300, category: "bill", cadence: null, date: "2026-10-20" });
+  both = upsertItem(both, { id: "b", name: "Pay", amount: 500, category: "income", cadence: null, date: "2026-10-20" });
+  const bothDay = buildCalendarMonth("2026-10", computeLedger(both, HORIZON).rows, 1000, ANCHOR, TODAY, HORIZON)
+    .cells.find((c) => c && c.day === 20);
+  eq("a payday that also pays a bill carries both", [bothDay.hasIn, bothDay.hasOut], [true, true]);
+  eq("...and nets the difference", bothDay.net, 200);
+
+  const quiet = at("2026-10", 11);
+  eq("a quiet day carries neither", [quiet.hasIn, quiet.hasOut], [false, false]);
+  // ZERO AND NOTHING ARE DIFFERENT SENTENCES. A quiet day has no net
+  // rather than a net of 0, so the cell can say nothing instead of
+  // printing a number that did not happen.
+  eq("...and has no net at all", quiet.net, null);
+  eq("a day outside the forecast has none either", at("2026-10", 4).net, null);
+}
+
+// ---- the net, which must agree with the balance above it ------------
+{
+  // DERIVED FROM THE BALANCES EITHER SIDE, not re-added from the rows:
+  // two numbers in one cell computed two ways is two numbers that can
+  // disagree, and this one sits directly under the other.
+  const oct = cells("2026-10").filter(Boolean);
+  let mismatches = 0, compared = 0;
+  for (let i = 1; i < oct.length; i++) {
+    const day = oct[i], prev = oct[i - 1];
+    if (day.net == null || prev.balance == null || day.balance == null) continue;
+    compared++;
+    if (Math.abs((prev.balance + day.net) - day.balance) > 0.005) mismatches++;
+  }
+  is("there are days to compare", compared > 2);
+  eq("every net is exactly the step from the day before", mismatches, 0);
+  eq("rent on the 10th is the step it caused", at("2026-10", 10).net, -1500);
+  eq("the paycheck on the 16th is its own", at("2026-10", 16).net, 1800);
+}
+
+// ---- the net, written out --------------------------------------------
+{
+  // A TRUE MINUS (U+2212), not a hyphen: it sits beside a plus in a
+  // column of tabular figures and has to be its own width.
+  eq("money in gets a plus", netAmountFull(1690), "+$1,690");
+  eq("money out gets a minus", netAmountFull(-412), "\u2212$412");
+  eq("...and the phone drops the dollar sign", netAmountCompact(-412), "\u2212412");
+  eq("...and shortens past ten thousand", netAmountCompact(-12345), "\u221212.3k");
+  eq("exactly zero is neither up nor down", [netAmountFull(0), netAmountCompact(0)], ["$0", "0"]);
 }
 
 // ---- the cell number ------------------------------------------------

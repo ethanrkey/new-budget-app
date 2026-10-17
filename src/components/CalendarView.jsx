@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { todayISO, primaryAccount, ledgerHorizonOf } from "../engine/model.ts";
 import {
-  calendarMonths, buildCalendarMonth, addMonthKey, cellAmountFull,
+  calendarMonths, buildCalendarMonth, addMonthKey, cellAmountFull, netAmountFull,
 } from "../engine/calendar.ts";
 import { CALENDAR_COPY as COPY } from "../content/calendar.ts";
 import { fmtDate, fmtLongDay, fmtMonthYear } from "../shared/dates.ts";
@@ -22,10 +22,23 @@ import { fmtDate, fmtLongDay, fmtMonthYear } from "../shared/dates.ts";
 // the phone in src/engine/calendar.ts, including which days have no
 // forecast at all; the words are shared in src/content/calendar.ts.
 //
-// NO WARNING COLORS. A negative projected balance is a minus sign and
+// NO WARNING COLORS. A negative projected BALANCE is a minus sign and
 // nothing else. Tinting the low days turns a map of where the money
 // goes into a verdict on it, and the app does not make that call here.
+//
+// The dots and the day's net ARE colored, which is not a reversal of
+// that: direction of flow is the same red and green every amount in
+// this app already wears, and it is a fact rather than a judgment.
+// Identity never rests on color either way — the cell lists the items
+// in words, the aria-label says them, and the panel below repeats
+// them.
+//
+// THE WEB CELL CARRIES MORE THAN THE PHONE'S, deliberately. It is
+// three times the width and was mostly empty, so it also lists the
+// day's first three items by name. The phone's 49pt cell could not
+// hold a name and does not try.
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const ITEM_CAP = 3;
 
 export default function CalendarView({ state, ledger, trackerCategories = [], onEditItem }) {
   const today = todayISO();
@@ -110,7 +123,7 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
               onClick={() => setSelected(cell.date)}
               aria-label={ariaFor(cell)}
               aria-current={cell.isToday ? "date" : undefined}
-              className={`min-h-[62px] sm:min-h-[84px] rounded-lg border p-1 sm:p-1.5 text-left align-top transition hover:bg-gray-50 dark:hover:bg-gray-800/60 ${
+              className={`min-h-[62px] sm:min-h-[132px] rounded-lg border p-1 sm:p-1.5 text-left align-top transition hover:bg-gray-50 dark:hover:bg-gray-800/60 ${
                 isSelected
                   ? "border-gray-900 dark:border-gray-100"
                   : "border-gray-200 dark:border-gray-800"
@@ -125,18 +138,47 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                 <span className={`text-[11px] ${
                   cell.isToday
                     ? "font-bold text-gray-900 dark:text-gray-100 border-b-2 border-gray-900 dark:border-gray-100 pb-0.5"
-                    : "text-gray-500"}`}>
+                    : "text-gray-400"}`}>
                   {cell.day}
                 </span>
-                {cell.busy && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 shrink-0" />
-                )}
+                {/* One dot per direction: red out, green in, both on a
+                    payday that also pays a bill. */}
+                {cell.hasOut && <span className="h-1.5 w-1.5 rounded-full bg-expense shrink-0" />}
+                {cell.hasIn && <span className="h-1.5 w-1.5 rounded-full bg-income shrink-0" />}
               </div>
-              {/* Neutral, always. See the note at the top of the file. */}
+              {/* The number you came for, so it is the one in ink.
+                  Dimmer on a quiet day, where it is carried over from
+                  the last day that moved. */}
               {cell.balance != null && (
-                <div className="mt-1 text-[11px] sm:text-xs tabular-nums leading-none text-gray-600 dark:text-gray-300">
+                <div className={`text-[11px] sm:text-xs tabular-nums leading-none font-medium ${
+                  cell.busy ? "text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"}`}>
                   {cellAmountFull(cell.balance)}
                 </div>
+              )}
+              {cell.net != null && (
+                <div className={`mt-0.5 text-[10px] tabular-nums leading-none ${
+                  cell.net < 0 ? "text-expense" : "text-income"}`}>
+                  {netAmountFull(cell.net)}
+                </div>
+              )}
+              {/* The room the phone does not have, used for the thing
+                  that otherwise needs a click. */}
+              {cell.rows.length > 0 && (
+                <ul className="mt-1.5 hidden sm:block space-y-0.5">
+                  {cell.rows.slice(0, ITEM_CAP).map((r) => (
+                    <li key={r.id} className="flex items-baseline justify-between gap-1 text-[10px] leading-tight">
+                      <span className="truncate text-gray-500 dark:text-gray-400">{r.name}</span>
+                      <span className={`shrink-0 tabular-nums ${r.direction === "in" ? "text-income" : "text-expense"}`}>
+                        {netAmountFull(r.direction === "in" ? r.amount : -r.amount)}
+                      </span>
+                    </li>
+                  ))}
+                  {cell.rows.length > ITEM_CAP && (
+                    <li className="text-[10px] leading-tight text-gray-400">
+                      +{cell.rows.length - ITEM_CAP} more
+                    </li>
+                  )}
+                </ul>
               )}
             </button>
           );
@@ -160,8 +202,13 @@ function ariaFor(cell) {
   const parts = [fmtLongDay(cell.date)];
   if (cell.isToday) parts.push("today");
   if (cell.balance != null) parts.push(`${COPY.balanceAfter} ${cellAmountFull(cell.balance)}`);
+  if (cell.net != null) parts.push(`${cell.net < 0 ? "down" : "up"} ${cellAmountFull(Math.abs(cell.net))}`);
   if (cell.rows.length) {
     parts.push(`${cell.rows.length} transaction${cell.rows.length === 1 ? "" : "s"}`);
+    // THE DOTS' MEANING, IN WORDS. They are the one mark here that
+    // carries information by color alone.
+    if (cell.hasIn) parts.push("money in");
+    if (cell.hasOut) parts.push("money out");
   }
   return parts.join(", ");
 }

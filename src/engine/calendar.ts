@@ -1,5 +1,10 @@
 import type { ISODate, LedgerRow } from "./types.ts";
 
+// Cents, like everywhere else in the engine. A fourth private copy of
+// this is a thing to notice rather than a thing to clean up today —
+// compute.ts, progress.ts and loans.ts each have their own.
+const round = (n: number): number => Math.round(n * 100) / 100;
+
 // THE MONTH GRID'S ARITHMETIC, in one place, for both clients.
 //
 // WHAT THE CALENDAR USED TO SAY, and why it was rebuilt on 2026-10-17:
@@ -37,10 +42,24 @@ export interface CalendarDay {
   /** The projected checking balance at the END of this day, or null
    *  where there is no forecast — see the note on `dim`. */
   balance: number | null;
-  /** Anything at all happens on this day. ONE marker, not one per row:
-   *  the cell's room goes to the balance now, and "something here" is
-   *  the whole of what a dot was ever able to say. */
+  /** Anything at all happens on this day. */
   busy: boolean;
+  /** Something arrives — a paycheck, a transfer in. */
+  hasIn: boolean;
+  /** Something leaves. A day can be both, and most paydays are. */
+  hasOut: boolean;
+  /**
+   * What the day MOVED the balance by, or null where there is no
+   * forecast. Null on a quiet day too: zero and "nothing happened"
+   * are different sentences and the cell says the second by staying
+   * empty rather than by printing 0.
+   *
+   * DERIVED FROM THE BALANCES EITHER SIDE, not re-added from the
+   * rows. Two numbers in one cell that are computed two ways is two
+   * numbers that can disagree, and this one sits directly under the
+   * other.
+   */
+  net: number | null;
   rows: LedgerRow[];
   /** The device's current date. Its own marker on both clients, and
    *  deliberately not the same marker as the selected day. */
@@ -140,14 +159,19 @@ export function buildCalendarMonth(
   const cells: (CalendarDay | null)[] = Array.from({ length: leadingBlanks(key) }, () => null);
   for (let d = 1; d <= n; d++) {
     const date = `${key}-${String(d).padStart(2, "0")}`;
+    const before = running;
     while (i < sorted.length && sorted[i]!.date <= date) { running = sorted[i]!.balance; i++; }
     const dim = date < anchor || date > horizon;
+    const rows = byDate.get(date) ?? [];
     cells.push({
       date,
       day: d,
       balance: dim ? null : running,
-      busy: byDate.has(date),
-      rows: byDate.get(date) ?? [],
+      busy: rows.length > 0,
+      hasIn: rows.some((r) => r.direction === "in"),
+      hasOut: rows.some((r) => r.direction === "out"),
+      net: dim || rows.length === 0 ? null : round(running - before),
+      rows,
       isToday: date === today,
       dim,
     });
@@ -202,4 +226,32 @@ function shorten(x: number): string | null {
   if (one < 100) return one.toFixed(1);
   const whole = Math.round(x);
   return whole < 1000 ? String(whole) : null;
+}
+
+/**
+ * The day's movement, under the balance it produced: "+$1,690", "−$412".
+ *
+ * SIGNED AND COLORED, which looks like a reversal of the rule written
+ * here on 2026-10-17 — "no warning tints; a negative projected
+ * balance is a minus sign and nothing else" — and is not. That rule
+ * is about the BALANCE, and it stands: coloring a low balance red is
+ * the app passing judgment on how much money somebody has. This is
+ * direction of flow, which is the same thing green and red mean
+ * everywhere else in this app and is a fact rather than a verdict.
+ *
+ * A true minus (U+2212), not a hyphen, because it sits beside a plus
+ * and has to be its own width.
+ */
+export function netAmountFull(n: number): string {
+  const r = Math.round(n);
+  if (r === 0) return "$0";
+  return `${r < 0 ? "\u2212" : "+"}$${Math.abs(r).toLocaleString("en-US")}`;
+}
+
+/** The same, shortened for a 49pt phone cell: "+1,690", "−412", "−12.3k". */
+export function netAmountCompact(n: number): string {
+  const r = Math.round(n);
+  if (r === 0) return "0";
+  const body = cellAmountCompact(Math.abs(r));
+  return `${r < 0 ? "\u2212" : "+"}${body}`;
 }

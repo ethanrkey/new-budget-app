@@ -1,4 +1,4 @@
-import { render, screen, userEvent } from "@testing-library/react-native";
+import { render, screen, userEvent, within } from "@testing-library/react-native";
 import { normalize } from "../../src/engine/stateShape.ts";
 import { fmtLongDay, fmtMonthYear } from "../../src/shared/dates.ts";
 import { CALENDAR_COPY } from "../../src/content/calendar.ts";
@@ -26,13 +26,21 @@ const shift = (iso: string, days: number) => {
 const ANCHOR = shift(today, -4);
 const HORIZON = shift(today, 120);
 const BILL_DAY = shift(today, 2);
+const PAY_DAY = shift(today, 4);
+const BOTH_DAY = shift(today, 6);
 
 const mockState = normalize({
   settings: { budgetHorizon: HORIZON, ledgerHorizon: HORIZON },
   accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 4000, balanceAsOf: ANCHOR, order: 0 }],
   trackerCategories: [],
   recurring: [],
-  oneoffs: [{ id: "o-bill", name: "Car insurance", amount: 150, category: "bill", date: BILL_DAY, order: 0 }],
+  oneoffs: [
+    { id: "o-bill", name: "Car insurance", amount: 150, category: "bill", date: BILL_DAY, order: 0 },
+    { id: "o-pay", name: "Bonus", amount: 400, category: "income", date: PAY_DAY, order: 1 },
+    // A payday that also pays a bill — the case the two dots exist for.
+    { id: "o-both-in", name: "Refund", amount: 90, category: "income", date: BOTH_DAY, order: 2 },
+    { id: "o-both-out", name: "Phone", amount: 45, category: "bill", date: BOTH_DAY, order: 3 },
+  ],
 });
 
 jest.mock("../lib/supabase", () => ({
@@ -81,7 +89,12 @@ test("the detail panel leads with where the balance lands", async () => {
   expect(screen.getByText("$4,000.00")).toBeOnTheScreen();
 });
 
-test("NET IS GONE — from the cells and from the panel alike", async () => {
+test("THE OLD NET LINE IS GONE — \"Net X · in Y · out Z\" under the grid", async () => {
+  // The panel used to foot with the day's net, its inflow and its
+  // outflow, which is a question about the day in isolation. The
+  // cells carry a net again since the second round, but as the step
+  // the day made in the balance above it — not as a third statistic
+  // in a panel that leads with the balance.
   await openCalendar();
   expect(screen.queryByText(/^Net /)).toBeNull();
   expect(screen.queryByText(/· in \$/)).toBeNull();
@@ -124,4 +137,84 @@ test("a dimmed cell never claims a balance to a screen reader", async () => {
   // ...while a covered one always does.
   const covered = screen.getByLabelText(new RegExp(`^${fmtLongDay(BILL_DAY)}`));
   expect(covered.props.accessibilityLabel).toContain(CALENDAR_COPY.balanceAfter);
+});
+
+/** Every backgroundColor painted anywhere inside a cell. */
+function dotColors(cell: { children: unknown[]; props: Record<string, unknown> }): string[] {
+  const out: string[] = [];
+  const walk = (n: unknown) => {
+    if (!n || typeof n !== "object") return;
+    const node = n as { children?: unknown[]; props?: { style?: unknown } };
+    const style = Object.assign({}, ...[node.props?.style].flat(Infinity).filter(Boolean)) as
+      { backgroundColor?: string; width?: number };
+    // The dots are the only painted 4pt squares in a cell; the
+    // selected cell's own fill is the other backgroundColor in here.
+    if (style.backgroundColor && style.width === 4) out.push(style.backgroundColor);
+    (node.children ?? []).forEach(walk);
+  };
+  walk(cell);
+  return out;
+}
+
+test("a cell colors its dots by what moved, and says so in words too", async () => {
+  const { T } = require("../lib/theme");
+  await openCalendar();
+
+  const cellFor = (iso: string) => screen.getByLabelText(new RegExp(`^${fmtLongDay(iso)}`));
+  // RED FOR OUT, GREEN FOR IN, both on a day that does both — which
+  // is the whole of what the dots say, and the only thing in the cell
+  // that says it by color.
+  expect(dotColors(cellFor(BILL_DAY))).toEqual([T.expense]);
+  expect(dotColors(cellFor(PAY_DAY))).toEqual([T.income]);
+  expect(dotColors(cellFor(BOTH_DAY)).sort()).toEqual([T.expense, T.income].sort());
+  expect(dotColors(cellFor(shift(BILL_DAY, 1)))).toEqual([]);
+  // ...and in words, because identity never rests on color.
+  const billCell = cellFor(BILL_DAY);
+  expect(billCell.props.accessibilityLabel).toContain("money out");
+  expect(billCell.props.accessibilityLabel).not.toContain("money in");
+  expect(cellFor(PAY_DAY).props.accessibilityLabel).toContain("money in");
+  const both = cellFor(BOTH_DAY).props.accessibilityLabel;
+  expect(both).toContain("money in");
+  expect(both).toContain("money out");
+  expect(cellFor(today).props.accessibilityLabel).not.toContain("money out");
+});
+
+test("the balance is the bright number and the day is the muted one", async () => {
+  await openCalendar();
+  const { T } = require("../lib/theme");
+  const flat = (style: unknown): Record<string, unknown> =>
+    Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
+
+  // The bill day: something happens, so its balance reads bright.
+  const bill = screen.getByLabelText(new RegExp(`^${fmtLongDay(BILL_DAY)}`));
+  const texts = (node: { findAllByType?: unknown }) => node;
+  void texts;
+  const { getAllByText } = within(bill);
+  // 4000 - 150, in the phone's compact format.
+  expect(flat(getAllByText("3,850")[0]!.props.style).color).toBe(T.text);
+  // ...and the day number beside it is the muted one.
+  expect(flat(getAllByText(String(Number(BILL_DAY.slice(8))))[0]!.props.style).color)
+    .not.toBe(T.text);
+
+  // A QUIET DAY'S BALANCE IS DIMMER, because it is carried over from
+  // the last day that moved rather than produced by this one.
+  const quietDay = shift(BILL_DAY, 1);
+  const quiet = screen.getByLabelText(new RegExp(`^${fmtLongDay(quietDay)}`));
+  expect(flat(within(quiet).getAllByText("3,850")[0]!.props.style).color).toBe(T.dim);
+});
+
+test("a day that moves the balance says by how much, under it", async () => {
+  await openCalendar();
+  const { T } = require("../lib/theme");
+  const flat = (style: unknown): Record<string, unknown> =>
+    Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
+
+  const bill = within(screen.getByLabelText(new RegExp(`^${fmtLongDay(BILL_DAY)}`)));
+  const net = bill.getByText("−150");
+  expect(flat(net.props.style).color).toBe(T.expense);
+
+  // ZERO AND NOTHING ARE DIFFERENT SENTENCES: a quiet day prints no
+  // net at all rather than a 0 that did not happen.
+  const quiet = within(screen.getByLabelText(new RegExp(`^${fmtLongDay(shift(BILL_DAY, 1))}`)));
+  expect(quiet.queryByText("0")).toBeNull();
 });

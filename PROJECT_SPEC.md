@@ -1817,6 +1817,34 @@ fifth tab never needs a migration.
   low days turns a map of where the money goes into a verdict on it.
   Cumulative columns and multi-select hide in calendar mode, being
   list-only concepts.
+  **ROUND TWO, 2026-10-17 (OTA 2).** The first round was legible and
+  flat. Now: the day number is the muted one and the BALANCE is in
+  ink, because the balance is what the cell is for. A day that moves
+  the balance reads bright and a quiet day reads dim, since a quiet
+  day's number is carried over from the last day that moved. Under
+  the balance, on days that moved, the step it made — signed and
+  colored, with a true minus (U+2212) because it sits beside a plus
+  in tabular figures. **The net is DERIVED FROM THE BALANCES EITHER
+  SIDE, never re-added from the rows**: two numbers in one cell
+  computed two ways is two numbers that can disagree, and this one
+  sits directly under the other. A quiet day has `net: null` rather
+  than 0 — zero and "nothing happened" are different sentences, and
+  the cell says the second by staying empty.
+
+  The dots are **one per direction**: red when something leaves,
+  green when something arrives, both on a payday that also pays a
+  bill. That is not a reversal of the no-warning-tints rule above —
+  that rule is about the BALANCE, and it stands. Direction of flow is
+  the red and green every amount in this app already wears, and it is
+  a fact rather than a verdict. Identity still never rests on color:
+  both clients' accessibility labels say "money in" / "money out" and
+  "up $X" / "down $X" in words, and the web cell lists the items.
+
+  **THE WEB CELL ALSO LISTS THE DAY'S ITEMS**, up to three by name
+  and amount, then "+N more". It is three times the phone's width and
+  was mostly empty; the phone's 49pt cell could not hold a name and
+  does not try. `min-h` went to 132px to fit it.
+
   The phone's cell number is shortened — "2,545", "12.3k", no sign and no
   cents (`cellAmountCompact`); the web's is "$2,545" (`cellAmountFull`).
   MEASURED, not guessed: the deployment target is iOS 16.4, so the
