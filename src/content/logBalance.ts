@@ -31,6 +31,36 @@
  * you right now, which is the question the date field underneath is
  * about.
  */
+/**
+ * Leaving a balance sheet with something typed in it.
+ *
+ * Its own words rather than the transaction form's DISCARD, which
+ * says "this transaction hasn't been saved" — true there, and wrong
+ * about a sheet that logs a number against an account.
+ */
+export const DISCARD_BALANCE = {
+  title: "Discard this balance?",
+  body: "You haven't logged it yet. Leaving now throws away the amount you typed.",
+  keep: "Keep editing",
+  discard: "Discard",
+} as const;
+
+/** Leaving an account's own form with something changed in it. */
+export const DISCARD_ACCOUNT = {
+  title: "Discard these changes?",
+  body: "This account hasn't been saved. Leaving now throws away what you changed.",
+  keep: "Keep editing",
+  discard: "Discard",
+} as const;
+
+/** Leaving the "put money in regularly?" offer with an amount typed. */
+export const DISCARD_CONTRIBUTION = {
+  title: "Discard this contribution?",
+  body: "It hasn't been scheduled yet. Leaving now throws away what you typed.",
+  keep: "Keep editing",
+  discard: "Discard",
+} as const;
+
 export const LOG_BALANCE_TITLE = (account: string) =>
   `Log the current balance of ${account}`;
 

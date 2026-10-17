@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import FormSheet, { useDiscardGuard } from "./FormSheet";
+import { DISCARD_ACCOUNT } from "../../src/content/logBalance.ts";
 import { T } from "../lib/theme";
 import DatePicker from "./DatePicker";
 import type { TrackerCategory } from "../../src/engine/types.ts";
@@ -27,6 +29,13 @@ export default function LoanSheet({
   const [rate, setRate] = useState(cat.interestRate != null ? String(cat.interestRate) : "");
   const [from, setFrom] = useState(cat.interestStartDate ?? "");
   const [picking, setPicking] = useState(false);
+  // CHANGED, not merely opened: this sheet starts holding the loan's
+  // own terms, so emptiness is no test of whether anything was typed.
+  const dirty = name !== cat.name
+    || original !== (cat.originalPrincipal != null ? String(cat.originalPrincipal) : "")
+    || rate !== (cat.interestRate != null ? String(cat.interestRate) : "")
+    || from !== (cat.interestStartDate ?? "");
+  const requestClose = useDiscardGuard(dirty, DISCARD_ACCOUNT, onClose);
 
   const num = (v: string) => Number(v.trim());
   const error =
@@ -39,9 +48,12 @@ export default function LoanSheet({
     return <DatePicker value={from || new Date().toISOString().slice(0, 10)} onPick={setFrom} onClose={() => setPicking(false)} />;
   }
 
+  // ITS OWN SHEET NOW, not content inside the Dashboard's BottomSheet.
+  // It is a form with four fields, so it gets the same presentation
+  // and the same guard as every other form — see FormSheet.
   return (
-    <View style={styles.card}>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.inner}>
+    <FormSheet onRequestClose={requestClose} dirty={dirty}>
+      <>
         <Text style={styles.title}>Edit {cat.name}</Text>
         <Text style={styles.dim}>
           The loan&apos;s terms. Payments toward it are ordinary transactions that pick it as their
@@ -75,7 +87,7 @@ export default function LoanSheet({
 
         {error ? <Text style={styles.err}>{error}</Text> : null}
         <View style={styles.row}>
-          <Pressable style={[styles.btn, styles.ghost]} onPress={onClose} disabled={busy} accessibilityRole="button">
+          <Pressable style={[styles.btn, styles.ghost]} onPress={requestClose} disabled={busy} accessibilityRole="button">
             <Text style={styles.ghostText}>Cancel</Text>
           </Pressable>
           <Pressable
@@ -92,14 +104,14 @@ export default function LoanSheet({
             {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.primaryText}>Save</Text>}
           </Pressable>
         </View>
-      </ScrollView>
-    </View>
+      </>
+    </FormSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { maxHeight: "88%", backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: T.border },
-  inner: { padding: 20, paddingBottom: 34, gap: 4 },
+  // No card and no maxHeight: a page sheet is both, and FormSheet
+  // owns the padding and the scroller.
   title: { color: T.text, fontSize: 17, fontWeight: "700" },
   dim: { color: T.faint, fontSize: 12, lineHeight: 17, marginBottom: 4 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 10, marginBottom: 4 },

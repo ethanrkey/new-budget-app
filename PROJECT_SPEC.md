@@ -686,6 +686,53 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 5, 2026-10-17** — the web calendar compacted (see the
+  Ledger section) and **every form on the phone moved into a UIKit
+  page sheet.** Fingerprint unchanged; `presentationStyle` and
+  `allowSwipeDismissal` are RN Modal props already in build 13's
+  binary, so none of this needs native code.
+
+  Reported: the balance sheets "can't be swiped away smoothly",
+  which was accurate — there was nothing to swipe. The transaction
+  form has been a page sheet since build 9 and everything else that
+  takes typed input was still a card drawn at the bottom of a
+  transparent modal.
+
+  **THE TEST FOR WHETHER A SHEET MOVES: does it hold something
+  somebody typed?** A form does; a menu does not.
+
+  | sheet | moved? | why |
+  |---|---|---|
+  | transaction form | was already | the model, since build 9 |
+  | **LogBalance** (5 call sites: the checking bar, a tracked account's Log, log a contribution, edit a reading, edit a contribution) | **yes** | an amount, typed |
+  | **CategorySheet** (add/edit an account, from Settings and from a Dashboard card) | **yes** | name, balance, date |
+  | **ContributionPrompt** | **yes** | amount, cadence, date |
+  | **LoanSheet** (a loan's terms) | **yes** | four fields; it also stopped being content inside a BottomSheet |
+  | ScopeSheet | no | a four-row menu. Nothing typed, nothing to lose, and a page sheet would give four rows the whole screen |
+  | ExportSheet | no | a list of actions |
+  | the Ledger's horizon DatePicker | no | a wheel with Done; the value is committed, not typed |
+  | SaveFailure, UnsavedNotice | no | they report something that already happened and MUST NOT be swipeable — dismissing one is a decision |
+  | Setup, Tour, Settings, About, Categories | no | full-screen modals by design |
+
+  `mobile/components/FormSheet.tsx` is the shared piece: NativeSheet
+  plus `useDiscardGuard`, so the four do not each grow their own
+  version of the same alert. `swipeToClose={!dirty}` is UIKit's
+  `isModalInPresentation` inverted — a dirty sheet REFUSES the
+  gesture, rubber-bands back and reports the attempt, so the alert is
+  never about a sheet that has already slid away.
+
+  **DIRTY IS "CHANGED", NOT "NON-EMPTY"** for the two sheets that
+  open holding existing values (CategorySheet, LoanSheet); otherwise
+  every edit sheet is dirty the moment it appears and the guard fires
+  on a sheet nobody touched.
+
+  Two things the audit of this change found, both in code written
+  the same hour: the dirty predicate was written out TWICE in
+  LogBalance — once for the guard, once for the sheet's prop — so a
+  mutation of one survived because the other was still right; and
+  the amount field had no accessibility label, so VoiceOver read the
+  app's most-used input as an unlabeled text field.
+
 - **OTA UPDATE 3, 2026-10-17, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — a device and web pass
   on update 2. Fingerprint checked before and after; unchanged.

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import {
-  ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable,
-  StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View,
 } from "react-native";
+import FormSheet, { useDiscardGuard } from "./FormSheet";
+import { DISCARD_CONTRIBUTION } from "../../src/content/logBalance.ts";
 import DatePicker from "./DatePicker";
 import { T } from "../lib/theme";
 import { fmtDate } from "../../src/shared/dates.ts";
@@ -39,14 +40,15 @@ export default function ContributionPrompt({
   const set = (patch: Partial<ContributionRow>) => setRow((r) => ({ ...r, ...patch }));
   const isDebt = category.kind === "debt";
   const valid = Number(row.amount) > 0;
+  // The amount is the only thing typed here — the cadence and the
+  // date open on answers and a row with neither touched has nothing
+  // to lose.
+  const dirty = row.amount.trim() !== "";
+  const requestClose = useDiscardGuard(dirty, DISCARD_CONTRIBUTION, onClose);
 
   return (
-    <Modal transparent animationType="slide" visible onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.scrim}
-      >
-        <View style={styles.card}>
+    <FormSheet onRequestClose={requestClose} dirty={dirty}>
+      <>
           <Text style={styles.title}>{PROMPT.title(category.name)}</Text>
           <Text style={styles.dim}>{isDebt ? PROMPT.debtSub : PROMPT.sub}</Text>
 
@@ -111,7 +113,7 @@ export default function ContributionPrompt({
 
           <View style={styles.row}>
             <Pressable
-              style={[styles.btn, styles.ghost]} onPress={onClose} disabled={busy}
+              style={[styles.btn, styles.ghost]} onPress={requestClose} disabled={busy}
               accessibilityRole="button" accessibilityLabel={PROMPT.skip}
             >
               <Text style={styles.ghostText}>{PROMPT.skip}</Text>
@@ -125,15 +127,13 @@ export default function ContributionPrompt({
               {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.primaryText}>{PROMPT.add}</Text>}
             </Pressable>
           </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+      </>
+    </FormSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-  card: { backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: T.border, padding: 20, paddingBottom: 34 },
+  // No scrim and no card: a page sheet is both. See FormSheet.
   title: { color: T.text, fontSize: 17, fontWeight: "700" },
   dim: { color: T.faint, fontSize: 12, lineHeight: 17, marginTop: 6 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 14 },

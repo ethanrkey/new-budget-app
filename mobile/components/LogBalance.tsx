@@ -1,12 +1,12 @@
 import { useState } from "react";
 import {
-  ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable,
-  ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
+import FormSheet, { useDiscardGuard } from "./FormSheet";
 import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
 import { todayISO } from "../../src/engine/model.ts";
-import { HIDDEN_ROWS_COPY as HIDDEN } from "../../src/content/logBalance.ts";
+import { HIDDEN_ROWS_COPY as HIDDEN, DISCARD_BALANCE } from "../../src/content/logBalance.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
 
 // The first write surface on the phone, and the right one to be first:
@@ -37,6 +37,18 @@ export default function LogBalance({
   const [confirming, setConfirming] = useState<HiddenRow[] | null>(null);
   const parsed = amount.trim() === "" ? null : Number(amount);
   const valid = parsed != null && !Number.isNaN(parsed);
+  // TYPED IS DIRTY, valid or not: "4." and "40o" are both somebody
+  // part way through a number, and losing them to a stray swipe is
+  // the same loss as losing a good one. The date is not dirtiness —
+  // it opens on today and changing it alone leaves nothing to throw
+  // away.
+  // ONE EXPRESSION, used by both the guard and the gesture. It was
+  // written out twice — once here and once as the sheet's `dirty`
+  // prop — and a mutation that changed only this one survived,
+  // because the OTHER copy was still right. Two predicates that have
+  // to agree are one that will not.
+  const dirty = amount.trim() !== "";
+  const requestClose = useDiscardGuard(dirty, DISCARD_BALANCE, onClose);
 
   // A BACK-DATED LOG THAT HIDES NOTHING GETS NO PROMPT. The warning
   // earns its interruption by naming specific rows; shown when there
@@ -49,12 +61,8 @@ export default function LogBalance({
   }
 
   return (
-    <Modal transparent animationType="slide" visible onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.scrim}
-      >
-        <View style={styles.card}>
+    <FormSheet onRequestClose={requestClose} dirty={dirty}>
+      <>
           {confirming ? (
             <>
               <Text style={styles.title}>{HIDDEN.title}</Text>
@@ -71,6 +79,13 @@ export default function LogBalance({
               <Text style={styles.hiddenWhy}>{HIDDEN.why}</Text>
               <Text style={styles.hiddenEscape}>{HIDDEN.escape}</Text>
               <View style={styles.row}>
+                {/* STRAIGHT OUT, no discard prompt. The person has
+                    just read a warning naming the rows that would
+                    disappear and chosen to leave — that IS the
+                    confirmation, and asking again is the noise this
+                    file's own header warns about. The SWIPE is still
+                    guarded, because a swipe is accidental in a way a
+                    button press is not. */}
                 <Pressable
                   style={[styles.btn, styles.ghost]} onPress={onClose} disabled={busy}
                   accessibilityRole="button" accessibilityLabel={HIDDEN.cancel}
@@ -93,6 +108,10 @@ export default function LogBalance({
           {currentLabel ? <Text style={styles.dim}>{currentLabel}</Text> : null}
 
           <Text style={styles.label}>Amount</Text>
+          {/* LABELED, like the two buttons below it. A Text beside a
+              TextInput is not a label to VoiceOver — it read this as
+              an unlabeled text field, which is the same gap the
+              buttons had and was found the same way. */}
           <TextInput
             style={styles.field}
             keyboardType="decimal-pad"
@@ -100,6 +119,7 @@ export default function LogBalance({
             placeholderTextColor={T.faint}
             value={amount}
             onChangeText={setAmount}
+            accessibilityLabel="Amount"
             autoFocus
           />
 
@@ -129,7 +149,7 @@ export default function LogBalance({
                 unlabeled button — and a test could not find it either,
                 which is how the gap surfaced. */}
             <Pressable
-              style={[styles.btn, styles.ghost]} onPress={onClose} disabled={busy}
+              style={[styles.btn, styles.ghost]} onPress={requestClose} disabled={busy}
               accessibilityRole="button" accessibilityLabel="Cancel"
             >
               <Text style={styles.ghostText}>Cancel</Text>
@@ -145,9 +165,8 @@ export default function LogBalance({
           </View>
           </>
           )}
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+      </>
+    </FormSheet>
   );
 }
 
@@ -155,8 +174,8 @@ export const currently = (balance: number | null, asOf: string | null) =>
   balance == null ? undefined : `Currently ${money(balance)}, as of ${fmtDate(asOf)}`;
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-  card: { backgroundColor: T.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: T.border, padding: 20, paddingBottom: 34, gap: 6 },
+  // NO SCRIM AND NO CARD IN HERE. A page sheet is the card — see
+  // FormSheet, which owns the padding this used to carry.
   title: { color: T.text, fontSize: 17, fontWeight: "700" },
   dim: { color: T.faint, fontSize: 12, marginBottom: 4 },
   hiddenList: { maxHeight: 190, marginTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: T.border },

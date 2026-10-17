@@ -7,7 +7,6 @@ import {
 import { useBudget } from "../../components/StateProvider";
 import LogBalance from "../../components/LogBalance";
 import { useChrome } from "../../components/Chrome";
-import BottomSheet from "../../components/BottomSheet";
 import LoanSheet from "../../components/LoanSheet";
 import CategorySheet from "../../components/CategorySheet";
 import ContributionPrompt from "../../components/ContributionPrompt";
@@ -350,22 +349,24 @@ export default function DashboardScreen() {
       {/* A logged reading you got wrong has to be correctable, which is
           what the web has always allowed. `catId: null` is the checking
           account, whose readings live under accountSnapshots. */}
-      <BottomSheet visible={!!editingLoan} onClose={() => setEditingLoan(null)}>
-        {editingLoan && (
-          <LoanSheet
-            cat={editingLoan}
-            busy={saving}
-            onClose={() => setEditingLoan(null)}
-            onSave={async (patch) => {
-              const ok = await commit(
-                (st) => setupLoan(st, { categoryId: editingLoan.id, ...patch }),
-                `${patch.name} terms`
-              );
-              if (ok) setEditingLoan(null);
-            }}
-          />
-        )}
-      </BottomSheet>
+      {/* ITS OWN PAGE SHEET, not content inside a BottomSheet — see
+          FormSheet. Every form on this screen presents itself now,
+          and they are mutually exclusive states, so the one-modal
+          rule BottomSheet exists for is not in play. */}
+      {editingLoan && (
+        <LoanSheet
+          cat={editingLoan}
+          busy={saving}
+          onClose={() => setEditingLoan(null)}
+          onSave={async (patch) => {
+            const ok = await commit(
+              (st) => setupLoan(st, { categoryId: editingLoan.id, ...patch }),
+              `${patch.name} terms`
+            );
+            if (ok) setEditingLoan(null);
+          }}
+        />
+      )}
 
       {editingContrib && (
         <LogBalance

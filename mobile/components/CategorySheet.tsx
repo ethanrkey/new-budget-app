@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
-  ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable,
-  ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import DatePicker from "./DatePicker";
 import { T } from "../lib/theme";
@@ -9,6 +8,8 @@ import {
   type CategoryDraft, categoryDraftError,
 } from "../lib/categories";
 import { fmtDate } from "../../src/shared/dates.ts";
+import FormSheet, { useDiscardGuard } from "./FormSheet";
+import { DISCARD_ACCOUNT } from "../../src/content/logBalance.ts";
 
 // Add or edit one savings account, investment or loan.
 //
@@ -39,6 +40,13 @@ export default function CategorySheet({
   onClose: () => void;
 }) {
   const [d, setD] = useState(initial);
+  // CHANGED, not merely opened. An edit sheet starts holding the
+  // account's own values, so "has anything been typed" has to be a
+  // comparison with what it opened on rather than a check that the
+  // fields are non-empty — otherwise every edit sheet is dirty the
+  // moment it appears and the guard fires on a sheet nobody touched.
+  const dirty = JSON.stringify(d) !== JSON.stringify(initial);
+  const requestClose = useDiscardGuard(dirty, DISCARD_ACCOUNT, onClose);
   const [picking, setPicking] = useState<"asOf" | "interestStart" | null>(null);
   const [showError, setShowError] = useState(false);
   const set = <K extends keyof CategoryDraft>(k: K, v: CategoryDraft[K]) =>
@@ -48,13 +56,8 @@ export default function CategorySheet({
   const debt = d.kind === "debt";
 
   return (
-    <Modal transparent animationType="slide" visible onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.scrim}
-      >
-        <View style={styles.card}>
-          <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
+    <FormSheet onRequestClose={requestClose} dirty={dirty}>
+      <>
             <Text style={styles.title}>{title}</Text>
 
             <Text style={styles.label}>Name</Text>
@@ -193,7 +196,7 @@ export default function CategorySheet({
             {showError && error ? <Text style={styles.err}>{error}</Text> : null}
 
             <View style={styles.row}>
-              <Pressable style={[styles.btn, styles.ghost]} onPress={onClose} disabled={busy}
+              <Pressable style={[styles.btn, styles.ghost]} onPress={requestClose} disabled={busy}
                 accessibilityRole="button" accessibilityLabel="Cancel">
                 <Text style={styles.ghostText}>Cancel</Text>
               </Pressable>
@@ -211,20 +214,14 @@ export default function CategorySheet({
                 {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.primaryText}>Save</Text>}
               </Pressable>
             </View>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+      </>
+    </FormSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-  card: {
-    maxHeight: "92%", backgroundColor: T.surface,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderColor: T.border,
-  },
-  inner: { padding: 20, paddingBottom: 34, gap: 4 },
+  // No scrim, no card and no maxHeight: a page sheet is all three,
+  // and FormSheet owns the padding and the scroller.
   title: { color: T.text, fontSize: 17, fontWeight: "700", marginBottom: 4 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 10 },
   field: {

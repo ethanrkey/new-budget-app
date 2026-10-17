@@ -535,3 +535,97 @@ describe("the transaction form is presented as a system sheet", () => {
   // decoration, which is this suite's own argument. What the grabber
   // was for is covered by the four above.
 });
+
+// THE BALANCE SHEETS, which were still a card on a scrim.
+//
+// Reported 2026-10-17: "can't be swiped away smoothly", which was
+// accurate — there was nothing to swipe. Every surface that takes
+// typed input is a UIKit page sheet now, with the same guard the
+// transaction form has had since build 9. These are props rather
+// than pixels for the reason above: `presentationStyle` and
+// `allowSwipeDismissal` are instructions to UIKit, and whether they
+// are the right instructions is the part this harness can answer.
+describe("a balance sheet is a system sheet too", () => {
+  const LogBalance = require("../components/LogBalance").default;
+  const { DISCARD_BALANCE } = require("../../src/content/logBalance.ts");
+
+  /** The alert, captured with its buttons so one can be pressed. */
+  type Btn = { text?: string; onPress?: () => void };
+  const alerts: { title?: string; buttons: Btn[] }[] = [];
+  let spy: ReturnType<typeof jest.spyOn>;
+  beforeEach(() => {
+    alerts.length = 0;
+    spy = jest.spyOn(Alert, "alert").mockImplementation((title, _body, buttons) => {
+      alerts.push({ title: String(title), buttons: (buttons ?? []) as Btn[] });
+    });
+  });
+  afterEach(() => spy.mockRestore());
+  const press = (label: string) => {
+    const b = alerts.at(-1)!.buttons.find((x) => x.text === label);
+    if (!b) throw new Error(`no "${label}" in the alert`);
+    b.onPress?.();
+  };
+
+  const host = (onClose = () => {}) =>
+    render(<LogBalance title="Log the current balance of Ally" cta="Log balance" busy={false}
+      onSubmit={() => {}} onClose={onClose} />);
+
+  test("it is a page sheet, which is what covers the tab bar", async () => {
+    await host();
+    const modal = screen.getByTestId("native-sheet");
+    expect(modal.props.presentationStyle).toBe("pageSheet");
+    // NOT transparent, and no card of its own — the scrim-plus-card
+    // structure is exactly what left the gap under the old one.
+    expect(modal.props.transparent).toBeFalsy();
+  });
+
+  test("with nothing typed it may be swiped away", async () => {
+    await host();
+    expect(screen.getByTestId("native-sheet").props.allowSwipeDismissal).toBe(true);
+  });
+
+  test("an amount typed makes UIKit refuse the gesture", async () => {
+    await host();
+    await userEvent.type(screen.getByLabelText("Amount"), "40");
+    expect(screen.getByTestId("native-sheet").props.allowSwipeDismissal).toBe(false);
+  });
+
+  test("...INCLUDING a half-typed one, which is the same loss", async () => {
+    // A LONE DECIMAL POINT, not "4." — Number("4.") is 4, so a guard
+    // written against validity would have passed that and this test
+    // would have proved nothing. Number(".") is NaN, which is what
+    // somebody part way through a number actually looks like, and
+    // losing it to a stray swipe is the same loss as losing a good
+    // one. (Found by mutating the guard to fire on `valid`: it
+    // survived.)
+    await host();
+    await userEvent.type(screen.getByLabelText("Amount"), ".");
+    expect(screen.getByTestId("native-sheet").props.allowSwipeDismissal).toBe(false);
+  });
+
+  test("and the refused swipe asks before it throws anything away", async () => {
+    const closed: number[] = [];
+    await host(() => closed.push(1));
+    await userEvent.type(screen.getByLabelText("Amount"), "40");
+    await act(async () => { screen.getByTestId("native-sheet").props.onRequestClose(); });
+
+    // Asked, and NOT closed — the sheet is still there behind the alert.
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]!.title).toBe(DISCARD_BALANCE.title);
+    expect(closed).toHaveLength(0);
+
+    // ...and discarding is what closes it.
+    await act(async () => { press(DISCARD_BALANCE.discard); });
+    expect(closed).toHaveLength(1);
+  });
+
+  test("an untouched sheet closes without asking", async () => {
+    // A confirm over a sheet nobody typed in is the kind of prompt
+    // people learn to dismiss without reading.
+    const closed: number[] = [];
+    await host(() => closed.push(1));
+    await act(async () => { screen.getByTestId("native-sheet").props.onRequestClose(); });
+    expect(alerts).toHaveLength(0);
+    expect(closed).toHaveLength(1);
+  });
+});
