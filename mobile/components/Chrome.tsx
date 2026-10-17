@@ -18,6 +18,7 @@ import { primaryAccount, ledgerHorizonOf } from "../../src/engine/model.ts";
 import { rowsHiddenByAnchor } from "../../src/engine/compute.ts";
 import Setup from "./Setup";
 import { shouldRunSetup } from "../lib/setup";
+import { dismissedBy, withDismissalBy } from "../lib/dismissal";
 import { applySetup, markSetupSeen, markTourSeen, type SetupAnswers } from "../../src/engine/setup.ts";
 
 // WHERE THE WEB'S FIVE HEADER ITEMS LIVE ON A PHONE.
@@ -51,7 +52,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   // The checking log, hosted HERE rather than on a tab, because the
   // control that opens it is on every tab — see AnchorStrip.
   const [logging, setLogging] = useState(false);
-  const { state, commit, online, saving, prefs, setPref } = useBudget();
+  const { state, userId, commit, online, saving, prefs, setPref } = useBudget();
   const insets = useSafeAreaInsets();
   const value = useMemo(() => ({
     open: () => setScreen("settings"),
@@ -61,7 +62,14 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   // PHASE 3: who gets met with the flow. The three conditions and the
   // reason for each are in lib/setup.ts; the short version is that it
   // is a brand-new account that has not already done this on the web.
-  const runSetup = setupAgain || (!!state && shouldRunSetup(state, prefs.setupDismissed));
+  //
+  // THE DEVICE ANSWER IS ASKED ABOUT THIS ACCOUNT, since 2026-10-17. It
+  // used to be a bare boolean, so the first account to finish setup on a
+  // phone turned the flow off for every account after it — two brand-new
+  // test accounts on the owner's own phone got neither setup nor the
+  // tour. See lib/prefs.ts.
+  const dismissed = dismissedBy(prefs.setupDismissedBy, userId);
+  const runSetup = setupAgain || (!!state && shouldRunSetup(state, dismissed));
 
   async function finishSetup(answers: SetupAnswers) {
     // READ BEFORE THE WRITE, because the write is what sets it. The
@@ -74,7 +82,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
     // anchor, the accounts and BOTH flags land together or not at all.
     const ok = await commit((s) => markTourSeen(markSetupSeen(applySetup(s, answers))), "Setup");
     if (!ok) return;          // the Done screen stays up; the failure modal explains
-    setPref("setupDismissed", true);
+    setPref("setupDismissedBy", withDismissalBy(prefs.setupDismissedBy, userId));
     setSetupAgain(false);
     // The web shows the tour straight after the first setup, and the
     // phone has the same four stops in the same words
@@ -87,7 +95,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
     // The device pref first, because it always works. Somebody who
     // closed this must not meet it again on the next launch even if
     // the account write cannot land.
-    setPref("setupDismissed", true);
+    setPref("setupDismissedBy", withDismissalBy(prefs.setupDismissedBy, userId));
     setSetupAgain(false);
     // The account flag only when there is a network to write it on. A
     // Skip is not worth a failure modal, and the device pref has

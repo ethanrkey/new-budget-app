@@ -7,6 +7,7 @@ import { useBudget } from "./StateProvider";
 import { wipeToNewAccount } from "../../src/engine/mutate.ts";
 import type { Session } from "@supabase/supabase-js";
 import { fmtDate } from "../../src/shared/dates.ts";
+import { withoutDismissalBy } from "../lib/dismissal";
 
 // Everything the web header holds, behind ONE affordance.
 //
@@ -64,13 +65,15 @@ export default function Settings({
           text: "Wipe everything", style: "destructive",
           onPress: () => {
             // The two device preferences that say "I have already been
-            // shown this" go with the data. `wipeToNewAccount` is
+            // shown this" go with the data — THIS account's entry in
+            // each, not the whole list: another account on this phone
+            // did not ask to be shown setup again. `wipeToNewAccount` is
             // `blankState()` for the same reason — a wipe has to mean a
             // new account, or the flags that make one feel used outlive
             // the account they described, and a wiped phone sits on an
             // empty Ledger with nothing offering to set it up.
-            setPref("setupDismissed", false);
-            setPref("firstRunDismissed", false);
+            setPref("setupDismissedBy", withoutDismissalBy(prefs.setupDismissedBy, session.user.id));
+            setPref("firstRunDismissedBy", withoutDismissalBy(prefs.firstRunDismissedBy, session.user.id));
             void commit(() => wipeToNewAccount(), "Wiped all data");
           },
         },

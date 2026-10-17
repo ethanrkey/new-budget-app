@@ -16,6 +16,7 @@ import { T, money } from "../../lib/theme";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
 import { ledgerHorizonOf } from "../../../src/engine/model.ts";
 import { showFirstRun } from "../../lib/firstRun";
+import { dismissedBy, withDismissalBy } from "../../lib/dismissal";
 import * as feel from "../../lib/haptics";
 import { DISCARD } from "../../../src/content/transaction.ts";
 import {
@@ -28,7 +29,7 @@ import { fmtDate } from "../../../src/shared/dates.ts";
 
 
 export default function LedgerScreen() {
-  const { state, pullToRefresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
+  const { state, userId, pullToRefresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
   // The checking log lives in Chrome now, because the control that
   // opens it (AnchorStrip) is on every tab. Step one of the guide
   // reaches the same modal rather than drawing a second one.
@@ -56,7 +57,9 @@ export default function LedgerScreen() {
   // version shipped with: logging a balance made the whole thing vanish
   // and left a new user on an empty Ledger with two steps to go and
   // nothing saying so.
-  const guide = showFirstRun(state!, prefs.firstRunDismissed);
+  // Dismissal is read FOR THIS ACCOUNT — see lib/prefs.ts. A bare
+  // boolean here hid the guide from every later account on the phone.
+  const guide = showFirstRun(state!, dismissedBy(prefs.firstRunDismissedBy, userId));
 
   // Defined here rather than inline so the SectionList header is a
   // stable element and the list does not remount it on every render.
@@ -67,7 +70,7 @@ export default function LedgerScreen() {
       onLogBalance={logChecking}
       onAddIncome={() => setSheet({ kind: "add" })}
       onAddBill={() => setSheet({ kind: "add" })}
-      onDismiss={() => setPref("firstRunDismissed", true)}
+      onDismiss={() => setPref("firstRunDismissedBy", withDismissalBy(prefs.firstRunDismissedBy, userId))}
     />
   );
 

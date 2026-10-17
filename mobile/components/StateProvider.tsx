@@ -15,6 +15,9 @@ type Reason = "conflict" | "offline" | "error";
 export type CommitFeel = "success" | "selection" | "none";
 type Ctx = {
   state: BudgetState | null;
+  /** Who is signed in. On the context because two of the device
+   *  preferences are keyed by it — see lib/prefs.ts. */
+  userId: string;
   refresh: () => Promise<boolean>;
   refreshing: boolean;
   /** The PULL gesture, as opposed to a reload the app decided to do.
@@ -37,7 +40,7 @@ type Ctx = {
   setPref: <K extends keyof Prefs>(k: K, v: Prefs[K]) => void;
 };
 const StateCtx = createContext<Ctx>({
-  state: null, refresh: async () => false, refreshing: false,
+  state: null, userId: "", refresh: async () => false, refreshing: false,
   pullToRefresh: async () => {},
   commit: async () => false, online: true, saving: false,
   prefs: DEFAULT_PREFS, setPref: () => {},
@@ -146,7 +149,7 @@ export function StateProvider({ userId, children }: { userId: string; children: 
   if (!state || !prefs) return <View style={styles.center}><ActivityIndicator color={T.brass} /></View>;
 
   return (
-    <StateCtx.Provider value={{ state, refresh, pullToRefresh, refreshing, commit, online, saving, prefs, setPref }}>
+    <StateCtx.Provider value={{ state, userId, refresh, pullToRefresh, refreshing, commit, online, saving, prefs, setPref }}>
       {/* A harness left running is otherwise indistinguishable from the
           app being broken. Two different messages, because a local
           Supabase stack holds REAL data over plain http and must not be

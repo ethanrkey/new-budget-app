@@ -170,7 +170,13 @@ export function setupAnswers(collected: BudgetItem[], d: SetupDraft): SetupAnswe
  *     worse than not asking a new one.
  *   - `dismissed` is per device and exists for the offline case: Skip
  *     writes `hasSeenOnboarding`, and a write that cannot land must not
- *     leave somebody stuck in a wizard they already closed.
+ *     leave somebody stuck in a wizard they already closed. IT IS A
+ *     FACT ABOUT ONE ACCOUNT ON ONE PHONE, and the caller is the half
+ *     that has to know whose — see dismissedBy in lib/prefs.ts. It was
+ *     a bare device boolean until 2026-10-17, which meant the first
+ *     account to finish setup on a phone skipped it for every account
+ *     after it. Two brand-new accounts on the owner's own phone got
+ *     neither the flow nor the tour that follows it.
  *
  * Quitting the app mid-flow leaves all three unchanged, so the flow
  * comes back — correct, and the same as the web.

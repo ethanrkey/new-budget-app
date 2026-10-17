@@ -19,6 +19,9 @@ import {
   STEPS, blankSetupDraft, rulesForStep, canAdvance, accountRowErrors,
   setupAnswers, shouldRunSetup, scrollToReveal, stepsFor,
 } from "../mobile/lib/setup.ts";
+import {
+  dismissedBy, withDismissalBy, withoutDismissalBy, DISMISSAL_CAP,
+} from "../mobile/lib/dismissal.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -156,6 +159,47 @@ eq("the balance comes before the accounts step", STEPS.indexOf("balance") < STEP
   not("an account with rules in it is never asked", shouldRunSetup(used, false));
   const anchored = updateAccountBalance(blank, "checking", 4000, TODAY);
   not("...nor one with a logged balance", shouldRunSetup(anchored, false));
+}
+
+// ---- and WHOSE device answer it is ----------------------------------
+//
+// THE BUG, from the owner's phone on 2026-10-17: two brand-new accounts
+// (+kbtest23, +kbtest84) got neither setup nor the tour, because the
+// account before them had finished setup and the dismissal was a bare
+// device boolean. A phone cannot have done setup; an account can.
+{
+  const A = "user-a", B = "user-b";
+  let setupPref = [];
+  setupPref = withDismissalBy(setupPref, A);
+
+  is("A finishing setup is remembered for A", dismissedBy(setupPref, A));
+  not("THE BUG: a different account on the same phone is NOT dismissed",
+    dismissedBy(setupPref, B));
+  is("...so a brand-new B is still met with the flow",
+    shouldRunSetup(blank, dismissedBy(setupPref, B)));
+  not("...and A, who closed it, is not", shouldRunSetup(blank, dismissedBy(setupPref, A)));
+
+  setupPref = withDismissalBy(setupPref, B);
+  eq("both are remembered, and nobody is forgotten for the other", setupPref, [A, B]);
+  eq("dismissing twice does not add a second entry",
+    withDismissalBy(setupPref, A), [B, A]);
+
+  // Wipe data clears THIS account's entry. Another account on the
+  // phone did not ask to be shown setup again.
+  const wiped = withoutDismissalBy(setupPref, A);
+  eq("a wipe clears only the account that wiped", wiped, [B]);
+  is("...so the wiped account meets the flow again", shouldRunSetup(blank, dismissedBy(wiped, A)));
+
+  // The one preference that grows. A tester cycling through addresses
+  // must not write an unbounded array to disk.
+  let many = [];
+  for (let i = 0; i < DISMISSAL_CAP + 5; i++) many = withDismissalBy(many, `u${i}`);
+  eq("the list is capped", many.length, DISMISSAL_CAP);
+  is("the newest is kept", dismissedBy(many, `u${DISMISSAL_CAP + 4}`));
+  not("the oldest falls off", dismissedBy(many, "u0"));
+
+  // An empty list is the state of a phone that has never run this.
+  not("nobody is dismissed on a fresh phone", dismissedBy([], A));
 }
 
 // ---- the keyboard must not be allowed to hide a control ------------

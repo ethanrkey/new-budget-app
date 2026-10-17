@@ -1,4 +1,4 @@
-import { act, render, screen, userEvent, waitFor, within } from "@testing-library/react-native";
+import { act, cleanup, render, screen, userEvent, waitFor, within } from "@testing-library/react-native";
 import { T } from "../lib/theme";
 import { haptics, pickerProps } from "./setup";
 import { normalize } from "../../src/engine/stateShape.ts";
@@ -53,14 +53,24 @@ const { Text } = require("react-native");
 
 const session = { user: { id: "u1", email: "a@b.com", app_metadata: { providers: ["email"] }, created_at: "2026-10-01" } };
 
-async function mount() {
+async function mount(userId = "u1") {
   await render(
-    <StateProvider userId="u1">
-      <Chrome session={session}><Text>THE APP</Text></Chrome>
+    <StateProvider userId={userId}>
+      <Chrome session={{ ...session, user: { ...session.user, id: userId } }}><Text>THE APP</Text></Chrome>
     </StateProvider>
   );
   // StateProvider blocks on the state load and the prefs read.
   await screen.findByText("THE APP");
+}
+
+/** Walk the six questions and press through the Done screen. */
+async function finishSetup(balance = "4000") {
+  await screen.findByText("What's your take-home pay?");
+  for (const _ of [0, 1, 2, 3]) await userEvent.press(screen.getByLabelText("Skip"));
+  await userEvent.type(await screen.findByLabelText("Current balance"), balance);
+  await userEvent.press(screen.getByLabelText("Continue"));
+  await userEvent.press(screen.getByLabelText("Finish"));
+  await userEvent.press(await screen.findByLabelText("Go to my budget"));
 }
 
 beforeEach(async () => {
@@ -136,6 +146,34 @@ test("...and the tour comes up once, after the FIRST setup", async () => {
   await userEvent.press(screen.getByLabelText("Finish"));
   await userEvent.press(await screen.findByLabelText("Go to my budget"));
 
+  expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
+});
+
+test("A NEW ACCOUNT ON A USED PHONE still gets setup, and then the tour", async () => {
+  // THE BUG, reported from the owner's phone on 2026-10-17: two
+  // brand-new accounts (+kbtest23, +kbtest84) landed straight on the
+  // Ledger's three-step guide — no setup, no tour. The dismissal
+  // written when the FIRST account on the phone finished was a bare
+  // device boolean, so it answered for every account after it.
+  //
+  // AsyncStorage is NOT cleared between the two mounts here, exactly
+  // as one phone's preference file is not cleared between two
+  // sign-ins. That sharing is the whole point of the test.
+  await mount("acct-a");
+  await finishSetup();
+  await waitFor(() => expect(mockSaved).toHaveLength(1));
+  expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
+  await cleanup();   // async: unmounting account A is awaited, like a sign-out
+
+  // Account B is brand new — its own settings say so — so the only
+  // thing that could turn setup off for it is the device's answer.
+  mockSaved.length = 0;
+  mockLoaded.state = blank;
+  await mount("acct-b");
+
+  expect(await screen.findByText("What's your take-home pay?")).toBeOnTheScreen();
+  await finishSetup("250");
+  await waitFor(() => expect(mockSaved).toHaveLength(1));
   expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
 });
 

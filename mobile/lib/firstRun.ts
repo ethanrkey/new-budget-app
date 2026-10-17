@@ -115,7 +115,10 @@ export function stepsRemaining(state: BudgetState): number {
  *
  * Dismissal is per device and deliberately not account data: it is a
  * statement about this screen on this phone, not a fact about the
- * budget. Same rule as every other preference here.
+ * budget. It is a statement about ONE ACCOUNT on this phone, though —
+ * the caller resolves it with dismissedBy (lib/prefs.ts), because a
+ * bare device boolean hid the guide from every account that signed in
+ * after the one that put it away.
  */
 export function showFirstRun(state: BudgetState, dismissed: boolean): boolean {
   return !dismissed && stepsRemaining(state) > 0;

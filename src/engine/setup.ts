@@ -73,9 +73,9 @@ export type SetupContribution = {
  * — `wipeToNewAccount` is `blankState()` precisely so the flags that
  * make an account feel used do not survive a wipe. A wiped account is
  * greeted as a new one on both clients. The phone has a per-device
- * `setupDismissed` alongside this, so Settings clears that too; a
- * preference saying "I closed the wizard" must not outlive the data
- * it was closed over.
+ * `setupDismissedBy` alongside this, so Settings clears this account's
+ * entry there too; a preference saying "I closed the wizard" must not
+ * outlive the data it was closed over.
  */
 export function markSetupSeen(state: BudgetState): BudgetState {
   return { ...state, settings: { ...state.settings, hasSeenOnboarding: true } };
