@@ -730,6 +730,14 @@ written here in the same sitting** — there is no other record of it.
      the phone. Every one of the 23 the 2026-10-15 sweep changed
      stays as it is — owner's call.
 
+  **AUDIT: 62 of the 71 scoped mutations ran before the cap, all
+  caught, no survivors.** Scoped against `ed74c2e` out of a list that
+  grew from 247 to 269. All 22 of the entries written FOR this batch
+  were among the 62 — confirmed by name against the run's output —
+  because a scoped run walks the list backwards. Two existing entries
+  pointed at lines this batch moved (the Dashboard tour stop, the
+  busy flag) and were repaired rather than dropped.
+
   **FIVE BROWSER DRIVES NOW**, because the web still has no renderer
   harness and this batch was mostly web: `drive_calendar.mjs` (28),
   `drive_setup.mjs` (21), `drive_demo_restore.mjs` (9),
