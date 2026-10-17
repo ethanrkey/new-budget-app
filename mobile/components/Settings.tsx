@@ -8,6 +8,7 @@ import { wipeToNewAccount } from "../../src/engine/mutate.ts";
 import type { Session } from "@supabase/supabase-js";
 import { fmtDate } from "../../src/shared/dates.ts";
 import { withoutDismissalBy } from "../lib/dismissal";
+import { buildLine, updateLine } from "../lib/version";
 
 // Everything the web header holds, behind ONE affordance.
 //
@@ -240,6 +241,15 @@ export default function Settings({
           )}
           {busyMsg ? <Text style={styles.err}>{busyMsg}</Text> : null}
         </View>
+
+        {/* WHICH COPY OF THE APP IS THIS? Two lines, because they are
+            two different answers and a tester reporting a bug needs
+            both: the binary came from TestFlight, the JS may have been
+            replaced over the air since. See lib/version.ts. */}
+        <View style={styles.footer}>
+          <Text style={styles.footText} accessibilityLabel={`Version. ${buildLine()}`}>{buildLine()}</Text>
+          <Text style={styles.footText} accessibilityLabel={`Update. ${updateLine()}`}>{updateLine()}</Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -271,6 +281,8 @@ const styles = StyleSheet.create({
   title: { color: T.text, fontSize: 18, fontWeight: "700" },
   done: { color: T.brass, fontSize: 15, fontWeight: "600" },
   body: { padding: 16, paddingBottom: 48, gap: 6 },
+  footer: { paddingTop: 18, paddingBottom: 8, gap: 2, alignItems: "center" },
+  footText: { color: T.faint, fontSize: 11 },
   sectionLabel: { color: T.faint, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.7, marginTop: 14, marginBottom: 4 },
   card: { backgroundColor: T.surface, borderRadius: 14, borderWidth: 1, borderColor: T.border, paddingHorizontal: 12 },
   row: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
