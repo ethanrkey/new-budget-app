@@ -512,8 +512,8 @@ const MUTATIONS = [
    "  return { amount: amt, cadence: row.cadence, start: row.start || today };",
    "  return { amount: amt, cadence: row.cadence, start: today };"],
   ["a debt row is asked for a first CONTRIBUTION", "components/Setup.tsx",
-   "                          label={account.group === \"debt\"\n                            ? COPY.contributions.startLabelDebt\n                            : COPY.contributions.startLabel}",
-   "                          label={COPY.contributions.startLabel}"],
+   "                              label={account.group === \"debt\"\n                                ? COPY.contributions.startLabelDebt\n                                : COPY.contributions.startLabel}",
+   "                              label={COPY.contributions.startLabel}"],
 
   ["TOTAL OUT loses the tint that separates it from the rows above",
    "app/(tabs)/budget.tsx",
@@ -603,8 +603,8 @@ const MUTATIONS = [
   // that adds back the testID it looks for, which tests the marker
   // and not the behavior. That test was deleted instead.
   ["the first-date row goes back to monthly only", "components/Setup.tsx",
-   "                        <DateRow\n                          label={account.group === \"debt\"\n                            ? COPY.contributions.startLabelDebt\n                            : COPY.contributions.startLabel}\n                          value={row.start}\n                          minimum={todayISO}\n                          onChange={(v) => setRow({ start: v })}\n                          accessibilityLabel={`${account.name} first contribution`}\n                        />\n",
-   "                        {row.cadence === \"monthly\" && (\n                        <DateRow\n                          label={account.group === \"debt\"\n                            ? COPY.contributions.startLabelDebt\n                            : COPY.contributions.startLabel}\n                          value={row.start}\n                          minimum={todayISO}\n                          onChange={(v) => setRow({ start: v })}\n                          accessibilityLabel={`${account.name} first contribution`}\n                        />\n                        )}\n"],
+   "                            <DateRow\n                              label={account.group === \"debt\"\n                                ? COPY.contributions.startLabelDebt\n                                : COPY.contributions.startLabel}\n                              value={row.start}\n                              minimum={todayISO}\n                              onChange={(v) => setRow({ start: v })}\n                              accessibilityLabel={`${account.name} first contribution`}\n                            />\n",
+   "                            {row.cadence === \"monthly\" && (\n                            <DateRow\n                              label={account.group === \"debt\"\n                                ? COPY.contributions.startLabelDebt\n                                : COPY.contributions.startLabel}\n                              value={row.start}\n                              minimum={todayISO}\n                              onChange={(v) => setRow({ start: v })}\n                              accessibilityLabel={`${account.name} first contribution`}\n                            />\n                            )}\n"],
 
   // ---- build 10's device pass ----------------------------------------
   //
@@ -689,7 +689,7 @@ const MUTATIONS = [
   // file.
   ["the Dashboard stop stops naming what is on the Dashboard",
    "../src/content/tour.ts",
-   "    body: \"Everything you have and everything you owe, on one screen: checking, savings, investments and debt, and what they come to together. Nothing here is projected — it's what's true today, built only from balances you've logged. Log them again next month and the same screen starts showing which way each one is going.\",",
+   "    body: \"Everything you have and everything you owe, on one screen: checking, savings, investments and debt, and what they come to together. Nothing here is projected — it's what's true today, built only from balances you've logged. Log them again whenever and over time the Dashboard screen will show you how these balances have been trending.\",",
    "    body: \"Not a forecast: what's actually true right now. Your net position, your checking balance, and each account's balance as you log it.\","],
 
   // Written AFTER the first build 10 run, which reported three tests
@@ -825,6 +825,175 @@ const MUTATIONS = [
    "lib/secureStorage.ts",
    "    if (!(await secureAvailable())) return AsyncStorage.getItem(key);",
    "    if (false) return AsyncStorage.getItem(key);"],
+
+  // ---- the 2026-10-17 OTA batch ---------------------------------------
+  //
+  // Nine items, and the first of them was a bug a device found: a
+  // device boolean answering an account question. Every entry here
+  // breaks one thing the batch's tests claim.
+
+  // 1. setup and the guide are decided by the ACCOUNT.
+  ["a device flag answers for every account again, which is the bug",
+   "lib/dismissal.ts",
+   "  return list.includes(userId);", "  return list.length > 0;"],
+  ["dismissing twice writes the account twice",
+   "lib/dismissal.ts",
+   "  return [...list.filter((id) => id !== userId), userId].slice(-DISMISSAL_CAP);",
+   "  return [...list, userId].slice(-DISMISSAL_CAP);"],
+  ["the dismissal list grows without bound",
+   "lib/dismissal.ts",
+   "  return [...list.filter((id) => id !== userId), userId].slice(-DISMISSAL_CAP);",
+   "  return [...list.filter((id) => id !== userId), userId];"],
+  ["a wipe clears the flow for every account on the phone",
+   "lib/dismissal.ts",
+   "  return list.filter((id) => id !== userId);", "  return [];"],
+  ["the Ledger's guide goes back to a device-wide answer",
+   "app/(tabs)/index.tsx",
+   "  const guide = showFirstRun(state!, dismissedBy(prefs.firstRunDismissedBy, userId));",
+   "  const guide = showFirstRun(state!, prefs.firstRunDismissedBy.length > 0);"],
+  ["old boolean preferences come back as lists that are not lists",
+   "lib/prefs.ts",
+   "  Array.isArray(v) ? v.filter((x): x is string => typeof x === \"string\") : [];",
+   "  (v as string[]) ?? [];"],
+
+  // 2. About and the tour are two rows.
+  ["Settings' tour row opens About instead of the tour",
+   "components/Chrome.tsx",
+   "              onStartTour={() => { setScreen(null); setTouring(true); }}",
+   "              onStartTour={() => setScreen(\"about\")}"],
+
+  // 3. the Ledger's date column.
+  ["the Ledger's column goes back to a full date",
+   "../src/shared/dates.ts",
+   "  return `${MONTH_NAMES[Number(m) - 1]!.slice(0, 3)} ${Number(d)}`;",
+   "  return `${m}/${d}/${iso.slice(0, 4)}`;"],
+  ["a single-digit day gets its leading zero back",
+   "../src/shared/dates.ts",
+   "  return `${MONTH_NAMES[Number(m) - 1]!.slice(0, 3)} ${Number(d)}`;",
+   "  return `${MONTH_NAMES[Number(m) - 1]!.slice(0, 3)} ${d}`;"],
+
+  // 4. the calendar, rebuilt around the running balance.
+  ["a calendar cell shows the balance BEFORE the day instead of after",
+   "../src/engine/calendar.ts",
+   "    while (i < sorted.length && sorted[i]!.date <= date) { running = sorted[i]!.balance; i++; }",
+   "    while (i < sorted.length && sorted[i]!.date < date) { running = sorted[i]!.balance; i++; }"],
+  ["the forecast is drawn over days the anchor already accounts for",
+   "../src/engine/calendar.ts",
+   "    const dim = date < anchor || date > horizon;",
+   "    const dim = date > horizon;"],
+  ["the forecast is drawn past the end of the Ledger window",
+   "../src/engine/calendar.ts",
+   "    const dim = date < anchor || date > horizon;",
+   "    const dim = date < anchor;"],
+  ["today is derived from the balance's as-of date",
+   "../src/engine/calendar.ts",
+   "      isToday: date === today,", "      isToday: date === anchor,"],
+  ["the month list drops today when the ledger starts later",
+   "../src/engine/calendar.ts",
+   "  let last = todayKey;", "  let last = \"0000-00\";"],
+  ["the month list skips the months before today",
+   "../src/engine/calendar.ts",
+   "  let first = monthKeyOf(anchor) < todayKey ? monthKeyOf(anchor) : todayKey;",
+   "  let first = todayKey;"],
+  ["a busy day is marked by how many rows it has, not that it has any",
+   "../src/engine/calendar.ts",
+   "      busy: byDate.has(date),", "      busy: (byDate.get(date)?.length ?? 0) > 1,"],
+  ["the cell number bands before it rounds",
+   "../src/engine/calendar.ts",
+   "  const one = Math.round(x * 10) / 10;\n  if (one < 100) return one.toFixed(1);",
+   "  const one = x;\n  if (one < 100) return one.toFixed(1);"],
+  ["the phone's cell grows a dollar sign and cents",
+   "../src/engine/calendar.ts",
+   "  if (v < 10_000) return sign + v.toLocaleString(\"en-US\");\n  const k = shorten(v / 1000);",
+   "  if (true) return cellAmountFull(n);\n  const k = shorten(v / 1000);"],
+  ["the phone's calendar opens on the ledger's first month, not today",
+   "components/CalendarView.tsx",
+   "  const [monthKey, setMonthKey] = useState(today.slice(0, 7));\n  const [picked, setPicked] = useState<string>(today);",
+   "  const [monthKey, setMonthKey] = useState(months[0] ?? today.slice(0, 7));\n  const [picked, setPicked] = useState<string>(\"\");"],
+  ["the phone's calendar takes today from the anchor",
+   "components/CalendarView.tsx",
+   "  const today = new Date().toISOString().slice(0, 10);",
+   "  const today = anchor;"],
+  ["the day detail stops leading with the balance",
+   "components/CalendarView.tsx",
+   "          {detail.balance != null ? (", "          {false ? ("],
+
+  // 5. setup: a bill that varies, and On my payday.
+  ["a bill marked as varying is filed as a fixed one",
+   "../src/engine/setup.ts",
+   "      ...(b.varies ? { variable: true } : {}),", "      // mutated"],
+  ["every bill is filed as one that varies",
+   "../src/engine/setup.ts",
+   "      ...(b.varies ? { variable: true } : {}),", "      variable: true,"],
+  ["the varies box starts ticked",
+   "../src/engine/setup.ts",
+   "  return { name: \"\", amount: \"\", day: defaultBillDay(today), varies: false };",
+   "  return { name: \"\", amount: \"\", day: defaultBillDay(today), varies: true };"],
+  ["On my payday is ignored, and the row keeps its own answers",
+   "../src/engine/setup.ts",
+   "  if (row.onPayday && paycheck) {", "  if (false && paycheck) {"],
+  ["On my payday fires with no paycheck behind it",
+   "../src/engine/setup.ts",
+   "  if (row.onPayday && paycheck) {\n    return { amount: amt, cadence: paycheck.cadence, start: paycheck.next };",
+   "  if (row.onPayday) {\n    return { amount: amt, cadence: paycheck?.cadence ?? \"monthly\", start: paycheck?.next ?? today };"],
+  ["On my payday is offered with no paycheck entered",
+   "../src/engine/setup.ts",
+   "  if (positive(amount) == null) return null;\n  return { cadence, next: payday >= today ? payday : today };",
+   "  return { cadence, next: payday >= today ? payday : today };"],
+  ["a payday already gone is offered as the next one",
+   "../src/engine/setup.ts",
+   "  return { cadence, next: payday >= today ? payday : today };",
+   "  return { cadence, next: payday };"],
+  ["ticking On my payday leaves the two controls it answered on screen",
+   "components/Setup.tsx",
+   "                        {!(paycheck && row.onPayday) && (",
+   "                        {true && ("],
+  ["the varies box stops reaching its own row",
+   "components/Setup.tsx",
+   "                        onChange={(v) => set(\"bills\", d.bills.map((r, j) => (j === idx ? { ...r, varies: v } : r)))}",
+   "                        onChange={(v) => set(\"bills\", d.bills.map((r) => ({ ...r, varies: v })))}"],
+  ["the accounts step goes back to a title you have to already understand",
+   "../src/content/setup.ts",
+   "    title: \"What investments, savings accounts, and debts do you want to track?\",",
+   "    title: \"What else do you track?\","],
+
+  // 6. the tour's two sentences.
+  ["the Ledger stop stops asking for the one-offs setup cannot make",
+   "../src/content/tour.ts",
+   " After you finish setup, add any one-off transactions you know are coming up — and keep adding and updating them over time. The forecast is only as accurate as what's in it.\",",
+   "\","],
+
+  // 7. the account card's stacked buttons.
+  ["Log loses the one accent on the card",
+   "app/(tabs)/dashboard.tsx",
+   "  logPrimary: { borderColor: T.brass },", "  logPrimary: { borderColor: T.border },"],
+  ["Log's label loses it too",
+   "app/(tabs)/dashboard.tsx",
+   "  logTextPrimary: { color: T.brass },", "  logTextPrimary: { color: T.dim },"],
+  ["Edit goes back beside Log instead of under it",
+   "app/(tabs)/dashboard.tsx",
+   "  cardActions: { alignSelf: \"flex-start\", alignItems: \"stretch\", gap: 6 },",
+   "  cardActions: { flexDirection: \"row\", alignSelf: \"flex-start\", gap: 6 },"],
+
+  // 8. the Planned spending caption.
+  ["the caption goes back to saying what it is not",
+   "../src/content/spending.ts",
+   "    `Projected spending based on the transactions you've entered from ${from} – ${to}.`,",
+   "    `Projected from your rules for ${from} – ${to} — not what you've logged. Income is excluded.`,"],
+
+  // The version footer, which is how a tester says which JS they have.
+  ["an over-the-air update claims to be the bundled one",
+   "lib/version.ts",
+   "  if (Updates.isEmbeddedLaunch) return \"Update: bundled with this build\";",
+   "  if (true) return \"Update: bundled with this build\";"],
+  ["the bundled JS reports the embedded bundle's id as an update",
+   "lib/version.ts",
+   "  if (Updates.isEmbeddedLaunch) return \"Update: bundled with this build\";",
+   "  // mutated"],
+  ["the build line stops naming the runtime an update has to match",
+   "lib/version.ts",
+   "  const runtime = (Updates.runtimeVersion ?? \"\").slice(0, 8) || \"—\";",
+   "  const runtime = \"—\";"],
 ];
 
 const killedBy = new Map();
@@ -884,8 +1053,17 @@ if (arg !== -1) {
     const repo = relative(resolve(process.cwd(), ".."), abs);
     return changed.has(repo);
   };
-  selected = MUTATIONS.filter(([, file]) => inDiff(file));
-  console.log(`${selected.length} of ${MUTATIONS.length} mutations touch files changed since ${base}\n`);
+  // NEWEST FIRST, and that is about the cap rather than about taste.
+  // The list is append-ordered, so the entries written for the batch
+  // being audited are at the END of it — and a run that hits the
+  // thirty-minute cap stops where it is. Running in list order means
+  // the cap cuts exactly the mutations that have never been proved,
+  // and keeps the ones that have passed every run for a month. So a
+  // scoped run walks it backwards. A full release run does not: it
+  // has to finish anyway, and its order is the file's.
+  selected = MUTATIONS.filter(([, file]) => inDiff(file)).reverse();
+  console.log(`${selected.length} of ${MUTATIONS.length} mutations touch files changed since ${base}`);
+  console.log("newest first, so the cap cuts the oldest rather than the newest\n");
   if (selected.length === 0) {
     console.log("Nothing to break. Either the batch changed no file a mutation points at —");
     console.log("which means the batch's new behavior has no mutation yet — or the base is wrong.");
