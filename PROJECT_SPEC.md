@@ -488,10 +488,23 @@ before this is on anyone else's phone for real.
    stops looking right, the cheaper half is to stash a DIFF rather
    than the whole state.**
 
-3. **Device preferences (`budget-app-prefs-v1`, AsyncStorage) — five
-   booleans.** Two panels collapsed, the guide dismissed, the wizard
-   dismissed, and whether the last Apple sign-in failed to file its
-   token. Nothing financial, nothing identifying.
+3. **Device preferences (`budget-app-prefs-v1`, AsyncStorage) — three
+   booleans and two lists of user ids.** Two panels collapsed, whether
+   the last Apple sign-in failed to file its token, and — since
+   2026-10-17 — WHO on this phone has put the new-account guide away
+   and who has closed the setup wizard. Nothing financial. The user
+   ids are the only identifying thing here and they are opaque
+   Supabase uuids, already on the device in the session.
+
+   **THE TWO LISTS WERE BOOLEANS AND THAT WAS A BUG** — the first
+   account to finish setup on a phone turned the flow off for every
+   account after it. A device flag answering an account question says
+   "this phone has done setup", which is not a thing a phone can do.
+   The rule for anything added here: WHO SEES WHICH FLOW IS AN
+   ACCOUNT QUESTION (`hasSeenOnboarding`, `hasSeenTour`,
+   `isNewAccount`, all synced settings); a device copy exists only for
+   the offline case and is keyed by the account. See
+   `mobile/lib/dismissal.ts`.
 
    There is **no on-device cache of the budget itself**: `loadState`
    reads Supabase on every launch and the phone is read-only offline.
@@ -618,6 +631,113 @@ written here in the same sitting** — there is no other record of it.
   sheet and names the app on the phone's too.
 
 **App Store Connect / TestFlight**
+
+- **OTA UPDATE 1, 2026-10-17, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — a device pass on
+  build 13, shipped over the air rather than as a binary because the
+  free build allowance is spent and nothing in it is native. **THE
+  DEFAULT FOR EVERY BATCH FROM HERE IS OTA; a new binary only when
+  native code requires it.** The fingerprint was generated before and
+  after the work and is unchanged, which is the precondition — an
+  update published against a different runtime reaches nobody.
+
+  **HOW TO TELL WHICH COPY YOU ARE RUNNING**, on the phone: Settings,
+  at the very bottom. Two lines, because they are two questions. The
+  first names the version and the runtime (`Key Budget 1.0.0 · runtime
+  78c21cd1`), which is the binary. The second is the JavaScript:
+  "bundled with this build" means nothing has been applied over the
+  air, and otherwise it is the update's date and the first eight
+  characters of its id. `isEmbeddedLaunch` rather than the embedded
+  bundle's own id, which is stable across every install of a build
+  and would read as an update where none had happened. See
+  `mobile/lib/version.ts`.
+
+  1. **A NEW ACCOUNT ON A USED PHONE GOT NEITHER SETUP NOR THE TOUR.**
+     Two brand-new accounts in a row (+kbtest23, +kbtest84) landed on
+     the Ledger's three-step guide. `shouldRunSetup` asks three
+     questions and the first one was wrong: two are account data
+     (`hasSeenOnboarding`, `isNewAccount`) and the third,
+     `prefs.setupDismissed`, was a bare DEVICE boolean — so the first
+     account to finish setup on a phone wrote "setup is done" for the
+     phone and every account after it skipped the flow, the tour
+     along with it. `firstRunDismissed` had the same shape.
+     **A phone cannot have done setup; an account can.** Both
+     preferences are lists of user ids now, and the three lines of
+     list arithmetic live in `mobile/lib/dismissal.ts` — a pure module
+     with no imports, so the plain-node harness and the mutation audit
+     can both reach them, which `lib/prefs.ts` cannot (AsyncStorage).
+     Capped at twelve, because it is the one preference that grows.
+     **The old booleans are dropped, not migrated**: migrating
+     `setupDismissed: true` would have to mean "every account on this
+     phone", which is the bug. It costs at most one person — one who
+     skipped setup while offline and has not been online since —
+     being asked once more. **The web was CHECKED, not assumed**: its
+     only device flags are the hero fold, the debt fold, the calendar
+     toggle and the spending-mix fold, and both of its gates are
+     account settings.
+  2. **Settings splits "About & tour" into two rows.** One row that
+     named two things and did one of them; the tour was a button
+     inside About, two taps behind a label that promised it in one.
+     About keeps its own button.
+  3. **The Ledger's date column says "Oct 18" again.** The 2026-10-15
+     sweep was asked to fix raw ISO dates and read it as every date
+     everywhere — a column of full dates under a header that has just
+     said "October 2026". `fmtMonthDay` joins `fmtDate` and `fmtDay`
+     in `src/shared/dates.ts` rather than returning as a ninth private
+     formatter, built from the string like its siblings. **The rest of
+     the sweep's non-ISO changes are listed for the owner to pick
+     from and were NOT touched** — see the report in the session, and
+     the note on `prettyDate` in `src/components/SpendingMix.jsx`,
+     which is the one the sweep MISSED: the Planned spending caption
+     says "Oct 17, 2026" on the web and "10/17/2026" on the phone.
+  4. **THE CALENDAR IS REBUILT AROUND THE RUNNING BALANCE.** See the
+     Ledger section for the whole of it. Net is gone from both
+     clients; a cell is the day, one neutral dot, and the projected
+     end-of-day checking balance; the detail panel leads with
+     "Balance after:". Today is the device's date and has its own
+     mark, days outside the forecast are dimmed, and the phone's cell
+     number was measured rather than guessed.
+  5. **Setup can say a bill varies**, which is the Spending tab's
+     door and the thing the flow could never say — so electric, the
+     one bill everybody has that moves, was the one bill nobody could
+     track. Contributions get an "On my payday" opt-in, offered only
+     when a paycheck was entered, which COPIES the paycheck's cadence
+     and next payday rather than linking to it: a hidden dependency
+     between two rules would be something the app knows and the
+     Ledger does not show. The accounts step names the three things
+     it is asking about. The phone got its first checkbox, drawn
+     rather than pulled in — RN has none, the community package is a
+     native module, and `Switch` is the wrong control.
+  6. **Two tour sentences in the owner's own words** — the Dashboard
+     stop's last line (the draft flagged for the voice pass when it
+     was written) and an addition to the Ledger's, which says the
+     thing the flow cannot: setup makes the rules, the one-offs are
+     on you.
+  7. **Edit is stacked under Log on the phone's account cards**, and
+     Log is brass. Side by side in the header left neither of them
+     room next to a long account name. Nothing else on the card
+     borrowed the accent.
+  8. **The Planned spending caption is one claim**, not three, and it
+     is one shared string now (`src/content/spending.ts`) rather than
+     the same sentence written out per client.
+  9. **A demo account for the App Store screenshots**,
+     `scripts/demo_account.mjs` → a gitignored `demo-account.json`
+     that Import → Restore backup takes. A script and not a committed
+     file because every date in it is relative to the day it runs.
+     Built on `scripts/fixture.mjs` so there is one invented account
+     to keep plausible, with six months of monthly readings and
+     investments that FALL as well as rise — a retirement account
+     that has never had a red month is what makes a demo look staged.
+     Verified through the app's own file picker in Chrome
+     (`scripts/drive_demo_restore.mjs`), not by the generator checking
+     its own homework.
+
+  **THE WEB HAS NO RENDERER HARNESS**, which this batch made expensive
+  — six of the nine items are shared copy with a web half nobody was
+  watching. Three driver scripts now exist and are run by hand when
+  the thing they cover changes: `scripts/drive_calendar.mjs` (12
+  checks), `scripts/drive_setup.mjs` (21), `scripts/drive_demo_restore.mjs`
+  (9). They start Vite and Chrome, so they are not in `npm test`.
 
 - **1.0.0 (13), 2026-10-16** — a device pass on build 12. Six items.
   Build 12 confirmed good on a device: still signed in after the
@@ -2120,6 +2240,34 @@ resolve.
    the diff, which is exactly the habit this guard exists to prevent. Only
    `new Date()` with no arguments is frozen, so every date string in the
    fixtures still parses normally.
+
+8. **A BATCH SHIPS AS AN OTA UPDATE, NOT A BINARY** — owner's call,
+   2026-10-17, and the default for everything from here. A new build
+   is for a change that needs one: a native module, an app.json
+   plugin, an icon, a permission, a dependency with native code. The
+   free EAS build allowance is finite and a review cycle costs days;
+   a JS-only change reaches every phone on the same runtime in
+   minutes.
+
+   **GENERATE THE FINGERPRINT BEFORE AND AFTER THE WORK, and compare
+   them.** `npx expo-updates fingerprint:generate --platform ios`, run
+   from `mobile/`. The runtime version is what pairs an update with
+   the builds that can run it, so an update published against a
+   runtime nothing is installed on reaches nobody and says nothing
+   about it. **If an item would move the fingerprint, stop and say
+   which one before doing it** — that is the item that turns the
+   batch into a build.
+
+   Publish with `npx eas update --branch production --message "…"`.
+   The channel is `production` (eas.json), and build 13 and later are
+   on runtime `78c21cd112c8724cfb309601209499bcef5c6f02`.
+
+   **THE PHONE SAYS WHICH COPY IT IS RUNNING**, at the foot of
+   Settings: the version and runtime on one line, and the JS on the
+   next — "bundled with this build" until an update is applied, then
+   its date and the first eight characters of its id. Without that,
+   "is the fix on my phone yet" has no answer. See
+   `mobile/lib/version.ts`.
 
 ## 10. Roadmap
 
