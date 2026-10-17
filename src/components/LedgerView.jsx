@@ -6,7 +6,7 @@ import InfoTip from "./InfoTip.jsx";
 import SpendingMix from "./SpendingMix.jsx";
 import CalendarView from "./CalendarView.jsx";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
-import { fmtDate } from "../shared/dates.ts";
+import { fmtMonthDay } from "../shared/dates.ts";
 
 const money = (n) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -304,8 +304,11 @@ function FragmentGroup({ group, sortedCats, visibleIds, colCount, selectMode, se
                 />
               </td>
             )}
+            {/* "Oct 18", not "10/18/2026": the month header above this
+                group already says October 2026, and a column of
+                full dates under it repeats it on every line. */}
             <td className="py-2 sm:py-1.5 pr-3 text-gray-500 whitespace-nowrap">
-              {fmtDate(r.date)}
+              {fmtMonthDay(r.date)}
             </td>
             <td className="py-2 sm:py-1.5 pr-3">
               <button

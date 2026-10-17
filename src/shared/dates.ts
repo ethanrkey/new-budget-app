@@ -10,7 +10,10 @@
 // rows list said "2026-10-21", the investment history said
 // "2026-09-30".
 //
-// So: MM/DD/YYYY, from here, everywhere a date is read by a person.
+// So: MM/DD/YYYY, from here, everywhere a date is read by a person —
+// except where a heading has already said the month, which is what
+// fmtMonthDay is for. See its note; the Ledger's column is the one
+// place that qualifies, and the 2026-10-15 sweep took it too.
 //
 // NOT HERE, deliberately:
 //
@@ -42,6 +45,29 @@ export function fmtDay(iso: string | null | undefined): string {
   if (!isISO(iso)) return iso ?? "";
   const [, m, d] = iso.slice(0, 10).split("-");
   return `${m}/${d}`;
+}
+
+/**
+ * The month and the day, as a person says them: Oct 18.
+ *
+ * ONLY where a grouping heading has already established the year and
+ * the dates are read as a COLUMN — the Ledger's list, whose month
+ * headers say "October 2026" above every row they contain. Twelve
+ * MM/DD/YYYYs stacked under a heading that already says the month is
+ * three redundant characters a line, and the 2026-10-15 sweep put
+ * them there: the owner asked for raw ISO dates to be fixed and the
+ * sweep read that as every date everywhere.
+ *
+ * Built from the string, never from `new Date(iso)`. The formatter
+ * this replaces parsed in local time while two of its siblings parsed
+ * in UTC, which is how one app showed the same date a day apart on
+ * two screens.
+ */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function fmtMonthDay(iso: string | null | undefined): string {
+  if (!isISO(iso)) return iso ?? "";
+  const [, m, d] = iso.slice(0, 10).split("-");
+  return `${MONTHS[Number(m) - 1]} ${Number(d)}`;
 }
 
 /**

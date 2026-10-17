@@ -5,7 +5,7 @@
 // There were eight private formatters and, wherever none of them was
 // called, the raw ISO string went to the screen — the phone's top bar
 // said "verified 2026-10-14". These checks are what stops a ninth.
-import { fmtDate, fmtDay } from "../src/shared/dates.ts";
+import { fmtDate, fmtDay, fmtMonthDay } from "../src/shared/dates.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -39,6 +39,22 @@ eq("so is an empty string", fmtDate(""), "");
 // row overlap into a smear and the range already says the year.
 eq("an axis tick drops the year", fmtDay("2026-10-14"), "10/14");
 eq("...and is tolerant in the same way", fmtDay("never"), "never");
+
+// fmtMonthDay is for a column under a heading that already says the
+// month — the Ledger's list, and nothing else. The 2026-10-15 sweep
+// took it to MM/DD/YYYY, which repeated "October 2026" on every line
+// under a heading that had just said it.
+eq("the Ledger's column drops the year AND pads nothing",
+  fmtMonthDay("2026-10-18"), "Oct 18");
+eq("a single-digit day has no leading zero", fmtMonthDay("2026-03-07"), "Mar 7");
+eq("January is the first month, not the zeroth", fmtMonthDay("2026-01-01"), "Jan 1");
+eq("and December the last", fmtMonthDay("2026-12-31"), "Dec 31");
+// Built from the string, never parsed into a Date: the formatter this
+// replaces parsed in local time while two of its siblings parsed in
+// UTC, which is how the same date showed a day apart on two screens.
+eq("a date is not an instant here either", fmtMonthDay("2026-01-01T00:30:00Z"), "Jan 1");
+eq("...and is tolerant like the rest", fmtMonthDay("never"), "never");
+eq("null is empty", fmtMonthDay(null), "");
 
 if (checks < 10) {
   console.log(`FAIL  this suite ran only ${checks} checks — truncated, or short-circuited before the end`);
