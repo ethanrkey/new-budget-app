@@ -732,6 +732,28 @@ written here in the same sitting** — there is no other record of it.
      (`scripts/drive_demo_restore.mjs`), not by the generator checking
      its own homework.
 
+  **AUDIT: 64 of the 107 scoped mutations ran before the thirty-minute
+  cap, all caught, no survivors.** Scoped against `08075fa` (build
+  13's last commit) out of a list that grew from 208 to 247. All 39 of
+  the entries written FOR this batch were among the 64 — confirmed by
+  name against the run's output rather than assumed — because a scoped
+  run walks the list backwards now. That change is the batch's other
+  finding: the list is append-ordered, so a batch's own entries are at
+  the end of it, and in list order the cap was cutting exactly the
+  mutations that had never been proved while keeping the ones that
+  have passed every run for a month.
+
+  The preflight also refused to start twice, both times correctly.
+  Three existing mutations pointed at code this batch moved (the
+  contributions date row, twice, and the Dashboard tour stop), and
+  the new code had no mutations at all — `dismissal.ts`,
+  `calendar.ts`, `version.ts`, `spending.ts` and both calendar
+  components would have been audited by nothing while the run
+  reported a clean sweep. **A diff-scoped run only picks entries whose
+  FILE changed, so a batch that adds files adds no coverage unless
+  somebody writes the entries.** That is the standing cost of scoping
+  and it is worth restating every time.
+
   **THE WEB HAS NO RENDERER HARNESS**, which this batch made expensive
   — six of the nine items are shared copy with a web half nobody was
   watching. Three driver scripts now exist and are run by hand when
