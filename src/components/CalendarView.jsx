@@ -37,8 +37,18 @@ import { fmtDate, fmtLongDay, fmtMonthYear } from "../shared/dates.ts";
 // three times the width and was mostly empty, so it also lists the
 // day's first three items by name. The phone's 49pt cell could not
 // hold a name and does not try.
+//
+// PAST DAYS SHOW LOGGED HISTORY AND NOTHING ELSE. The days before the
+// anchor could be filled by running the rules backwards; the result
+// would be fiction. A rule says what is supposed to happen, the past
+// is what did, and the only honest thing to put in a past cell is a
+// balance the user actually recorded. It wears a tag saying so.
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const ITEM_CAP = 3;
+
+// FOUR, not three. At three a day with four items spent a line saying
+// "+1 more" instead of just showing the fourth — strictly less
+// information in the same room.
+const ITEM_CAP = 4;
 
 export default function CalendarView({ state, ledger, trackerCategories = [], onEditItem }) {
   const today = todayISO();
@@ -46,9 +56,17 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
   const anchor = account.balanceAsOf;
   const horizon = ledgerHorizonOf(state);
 
+  // The checking account's own logged readings — real history, and
+  // the only thing a past cell is allowed to show. Memoized because
+  // `?? []` is a new array every render, which would rebuild the
+  // whole month grid on each one.
+  const snapshots = useMemo(
+    () => state.accountSnapshots?.[account.id] ?? [],
+    [state.accountSnapshots, account.id],
+  );
   const months = useMemo(
-    () => calendarMonths(ledger.rows, anchor, today),
-    [ledger.rows, anchor, today],
+    () => calendarMonths(ledger.rows, anchor, today, snapshots),
+    [ledger.rows, anchor, today, snapshots],
   );
   // OPENS ON TODAY, AND ON TODAY SELECTED. The old version opened on
   // whichever month the ledger's first row fell in, with nothing
@@ -58,8 +76,11 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
   const [selected, setSelected] = useState(today);
 
   const month = useMemo(
-    () => buildCalendarMonth(monthKey, ledger.rows, account.balance, anchor, today, horizon),
-    [monthKey, ledger.rows, account.balance, anchor, today, horizon],
+    () => buildCalendarMonth({
+      key: monthKey, rows: ledger.rows, startBalance: account.balance,
+      anchor, today, horizon, snapshots,
+    }),
+    [monthKey, ledger.rows, account.balance, anchor, today, horizon, snapshots],
   );
   const byDate = useMemo(() => {
     const m = new Map();
@@ -146,13 +167,27 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                 {cell.hasOut && <span className="h-1.5 w-1.5 rounded-full bg-expense shrink-0" />}
                 {cell.hasIn && <span className="h-1.5 w-1.5 rounded-full bg-income shrink-0" />}
               </div>
-              {/* The number you came for, so it is the one in ink.
-                  Dimmer on a quiet day, where it is carried over from
-                  the last day that moved. */}
+              {/* The number you came for, so it is the one in ink —
+                  on every day it exists, busy or quiet. It was dimmer
+                  on quiet days for one round and that read as two
+                  kinds of balance; the dots and the +/- line are what
+                  tell a quiet day from a busy one. */}
               {cell.balance != null && (
-                <div className={`text-[11px] sm:text-xs tabular-nums leading-none font-medium ${
-                  cell.busy ? "text-gray-900 dark:text-gray-100" : "text-gray-400 dark:text-gray-500"}`}>
+                <div className="text-[11px] sm:text-xs tabular-nums leading-none font-medium text-gray-900 dark:text-gray-100">
                   {cellAmountFull(cell.balance)}
+                </div>
+              )}
+              {/* A past day the user recorded a balance on. Tagged,
+                  because a fact and a projection must not look the
+                  same. */}
+              {cell.balance == null && cell.logged != null && (
+                <div className="leading-none">
+                  <div className="text-[11px] sm:text-xs tabular-nums font-medium text-gray-900 dark:text-gray-100">
+                    {cellAmountFull(cell.logged)}
+                  </div>
+                  <div className="mt-0.5 text-[9px] uppercase tracking-wide text-gray-400">
+                    {COPY.loggedTag}
+                  </div>
                 </div>
               )}
               {cell.net != null && (
@@ -202,6 +237,7 @@ function ariaFor(cell) {
   const parts = [fmtLongDay(cell.date)];
   if (cell.isToday) parts.push("today");
   if (cell.balance != null) parts.push(`${COPY.balanceAfter} ${cellAmountFull(cell.balance)}`);
+  else if (cell.logged != null) parts.push(`${COPY.loggedBalance} ${cellAmountFull(cell.logged)}`);
   if (cell.net != null) parts.push(`${cell.net < 0 ? "down" : "up"} ${cellAmountFull(Math.abs(cell.net))}`);
   if (cell.rows.length) {
     parts.push(`${cell.rows.length} transaction${cell.rows.length === 1 ? "" : "s"}`);
@@ -226,6 +262,13 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
           <span className="text-xs text-gray-500">{COPY.balanceAfter}</span>{" "}
           <span className="text-lg font-semibold">{money(cell.balance)}</span>
         </p>
+      ) : cell.logged != null ? (
+        // A DIFFERENT SENTENCE, not the same one about a different
+        // number: this is what was recorded, not what is projected.
+        <p className="mt-1 mb-2 tabular-nums">
+          <span className="text-xs text-gray-500">{COPY.loggedBalance}</span>{" "}
+          <span className="text-lg font-semibold">{money(cell.logged)}</span>
+        </p>
       ) : (
         <p className="mt-1 mb-2 text-xs text-gray-400">
           {cell.date < anchor ? COPY.beforeAnchor(fmtDate(anchor)) : COPY.pastHorizon}
@@ -233,7 +276,9 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
       )}
 
       {cell.rows.length === 0 ? (
-        <p className="text-xs text-gray-400">{COPY.quiet}</p>
+        <p className="text-xs text-gray-400">
+          {cell.outsideForecast ? "" : COPY.quiet}
+        </p>
       ) : (
         <ul className="space-y-1">
           {cell.rows.map((r) => (

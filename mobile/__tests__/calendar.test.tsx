@@ -29,9 +29,18 @@ const BILL_DAY = shift(today, 2);
 const PAY_DAY = shift(today, 4);
 const BOTH_DAY = shift(today, 6);
 
+// Real logged history: one reading a week before the anchor, in the
+// same month so a single grid holds both halves.
+const LOGGED_DAY = shift(ANCHOR, -3);
 const mockState = normalize({
   settings: { budgetHorizon: HORIZON, ledgerHorizon: HORIZON },
   accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 4000, balanceAsOf: ANCHOR, order: 0 }],
+  accountSnapshots: {
+    checking: [
+      { id: "h1", date: LOGGED_DAY, amount: 2750 },
+      { id: "h2", date: ANCHOR, amount: 4000 },
+    ],
+  },
   trackerCategories: [],
   recurring: [],
   oneoffs: [
@@ -112,8 +121,45 @@ test("a day with something on it shows the balance after it, and names it", asyn
   expect(screen.getByText("$3,850.00")).toBeOnTheScreen();
 });
 
+test("a past day the user logged a balance on shows what they logged", async () => {
+  // REAL HISTORY AND NOTHING ELSE. The days before the anchor could
+  // be filled by running the rules backwards; the result would be
+  // fiction, and this app does not show inferred history.
+  await openCalendar();
+  if (LOGGED_DAY.slice(0, 7) !== today.slice(0, 7)) {
+    await userEvent.press(screen.getByLabelText("Previous month"));
+  }
+  const cell = screen.getByLabelText(new RegExp(`^${fmtLongDay(LOGGED_DAY)}`));
+  // Tagged in the cell, so a fact and a projection never look alike.
+  expect(within(cell).getByText(CALENDAR_COPY.loggedTag)).toBeOnTheScreen();
+  expect(within(cell).getByText("2,750")).toBeOnTheScreen();
+  // ...and said in words, not only by the tag.
+  expect(cell.props.accessibilityLabel).toContain(CALENDAR_COPY.loggedBalance);
+  expect(cell.props.accessibilityLabel).not.toContain(CALENDAR_COPY.balanceAfter);
+
+  await userEvent.press(cell);
+  expect(screen.getByText(CALENDAR_COPY.loggedBalance)).toBeOnTheScreen();
+  expect(screen.getByText("$2,750.00")).toBeOnTheScreen();
+  // The panel must not call it a forecast.
+  expect(screen.queryByText(CALENDAR_COPY.balanceAfter)).toBeNull();
+});
+
+test("...and a past day with no reading stays blank", async () => {
+  await openCalendar();
+  const blank = shift(LOGGED_DAY, -1);
+  if (blank.slice(0, 7) !== today.slice(0, 7)) {
+    await userEvent.press(screen.getByLabelText("Previous month"));
+  }
+  const cell = screen.getByLabelText(new RegExp(`^${fmtLongDay(blank)}`));
+  expect(within(cell).queryByText(CALENDAR_COPY.loggedTag)).toBeNull();
+  expect(cell.props.accessibilityLabel).not.toContain(CALENDAR_COPY.loggedBalance);
+  expect(cell.props.accessibilityLabel).not.toContain(CALENDAR_COPY.balanceAfter);
+});
+
 test("a day before the as-of date carries no forecast, and says why", async () => {
   await openCalendar();
+  // A day with nothing logged on it — the one next to the reading
+  // would show the reading.
   const before = shift(ANCHOR, -1);
   // Only reachable if it is in the same month; when the anchor is at
   // the very start of a month the previous day is on the last grid,
@@ -179,7 +225,7 @@ test("a cell colors its dots by what moved, and says so in words too", async () 
   expect(cellFor(today).props.accessibilityLabel).not.toContain("money out");
 });
 
-test("the balance is the bright number and the day is the muted one", async () => {
+test("every balance is the bright number, and the day is the muted one", async () => {
   await openCalendar();
   const { T } = require("../lib/theme");
   const flat = (style: unknown): Record<string, unknown> =>
@@ -196,11 +242,13 @@ test("the balance is the bright number and the day is the muted one", async () =
   expect(flat(getAllByText(String(Number(BILL_DAY.slice(8))))[0]!.props.style).color)
     .not.toBe(T.text);
 
-  // A QUIET DAY'S BALANCE IS DIMMER, because it is carried over from
-  // the last day that moved rather than produced by this one.
+  // EVERY BALANCE IS IN INK, busy day or quiet. It was dimmer on
+  // quiet days for one round and that read as two kinds of balance;
+  // the dots and the +/- line are what tell them apart.
   const quietDay = shift(BILL_DAY, 1);
   const quiet = screen.getByLabelText(new RegExp(`^${fmtLongDay(quietDay)}`));
-  expect(flat(within(quiet).getAllByText("3,850")[0]!.props.style).color).toBe(T.dim);
+  expect(flat(within(quiet).getAllByText("3,850")[0]!.props.style).color).toBe(T.text);
+  expect(within(quiet).queryByText(/^[+\u2212]/)).toBeNull();
 });
 
 test("a day that moves the balance says by how much, under it", async () => {

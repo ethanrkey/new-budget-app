@@ -52,7 +52,19 @@ export default function CalendarView({
   // on the 17th.
   const today = new Date().toISOString().slice(0, 10);
 
-  const months = useMemo(() => calendarMonths(rows, anchor, today), [rows, anchor, today]);
+  // The checking account's own logged readings — real history, and
+  // the only thing a past cell is allowed to show. The days before
+  // the anchor could be filled by running the rules backwards; the
+  // result would be fiction. A rule says what is supposed to happen,
+  // the past is what did.
+  const snapshots = useMemo(
+    () => state.accountSnapshots?.[account.id] ?? [],
+    [state.accountSnapshots, account.id],
+  );
+  const months = useMemo(
+    () => calendarMonths(rows, anchor, today, snapshots),
+    [rows, anchor, today, snapshots],
+  );
   // Opens on today, with today picked — the old version opened on the
   // month the first row fell in, with nothing picked, so the first
   // thing it showed was a grid you had to navigate before it said
@@ -61,8 +73,11 @@ export default function CalendarView({
   const [picked, setPicked] = useState<string>(today);
 
   const month = useMemo(
-    () => buildCalendarMonth(monthKey, rows, account.balance, anchor, today, horizon),
-    [monthKey, rows, account.balance, anchor, today, horizon],
+    () => buildCalendarMonth({
+      key: monthKey, rows, startBalance: account.balance,
+      anchor, today, horizon, snapshots,
+    }),
+    [monthKey, rows, account.balance, anchor, today, horizon, snapshots],
   );
   const detail = useMemo(
     () => month.cells.find((c) => c?.date === picked) ?? null,
@@ -140,16 +155,24 @@ export default function CalendarView({
                 {c.hasIn && <View style={[styles.dot, { backgroundColor: T.income }]} />}
               </View>
               {c.balance != null && (
-                <Text
-                  // BRIGHT ON A DAY SOMETHING HAPPENS, dim on a day
-                  // nothing does — the dim one is a number carried
-                  // over from the last day that moved, and saying so
-                  // by weight costs no room.
-                  style={[styles.bal, !c.busy && styles.balQuiet]}
-                  numberOfLines={1}
-                >
+                // IN INK ON EVERY DAY IT EXISTS, busy or quiet. It
+                // was dimmer on quiet days for one round and that
+                // read as two kinds of balance; the dots and the
+                // +/- line are what tell the two apart.
+                <Text style={styles.bal} numberOfLines={1}>
                   {cellAmountCompact(c.balance)}
                 </Text>
+              )}
+              {/* A past day the user recorded a balance on. Tagged,
+                  because a fact and a projection must not look the
+                  same. */}
+              {c.balance == null && c.logged != null && (
+                <>
+                  <Text style={styles.bal} numberOfLines={1}>
+                    {cellAmountCompact(c.logged)}
+                  </Text>
+                  <Text style={styles.loggedTag} numberOfLines={1}>{COPY.loggedTag}</Text>
+                </>
               )}
               {c.net != null && (
                 <Text
@@ -176,6 +199,14 @@ export default function CalendarView({
               <Text style={styles.balanceLabel}>{COPY.balanceAfter}</Text>
               <Text style={styles.balanceBig}>{money(detail.balance)}</Text>
             </View>
+          ) : detail.logged != null ? (
+            // A DIFFERENT SENTENCE, not the same one about a
+            // different number: this is what was recorded, not what
+            // is projected.
+            <View style={styles.balanceLine}>
+              <Text style={styles.balanceLabel}>{COPY.loggedBalance}</Text>
+              <Text style={styles.balanceBig}>{money(detail.logged)}</Text>
+            </View>
           ) : (
             <Text style={styles.noForecast}>
               {detail.date < anchor ? COPY.beforeAnchor(fmtDate(anchor)) : COPY.pastHorizon}
@@ -183,7 +214,9 @@ export default function CalendarView({
           )}
 
           {detail.rows.length === 0 ? (
-            <Text style={styles.quiet}>{COPY.quiet}</Text>
+            // "Nothing due or expected" is the wrong sentence about a
+            // day that has already happened.
+            detail.outsideForecast ? null : <Text style={styles.quiet}>{COPY.quiet}</Text>
           ) : detail.rows.map((r) => (
             <Pressable key={r.id} style={styles.detailRow} onPress={() => onPick?.(r.id)}>
               <Text style={styles.detailName} numberOfLines={1}>{r.name}</Text>
@@ -205,6 +238,7 @@ function ariaFor(c: CalendarDay): string {
   const parts = [fmtLongDay(c.date)];
   if (c.isToday) parts.push("today");
   if (c.balance != null) parts.push(`${COPY.balanceAfter} ${money(c.balance)}`);
+  else if (c.logged != null) parts.push(`${COPY.loggedBalance} ${money(c.logged)}`);
   if (c.net != null) parts.push(`${c.net < 0 ? "down" : "up"} ${money(Math.abs(c.net))}`);
   if (c.rows.length) {
     parts.push(`${c.rows.length} transaction${c.rows.length === 1 ? "" : "s"}`);
@@ -236,7 +270,7 @@ const styles = StyleSheet.create({
   dot: { width: 4, height: 4, borderRadius: 2 },
   // 11pt, measured — see the note at the top of the file.
   bal: { color: T.text, fontSize: 11, lineHeight: 14, marginTop: 1, fontVariant: ["tabular-nums"] },
-  balQuiet: { color: T.dim },
+  loggedTag: { color: T.faint, fontSize: 8, lineHeight: 10, letterSpacing: 0.3, textTransform: "uppercase" },
   net: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"] },
   detail: { margin: 16, padding: 14, backgroundColor: T.surface, borderRadius: 14, borderWidth: 1, borderColor: T.border, gap: 8 },
   detailHead: { color: T.text, fontWeight: "700" },

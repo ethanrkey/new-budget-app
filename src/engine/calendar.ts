@@ -1,4 +1,4 @@
-import type { ISODate, LedgerRow } from "./types.ts";
+import type { BalanceSnapshot, ISODate, LedgerRow } from "./types.ts";
 
 // Cents, like everywhere else in the engine. A fourth private copy of
 // this is a thing to notice rather than a thing to clean up today —
@@ -64,8 +64,26 @@ export interface CalendarDay {
   /** The device's current date. Its own marker on both clients, and
    *  deliberately not the same marker as the selected day. */
   isToday: boolean;
-  /** No forecast covers this day: before the anchor, or past the
-   *  horizon. Drawn faded, and its detail panel says which. */
+  /**
+   * A checking balance the USER RECORDED on this day — real history,
+   * read off the account's snapshots.
+   *
+   * WHY THERE IS NO FORECAST HERE INSTEAD, and why there never will
+   * be: the days before the anchor could be filled by running the
+   * rules backwards, and the result would be fiction. A rule says
+   * what is SUPPOSED to happen; the past is what did. This app shows
+   * one logged number or nothing, and the cell says which it is
+   * looking at.
+   */
+  logged: number | null;
+  /** Outside the window the forecast covers: before the anchor or
+   *  past the horizon. `balance` is null exactly when this is true. */
+  outsideForecast: boolean;
+  /**
+   * Nothing real to show, so draw it faded — outside the forecast AND
+   * with no logged reading. A past day the user recorded a balance on
+   * is NOT this: it holds a fact, and it reads like one.
+   */
   dim: boolean;
 }
 
@@ -109,12 +127,23 @@ export function addMonthKey(key: string, n: number): string {
  * Contiguous, so paging never jumps over an empty month and leaves
  * somebody wondering what is in it.
  */
-export function calendarMonths(rows: LedgerRow[], anchor: ISODate, today: ISODate): string[] {
+export function calendarMonths(
+  rows: LedgerRow[], anchor: ISODate, today: ISODate, snapshots: BalanceSnapshot[] = [],
+): string[] {
   const todayKey = monthKeyOf(today);
   let first = monthKeyOf(anchor) < todayKey ? monthKeyOf(anchor) : todayKey;
   let last = todayKey;
   for (const r of rows) {
     const k = monthKeyOf(r.date);
+    if (k < first) first = k;
+    if (k > last) last = k;
+  }
+  // BACK OVER THE LOGGED HISTORY TOO. Rows begin at the anchor, so a
+  // list built from them alone stops where the forecast starts — and
+  // the months holding six months of logged readings would not be
+  // reachable at all, which is most of what the history is for.
+  for (const snap of snapshots) {
+    const k = monthKeyOf(snap.date);
     if (k < first) first = k;
     if (k > last) last = k;
   }
@@ -130,21 +159,43 @@ export function calendarMonths(rows: LedgerRow[], anchor: ISODate, today: ISODat
  * the 1st is carried in from everything before it, and handing this
  * function a month at a time is exactly how that gets lost.
  * `startBalance` is the anchor — what the ledger counts forward from.
+ *
+ * ONE OBJECT, NOT SEVEN POSITIONAL ARGUMENTS. Four of them are ISO
+ * date strings, so swapping the anchor and today type-checks cleanly
+ * and produces a calendar that is wrong about which day is which —
+ * the exact bug the three-dates note above exists to prevent.
  */
-export function buildCalendarMonth(
-  key: string,
-  rows: LedgerRow[],
-  startBalance: number,
-  anchor: ISODate,
-  today: ISODate,
-  horizon: ISODate,
-): CalendarMonth {
+export interface CalendarInput {
+  /** "2026-10". */
+  key: string;
+  /** The WHOLE ledger, not this month's slice — see the note above. */
+  rows: LedgerRow[];
+  /** The anchor: what the ledger counts forward from. */
+  startBalance: number;
+  /** The as-of date of that balance. */
+  anchor: ISODate;
+  /** The device's current date. Never derived from `anchor`. */
+  today: ISODate;
+  /** The end of the Ledger's window. */
+  horizon: ISODate;
+  /** Every checking balance the user has logged — real history. */
+  snapshots?: BalanceSnapshot[];
+}
+
+export function buildCalendarMonth({
+  key, rows, startBalance, anchor, today, horizon, snapshots = [],
+}: CalendarInput): CalendarMonth {
   const byDate = new Map<ISODate, LedgerRow[]>();
   for (const r of rows) {
     const list = byDate.get(r.date);
     if (list) list.push(r);
     else byDate.set(r.date, [r]);
   }
+  // LAST WINS on a date with more than one reading, matching the
+  // Dashboard: `updateAccountBalance` upserts by date, so this is
+  // belt and braces for an imported file that carries two.
+  const loggedOn = new Map<ISODate, number>();
+  for (const snap of snapshots) loggedOn.set(snap.date, snap.amount);
 
   // The running balance walked forward from the anchor to this month's
   // first day, then day by day through it. `rows` carries its own
@@ -161,19 +212,22 @@ export function buildCalendarMonth(
     const date = `${key}-${String(d).padStart(2, "0")}`;
     const before = running;
     while (i < sorted.length && sorted[i]!.date <= date) { running = sorted[i]!.balance; i++; }
-    const dim = date < anchor || date > horizon;
+    const outsideForecast = date < anchor || date > horizon;
     const rows = byDate.get(date) ?? [];
+    const logged = loggedOn.get(date) ?? null;
     cells.push({
       date,
       day: d,
-      balance: dim ? null : running,
+      balance: outsideForecast ? null : running,
+      logged,
       busy: rows.length > 0,
       hasIn: rows.some((r) => r.direction === "in"),
       hasOut: rows.some((r) => r.direction === "out"),
-      net: dim || rows.length === 0 ? null : round(running - before),
+      net: outsideForecast || rows.length === 0 ? null : round(running - before),
       rows,
       isToday: date === today,
-      dim,
+      outsideForecast,
+      dim: outsideForecast && logged == null,
     });
   }
   while (cells.length % 7 !== 0) cells.push(null);

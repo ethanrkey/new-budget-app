@@ -70,19 +70,44 @@ try {
   // which is exactly the set with no balance in its label.
   eq("no dimmed cell claims a balance",
     seen.dimmed.filter((l) => /Balance after/.test(l)).length, 0);
-  // And the dimmed set is exactly the days this month that fall before
-  // the balance's as-of date — not "roughly the start of the month".
-  const anchor = primaryAccount(fixtureState()).balanceAsOf;
+  // And the dimmed set is exactly the days this month that fall
+  // before the balance's as-of date AND have no logged reading on
+  // them — not "roughly the start of the month". A past day the user
+  // recorded a balance on holds a fact and reads like one.
+  const fixture = fixtureState();
+  const anchor = primaryAccount(fixture).balanceAsOf;
+  const loggedDates = new Set(
+    (fixture.accountSnapshots?.[primaryAccount(fixture).id] ?? []).map((sn) => sn.date),
+  );
   const month = today.slice(0, 7);
   const expectDim = [];
+  const expectLogged = [];
   for (let d = 1; d <= 31; d++) {
     const iso = `${month}-${String(d).padStart(2, "0")}`;
-    if (iso.slice(0, 7) === month && iso < anchor) expectDim.push(fmtLongDay(iso));
+    if (iso.slice(0, 7) !== month || iso >= anchor) continue;
+    (loggedDates.has(iso) ? expectLogged : expectDim).push(fmtLongDay(iso));
   }
-  eq("the dimmed days are exactly the ones before the as-of date",
+  eq("the dimmed days are the ones before the as-of date with nothing logged",
     seen.dimmed.map((l) => l.split(", ").slice(0, 3).join(", ")), expectDim);
-  eq("...and every other day carries a balance",
-    seen.withBalance, seen.cellCount - seen.dimmed.length);
+  is("the fixture has a logged day in this month to check", expectLogged.length > 0);
+  eq("...and a past day WITH a reading is not among them",
+    expectLogged.filter((l) => seen.dimmed.some((d) => d.startsWith(l))).length, 0);
+  eq("...every forecast day carries a balance",
+    seen.withBalance, seen.cellCount - seen.dimmed.length - expectLogged.length);
+
+  // REAL HISTORY, AND TAGGED AS SUCH. The past could be filled by
+  // running the rules backwards; it would be fiction.
+  const history = await app.page.evaluate((pretty) => {
+    const b = [...document.querySelectorAll("button[aria-label]")]
+      .find((x) => (x.getAttribute("aria-label") ?? "").startsWith(pretty));
+    if (!b) throw new Error(`no cell for ${pretty}`);
+    return { text: b.innerText.replace(/\s+/g, " ").trim(), label: b.getAttribute("aria-label") };
+  }, expectLogged[0]);
+  is("a past logged day names its reading in the cell", /\$[\d,]+/.test(history.text));
+  is("...and tags it, so a fact never looks like a projection",
+    history.text.toLowerCase().includes(CALENDAR_COPY.loggedTag));
+  is("...and says which it is in words", history.label.includes(CALENDAR_COPY.loggedBalance));
+  not("...and never calls it a forecast", history.label.includes(CALENDAR_COPY.balanceAfter));
 
   // ---- round two: color by direction, and the items in the cell ----
   const cells = await app.page.evaluate(() => {
@@ -93,12 +118,14 @@ try {
         const dots = [...b.querySelectorAll("span.rounded-full")].map((d) => getComputedStyle(d).backgroundColor);
         const lines = [...b.querySelectorAll(":scope > div")];
         const bal = lines.find((d) => /tabular-nums/.test(d.className) && /^\$|^-\$/.test(d.innerText.trim()));
+        const dayNum = b.querySelector("span");
         const net = lines.find((d) => /^[+\u2212]/.test(d.innerText.trim()));
         const items = [...b.querySelectorAll("li")].map((li) => li.innerText.replace(/\s+/g, " ").trim());
         return {
           label: b.getAttribute("aria-label"),
           dots, items,
-          balColor: paint(bal), netText: net?.innerText.trim() ?? null, netColor: paint(net),
+          balColor: paint(bal), dayColor: paint(dayNum),
+          netText: net?.innerText.trim() ?? null, netColor: paint(net),
         };
       });
   });
@@ -135,11 +162,13 @@ try {
   is("...and at least one day has both", cells.some((c) => /money in/.test(c.label) && /money out/.test(c.label)));
   eq("a quiet day has no dot", quiet.filter((c) => c.dots.length).length, 0);
 
-  // The balance is the bright one on a day that moved and the dim one
-  // on a day that did not.
-  eq("every busy day's balance is in ink", new Set(busy.map((c) => c.balColor)).size, 1);
-  eq("every quiet day's balance is muted", new Set(quiet.map((c) => c.balColor)).size, 1);
-  is("...and the two are different", busy[0].balColor !== quiet[0].balColor);
+  // EVERY BALANCE IS IN THE SAME INK, busy day or quiet. It was
+  // dimmer on quiet days for one round and that read as two kinds of
+  // balance; the dots and the +/- line are what tell them apart.
+  eq("every balance in the month is the same color",
+    new Set([...busy, ...quiet].map((c) => c.balColor)).size, 1);
+  is("...and it is not the muted one the day number wears",
+    busy[0].balColor !== busy[0].dayColor);
 
   // The net under it, signed and colored, and absent where nothing moved.
   eq("no quiet day prints a net", quiet.filter((c) => c.netText).length, 0);
@@ -186,7 +215,7 @@ try {
     ...base,
     oneoffs: [
       ...base.oneoffs,
-      ...["Vet", "Haircut", "Books", "Parking", "Gift"].map((name, i) => ({
+      ...["Vet", "Haircut", "Books", "Parking", "Gift", "Cab"].map((name, i) => ({
         id: `o-crowd-${i}`, name, amount: 20 + i, category: "oneoff", order: 90 + i, date: crowded,
       })),
     ],
@@ -217,9 +246,9 @@ try {
     // was right.
     const total = Number(items.label.match(/(\d+) transactions/)[1]);
     is("the crowded day really is crowded", total > 4);
-    eq("a crowded cell lists three and then counts the rest", items.items.length, 4);
-    is("...and the last line is the count", /^\+\d+ more$/.test(items.items[3] ?? ""));
-    eq("...naming how many are hidden", items.items[3], `+${total - 3} more`);
+    eq("a crowded cell lists four and then counts the rest", items.items.length, 5);
+    is("...and the last line is the count", /^\+\d+ more$/.test(items.items[4] ?? ""));
+    eq("...naming how many are hidden", items.items[4], `+${total - 4} more`);
   } finally { await app2.close(); }
 }
 

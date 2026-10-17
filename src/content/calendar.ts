@@ -13,9 +13,19 @@ export const CALENDAR_COPY = {
   balanceAfter: "Balance after:",
   /** Before anything has been picked. */
   hint: "Pick a day to see where your balance lands and what moved it.",
+  /**
+   * A past day the user recorded a balance on. REAL, and said so:
+   * the cell wears a "logged" tag and the panel uses this instead of
+   * "Balance after:", because one is a fact and the other is a
+   * projection and a calendar that showed them identically would be
+   * inviting the reader to confuse them.
+   */
+  loggedBalance: "Logged balance:",
+  /** The cell's own tag, which has room for one word. */
+  loggedTag: "logged",
   /** A day the forecast does not cover, because it is behind the anchor. */
   beforeAnchor: (asOf: string) =>
-    `No forecast before ${asOf} — your checking balance already accounts for what happened then.`,
+    `No forecast before ${asOf} — your checking balance already accounts for what happened then. Days you logged a balance on show what you recorded.`,
   /** A day past the end of the Ledger's window. */
   pastHorizon: "Past the end of your Ledger window. Move the horizon out to project this far.",
   /** A covered day with nothing on it. The balance line is still shown. */

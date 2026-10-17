@@ -686,6 +686,21 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 3, 2026-10-17, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — a device and web pass
+  on update 2. Fingerprint checked before and after; unchanged.
+  Confirmed good: the sign-out fix (signed out on the phone, the web
+  stayed signed in — the first direct confirmation of that root
+  cause), the calendar's round two on both clients, the copy, the
+  add-another buttons, and the web's Settings. Import and Export stay
+  in the web header — owner's call, confirmed. The demo backup keeps
+  its own columns.
+
+  All three items are the calendar; see the Ledger section for the
+  whole of round three. Past days show logged readings and nothing
+  inferred; every balance is the same ink; the web cell lists four
+  items before it starts counting.
+
 - **OTA UPDATE 2, 2026-10-17, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — a device and web pass
   on update 1. Fingerprint checked before and after; unchanged.
@@ -1903,6 +1918,41 @@ fifth tab never needs a migration.
   and amount, then "+N more". It is three times the phone's width and
   was mostly empty; the phone's 49pt cell could not hold a name and
   does not try. `min-h` went to 132px to fit it.
+
+  **ROUND THREE, 2026-10-17 (OTA 3).** Three changes, and the first
+  one is a rule.
+
+  **PAST DAYS SHOW LOGGED HISTORY AND NOTHING ELSE.** They were blank
+  before the anchor, and they could have been filled by running the
+  rules backwards — the result would be fiction. A rule says what is
+  SUPPOSED to happen; the past is what did. So a past cell holds one
+  checking snapshot the user actually recorded, or nothing, and it
+  wears a "logged" tag so a fact never looks like a projection. The
+  detail panel says "Logged balance:" rather than "Balance after:",
+  which is a different sentence and not the same one about a
+  different number. `calendarMonths` reaches back over the snapshots
+  too, or the months holding the history would not be reachable at
+  all. **WE NEVER SHOW INFERRED HISTORY** — owner's rule, and the
+  test that holds it asserts a past day a monthly rule WOULD have hit
+  is still blank.
+
+  `dim` now means "nothing real here" (outside the forecast AND
+  nothing logged) and `outsideForecast` means what `dim` used to.
+  Three fields, each saying one thing, because a past day with a
+  reading is outside the forecast and must not be faded.
+
+  **EVERY BALANCE IS IN THE SAME INK**, busy day or quiet. Round two
+  dimmed the quiet ones and that read as two kinds of balance; the
+  dots and the +/− line are what tell a quiet day from a busy one.
+
+  **THE WEB CELL LISTS FOUR ITEMS**, not three. At three, a day with
+  four spent a line saying "+1 more" instead of showing the fourth —
+  strictly less information in the same room.
+
+  `buildCalendarMonth` takes ONE OBJECT now. Four of its seven
+  arguments were ISO date strings, so swapping the anchor and today
+  type-checked cleanly and produced a calendar wrong about which day
+  is which — the exact bug the three-dates note exists to prevent.
 
   The phone's cell number is shortened — "2,545", "12.3k", no sign and no
   cents (`cellAmountCompact`); the web's is "$2,545" (`cellAmountFull`).

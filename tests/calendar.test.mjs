@@ -49,8 +49,19 @@ state = upsertItem(state, {
   cadence: "biweekly", startDate: "2026-10-16",
 });
 const ledger = computeLedger(state, HORIZON);
-const cells = (key) =>
-  buildCalendarMonth(key, ledger.rows, 4000, ANCHOR, TODAY, HORIZON).cells;
+const SNAPS = [
+  // Real history: three readings before the anchor, and the anchor's
+  // own. Everything else before it stays blank, which is the point.
+  { id: "s1", date: "2026-08-14", amount: 2150.25 },
+  { id: "s2", date: "2026-09-02", amount: 3310 },
+  { id: "s3", date: "2026-09-28", amount: 2890.5 },
+  { id: "s4", date: ANCHOR, amount: 4000 },
+];
+const build = (key, extra = {}) => buildCalendarMonth({
+  key, rows: ledger.rows, startBalance: 4000,
+  anchor: ANCHOR, today: TODAY, horizon: HORIZON, ...extra,
+});
+const cells = (key) => build(key).cells;
 const at = (key, d) => cells(key).find((c) => c && c.day === d);
 
 // ---- the grid and the list cannot disagree -------------------------
@@ -103,8 +114,10 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
     cadence: null, date: "2026-10-20",
   });
   const l = computeLedger(busy, HORIZON);
-  const c = buildCalendarMonth("2026-10", l.rows, 1000, ANCHOR, TODAY, HORIZON)
-    .cells.find((x) => x && x.day === 20);
+  const c = buildCalendarMonth({
+    key: "2026-10", rows: l.rows, startBalance: 1000,
+    anchor: ANCHOR, today: TODAY, horizon: HORIZON,
+  }).cells.find((x) => x && x.day === 20);
   eq("two rows on one day leave one end-of-day balance", c.balance, 1200);
   eq("...and both are in its detail", c.rows.length, 2);
   is("...and the day is marked busy", c.busy);
@@ -127,9 +140,60 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
   // After the horizon the rules have not been run, so a number there
   // would be the last projection pretending nothing further happens.
   is("the day after the horizon is dimmed",
-    buildCalendarMonth("2027-01", ledger.rows, 4000, ANCHOR, TODAY, HORIZON)
+    build("2027-01")
       .cells.find((c) => c && c.day === 1).dim);
   not("the horizon day itself is not", at("2026-12", 31).dim);
+}
+
+// ---- REAL HISTORY, and only real history ----------------------------
+//
+// The days before the anchor could be filled by running the rules
+// backwards. The result would be fiction: a rule says what is
+// SUPPOSED to happen and the past is what did. So a past cell holds
+// one logged reading or nothing, and it is tagged either way.
+{
+  const withHistory = (key) => build(key, { snapshots: SNAPS }).cells;
+  const on = (key, d) => withHistory(key).find((c) => c && c.day === d);
+
+  eq("a past day the user logged a balance on shows what they logged",
+    on("2026-09", 2).logged, 3310);
+  eq("...and has no forecast balance, because there is none",
+    on("2026-09", 2).balance, null);
+  eq("...so it is NOT drawn faded — it holds a fact", on("2026-09", 2).dim, false);
+  is("...while still being outside the forecast", on("2026-09", 2).outsideForecast);
+
+  // THE WHOLE POINT: everything else in that month stays blank.
+  const sept = withHistory("2026-09").filter(Boolean);
+  eq("exactly the logged days carry a number",
+    sept.filter((c) => c.logged != null).map((c) => c.day), [2, 28]);
+  eq("...and every other day of it is blank and faded",
+    sept.filter((c) => c.logged == null && !c.dim).length, 0);
+  eq("...with no balance invented for any of them",
+    sept.filter((c) => c.balance != null).length, 0);
+
+  // Nothing is generated for a day a rule WOULD have fired on. Rent
+  // is monthly on the 10th and September is before the anchor.
+  eq("a past day a rule would have hit is still blank",
+    [on("2026-09", 10).logged, on("2026-09", 10).balance, on("2026-09", 10).dim],
+    [null, null, true]);
+
+  // The anchor's own reading is a forecast day, not a history day:
+  // it is where the projection starts.
+  eq("the anchor day keeps its forecast balance", on("2026-10", 5).balance, 4000);
+  eq("...and carries the reading too, since that is what it is", on("2026-10", 5).logged, 4000);
+  not("...and is not faded", on("2026-10", 5).dim);
+
+  // Without the snapshots nothing changes — the history is opt-in
+  // data, not a new default.
+  eq("a calendar built with no snapshots is the old one",
+    cells("2026-09").filter((c) => c && !c.dim).length, 0);
+
+  // An imported file can carry two readings for one date; the
+  // Dashboard upserts by date, so the last one wins here too.
+  const twice = build("2026-09", {
+    snapshots: [{ id: "a", date: "2026-09-02", amount: 1 }, { id: "b", date: "2026-09-02", amount: 2 }],
+  }).cells.find((c) => c && c.day === 2);
+  eq("two readings on one date leave one number", twice.logged, 2);
 }
 
 // ---- which months you can page through -----------------------------
@@ -137,6 +201,17 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
   const months = calendarMonths(ledger.rows, ANCHOR, TODAY);
   eq("the window is contiguous and covers the ledger",
     months, ["2026-10", "2026-11", "2026-12"]);
+
+  // BACK OVER THE HISTORY TOO. Rows begin at the anchor, so a list
+  // built from them alone stops where the forecast starts — and the
+  // months holding the logged readings would not be reachable at
+  // all, which is most of what the history is for.
+  eq("the logged months are reachable",
+    calendarMonths(ledger.rows, ANCHOR, TODAY, SNAPS),
+    ["2026-08", "2026-09", "2026-10", "2026-11", "2026-12"]);
+  eq("...and the window is still contiguous with a gap in the readings",
+    calendarMonths(ledger.rows, ANCHOR, TODAY, [{ id: "x", date: "2026-05-11", amount: 1 }]),
+    ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12"]);
   is("today's month is in it", months.includes(TODAY.slice(0, 7)));
 
   // THE CASE THE OLD WEB VERSION COULD NOT HANDLE: it built the list
@@ -159,7 +234,7 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
 // ---- the grid keeps its shape --------------------------------------
 {
   for (const key of ["2026-01", "2026-02", "2024-02", "2026-09", "2026-10"]) {
-    const c = buildCalendarMonth(key, ledger.rows, 4000, ANCHOR, TODAY, HORIZON).cells;
+    const c = build(key).cells;
     eq(`${key} is whole weeks`, c.length % 7, 0);
     eq(`${key} has its own number of days`,
       c.filter(Boolean).length, daysInMonth(key));
@@ -183,8 +258,10 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
   let both = updateAccountBalance(normalize({}), "checking", 1000, ANCHOR);
   both = upsertItem(both, { id: "a", name: "Bill", amount: 300, category: "bill", cadence: null, date: "2026-10-20" });
   both = upsertItem(both, { id: "b", name: "Pay", amount: 500, category: "income", cadence: null, date: "2026-10-20" });
-  const bothDay = buildCalendarMonth("2026-10", computeLedger(both, HORIZON).rows, 1000, ANCHOR, TODAY, HORIZON)
-    .cells.find((c) => c && c.day === 20);
+  const bothDay = buildCalendarMonth({
+    key: "2026-10", rows: computeLedger(both, HORIZON).rows, startBalance: 1000,
+    anchor: ANCHOR, today: TODAY, horizon: HORIZON,
+  }).cells.find((c) => c && c.day === 20);
   eq("a payday that also pays a bill carries both", [bothDay.hasIn, bothDay.hasOut], [true, true]);
   eq("...and nets the difference", bothDay.net, 200);
 
