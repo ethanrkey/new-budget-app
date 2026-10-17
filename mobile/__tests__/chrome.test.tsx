@@ -177,6 +177,32 @@ test("A NEW ACCOUNT ON A USED PHONE still gets setup, and then the tour", async 
   expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
 });
 
+test("Settings starts the tour in one tap, without going through About", async () => {
+  // "About & tour" was ONE row that opened About, where the tour was a
+  // button — so the row named two things and did one of them. Two
+  // rows now, and this is the half that was two taps away.
+  mockLoaded.state = { ...seen, settings: { ...seen.settings, hasSeenTour: true } };
+  await mount();
+  await userEvent.press(await screen.findByLabelText("Settings, about and export"));
+  await userEvent.press(await screen.findByLabelText("Take the tour"));
+
+  expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
+  // Straight to the tour: About never came up on the way.
+  expect(screen.queryByText("How this app works")).toBeNull();
+  mockLoaded.state = blank;
+});
+
+test("...and About is its own row, which does not start anything", async () => {
+  mockLoaded.state = { ...seen, settings: { ...seen.settings, hasSeenTour: true } };
+  await mount();
+  await userEvent.press(await screen.findByLabelText("Settings, about and export"));
+  await userEvent.press(await screen.findByLabelText("About"));
+
+  expect(await screen.findByText("How this app works")).toBeOnTheScreen();
+  expect(screen.queryByText(TOUR_STOPS[0]!.title)).toBeNull();
+  mockLoaded.state = blank;
+});
+
 test("...and NOT again when Setup is re-run from Settings", async () => {
   // THE BUG THIS WOULD HAVE CAUGHT, reported on build 11: the tour was
   // started by "a setup just finished" and nothing remembered it, so

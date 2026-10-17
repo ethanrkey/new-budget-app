@@ -138,6 +138,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
             <Settings
               session={session}
               onOpenAbout={() => setScreen("about")}
+              onStartTour={() => { setScreen(null); setTouring(true); }}
               onOpenCategories={() => setScreen("categories")}
               onOpenSetup={() => { setScreen(null); setSetupAgain(true); }}
               onOpenExport={() => setExporting(true)}

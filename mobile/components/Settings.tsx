@@ -24,10 +24,11 @@ import { withoutDismissalBy } from "../lib/dismissal";
 const PROVIDER_LABEL: Record<string, string> = { google: "Google", email: "Email", apple: "Apple", github: "GitHub" };
 
 export default function Settings({
-  session, onOpenAbout, onOpenExport, onOpenCategories, onOpenSetup, onClose,
+  session, onOpenAbout, onStartTour, onOpenExport, onOpenCategories, onOpenSetup, onClose,
 }: {
   session: Session;
   onOpenAbout: () => void;
+  onStartTour: () => void;
   onOpenExport: () => void;
   onOpenCategories: () => void;
   onOpenSetup: () => void;
@@ -164,7 +165,14 @@ export default function Settings({
             sub="The six questions a new account is asked. Answers are added to what you already have."
             onPress={onOpenSetup}
           />
-          <Row label="About & tour" sub="What every screen does, and a walk through the four tabs." onPress={onOpenAbout} />
+          {/* TWO ROWS, not one, from 2026-10-17. "About & tour" was one
+              row that opened About, where the tour was a button — so
+              the one thing people come back for was two taps behind a
+              label that promised it in one. A row that names two
+              things and does one of them is a row that is wrong about
+              itself. */}
+          <Row label="About" sub="What every screen does, and why it works the way it does." onPress={onOpenAbout} />
+          <Row label="Take the tour" sub="A walk through the four tabs. Takes a minute." onPress={onStartTour} />
           <Row label="Export" sub="Ledger or Budget as CSV, or the whole account as a JSON backup." onPress={onOpenExport} />
           {/* NO APPEARANCE ROW. There was one, stating "Dark. The phone
               has one theme on purpose." — a setting with no choice in
