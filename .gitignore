@@ -59,3 +59,8 @@ src/mobile-preview-entry.jsx
 # machine keeps its own, and the check skips quietly where there is
 # none. Never remove this line.
 .personal-terms
+
+# The App Store demo account, written by scripts/demo_account.mjs.
+# Regenerable and dated relative to the day it is made, so a committed
+# copy would go stale the way the hand-taken landing screenshots did.
+demo-account.json
