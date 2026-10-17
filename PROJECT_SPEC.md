@@ -431,6 +431,60 @@ balance updates). Nothing is append-only.
   boundary. No secrets are in git (history swept 2026-09-13).
 - Financial CSVs are gitignored (`*.csv`). Never commit user data.
 
+### Signing out ends THIS device's session, and nothing else
+
+**ROOT CAUSE OF "the web signs me out every so often and iOS doesn't",
+found 2026-10-17 in the Supabase auth log:**
+
+```
+400: Invalid Refresh Token: Refresh Token Not Found
+error_code refresh_token_not_found — 19:01:22Z, and twice more that afternoon
+```
+
+`supabase.auth.signOut()` takes an options object whose default is
+`{ scope: 'global' }`, and global means every session this user has, on
+every device. auth-js warns about it in a comment above its own
+signature. All three call sites — `src/auth.js`, the phone's Settings
+and its StateProvider error screen — called it with no argument.
+
+So an afternoon of signing out on the phone to test other accounts was
+an afternoon of silently revoking the refresh token the browser was
+holding. The browser noticed on its NEXT refresh, up to an hour later,
+with no connection to anything the person had just done — which is
+exactly why it read as random, and why it never happened on iOS: the
+phone was always the one doing the signing out.
+
+**THE THREE WRONG SUSPECTS**, all ruled out by reading code over two
+batches, and worth keeping because the shape of the mistake is the
+lesson. Two tabs refreshing at once (auth-js 2.115 serializes through
+`navigator.locks`); a code path signing out on a network error (there
+is none — the only `signOut()` is the button); Safari's seven-day cap
+on script-written localStorage, which fit "web only" so neatly that it
+survived as the leading theory for a batch. Every one of them was a
+theory about the BROWSER, because the symptom was in the browser. The
+cause was a call on the other device.
+
+`SIGN_OUT_SCOPE` in `src/shared/signOutScope.ts` is the one place that
+says it, imported by all three. A constant rather than a literal per
+call site because there is no way to notice this by reading: a call
+with no argument looks finished, and what it does wrong happens
+somewhere else an hour later.
+
+**The "Your session ended and you were signed out" notice stays.** It
+was built in the previous batch for this bug and would not have fired
+for it — `takeInvoluntarySignOut` only marks a sign-out nobody asked
+for on THIS client, and these were asked for, on the phone. It is
+still the right thing to show for a genuine expiry, and it is now the
+thing that will say so if this ever happens again for a different
+reason.
+
+`scripts/drive_signout.mjs` presses the real button in a real browser
+and reads `scope=local` off the outgoing `/auth/v1/logout` request —
+asserting the WIRE rather than the argument, because the argument is
+what was missing and a test of it would have been written against the
+same misunderstanding. It was proved to fail first: with the default
+restored, the request goes out `scope=global`.
+
 ### What the phone keeps on the device, and where (audited 2026-10-16)
 
 Three things, and only three. Asked for on build 11's device pass,
@@ -781,7 +835,10 @@ written here in the same sitting** — there is no other record of it.
      applied. The copy on both screens said "if that address has an
      account", which is what a new user read seconds before nothing
      arrived.
-  3. **An unasked-for sign-out says so.** See §5's note.
+  3. **An unasked-for sign-out says so.** See §5's sign-out note —
+     and note that this notice would NOT have fired for the bug it
+     was built during, which turned out to be a deliberate sign-out
+     on the other device.
   4. **Every dated balance label says "as of"** — the Dashboard
      checking card on each client, both log-balance lines, the
      phone's net-position breakdown ("Checking balance", since

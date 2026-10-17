@@ -2,6 +2,7 @@
 // ---- Auth: Google OAuth (primary) + email magic link (fallback) ----
 import { supabase } from "./supabase.js";
 import { markDeliberateSignOut } from "./shared/signOutReason.ts";
+import { SIGN_OUT_SCOPE } from "./shared/signOutScope.ts";
 
 // Where OAuth and magic links come back to. NOT window.location.origin:
 // since 2026-10-02 that is the public landing page, and a user who just
@@ -53,9 +54,14 @@ export function verifyEmailCode(email, token) {
 // told apart from it — see src/shared/signOutReason.ts, which is a
 // separate module precisely so it can be tested without this one's
 // Supabase client.
+//
+// LOCAL SCOPE, and never the default. See src/shared/signOutScope.ts:
+// the default is global, global revokes every session this user has
+// on every device, and that is what had been signing this browser out
+// all along.
 export function signOut() {
   markDeliberateSignOut();
-  return supabase.auth.signOut();
+  return supabase.auth.signOut(SIGN_OUT_SCOPE);
 }
 
 export { takeInvoluntarySignOut } from "./shared/signOutReason.ts";

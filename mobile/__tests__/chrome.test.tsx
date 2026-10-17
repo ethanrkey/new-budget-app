@@ -177,6 +177,29 @@ test("A NEW ACCOUNT ON A USED PHONE still gets setup, and then the tour", async 
   expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
 });
 
+test("SIGNING OUT ENDS THIS DEVICE'S SESSION, not every session the user has", async () => {
+  // THE BUG THIS EXISTS FOR, found in the Supabase auth log on
+  // 2026-10-17: "400: Invalid Refresh Token: Refresh Token Not Found".
+  // `supabase.auth.signOut()` defaults to `{ scope: 'global' }`, which
+  // revokes every session this user has on every device — so an
+  // afternoon of signing out on the phone to test other accounts was
+  // an afternoon of silently killing the browser's session, which only
+  // noticed on its next refresh up to an hour later. That is the whole
+  // of "the web signs me out every so often and iOS doesn't".
+  //
+  // There is no way to notice the default by reading the call: one
+  // with no argument looks finished.
+  const { supabase } = require("../lib/supabase");
+  supabase.auth.signOut.mockClear();
+  mockLoaded.state = seen;
+  await mount();
+  await userEvent.press(await screen.findByLabelText("Settings, about and export"));
+  await userEvent.press(await screen.findByLabelText("Sign out"));
+
+  expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+  mockLoaded.state = blank;
+});
+
 test("Settings starts the tour in one tap, without going through About", async () => {
   // "About & tour" was ONE row that opened About, where the tour was a
   // button — so the row named two things and did one of them. Two

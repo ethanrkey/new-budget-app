@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { loadState, saveState, resetStore } from "../lib/store";
 import { supabase, BACKEND, BACKEND_NOTICE } from "../lib/supabase";
+import { SIGN_OUT_SCOPE } from "../../src/shared/signOutScope.ts";
 import { T } from "../lib/theme";
 import SaveFailure from "./SaveFailure";
 import UnsavedNotice from "./UnsavedNotice";
@@ -142,7 +143,7 @@ export function StateProvider({ userId, children }: { userId: string; children: 
       <View style={styles.center}>
         <Text style={styles.err}>Couldn&apos;t load your data</Text>
         <Text style={styles.dim}>{error}</Text>
-        <Text style={styles.link} onPress={() => supabase.auth.signOut()}>Sign out</Text>
+        <Text style={styles.link} onPress={() => supabase.auth.signOut(SIGN_OUT_SCOPE)}>Sign out</Text>
       </View>
     );
   }

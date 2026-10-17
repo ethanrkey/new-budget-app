@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { T, money } from "../lib/theme";
 import * as feel from "../lib/haptics";
 import { supabase } from "../lib/supabase";
+import { SIGN_OUT_SCOPE } from "../../src/shared/signOutScope.ts";
 import { useBudget } from "./StateProvider";
 import { wipeToNewAccount } from "../../src/engine/mutate.ts";
 import type { Session } from "@supabase/supabase-js";
@@ -140,7 +141,7 @@ export default function Settings({
           )}
           <Pressable
             style={styles.action}
-            onPress={() => supabase.auth.signOut()}
+            onPress={() => supabase.auth.signOut(SIGN_OUT_SCOPE)}
             accessibilityRole="button" accessibilityLabel="Sign out"
           >
             <Text style={styles.actionText}>Sign out</Text>
