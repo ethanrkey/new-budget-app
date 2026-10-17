@@ -686,6 +686,57 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 2, 2026-10-17, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — a device and web pass
+  on update 1. Fingerprint checked before and after; unchanged.
+
+  Confirmed good and untouched from update 1: the setup bug, the
+  varies checkbox and its intro, "On my payday", the accounts title,
+  the Ledger tour sentence, today's underline, Log in gold with Edit
+  under it, the Planned spending caption, the About/Tour split, the
+  web Ledger's dates, and the demo import on both clients.
+
+  1. **THE WEB SIGN-OUTS, ROOT CAUSE.** `signOut()` defaults to
+     global scope. See §5's sign-out note — it is the whole story,
+     including the three wrong suspects, because the shape of that
+     mistake is worth keeping.
+  2. **The calendar's second round.** See the Ledger section: the
+     balance is the bright number, the dots say direction, the day's
+     step sits under the balance, and the web cell lists its items.
+  3. **Copy.** The Dashboard tour stop's first sentence; one shared
+     "Log the current balance of <account>" replacing two different
+     titles; iOS Export says "CSV file", "Tour" instead of "Take the
+     tour", and a wipe row that says what it erases; the web sign-in
+     card says Key Budget.
+  4. **The add-another buttons hug their text.** iOS only — the web
+     was MEASURED and already hugged (114pt of a 398pt parent); what
+     it lacked was a target worth pressing at 20px tall, so both got
+     padding.
+  5. **Setup and About moved into the web's Settings**, with a Tour
+     row, matching the phone. Import and Export stayed in the header
+     — reasoning in SettingsModal's own note and in the decision log.
+  6. **Cumulative columns: nothing to fix, and the answer is the
+     import.** A new account already has none chosen and the menu
+     closed. The check that matters had to be a MEASUREMENT, because
+     every tracker column is always in the DOM — a `<th>` has to
+     exist to animate open from zero width — so asking whether the
+     name appears answers the wrong question. 0pt each with none
+     chosen; 104-110pt for the three a restored backup names; 0pt for
+     the two it does not. The demo backup names three, which is where
+     the owner saw them.
+  7. **One date format changed and no others**: the web's Planned
+     spending caption had the ninth private formatter, so a shared
+     sentence printed "Oct 17, 2026" on the web and "10/17/2026" on
+     the phone. Every one of the 23 the 2026-10-15 sweep changed
+     stays as it is — owner's call.
+
+  **FIVE BROWSER DRIVES NOW**, because the web still has no renderer
+  harness and this batch was mostly web: `drive_calendar.mjs` (28),
+  `drive_setup.mjs` (21), `drive_demo_restore.mjs` (9),
+  `drive_signout.mjs` (3), `drive_columns.mjs` (9). Run by hand when
+  what they cover changes; they start Vite and Chrome, so they are
+  not in `npm test`.
+
 - **OTA UPDATE 1, 2026-10-17, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — a device pass on
   build 13, shipped over the air rather than as a binary because the
