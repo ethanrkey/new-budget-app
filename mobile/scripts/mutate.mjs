@@ -1095,10 +1095,6 @@ const MUTATIONS = [
    "../src/engine/calendar.ts",
    "  for (const snap of snapshots) loggedOn.set(snap.date, snap.amount);",
    "  for (const snap of snapshots) if (!loggedOn.has(snap.date)) loggedOn.set(snap.date, snap.amount);"],
-  ["the phone stops tagging a logged reading",
-   "components/CalendarView.tsx",
-   "                  <Text style={styles.loggedTag} numberOfLines={1}>{COPY.loggedTag}</Text>",
-   "                  {/* mutated */}"],
   ["the phone draws a logged reading as a forecast",
    "components/CalendarView.tsx",
    "              {c.balance == null && c.logged != null && (", "              {false && ("],
@@ -1116,8 +1112,10 @@ const MUTATIONS = [
   ["the logged label and the forecast one are the same sentence",
    "../src/content/calendar.ts",
    '  loggedBalance: "Logged balance:",', '  loggedBalance: "Balance after:",'],
-  ["the cell's logged tag says nothing",
-   "../src/content/calendar.ts", '  loggedTag: "logged",', '  loggedTag: "",'],
+  ["a past logged cell grows a tag back, in a box with no room for one",
+   "components/CalendarView.tsx",
+   "                <Text style={styles.bal} numberOfLines={1}>\n                  {cellAmountCompact(c.logged)}\n                </Text>",
+   "                <><Text style={styles.bal} numberOfLines={1}>{cellAmountCompact(c.logged)}</Text><Text style={styles.bal}>logged</Text></>"],
 ];
 
 const killedBy = new Map();

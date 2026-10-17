@@ -163,16 +163,16 @@ export default function CalendarView({
                   {cellAmountCompact(c.balance)}
                 </Text>
               )}
-              {/* A past day the user recorded a balance on. Tagged,
-                  because a fact and a projection must not look the
-                  same. */}
+              {/* A past day the user recorded a balance on. JUST THE
+                  NUMBER, like every other cell: a tag under it was
+                  one more thing to read in 49pt, in a grid whose
+                  whole job is to be scannable. The distinction lives
+                  one tap away, in the panel, and in the VoiceOver
+                  label for anyone who cannot see the grid at all. */}
               {c.balance == null && c.logged != null && (
-                <>
-                  <Text style={styles.bal} numberOfLines={1}>
-                    {cellAmountCompact(c.logged)}
-                  </Text>
-                  <Text style={styles.loggedTag} numberOfLines={1}>{COPY.loggedTag}</Text>
-                </>
+                <Text style={styles.bal} numberOfLines={1}>
+                  {cellAmountCompact(c.logged)}
+                </Text>
               )}
               {c.net != null && (
                 <Text
@@ -270,7 +270,6 @@ const styles = StyleSheet.create({
   dot: { width: 4, height: 4, borderRadius: 2 },
   // 11pt, measured — see the note at the top of the file.
   bal: { color: T.text, fontSize: 11, lineHeight: 14, marginTop: 1, fontVariant: ["tabular-nums"] },
-  loggedTag: { color: T.faint, fontSize: 8, lineHeight: 10, letterSpacing: 0.3, textTransform: "uppercase" },
   net: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"] },
   detail: { margin: 16, padding: 14, backgroundColor: T.surface, borderRadius: 14, borderWidth: 1, borderColor: T.border, gap: 8 },
   detailHead: { color: T.text, fontWeight: "700" },

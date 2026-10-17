@@ -699,7 +699,9 @@ written here in the same sitting** — there is no other record of it.
   All three items are the calendar; see the Ledger section for the
   whole of round three. Past days show logged readings and nothing
   inferred; every balance is the same ink; the web cell lists four
-  items before it starts counting.
+  items before it starts counting. **Amended the same day (OTA 4):
+  the "logged" tag came off both cells** — the number alone, with the
+  distinction in the panel and in the accessibility labels.
 
 - **OTA UPDATE 2, 2026-10-17, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — a device and web pass
@@ -1926,11 +1928,16 @@ fifth tab never needs a migration.
   before the anchor, and they could have been filled by running the
   rules backwards — the result would be fiction. A rule says what is
   SUPPOSED to happen; the past is what did. So a past cell holds one
-  checking snapshot the user actually recorded, or nothing, and it
-  wears a "logged" tag so a fact never looks like a projection. The
-  detail panel says "Logged balance:" rather than "Balance after:",
-  which is a different sentence and not the same one about a
-  different number. `calendarMonths` reaches back over the snapshots
+  checking snapshot the user actually recorded, or nothing.
+
+  **THE CELL IS JUST THE NUMBER**, exactly like every other cell. It
+  wore a small "logged" tag for one round and that came straight back
+  out (owner's call, same day): a second thing to read in a 49pt box,
+  in a grid whose whole job is to be scanned. **The distinction lives
+  in the detail panel**, which says "Logged balance:" rather than
+  "Balance after:" — a different sentence, not the same one about a
+  different number — and in both clients' accessibility labels, for
+  anyone who cannot see the grid at all. `calendarMonths` reaches back over the snapshots
   too, or the months holding the history would not be reachable at
   all. **WE NEVER SHOW INFERRED HISTORY** — owner's rule, and the
   test that holds it asserts a past day a monthly rule WOULD have hit

@@ -130,10 +130,13 @@ test("a past day the user logged a balance on shows what they logged", async () 
     await userEvent.press(screen.getByLabelText("Previous month"));
   }
   const cell = screen.getByLabelText(new RegExp(`^${fmtLongDay(LOGGED_DAY)}`));
-  // Tagged in the cell, so a fact and a projection never look alike.
-  expect(within(cell).getByText(CALENDAR_COPY.loggedTag)).toBeOnTheScreen();
+  // THE CELL IS JUST THE NUMBER, like every other cell. A "logged"
+  // tag shipped under it for one round and came back out: a second
+  // thing to read in a 49pt box, in a grid built to be scanned.
   expect(within(cell).getByText("2,750")).toBeOnTheScreen();
-  // ...and said in words, not only by the tag.
+  expect(within(cell).queryByText(/logged/i)).toBeNull();
+  // The distinction lives in the panel — and in the label, for
+  // anyone who cannot see the grid at all.
   expect(cell.props.accessibilityLabel).toContain(CALENDAR_COPY.loggedBalance);
   expect(cell.props.accessibilityLabel).not.toContain(CALENDAR_COPY.balanceAfter);
 
@@ -151,7 +154,6 @@ test("...and a past day with no reading stays blank", async () => {
     await userEvent.press(screen.getByLabelText("Previous month"));
   }
   const cell = screen.getByLabelText(new RegExp(`^${fmtLongDay(blank)}`));
-  expect(within(cell).queryByText(CALENDAR_COPY.loggedTag)).toBeNull();
   expect(cell.props.accessibilityLabel).not.toContain(CALENDAR_COPY.loggedBalance);
   expect(cell.props.accessibilityLabel).not.toContain(CALENDAR_COPY.balanceAfter);
 });

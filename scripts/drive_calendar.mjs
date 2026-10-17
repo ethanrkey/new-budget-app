@@ -104,10 +104,23 @@ try {
     return { text: b.innerText.replace(/\s+/g, " ").trim(), label: b.getAttribute("aria-label") };
   }, expectLogged[0]);
   is("a past logged day names its reading in the cell", /\$[\d,]+/.test(history.text));
-  is("...and tags it, so a fact never looks like a projection",
-    history.text.toLowerCase().includes(CALENDAR_COPY.loggedTag));
-  is("...and says which it is in words", history.label.includes(CALENDAR_COPY.loggedBalance));
+  // THE CELL IS JUST THE NUMBER, like every other cell. A "logged"
+  // tag under it shipped for one round and came back out.
+  not("...and wears no tag", /logged/i.test(history.text));
+  is("...while the label still says which it is", history.label.includes(CALENDAR_COPY.loggedBalance));
   not("...and never calls it a forecast", history.label.includes(CALENDAR_COPY.balanceAfter));
+
+  // ...and the panel is where the distinction lives, so tapping it
+  // has to produce the other sentence.
+  const panelAfterTap = await app.page.evaluate((pretty) => {
+    const b = [...document.querySelectorAll("button[aria-label]")]
+      .find((x) => (x.getAttribute("aria-label") ?? "").startsWith(pretty));
+    b.click();
+    return new Promise((r) => setTimeout(() => r(document.querySelector("main").innerText), 200));
+  }, expectLogged[0]);
+  is("tapping a past logged day says Logged balance in the panel",
+    panelAfterTap.includes(CALENDAR_COPY.loggedBalance));
+  not("...and not Balance after", panelAfterTap.includes(CALENDAR_COPY.balanceAfter));
 
   // ---- round two: color by direction, and the items in the cell ----
   const cells = await app.page.evaluate(() => {

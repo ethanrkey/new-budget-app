@@ -177,17 +177,13 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                   {cellAmountFull(cell.balance)}
                 </div>
               )}
-              {/* A past day the user recorded a balance on. Tagged,
-                  because a fact and a projection must not look the
-                  same. */}
+              {/* A past day the user recorded a balance on. JUST THE
+                  NUMBER, like every other cell — the distinction
+                  lives one click away in the panel, and in the
+                  aria-label for anyone who cannot see the grid. */}
               {cell.balance == null && cell.logged != null && (
-                <div className="leading-none">
-                  <div className="text-[11px] sm:text-xs tabular-nums font-medium text-gray-900 dark:text-gray-100">
-                    {cellAmountFull(cell.logged)}
-                  </div>
-                  <div className="mt-0.5 text-[9px] uppercase tracking-wide text-gray-400">
-                    {COPY.loggedTag}
-                  </div>
+                <div className="text-[11px] sm:text-xs tabular-nums leading-none font-medium text-gray-900 dark:text-gray-100">
+                  {cellAmountFull(cell.logged)}
                 </div>
               )}
               {cell.net != null && (

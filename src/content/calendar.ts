@@ -14,15 +14,17 @@ export const CALENDAR_COPY = {
   /** Before anything has been picked. */
   hint: "Pick a day to see where your balance lands and what moved it.",
   /**
-   * A past day the user recorded a balance on. REAL, and said so:
-   * the cell wears a "logged" tag and the panel uses this instead of
-   * "Balance after:", because one is a fact and the other is a
-   * projection and a calendar that showed them identically would be
-   * inviting the reader to confuse them.
+   * A past day the user recorded a balance on. One is a fact and the
+   * other is a projection, so they are not the same sentence.
+   *
+   * THE CELL ITSELF SAYS NOTHING — it carries the number and nothing
+   * else, like every other cell. A "logged" tag under it shipped for
+   * one round and came straight back out: it was a second thing to
+   * read in a 49pt box, in a grid whose whole job is to be scanned.
+   * The distinction lives here, one tap away, and in both clients'
+   * accessibility labels for anyone who cannot see the grid at all.
    */
   loggedBalance: "Logged balance:",
-  /** The cell's own tag, which has room for one word. */
-  loggedTag: "logged",
   /** A day the forecast does not cover, because it is behind the anchor. */
   beforeAnchor: (asOf: string) =>
     `No forecast before ${asOf} — your checking balance already accounts for what happened then. Days you logged a balance on show what you recorded.`,
