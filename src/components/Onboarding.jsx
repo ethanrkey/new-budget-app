@@ -4,7 +4,7 @@ import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
   blankAccountRows, incompleteAccountRows, emptyBillRow, removeBillRow,
   emptyAccountRow, removeAccountRow,
-  contributionTargets, collectAccountsWith, blankContributionRow,
+  contributionTargets, collectAccountsWith, blankContributionRow, setupPaycheck,
 } from "../engine/setup.ts";
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, SETUP_STEPS, WEEKDAY_OPTIONS,
@@ -73,6 +73,11 @@ export default function Onboarding({ initialBalance, onComplete }) {
   // that step is not in the flow at all — a step listing nothing makes
   // the flow look longer than it is.
   const contributing = contributionTargets(accounts);
+  // The paycheck as the contributions step needs it — null when none
+  // was entered, which is also the condition for offering "On my
+  // payday" at all. Resolved by the engine so a transfer ticked onto
+  // payday lands on the same date the paycheck rule does.
+  const paycheck = setupPaycheck(payAmount, payCadence, todayISO(), payday);
   // Exclude "done" from the progress count, and the contributions step
   // too when it will be passed over.
   const questionSteps = STEPS.length - 1 - (contributing.length ? 0 : 1);
@@ -98,7 +103,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
     const balance = typed != null ? typed : checkInBalance;
     onComplete({
       recurring, oneoffs: [], checkInBalance: balance,
-      accounts: collectAccountsWith(accounts, contributions),
+      accounts: collectAccountsWith(accounts, contributions, todayISO(), paycheck),
     });
   })
 
@@ -236,48 +241,64 @@ export default function Onboarding({ initialBalance, onComplete }) {
           <div className="space-y-3">
             <h2 className="text-lg font-semibold">{COPY.bills.title}</h2>
             <p className="text-sm text-gray-500">{COPY.bills.sub}</p>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {bills.map((b, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <label className="flex-1 min-w-0">
-                    <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.name}</span>
-                    <input className={field} placeholder="e.g. Spotify" value={b.name} onChange={(e) => updateBill(i, "name", e.target.value)} />
+                <div key={i} className="space-y-1">
+                  <div className="flex gap-2 items-center">
+                    <label className="flex-1 min-w-0">
+                      <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.name}</span>
+                      <input className={field} placeholder="e.g. Spotify" value={b.name} onChange={(e) => updateBill(i, "name", e.target.value)} />
+                    </label>
+                    <label className="w-24 shrink-0">
+                      <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.amount}</span>
+                      <input className={field} type="number" placeholder="0.00" value={b.amount} onChange={(e) => updateBill(i, "amount", e.target.value)} />
+                    </label>
+                    {/* The day is a GUESS — today's date — and it used to be
+                        made silently. A date box per row doubles this
+                        screen's width on a phone and is where people stop,
+                        so the guess is shown instead of asked for. Rent
+                        gets its own field because the 1st is usually right
+                        and the ledger's ordering actually turns on it. */}
+                    {/* Setting the day HERE rather than on a card later:
+                        someone doing all of this by hand should knock it out
+                        in the one place that is already asking, and a wrong
+                        date changes the ledger's ordering and therefore the
+                        running balance. Defaults to today, visibly. */}
+                    <label className="shrink-0">
+                      <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">{COPY.labels.dueDayShort}</span>
+                      <select
+                        className={`${field} w-[4.5rem]`}
+                        aria-label={`Bill ${i + 1} due day`}
+                        value={b.day ?? emptyBillRow(todayISO()).day}
+                        onChange={(e) => updateBill(i, "day", e.target.value)}
+                      >
+                        {DAY_OPTIONS.map((n) => <option key={n} value={String(n)}>{n}</option>)}
+                      </select>
+                    </label>
+                    {/* ALWAYS, not only past one row. Hiding it at the
+                        last row meant a row you had typed into could be
+                        emptied by hand but never cleared. */}
+                    <button
+                      onClick={() => dropBillRow(i)}
+                      className="text-gray-300 hover:text-expense px-1"
+                      title="Remove"
+                      aria-label={`Remove bill ${i + 1}`}
+                    >✕</button>
+                  </div>
+                  {/* UNDER the row, not beside it: four controls
+                      already share that line and a fifth would push
+                      the name field to nothing. This is the Spending
+                      tab's door — see BillRow in engine/setup.ts. */}
+                  <label className="flex items-center gap-2 text-xs text-gray-500 pl-0.5">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 dark:border-gray-600"
+                      checked={b.varies}
+                      aria-label={`Bill ${i + 1} varies`}
+                      onChange={(e) => updateBill(i, "varies", e.target.checked)}
+                    />
+                    {COPY.bills.varies}
                   </label>
-                  <label className="w-24 shrink-0">
-                    <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.amount}</span>
-                    <input className={field} type="number" placeholder="0.00" value={b.amount} onChange={(e) => updateBill(i, "amount", e.target.value)} />
-                  </label>
-                  {/* The day is a GUESS — today's date — and it used to be
-                      made silently. A date box per row doubles this
-                      screen's width on a phone and is where people stop,
-                      so the guess is shown instead of asked for. Rent
-                      gets its own field because the 1st is usually right
-                      and the ledger's ordering actually turns on it. */}
-                  {/* Setting the day HERE rather than on a card later:
-                      someone doing all of this by hand should knock it out
-                      in the one place that is already asking, and a wrong
-                      date changes the ledger's ordering and therefore the
-                      running balance. Defaults to today, visibly. */}
-                  <label className="shrink-0">
-                    <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">{COPY.labels.dueDayShort}</span>
-                    <select
-                      className={`${field} w-[4.5rem]`}
-                      aria-label={`Bill ${i + 1} due day`}
-                      value={b.day ?? emptyBillRow(todayISO()).day}
-                      onChange={(e) => updateBill(i, "day", e.target.value)}
-                    >
-                      {DAY_OPTIONS.map((n) => <option key={n} value={String(n)}>{n}</option>)}
-                    </select>
-                  </label>
-                  {/* ALWAYS, not only past one row. Hiding it at the
-                      last row meant a row you had typed into could be
-                      emptied by hand but never cleared. */}
-                  <button
-                    onClick={() => dropBillRow(i)}
-                    className="text-gray-300 hover:text-expense px-1"
-                    title="Remove"
-                    aria-label={`Remove bill ${i + 1}`}
-                  >✕</button>
                 </div>
               ))}
             </div>
@@ -444,6 +465,10 @@ export default function Onboarding({ initialBalance, onComplete }) {
               const row = contributions[key] ?? blankContributionRow(todayISO());
               const setRow = (patch) =>
                 setContributions((c) => ({ ...c, [key]: { ...row, ...patch } }));
+              // A ticked box with no paycheck behind it is not ticked:
+              // the engine ignores it too, so the two cannot disagree
+              // about what the row means.
+              const onPayday = row.onPayday && !!paycheck;
               return (
                 <div key={key} className="border-t border-gray-100 dark:border-gray-800 pt-3">
                   <div className="text-sm font-medium mb-1">{account.name}</div>
@@ -460,35 +485,59 @@ export default function Onboarding({ initialBalance, onComplete }) {
                         onChange={(e) => setRow({ amount: e.target.value })}
                       />
                     </label>
-                    <label className="w-32 shrink-0">
-                      <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.cadence}</span>
-                      <select
-                        className={field} value={row.cadence}
-                        onChange={(e) => setRow({ cadence: e.target.value })}
-                      >
-                        {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                      </select>
-                    </label>
-                    {/* EVERY CADENCE GETS A FIRST DATE. It used to be
-                        a day of the month shown only for a monthly
-                        one, so a weekly or biweekly transfer silently
-                        started on the day setup was run — the same
-                        date as the balance it is counted forward
-                        from, which counts it twice. */}
-                    <label className="shrink-0">
-                      <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">
-                        {account.group === "debt"
-                          ? COPY.contributions.startLabelDebt
-                          : COPY.contributions.startLabel}
-                      </span>
-                      <input
-                        className={field} type="date" min={todayISO()}
-                        aria-label={`${account.name} first contribution`}
-                        value={row.start}
-                        onChange={(e) => setRow({ start: e.target.value || todayISO() })}
-                      />
-                    </label>
+                    {/* TICKED, THE TWO CONTROLS BESIDE THIS GO AWAY —
+                        they are the question it has just answered, and
+                        leaving them visible but ignored is the shape of
+                        a control that lies. */}
+                    {!onPayday && (
+                      <>
+                        <label className="w-32 shrink-0">
+                          <span className="block text-[11px] text-gray-400 mb-0.5">{COPY.labels.cadence}</span>
+                          <select
+                            className={field} value={row.cadence}
+                            onChange={(e) => setRow({ cadence: e.target.value })}
+                          >
+                            {CADENCE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                          </select>
+                        </label>
+                        {/* EVERY CADENCE GETS A FIRST DATE. It used to be
+                            a day of the month shown only for a monthly
+                            one, so a weekly or biweekly transfer silently
+                            started on the day setup was run — the same
+                            date as the balance it is counted forward
+                            from, which counts it twice. */}
+                        <label className="shrink-0">
+                          <span className="block text-[11px] text-gray-400 mb-0.5 whitespace-nowrap">
+                            {account.group === "debt"
+                              ? COPY.contributions.startLabelDebt
+                              : COPY.contributions.startLabel}
+                          </span>
+                          <input
+                            className={field} type="date" min={todayISO()}
+                            aria-label={`${account.name} first contribution`}
+                            value={row.start}
+                            onChange={(e) => setRow({ start: e.target.value || todayISO() })}
+                          />
+                        </label>
+                      </>
+                    )}
                   </div>
+                  {/* OFFERED ONLY WHEN THERE IS A PAYDAY TO BE ON, and
+                      off by default. Subtle on purpose: it is a
+                      shortcut past two controls, not a recommendation
+                      about when to save. */}
+                  {paycheck && (
+                    <label className="flex items-center gap-2 text-xs text-gray-500 mt-1.5">
+                      <input
+                        type="checkbox"
+                        className="rounded border-gray-300 dark:border-gray-600"
+                        checked={onPayday}
+                        aria-label={`${account.name} on my payday`}
+                        onChange={(e) => setRow({ onPayday: e.target.checked })}
+                      />
+                      {COPY.contributions.onPayday}
+                    </label>
+                  )}
                 </div>
               );
             })}

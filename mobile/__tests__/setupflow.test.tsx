@@ -5,6 +5,7 @@ import Setup from "../components/Setup";
 import { applySetup } from "../../src/engine/setup.ts";
 import { normalize } from "../../src/engine/stateShape.ts";
 import type { SetupAnswers } from "../../src/engine/setup.ts";
+import type { RecurringItem } from "../../src/engine/types.ts";
 
 // The six screens, mounted. What each step MEANS is in
 // tests/mobile-setup.test.mjs and what it CREATES is in
@@ -726,4 +727,93 @@ test("Skip setup leaves without creating anything", async () => {
   // Nothing is committed on the way out — the three-step guide is what
   // picks up from here, and it computes what is still missing itself.
   expect(got).toHaveLength(0);
+});
+
+test("a bill can be marked as one that varies, and only that bill is", async () => {
+  // THE SPENDING TAB'S DOOR, added 2026-10-17. Setup could not say
+  // this about anything, so the one bill everybody has that moves —
+  // electric — was the one bill nobody could compare against reality.
+  const got: SetupAnswers[] = [];
+  await mount((a) => got.push(a));
+  await skip(2);   // past the paycheck and the rent
+
+  await userEvent.type(screen.getByLabelText("Bill 1 name"), "Spotify");
+  await userEvent.type(screen.getByLabelText("Bill 1 amount"), "12");
+  await press("+ Add another bill");
+  await userEvent.type(screen.getByLabelText("Bill 2 name"), "Electric");
+  await userEvent.type(screen.getByLabelText("Bill 2 amount"), "90");
+
+  // OFF by default — "varies" is the claim you make, not the one you
+  // have to deny.
+  expect(screen.getByLabelText("Bill 1 varies").props.accessibilityState.checked).toBe(false);
+  await userEvent.press(screen.getByLabelText("Bill 2 varies"));
+  expect(screen.getByLabelText("Bill 2 varies").props.accessibilityState.checked).toBe(true);
+  expect(screen.getByLabelText("Bill 1 varies").props.accessibilityState.checked).toBe(false);
+
+  await press("Continue");
+  await skip(1);
+  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
+  await press("Continue");
+  await press("Finish");
+  await press("Go to my budget");
+
+  const bills = (got[0]!.recurring ?? []).filter(
+    (r): r is RecurringItem => r.category === "bill" && "cadence" in r,
+  );
+  expect(bills.map((b) => b.name)).toEqual(["Spotify", "Electric"]);
+  expect(bills.map((b) => b.variable ?? false)).toEqual([false, true]);
+});
+
+test("'On my payday' copies the paycheck and puts away the two questions it answers", async () => {
+  const got: SetupAnswers[] = [];
+  await mount((a) => got.push(a));
+
+  // A paycheck first, because the offer only exists when there is a
+  // payday to be on.
+  await userEvent.type(screen.getByLabelText("Amount"), "2100");
+  await userEvent.press(screen.getByLabelText("Every 2 weeks"));
+  const payday = await pickFirst("When's your next payday\\?", 5);
+  await press("Continue");
+
+  await skip(3);
+  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
+  await press("Continue");
+  await userEvent.type(screen.getByLabelText("Savings 1 name"), "Emergency fund");
+  await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
+  await press("Continue");
+
+  // Off by default, with both of its own controls on screen.
+  const box = () => screen.getByLabelText("Emergency fund on my payday");
+  expect(box().props.accessibilityState.checked).toBe(false);
+  expect(screen.getByText("First contribution")).toBeOnTheScreen();
+
+  await userEvent.type(screen.getByLabelText("Emergency fund contribution amount"), "200");
+  await userEvent.press(box());
+
+  // TICKED, THE TWO CONTROLS IT ANSWERS GO AWAY. Leaving them visible
+  // but ignored is the shape of a control that lies.
+  expect(box().props.accessibilityState.checked).toBe(true);
+  expect(screen.queryByText("First contribution")).toBeNull();
+  expect(screen.queryByText("How often?")).toBeNull();
+
+  await press("Finish");
+  await press("Go to my budget");
+
+  // The paycheck's cadence and its next date, copied — not the
+  // monthly-from-today a blank row would have carried.
+  expect(got[0]!.accounts![0]!.contribution).toEqual({
+    amount: 200, cadence: "biweekly", start: payday,
+  });
+});
+
+test("...and there is nothing to tick when no paycheck was entered", async () => {
+  await mount();
+  await toAccounts("4000");
+  await userEvent.type(screen.getByLabelText("Savings 1 name"), "Emergency fund");
+  await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
+  await press("Continue");
+
+  expect(screen.queryByLabelText("Emergency fund on my payday")).toBeNull();
+  // ...and the two controls it would have replaced are still there.
+  expect(screen.getByText("First contribution")).toBeOnTheScreen();
 });

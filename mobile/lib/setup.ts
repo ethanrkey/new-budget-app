@@ -2,10 +2,11 @@ import type { BudgetItem, BudgetState } from "../../src/engine/types.ts";
 import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
   blankAccountRows, incompleteAccountRows, emptyBillRow,
-  contributionTargets, collectAccountsWith, blankContributionRow,
+  contributionTargets, collectAccountsWith, blankContributionRow, setupPaycheck,
   type SetupCadence, type BillRow, type AccountRows, type SetupAnswers,
   type ContributionRows,
 } from "../../src/engine/setup.ts";
+import { todayISO } from "../../src/engine/model.ts";
 import { SETUP_STEPS, type SetupStepKey } from "../../src/content/setup.ts";
 import { isNewAccount } from "./firstRun.ts";
 
@@ -142,7 +143,9 @@ export function accountRowErrors(d: SetupDraft): Record<string, "name" | "amount
 }
 
 /** The draft plus whatever Continue collected, in the shape applySetup takes. */
-export function setupAnswers(collected: BudgetItem[], d: SetupDraft): SetupAnswers {
+export function setupAnswers(
+  collected: BudgetItem[], d: SetupDraft, today: string = todayISO(),
+): SetupAnswers {
   return {
     recurring: collected,
     oneoffs: [],
@@ -151,7 +154,13 @@ export function setupAnswers(collected: BudgetItem[], d: SetupDraft): SetupAnswe
     // dropped once; here the field is the only copy, which is the same
     // fix done structurally.
     checkInBalance: balanceAnswer(d.balance),
-    accounts: collectAccountsWith(d.accounts, d.contributions),
+    // The paycheck is passed in so a contribution ticked "On my
+    // payday" can take its cadence and next date — a copy made here,
+    // once, not a live link. See ContributionRow in the engine.
+    accounts: collectAccountsWith(
+      d.accounts, d.contributions, today,
+      setupPaycheck(d.payAmount, d.payCadence, today, d.payday),
+    ),
   };
 }
 

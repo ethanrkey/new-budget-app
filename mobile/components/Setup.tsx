@@ -17,6 +17,7 @@ import {
 } from "../../src/content/setup.ts";
 import {
   emptyBillRow, removeBillRow, emptyAccountRow, removeAccountRow, contributionTargets,
+  setupPaycheck,
 } from "../../src/engine/setup.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
 import type { SetupAnswers, SetupCadence } from "../../src/engine/setup.ts";
@@ -108,6 +109,11 @@ export default function Setup({
   const set = <K extends keyof SetupDraft>(k: K, v: SetupDraft[K]) => setD((p) => ({ ...p, [k]: v }));
   const rules = STEPS.flatMap((s) => collected[s] ?? []);
   const contributing = contributionTargets(d.accounts);
+  // The paycheck as the contributions step needs it — null when none
+  // was entered, which is also the condition for offering "On my
+  // payday" at all. Resolved by the engine so a transfer ticked onto
+  // payday lands on the same date the paycheck rule does.
+  const paycheck = setupPaycheck(d.payAmount, d.payCadence, todayISO, d.payday);
   const last = i === STEPS.length - 1;
   const rowErrors = accountRowErrors(d);
 
@@ -133,7 +139,7 @@ export default function Setup({
         style={[styles.wrap, { paddingTop: insets.top + 8 }]}
       >
         {done ? (
-          <Done count={rules.length} busy={busy} onGo={() => onComplete(setupAnswers(rules, d))} />
+          <Done count={rules.length} busy={busy} onGo={() => onComplete(setupAnswers(rules, d, todayISO))} />
         ) : (
           <>
             {/* The progress bar is a count AND a bar. A bar alone on a
@@ -233,6 +239,15 @@ export default function Setup({
                         value={b.day}
                         onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, day: v } : r)))}
                         accessibilityLabel={`Bill ${idx + 1} due day`}
+                      />
+                      {/* The Spending tab's door — see BillRow in
+                          engine/setup.ts. Third line of the card,
+                          because the first two are already full. */}
+                      <Check
+                        label={COPY.bills.varies}
+                        value={b.varies}
+                        onChange={(v) => set("bills", d.bills.map((r, j) => (j === idx ? { ...r, varies: v } : r)))}
+                        accessibilityLabel={`Bill ${idx + 1} varies`}
                       />
                     </View>
                   ))}
@@ -353,29 +368,50 @@ export default function Setup({
                           onChange={(v) => setRow({ amount: v })}
                           accessibilityLabel={`${account.name} contribution amount`}
                         />
-                        <Cadence
-                          label={COPY.labels.cadence}
-                          value={row.cadence}
-                          onChange={(v) => setRow({ cadence: v })}
-                        />
-                        {/* EVERY CADENCE GETS A FIRST DATE. It used to
-                            be a day of the month and only for a
-                            monthly one, so a weekly or biweekly
-                            transfer silently started on the day setup
-                            was run — which put it on the same date as
-                            the balance it is counted forward from,
-                            and therefore counted it twice. Same
-                            control as the payday question, one step
-                            earlier, which fixed the same thing. */}
-                        <DateRow
-                          label={account.group === "debt"
-                            ? COPY.contributions.startLabelDebt
-                            : COPY.contributions.startLabel}
-                          value={row.start}
-                          minimum={todayISO}
-                          onChange={(v) => setRow({ start: v })}
-                          accessibilityLabel={`${account.name} first contribution`}
-                        />
+                        {/* OFFERED ONLY WHEN THERE IS A PAYDAY TO BE
+                            ON, and off by default. It is a shortcut
+                            past the two controls below it, not a
+                            recommendation about when to save. */}
+                        {paycheck && (
+                          <Check
+                            label={COPY.contributions.onPayday}
+                            value={!!row.onPayday}
+                            onChange={(v) => setRow({ onPayday: v })}
+                            accessibilityLabel={`${account.name} on my payday`}
+                          />
+                        )}
+                        {/* TICKED, THESE TWO GO AWAY — they are the
+                            question it has just answered, and leaving
+                            them visible but ignored is the shape of a
+                            control that lies. */}
+                        {!(paycheck && row.onPayday) && (
+                          <>
+                            <Cadence
+                              label={COPY.labels.cadence}
+                              value={row.cadence}
+                              onChange={(v) => setRow({ cadence: v })}
+                            />
+                            {/* EVERY CADENCE GETS A FIRST DATE. It used
+                                to be a day of the month and only for a
+                                monthly one, so a weekly or biweekly
+                                transfer silently started on the day
+                                setup was run — which put it on the
+                                same date as the balance it is counted
+                                forward from, and therefore counted it
+                                twice. Same control as the payday
+                                question, one step earlier, which fixed
+                                the same thing. */}
+                            <DateRow
+                              label={account.group === "debt"
+                                ? COPY.contributions.startLabelDebt
+                                : COPY.contributions.startLabel}
+                              value={row.start}
+                              minimum={todayISO}
+                              onChange={(v) => setRow({ start: v })}
+                              accessibilityLabel={`${account.name} first contribution`}
+                            />
+                          </>
+                        )}
                       </View>
                     );
                   })}
@@ -514,6 +550,38 @@ function Remove({ label, onPress }: { label: string; onPress: () => void }) {
       accessibilityLabel={label}
     >
       <Text style={styles.removeGlyph}>✕</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * A checkbox, which this flow had no such thing as until 2026-10-17.
+ *
+ * Drawn rather than imported: RN has no checkbox, the one community
+ * package for it is a native module (a new binary, for a square with a
+ * tick in it), and `Switch` is the wrong control — a switch is a mode
+ * you turn on, a checkbox is a fact you state about the row it sits in.
+ *
+ * The whole row is the target, label included, because a 20pt square
+ * is under the 44pt Apple asks for and the label is the part people
+ * aim at anyway.
+ */
+function Check({ label, value, onChange, accessibilityLabel }: {
+  label: string; value: boolean; onChange: (v: boolean) => void; accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable
+      style={styles.checkRow}
+      onPress={() => { Keyboard.dismiss(); onChange(!value); }}
+      hitSlop={6}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: value }}
+      accessibilityLabel={accessibilityLabel ?? label}
+    >
+      <View style={[styles.checkBox, value && styles.checkBoxOn]}>
+        {value && <Text style={styles.checkTick}>✓</Text>}
+      </View>
+      <Text style={styles.checkLabel}>{label}</Text>
     </Pressable>
   );
 }
@@ -707,6 +775,14 @@ function Weekday({
 }
 
 const styles = StyleSheet.create({
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 },
+  checkBox: {
+    width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: T.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  checkBoxOn: { backgroundColor: T.brass, borderColor: T.brass },
+  checkTick: { color: "#111827", fontSize: 13, fontWeight: "800", lineHeight: 15 },
+  checkLabel: { color: T.dim, fontSize: 13, flexShrink: 1 },
   wrap: { flex: 1, backgroundColor: T.bg },
   head: { flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 20 },
   track: { flex: 1, height: 4, borderRadius: 2, backgroundColor: T.surfaceAlt, overflow: "hidden" },

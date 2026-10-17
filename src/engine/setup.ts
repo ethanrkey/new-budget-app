@@ -210,8 +210,19 @@ export function applySetup(
 
 export type SetupCadence = "weekly" | "biweekly" | "monthly";
 
-/** One row of the "other monthly bills" step, as typed. */
-export type BillRow = { name: string; amount: string; day: string };
+/**
+ * One row of the "other monthly bills" step, as typed.
+ *
+ * `varies` is the Spending tab's door, added 2026-10-17. The flag it
+ * sets — `variable: true` — is what makes a bill appear on Spending,
+ * where plan is compared against what was actually paid; without it an
+ * electric bill entered during setup is a fixed number forever and the
+ * tab it belongs on never mentions it. Groceries have always been
+ * marked this way; setup had no way to say it about anything else, so
+ * the one bill everybody has that moves was the one bill nobody could
+ * track.
+ */
+export type BillRow = { name: string; amount: string; day: string; varies: boolean };
 
 /** One row of the accounts step, as typed. */
 export type AccountRow = { name: string; amount: string };
@@ -339,7 +350,9 @@ export function defaultBillDay(today: ISODate = todayISO()): string {
 }
 
 export function emptyBillRow(today: ISODate = todayISO()): BillRow {
-  return { name: "", amount: "", day: defaultBillDay(today) };
+  // OFF by default. Most monthly bills do not move, and a box that
+  // starts ticked makes "varies" the claim you have to deny.
+  return { name: "", amount: "", day: defaultBillDay(today), varies: false };
 }
 
 /**
@@ -398,6 +411,24 @@ export function paycheckRule(
 }
 
 /**
+ * The paycheck answer as the contributions step needs it, or null when
+ * no usable paycheck was entered.
+ *
+ * NULL IS THE CONTROL'S OWN CONDITION. "On my payday" is only offered
+ * when there is a payday to be on, and the one place that decides what
+ * counts as a paycheck is paycheckRule — so this resolves the start
+ * date exactly as that does rather than beside it, and a transfer
+ * ticked onto payday lands on the same date the paycheck does.
+ */
+export function setupPaycheck(
+  amount: string, cadence: SetupCadence, today: ISODate = todayISO(),
+  payday: ISODate = today,
+): SetupPaycheck | null {
+  if (positive(amount) == null) return null;
+  return { cadence, next: payday >= today ? payday : today };
+}
+
+/**
  * The rent step. Null when nothing usable was typed.
  *
  * Rent gets a day field of its own, unlike the generic bills, because
@@ -442,6 +473,10 @@ export function billRules(rows: BillRow[], today: ISODate = todayISO()): BudgetI
     out.push({
       id: uid(), name: b.name.trim(), amount: amt, category: "bill",
       cadence: "monthly", startDate: firstMonthlyOn(dom, today), dayOfMonth: dom,
+      // Set only when it is true, so a fixed bill carries no flag at
+      // all rather than carrying `false` — the same shape the Ledger's
+      // own form produces for one.
+      ...(b.varies ? { variable: true } : {}),
     } as BudgetItem);
   }
   return out;
@@ -602,8 +637,29 @@ export function collectAccounts(rows: AccountRows): SetupAccount[] {
 // entered, because a step listing nothing is a step that makes the
 // flow look longer than it is.
 
-/** One row of the contributions step, as typed. */
-export type ContributionRow = { amount: string; cadence: SetupCadence; start: ISODate };
+/**
+ * One row of the contributions step, as typed.
+ *
+ * `onPayday` is an opt-in added 2026-10-17: tick it and the row takes
+ * the paycheck's cadence and next payday instead of asking for its
+ * own, because "I move $200 into savings every payday" is how most
+ * people actually describe this and answering it twice is two more
+ * controls on the longest step in the flow.
+ *
+ * IT IS A COPY, NOT A LINK. The cadence and date are read off the
+ * paycheck once, here, and written onto the rule like any other
+ * answer. Editing the paycheck later does not move the transfer —
+ * which is the honest behavior: the rules the flow creates are
+ * ordinary rules that the user owns, and a hidden dependency between
+ * two of them would be a thing the app knows and the Ledger does not
+ * show.
+ */
+export type ContributionRow = {
+  amount: string; cadence: SetupCadence; start: ISODate; onPayday: boolean;
+};
+
+/** The paycheck answer, as far as a contribution row needs it. */
+export type SetupPaycheck = { cadence: SetupCadence; next: ISODate };
 
 /** Rows, keyed by the account row they belong to — see contributionTargets. */
 export type ContributionRows = Record<string, ContributionRow>;
@@ -613,7 +669,7 @@ export function blankContributionRow(today: ISODate = todayISO()): ContributionR
   // monthly far more often than it is anything else, and the first
   // one defaults to today — shown, though, which is the whole
   // difference from the version that assumed it.
-  return { amount: "", cadence: "monthly", start: today };
+  return { amount: "", cadence: "monthly", start: today, onPayday: false };
 }
 
 /**
@@ -635,22 +691,34 @@ export function contributionTargets(rows: AccountRows): { key: string; account: 
     }));
 }
 
-/** What one typed row means. Null for "nothing was entered here". */
+/**
+ * What one typed row means. Null for "nothing was entered here".
+ *
+ * `paycheck` is where "On my payday" is resolved — see ContributionRow.
+ * It is ignored when the box is not ticked, and when it is ticked but
+ * no paycheck was entered the row keeps its own answers: a flag with
+ * nothing behind it must not silently become "monthly from today".
+ */
 export function contributionOf(
   row: ContributionRow | undefined, today: ISODate = todayISO(),
+  paycheck: SetupPaycheck | null = null,
 ): SetupContribution | null {
   if (!row) return null;
   const amt = positive(row.amount);
   if (amt == null) return null;
+  if (row.onPayday && paycheck) {
+    return { amount: amt, cadence: paycheck.cadence, start: paycheck.next };
+  }
   return { amount: amt, cadence: row.cadence, start: row.start || today };
 }
 
 /** The finished account rows with their contributions attached. */
 export function collectAccountsWith(
   rows: AccountRows, contributions: ContributionRows, today: ISODate = todayISO(),
+  paycheck: SetupPaycheck | null = null,
 ): SetupAccount[] {
   return contributionTargets(rows).map(({ key, account }) => {
-    const contribution = contributionOf(contributions[key], today);
+    const contribution = contributionOf(contributions[key], today, paycheck);
     return contribution ? { ...account, contribution } : account;
   });
 }

@@ -14,6 +14,7 @@ import {
   blankAccountRows, startedAccountRows, incompleteAccountRows, collectAccounts,
   firstMonthlyOn, defaultBillDay, emptyBillRow, firstWeekdayOn,
   contributionTargets, contributionOf, collectAccountsWith, contributionName,
+  setupPaycheck,
   blankContributionRow, clampDay, removeBillRow, removeAccountRow, SETUP_GROUPS,
   markSetupSeen, markTourSeen,
 } from "../src/engine/setup.ts";
@@ -218,6 +219,68 @@ eq("a new account is seeded with three categories", names(blank), ["Debt", "Inve
   eq("rent is NOT variable — the whole point is that it does not move",
     rentRule("1450", "1", TODAY).variable, undefined);
   eq("...nor is a named bill", billRules([{ name: "Spotify", amount: "12", day: "4" }], TODAY)[0].variable, undefined);
+
+  // ...UNLESS THE ROW SAYS IT DOES, from 2026-10-17. Setup could not
+  // say this about anything, so the one bill everybody has that moves
+  // — electric — was the one bill nobody could put on Spending.
+  eq("a bill ticked 'This bill varies' is variable",
+    billRules([{ name: "Electric", amount: "90", day: "18", varies: true }], TODAY)[0].variable, true);
+  eq("...and an unticked one carries no flag at all, not false",
+    "variable" in billRules([{ name: "Rent-ish", amount: "90", day: "18", varies: false }], TODAY)[0], false);
+  // One row ticked must not tick the others.
+  eq("the flag belongs to its own row",
+    billRules([
+      { name: "Spotify", amount: "12", day: "4", varies: false },
+      { name: "Electric", amount: "90", day: "18", varies: true },
+      { name: "Gym", amount: "40", day: "20", varies: false },
+    ], TODAY).map((r) => r.variable ?? false),
+    [false, true, false]);
+}
+
+// ---- "On my payday", which copies rather than links -----------------
+{
+  // THE OPT-IN, 2026-10-17. "I move $200 across every payday" is how
+  // most people describe a transfer, and answering it twice is two
+  // more controls on the longest step in the flow.
+  const pay = setupPaycheck("2100", "biweekly", TODAY, "2026-10-16");
+  eq("the paycheck resolves to its cadence and next date",
+    pay, { cadence: "biweekly", next: "2026-10-16" });
+  eq("a payday already gone is clamped to today, exactly as paycheckRule clamps it",
+    setupPaycheck("2100", "biweekly", TODAY, "2020-01-01").next,
+    paycheckRule("2100", "biweekly", TODAY, "2020-01-01").startDate);
+
+  // NULL IS THE CONTROL'S OWN CONDITION: no paycheck, no offer.
+  eq("no amount means no paycheck to be paid on",
+    setupPaycheck("", "biweekly", TODAY, "2026-10-16"), null);
+  eq("...and neither does zero", setupPaycheck("0", "biweekly", TODAY, "2026-10-16"), null);
+
+  const ticked = { amount: "200", cadence: "monthly", start: "2026-12-25", onPayday: true };
+  eq("a ticked row takes the paycheck's cadence and date",
+    contributionOf(ticked, TODAY, pay),
+    { amount: 200, cadence: "biweekly", start: "2026-10-16" });
+  eq("...and its own amount, which is the one thing it still asks",
+    contributionOf({ ...ticked, amount: "75" }, TODAY, pay).amount, 75);
+
+  // A flag with nothing behind it must not silently become "monthly
+  // from today" — the row keeps what it was given.
+  eq("ticked with no paycheck falls back to the row's own answers",
+    contributionOf(ticked, TODAY, null),
+    { amount: 200, cadence: "monthly", start: "2026-12-25" });
+  eq("an unticked row ignores the paycheck entirely",
+    contributionOf({ ...ticked, onPayday: false }, TODAY, pay),
+    { amount: 200, cadence: "monthly", start: "2026-12-25" });
+
+  // IT IS A COPY, NOT A LINK. Editing the paycheck afterwards does
+  // not move the transfer, because there is nothing left to move it:
+  // the rule carries a date like any other rule.
+  const rows = { investment: [], savings: [{ name: "Emergency fund", amount: "800" }], debt: [] };
+  const copied = collectAccountsWith(
+    rows, { "savings:0": ticked }, TODAY, pay,
+  )[0].contribution;
+  const later = applySetup(blank, { accounts: [{ name: "Emergency fund", amount: 800, group: "savings", contribution: copied }] }, TODAY);
+  const rule = later.recurring.find((r) => r.name === "Emergency fund");
+  eq("the rule carries the payday as a plain start date", rule.startDate, "2026-10-16");
+  eq("...and the paycheck's cadence", rule.cadence, "biweekly");
 }
 
 // ---- rent's day, which the ledger's ordering turns on -----------------
@@ -466,7 +529,8 @@ eq("...and that order is investments, savings, debt",
   // `new Date().getDate()`, frozen when the bundle loaded. One builder
   // now, and it takes the day as an argument.
   eq("a new row's day is today's", emptyBillRow(TODAY).day, "12");
-  eq("...with nothing else filled in", emptyBillRow(TODAY), { name: "", amount: "", day: "12" });
+  eq("...with nothing else filled in, and the varies box UNticked",
+    emptyBillRow(TODAY), { name: "", amount: "", day: "12", varies: false });
   eq("a single-digit day has no leading zero", defaultBillDay("2026-10-04"), "4");
   eq("a two-digit day is itself", defaultBillDay("2026-10-31"), "31");
   // The point of the parameter: two rows made on different days differ,
@@ -550,7 +614,7 @@ eq("...and that order is investments, savings, debt",
   eq("a blank row means nothing was asked for", contributionOf(blankContributionRow(TODAY)), null);
   eq("a missing row too", contributionOf(undefined), null);
   eq("zero is not a contribution either",
-    contributionOf({ amount: "0", cadence: "monthly", start: "2026-11-05" }), null);
+    contributionOf({ amount: "0", cadence: "monthly", start: "2026-11-05", onPayday: false }), null);
   // EVERY CADENCE CARRIES A FIRST DATE now. It used to be a day of
   // the month and only for a monthly one; weekly and biweekly
   // contributions started on whatever day setup was run, which is

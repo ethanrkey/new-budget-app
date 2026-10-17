@@ -51,8 +51,14 @@ export const SETUP_COPY = {
   },
   bills: {
     title: "Any other monthly bills?",
-    sub: "Phone, internet, subscriptions, memberships — anything that's roughly the same amount every month. Set the day each one is due; it defaults to today.",
+    sub: "Phone, internet, subscriptions, utilities — anything that comes due each month. Set the day each one is due, and check 'This bill varies' for ones like electric that change month to month.",
     add: "+ Add another bill",
+    // THE SPENDING TAB'S DOOR. A bill marked this way is `variable:
+    // true`, which is what puts it on Spending where plan is compared
+    // against what was actually paid. Before 2026-10-17 setup could
+    // not say it about anything, so the one bill everybody has that
+    // moves was the one bill nobody could track.
+    varies: "This bill varies",
   },
   groceries: {
     title: "About how much do you spend on groceries?",
@@ -73,7 +79,11 @@ export const SETUP_COPY = {
     why: "Enter the number your bank shows right now — even if it's 0. Everything in the Ledger is counted forward from it, so the forecast is wrong without it.",
   },
   accounts: {
-    title: "What else do you track?",
+    // NAMES THE THREE THINGS, since 2026-10-17. "What else do you
+    // track?" is a question you can only answer if you already know
+    // what the step is for; the three words below the fold were doing
+    // the work the title should.
+    title: "What investments, savings accounts, and debts do you want to track?",
     sub: "These accounts are what will show on your dashboard, which is the page where you see your full current financial picture. These can be added and updated at any time whenever needed.",
     add: "+ Add another",
     // Both halves of a row are required once either is filled in. The
@@ -99,6 +109,13 @@ export const SETUP_COPY = {
     // it is the word for it, and the row has to read next to a
     // month's other bills.
     startLabelDebt: "First payment",
+    // AN OPT-IN, OFF BY DEFAULT, and only offered when a paycheck was
+    // entered. "I move $200 across every payday" is how most people
+    // describe this, and answering it twice is two more controls on
+    // the longest step in the flow. It copies the paycheck's cadence
+    // and next payday at setup time — it is not a live link, and
+    // editing the paycheck later does not move the transfer.
+    onPayday: "On my payday",
     amountFor: (name: string) => `Into ${name}`,
     owedFor: (name: string) => `Toward ${name}`,
   },
