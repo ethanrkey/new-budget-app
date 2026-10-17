@@ -1916,10 +1916,43 @@ fifth tab never needs a migration.
   both clients' accessibility labels say "money in" / "money out" and
   "up $X" / "down $X" in words, and the web cell lists the items.
 
-  **THE WEB CELL ALSO LISTS THE DAY'S ITEMS**, up to three by name
-  and amount, then "+N more". It is three times the phone's width and
-  was mostly empty; the phone's 49pt cell could not hold a name and
-  does not try. `min-h` went to 132px to fit it.
+  **THE WEB CELL ALSO LISTS THE DAY'S ITEMS**, up to four by name and
+  amount, then "+N more". It is three times the phone's width and was
+  mostly empty; the phone's 49pt cell could not hold a name and does
+  not try.
+
+  **COMPACTED 2026-10-17 (OTA 5), WEB ONLY**, because a month plus
+  the detail panel did not fit a laptop — measured at 1440x800, the
+  panel ended **416px below the fold**. Four changes: the cell is
+  `flex flex-col justify-start` (a button CENTERS its content
+  vertically in Chrome, so the `align-top` it carried was a
+  table-cell property doing nothing, and every quiet cell floated in
+  the middle of a 132px box); `min-h` is what a quiet day needs, 48px,
+  and a busy row grows past it on its own, which is how a grid row
+  already works; the gaps between cells, above the weekday header and
+  around the panel are all tighter; and **the net moved onto the
+  balance's line**, which was worth ~11px on every busy row.
+
+  `scripts/measure_calendar.mjs` is the measurement, and it checks
+  three months rather than one, because "it fits" is a claim about
+  the worst case somebody will actually meet:
+
+  | case | result at 1440x800 |
+  |---|---|
+  | a typical five-week month | **fits, 43px to spare** |
+  | ...with a five-item day | **fits, 2px to spare** |
+  | a six-week month | **73px over** |
+
+  **A SIX-WEEK MONTH CANNOT FIT, and that is arithmetic rather than a
+  missing optimization.** 403px of the viewport is spent above the
+  grid — the app header, the action row, the account strip, the tabs,
+  the toolbar and the Planned spending panel — and the detail panel
+  is ~90px. That leaves ~307px for six rows: 51px each, which is
+  exactly a quiet row with nothing in it. Any month where one day has
+  a transaction is over. The lever is above the calendar, not inside
+  it: hiding the Planned spending panel in calendar mode would return
+  ~51px, most of a row. Not done, because that is a product call
+  about a panel somebody may want beside the grid.
 
   **ROUND THREE, 2026-10-17 (OTA 3).** Three changes, and the first
   one is a rule.

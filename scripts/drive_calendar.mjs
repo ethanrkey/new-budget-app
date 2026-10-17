@@ -122,6 +122,17 @@ try {
     panelAfterTap.includes(CALENDAR_COPY.loggedBalance));
   not("...and not Balance after", panelAfterTap.includes(CALENDAR_COPY.balanceAfter));
 
+  // SETTLE BEFORE READING THE GRID AGAIN. That click re-renders, and
+  // reading the cells straight after it caught a half-rendered grid
+  // about one run in three — which reported real behavior as broken
+  // and, worse, reported it inconsistently.
+  await app.page.waitForFunction(
+    () => [...document.querySelectorAll("button[aria-label]")]
+      .filter((b) => /^\w+day, /.test(b.getAttribute("aria-label")))
+      .some((b) => /money in/.test(b.getAttribute("aria-label"))),
+    { timeout: 5000 },
+  );
+
   // ---- round two: color by direction, and the items in the cell ----
   const cells = await app.page.evaluate(() => {
     const paint = (el) => el && getComputedStyle(el).color;
@@ -130,9 +141,14 @@ try {
       .map((b) => {
         const dots = [...b.querySelectorAll("span.rounded-full")].map((d) => getComputedStyle(d).backgroundColor);
         const lines = [...b.querySelectorAll(":scope > div")];
-        const bal = lines.find((d) => /tabular-nums/.test(d.className) && /^\$|^-\$/.test(d.innerText.trim()));
+        // The balance and the net share a line since the compaction,
+        // so the net is a span beside the balance rather than a div
+        // under it.
+        const balLine = lines.find((d) => /tabular-nums/.test(d.innerHTML) && /\$/.test(d.innerText));
+        const spans = balLine ? [...balLine.querySelectorAll("span")] : [];
+        const bal = spans[0] ?? balLine;
+        const net = spans.find((x) => /^[+\u2212]/.test(x.innerText.trim()));
         const dayNum = b.querySelector("span");
-        const net = lines.find((d) => /^[+\u2212]/.test(d.innerText.trim()));
         const items = [...b.querySelectorAll("li")].map((li) => li.innerText.replace(/\s+/g, " ").trim());
         return {
           label: b.getAttribute("aria-label"),
@@ -198,6 +214,37 @@ try {
   const cats = fixtureState().recurring.map((r) => r.name);
   is("a busy cell lists its items by name", busy.some((c) => c.items.some((t) => cats.some((n) => t.startsWith(n)))));
   eq("a quiet cell lists nothing", quiet.filter((c) => c.items.length).length, 0);
+
+  // TOP-ALIGNED, which only shows in a quiet cell sharing a row with
+  // a busy one — a button centers its content vertically in Chrome,
+  // so the cell's own height is no evidence either way.
+  const align = await app.page.evaluate(() => {
+    const grid = [...document.querySelectorAll(".grid.grid-cols-7")].find((g) => g.querySelector("button[aria-label]"));
+    const cells = [...grid.children].filter((c) => c.tagName === "BUTTON");
+    const byRow = new Map();
+    for (const c of cells) {
+      const top = Math.round(c.getBoundingClientRect().top);
+      (byRow.get(top) ?? byRow.set(top, []).get(top)).push(c);
+    }
+    // A row where the cells differ in CONTENT height is the only one
+    // that can show the difference. scrollHeight is no use — a flex
+    // column does not overflow, so it equals the stretched height.
+    const content = (c) =>
+      c.lastElementChild.getBoundingClientRect().bottom - c.firstElementChild.getBoundingClientRect().top;
+    for (const row of byRow.values()) {
+      const contents = row.map(content);
+      if (Math.max(...contents) - Math.min(...contents) < 20) continue;
+      return {
+        found: true,
+        gaps: row.map((c) =>
+          Math.round(c.firstElementChild.getBoundingClientRect().top - c.getBoundingClientRect().top)),
+      };
+    }
+    return { found: false, gaps: [] };
+  });
+  is("there is a row with a short cell beside a tall one", align.found);
+  is("...and every cell in it starts its content at the top",
+    align.gaps.length > 0 && Math.max(...align.gaps) - Math.min(...align.gaps) <= 1);
 
   // And a balance in a cell is a whole-dollar figure with no cents —
   // the cell's own format, not the panel's.

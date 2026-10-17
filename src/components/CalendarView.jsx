@@ -109,32 +109,36 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="flex items-center justify-between gap-3 mb-1">
         <button
           onClick={() => goMonth(-1)}
           disabled={monthKey <= first}
-          className="px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm disabled:opacity-30"
+          className="px-2.5 py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-sm disabled:opacity-30"
           aria-label="Previous month"
         >←</button>
         <div className="font-medium text-sm">{fmtMonthYear(monthKey)}</div>
         <button
           onClick={() => goMonth(1)}
           disabled={monthKey >= last}
-          className="px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-sm disabled:opacity-30"
+          className="px-2.5 py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-sm disabled:opacity-30"
           aria-label="Next month"
         >→</button>
       </div>
 
-      <div className="grid grid-cols-7 gap-px text-center text-[11px] font-medium text-gray-500 mb-1">
+      <div className="grid grid-cols-7 gap-px text-center text-[10px] font-medium text-gray-500 mb-0.5">
         {WEEKDAYS.map((d) => (
-          <div key={d} className="py-1">
+          <div key={d}>
             <span className="sm:hidden">{d[0]}</span>
             <span className="hidden sm:inline">{d}</span>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
+      {/* COMPACTED 2026-10-17. A row is as tall as its busiest cell
+          and no taller — which is how grid already works, and what
+          the 132px min-height was overriding on every quiet week.
+          See the note on the cell below. */}
+      <div className="grid grid-cols-7 gap-px">
         {month.cells.map((cell, i) => {
           if (!cell) return <div key={`pad-${i}`} />;
           const isSelected = cell.date === selected;
@@ -144,7 +148,13 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
               onClick={() => setSelected(cell.date)}
               aria-label={ariaFor(cell)}
               aria-current={cell.isToday ? "date" : undefined}
-              className={`min-h-[62px] sm:min-h-[132px] rounded-lg border p-1 sm:p-1.5 text-left align-top transition hover:bg-gray-50 dark:hover:bg-gray-800/60 ${
+              // FLEX-COL AND justify-start, which is the actual fix for
+              // "the content floats in the middle of a tall cell": a
+              // button centers its content vertically in Chrome, so
+              // `align-top` (a table-cell property) did nothing. The
+              // min-height is now what a QUIET day needs — a day and a
+              // balance — and a busy row grows past it on its own.
+              className={`flex flex-col justify-start min-h-[46px] sm:min-h-[48px] rounded-lg border px-1 py-0.5 sm:px-1.5 text-left transition hover:bg-gray-50 dark:hover:bg-gray-800/60 ${
                 isSelected
                   ? "border-gray-900 dark:border-gray-100"
                   : "border-gray-200 dark:border-gray-800"
@@ -155,7 +165,7 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                   today is a bold number with a rule under it. The old
                   grid bolded today and outlined the selection in the
                   same gray, which read as one state in two halves. */}
-              <div className="flex items-baseline gap-1 leading-none mb-1">
+              <div className="flex items-baseline gap-1 leading-none mb-0.5">
                 <span className={`text-[11px] ${
                   cell.isToday
                     ? "font-bold text-gray-900 dark:text-gray-100 border-b-2 border-gray-900 dark:border-gray-100 pb-0.5"
@@ -172,9 +182,22 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                   on quiet days for one round and that read as two
                   kinds of balance; the dots and the +/- line are what
                   tell a quiet day from a busy one. */}
+              {/* THE NET SHARES THE BALANCE'S LINE. It had one of its
+                  own and that cost ~11px on every busy row, which is
+                  55px of a 5-row month — the difference between the
+                  grid and its panel fitting an 800px laptop and not.
+                  Reading order is unchanged: balance, then net. */}
               {cell.balance != null && (
-                <div className="text-[11px] sm:text-xs tabular-nums leading-none font-medium text-gray-900 dark:text-gray-100">
-                  {cellAmountFull(cell.balance)}
+                <div className="flex items-baseline justify-between gap-1 leading-none">
+                  <span className="text-[11px] sm:text-xs tabular-nums font-medium text-gray-900 dark:text-gray-100">
+                    {cellAmountFull(cell.balance)}
+                  </span>
+                  {cell.net != null && (
+                    <span className={`text-[10px] tabular-nums shrink-0 ${
+                      cell.net < 0 ? "text-expense" : "text-income"}`}>
+                      {netAmountFull(cell.net)}
+                    </span>
+                  )}
                 </div>
               )}
               {/* A past day the user recorded a balance on. JUST THE
@@ -186,18 +209,12 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                   {cellAmountFull(cell.logged)}
                 </div>
               )}
-              {cell.net != null && (
-                <div className={`mt-0.5 text-[10px] tabular-nums leading-none ${
-                  cell.net < 0 ? "text-expense" : "text-income"}`}>
-                  {netAmountFull(cell.net)}
-                </div>
-              )}
               {/* The room the phone does not have, used for the thing
                   that otherwise needs a click. */}
               {cell.rows.length > 0 && (
-                <ul className="mt-1.5 hidden sm:block space-y-0.5">
+                <ul className="mt-0.5 hidden sm:block">
                   {cell.rows.slice(0, ITEM_CAP).map((r) => (
-                    <li key={r.id} className="flex items-baseline justify-between gap-1 text-[10px] leading-tight">
+                    <li key={r.id} className="flex items-baseline justify-between gap-1 text-[10px] leading-[1.05]">
                       <span className="truncate text-gray-500 dark:text-gray-400">{r.name}</span>
                       <span className={`shrink-0 tabular-nums ${r.direction === "in" ? "text-income" : "text-expense"}`}>
                         {netAmountFull(r.direction === "in" ? r.amount : -r.amount)}
@@ -205,7 +222,7 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                     </li>
                   ))}
                   {cell.rows.length > ITEM_CAP && (
-                    <li className="text-[10px] leading-tight text-gray-400">
+                    <li className="text-[10px] leading-[1.05] text-gray-400">
                       +{cell.rows.length - ITEM_CAP} more
                     </li>
                   )}
@@ -247,26 +264,26 @@ function ariaFor(cell) {
 
 function DayDetail({ cell, anchor, catName, onEditItem }) {
   return (
-    <div className="mt-3 border border-gray-200 dark:border-gray-800 rounded-xl p-3">
+    <div className="mt-1 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-1.5">
       <h3 className="text-sm font-medium">{fmtLongDay(cell.date)}</h3>
 
       {/* THE HEADLINE, not a footnote. This replaced "net $X", which
           answered a question about the day in isolation; this one
           answers the question the day was opened for. */}
       {cell.balance != null ? (
-        <p className="mt-1 mb-2 tabular-nums">
+        <p className="mt-0.5 mb-1.5 tabular-nums">
           <span className="text-xs text-gray-500">{COPY.balanceAfter}</span>{" "}
           <span className="text-lg font-semibold">{money(cell.balance)}</span>
         </p>
       ) : cell.logged != null ? (
         // A DIFFERENT SENTENCE, not the same one about a different
         // number: this is what was recorded, not what is projected.
-        <p className="mt-1 mb-2 tabular-nums">
+        <p className="mt-0.5 mb-1.5 tabular-nums">
           <span className="text-xs text-gray-500">{COPY.loggedBalance}</span>{" "}
           <span className="text-lg font-semibold">{money(cell.logged)}</span>
         </p>
       ) : (
-        <p className="mt-1 mb-2 text-xs text-gray-400">
+        <p className="mt-0.5 mb-1.5 text-xs text-gray-400">
           {cell.date < anchor ? COPY.beforeAnchor(fmtDate(anchor)) : COPY.pastHorizon}
         </p>
       )}

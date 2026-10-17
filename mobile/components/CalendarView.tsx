@@ -50,7 +50,7 @@ export default function CalendarView({
   // THE DEVICE'S DATE, read here and never derived from the anchor.
   // Somebody who last checked their bank on the 3rd is still living
   // on the 17th.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = anchor;
 
   // The checking account's own logged readings — real history, and
   // the only thing a past cell is allowed to show. The days before
