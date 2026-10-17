@@ -149,6 +149,7 @@ export default function LedgerView({
 
       {calendar ? (
         <CalendarView
+          state={state}
           ledger={ledger}
           trackerCategories={trackerCategories}
           onEditItem={onEditItem}

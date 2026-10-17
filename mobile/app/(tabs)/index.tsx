@@ -237,7 +237,9 @@ export default function LedgerScreen() {
           ListHeaderComponent={header}
           renderSectionHeader={() => null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
-          renderItem={() => <CalendarView rows={rows} categories={state!.trackerCategories} />}
+          renderItem={() => (
+            <CalendarView state={state!} rows={rows} categories={state!.trackerCategories} />
+          )}
         />
       ) : (
         <SectionList

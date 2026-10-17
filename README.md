@@ -74,9 +74,9 @@ net carried forward. Rows are reorderable, the horizon is a slider.
 ![Ledger](public/screenshots/ledger.png)
 
 The projection expanded into individual dated transactions with a running
-balance, grouped by month — or the same data as a **month calendar**, with
-colored dots and each day's net, and a click for the day's transactions. (The
-running balance stays in the list; a month grid has nowhere honest to put it.)
+balance, grouped by month — or the same data as a **month calendar**, where
+every day carries the projected end-of-day checking balance and a click opens
+that day's transactions.
 Either way there's a collapsible **Planned spending** breakdown
 above it — where the money in this window is going, by category, as a sorted
 horizontal bar. It's the forecast, and it says so: no logged number touches

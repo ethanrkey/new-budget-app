@@ -1499,10 +1499,12 @@ Conventions worth knowing before touching numbers:
   sparkline point) must not be the only place a fact is stated. Such a mark
   may indicate presence or density, but the identity behind it has to be
   reachable as text — a tooltip, a detail panel, an adjacent list. The
-  calendar's day dots are the worked example, and since 2026-10-06 they are
-  honest about it: they are secondary-text gray and claim only "something
-  happened here", with each carrying a title naming its category, item and
-  amount, and the day detail listing every transaction in words.
+  calendar's day dot is the worked example, and since 2026-10-06 it is
+  honest about it: secondary-text gray, claiming only "something happens
+  here", with the day detail listing every transaction in words. Since the
+  2026-10-17 rebuild there is ONE dot per day rather than one per
+  transaction — the cell's room went to the balance, and "something here"
+  is the whole of what a row of dots was ever able to say.
 
 - **Colors are inline styles** (`pieFill`, `barFill`, `cardColor`), never
   runtime-built Tailwind class names — the JIT scanner can't see those.
@@ -1590,18 +1592,42 @@ fifth tab never needs a migration.
   so placing it over that panel implied a relationship that isn't there. The
   horizon slider stays in the toolbar because it genuinely drives both.
   A **List / Calendar** toggle switches the rendering (`CalendarView.jsx`,
-  per device via `devicePrefs`, `ledger-calendar`). The calendar is a month
-  grid over the same rows: category-colored dots plus the day's net, click a
-  day for its transactions. **The running balance is list-only** — a
-  7-column grid has nowhere to put it, and it is the list's whole reason to
-  exist; a faked or omitted-but-implied balance would have two views
-  disagreeing about the app's most important number. Cumulative columns and
-  multi-select hide in calendar mode, being list-only concepts.
-  Per-day aggregation is `groupByDay` in the engine, so a day's net and the
-  running balance can never tell different stories.
-  Dot overflow is CAPPED (`+N`), not wrapped: grid cells share a row height,
-  so wrapping makes the whole row taller and gives quiet neighbors
-  whitespace — it flattens the busy/quiet contrast instead of sharpening it.
+  per device via `devicePrefs`, `ledger-calendar`). **REBUILT 2026-10-17
+  AROUND THE RUNNING BALANCE.** Each cell used to show the day's NET —
+  "+2,400" on payday — which is true and is almost nobody's question. What
+  people open a calendar for is where their checking balance LANDS on a
+  given day, and that was the one thing the grid refused to say: the
+  running balance was list-only, on the reasoning that a 7-column cell has
+  nowhere to put it. It has room for one number, and this is the one.
+  So a cell is now: the day, ONE neutral dot if anything happens that day,
+  and the **projected end-of-day checking balance**. Net is gone from the
+  grid and from the day detail, which now leads with "Balance after:" and
+  the exact figure. The arithmetic is shared with the phone in
+  `src/engine/calendar.ts` and the words in `src/content/calendar.ts`, so
+  the two clients cannot drift; `buildCalendarMonth` walks the LEDGER'S OWN
+  rows, so the grid and the list cannot disagree about a number either.
+  Three dates, deliberately separate — see the file's header: **today** is
+  the device's current date and is never derived from the anchor;
+  **`balanceAsOf`** is where the forecast starts, and days before it are
+  dimmed and carry no number; **the ledger horizon** is where it stops, and
+  days after it are dimmed too. Today is a bold underlined number, the
+  selected day is the cell's border and fill — two marks, never one.
+  Opening the calendar selects today. **NO WARNING TINTS**: a negative
+  projected balance is a minus sign and nothing else, because coloring the
+  low days turns a map of where the money goes into a verdict on it.
+  Cumulative columns and multi-select hide in calendar mode, being
+  list-only concepts.
+  The phone's cell number is shortened — "2,545", "12.3k", no sign and no
+  cents (`cellAmountCompact`); the web's is "$2,545" (`cellAmountFull`).
+  MEASURED, not guessed: the deployment target is iOS 16.4, so the
+  narrowest device is 375pt (iPhone SE 2nd gen / iPhone 8; nothing 320pt
+  gets past iOS 15), the cell is `floor((375 − 32) / 7)` = 49pt and 43pt
+  usable. In SF Pro with tabular figures at 11pt the widest string the
+  formatter can produce for a real balance, "-9,999", is 36.6pt, and the
+  absurd billion-dollar "-1000m" is 42.9pt. At 12pt the second overflows.
+  The formatter ROUNDS BEFORE IT BANDS, which is not a detail: the other
+  way round gives "100.0k" at $99,950 and "1000k" at $999,600 — seven
+  characters in a cell measured for six.
   Caps are 3 below `sm`, 5 above; below `sm` the cell also drops the net,
   which does not fit a ~45px cell, and shows it in the day detail instead.
   A **Planned spending** panel sits above the table (`SpendingMix.jsx`,
@@ -3842,8 +3868,10 @@ Further out:
   Kept verbatim because they are rules, not layout: every slice carries its
   label inline, item slices carry their parent's name, the pie never
   re-shapes (Other expands in the legend only) while the bar expands rows
-  in place, calendar dots are capped rather than wrapped, the day detail
-  names the category in words, and the running balance stays list-only.
+  in place, and the day detail names the category in words. (Two of these
+  were superseded on 2026-10-17: the calendar's dots became one neutral
+  marker, and the running balance stopped being list-only — it is the
+  cell.)
 
   **Read-only, deliberately** — *as of 2026-10-02, when this was written.
   No longer true: the phone has had a real write path since 2026-10-08.

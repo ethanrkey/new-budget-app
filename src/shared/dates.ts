@@ -47,6 +47,11 @@ export function fmtDay(iso: string | null | undefined): string {
   return `${m}/${d}`;
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 /**
  * The month and the day, as a person says them: Oct 18.
  *
@@ -63,11 +68,42 @@ export function fmtDay(iso: string | null | undefined): string {
  * in UTC, which is how one app showed the same date a day apart on
  * two screens.
  */
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export function fmtMonthDay(iso: string | null | undefined): string {
   if (!isISO(iso)) return iso ?? "";
   const [, m, d] = iso.slice(0, 10).split("-");
-  return `${MONTHS[Number(m) - 1]} ${Number(d)}`;
+  // The short name is the long one's first three letters for all
+  // twelve, which is why there is no second list to keep in step.
+  return `${MONTH_NAMES[Number(m) - 1]!.slice(0, 3)} ${Number(d)}`;
+}
+
+/**
+ * The month and the year, for a grid heading: October 2026.
+ */
+export function fmtMonthYear(key: string | null | undefined): string {
+  if (typeof key !== "string" || !/^\d{4}-\d{2}/.test(key)) return key ?? "";
+  const [y, m] = key.slice(0, 7).split("-");
+  return `${MONTH_NAMES[Number(m) - 1]} ${y}`;
+}
+
+/**
+ * The whole date with its weekday: Tuesday, October 27, 2026.
+ *
+ * For a heading that names ONE day somebody has just picked — the
+ * calendar's detail panel. The weekday is the point: "the 27th" is a
+ * number, "Tuesday the 27th" is a day you can place yourself in.
+ *
+ * The weekday needs a real Date, which is the one thing the rest of
+ * this file avoids. It is built at NOON so that neither end of a
+ * daylight-saving shift can roll it into the day next door.
+ */
+const WEEKDAY_NAMES = [
+  "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+];
+export function fmtLongDay(iso: string | null | undefined): string {
+  if (!isISO(iso)) return iso ?? "";
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const weekday = WEEKDAY_NAMES[new Date(y!, m! - 1, d!, 12).getDay()];
+  return `${weekday}, ${MONTH_NAMES[m! - 1]} ${d}, ${y}`;
 }
 
 /**
