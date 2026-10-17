@@ -13,7 +13,7 @@ export const TOUR_STOPS: TourStop[] = [
   {
     tab: "ledger",
     title: "This is the Ledger — your plan",
-    body: "Every transaction you expect, dated, with a running balance. It's built from the rules you just entered, so you can see a shortfall weeks before you reach it.",
+    body: "Every transaction you expect, dated, with a running balance. It's built from the rules you just entered, so you can see a shortfall weeks before you reach it. After you finish setup, add any one-off transactions you know are coming up — and keep adding and updating them over time. The forecast is only as accurate as what's in it.",
   },
   {
     tab: "budget",
@@ -30,10 +30,10 @@ export const TOUR_STOPS: TourStop[] = [
   // said what the screen is NOT (not a forecast) and named net
   // position, which is a term you have to already know. This one
   // lists the four things on it and says what the second reading
-  // buys. DRAFT — the owner finalizes it in the voice pass.
+  // buys. The last sentence is the owner's own, 2026-10-17.
   {
     tab: "dashboard",
     title: "And the Dashboard is your whole picture",
-    body: "Everything you have and everything you owe, on one screen: checking, savings, investments and debt, and what they come to together. Nothing here is projected — it's what's true today, built only from balances you've logged. Log them again next month and the same screen starts showing which way each one is going.",
+    body: "Everything you have and everything you owe, on one screen: checking, savings, investments and debt, and what they come to together. Nothing here is projected — it's what's true today, built only from balances you've logged. Log them again whenever and over time the Dashboard screen will show you how these balances have been trending.",
   },
 ];

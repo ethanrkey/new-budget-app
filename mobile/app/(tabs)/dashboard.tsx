@@ -479,19 +479,29 @@ function AssetCard({
           <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
         )}
         <View style={{ flex: 1 }} />
-        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
-          accessibilityRole="button" accessibilityLabel={`Log a balance for ${cat.name}`}>
-          <Text style={styles.logText}>{online ? "Log" : "Offline"}</Text>
-        </Pressable>
-        {/* EDIT, which the web has had on every account card and the
-            phone had only on loans. Renaming an account meant going
-            Settings -> Accounts you track, which is a detour from the
-            screen the name is wrong on. Same sheet Settings opens, so
-            there is one editor rather than two that agree. */}
-        <Pressable onPress={onEdit} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
-          accessibilityRole="button" accessibilityLabel={`Edit ${cat.name}`}>
-          <Text style={styles.logText}>Edit</Text>
-        </Pressable>
+        {/* STACKED, NOT SIDE BY SIDE, from 2026-10-17. Two pills on one
+            line next to a long account name left neither of them room,
+            and Log is the one anybody presses — so it goes on top, in
+            brass, and Edit sits under it in the plain border every
+            other secondary control uses. The column hugs its widest
+            child and both stretch to it, so the two never come out
+            ragged. */}
+        <View style={styles.cardActions}>
+          <Pressable onPress={onLog} disabled={!online}
+            style={[styles.logBtn, styles.logPrimary, !online && styles.logOff]}
+            accessibilityRole="button" accessibilityLabel={`Log a balance for ${cat.name}`}>
+            <Text style={[styles.logText, styles.logTextPrimary]}>{online ? "Log" : "Offline"}</Text>
+          </Pressable>
+          {/* EDIT, which the web has had on every account card and the
+              phone had only on loans. Renaming an account meant going
+              Settings -> Accounts you track, which is a detour from the
+              screen the name is wrong on. Same sheet Settings opens, so
+              there is one editor rather than two that agree. */}
+          <Pressable onPress={onEdit} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
+            accessibilityRole="button" accessibilityLabel={`Edit ${cat.name}`}>
+            <Text style={styles.logText}>Edit</Text>
+          </Pressable>
+        </View>
       </View>
       <Text style={[styles.cardNum, !latest && { color: T.faint }]}>
         {latest ? money(latest.amount) : "—"}
@@ -586,10 +596,15 @@ function DebtCard({ cat, today, online, onLog, onEdit, onEditEntry, onDeleteEntr
           : "Log what you owe today to see how far along you are."}
       </Text>
 
-      <View style={styles.loanActions}>
-        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
+      {/* Stacked and brass-on-top, like the asset cards — see the note
+          there. A loan card is the one place the two were already on a
+          line of their own, and they still look the same as the ones
+          that were not. */}
+      <View style={[styles.cardActions, styles.loanActions]}>
+        <Pressable onPress={onLog} disabled={!online}
+          style={[styles.logBtn, styles.logPrimary, !online && styles.logOff]}
           accessibilityRole="button" accessibilityLabel={`Log a balance for ${cat.name}`}>
-          <Text style={styles.logText}>{online ? "Log balance" : "Offline"}</Text>
+          <Text style={[styles.logText, styles.logTextPrimary]}>{online ? "Log balance" : "Offline"}</Text>
         </Pressable>
         <Pressable onPress={onEdit} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
           accessibilityRole="button" accessibilityLabel={`Edit ${cat.name}`}>
@@ -814,7 +829,6 @@ const styles = StyleSheet.create({
   debtListUnlogged: { color: T.faint, fontSize: 12 },
   expandBtn: { alignSelf: "flex-end", marginTop: 12 },
   loanTag: { color: T.brass, fontSize: 9, fontWeight: "700", letterSpacing: 0.5, borderWidth: 1, borderColor: T.brass, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, overflow: "hidden" },
-  loanActions: { flexDirection: "row", gap: 8, marginTop: 10 },
   loanBlock: { marginTop: 12, gap: 3 },
   loanRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 10, marginBottom: 4 },
   loanLabel: { color: T.faint, fontSize: 11 },
@@ -836,9 +850,20 @@ const styles = StyleSheet.create({
   acctK: { color: T.faint, fontSize: 12, width: 92 },
   acctV: { color: T.dim, fontSize: 12, flex: 1 },
   roleTag: { color: T.faint, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5 },
-  logBtn: { borderWidth: 1, borderColor: T.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, minHeight: 32, justifyContent: "center" },
+  logBtn: { borderWidth: 1, borderColor: T.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, minHeight: 32, justifyContent: "center", alignItems: "center" },
   logOff: { opacity: 0.4 },
   logText: { color: T.dim, fontSize: 12 },
+  // THE ONE BUTTON ON THE CARD ANYBODY PRESSES. Brass border and
+  // brass text, which is this app's accent and nothing else's; every
+  // other control on the card keeps the plain border it had.
+  logPrimary: { borderColor: T.brass },
+  logTextPrimary: { color: T.brass },
+  // A column that hugs its widest child, so Log and Edit come out the
+  // same width stacked rather than ragged.
+  cardActions: { alignSelf: "flex-start", alignItems: "stretch", gap: 6 },
+  // The loan card's pair sits under a paragraph rather than in the
+  // header row, so it is the one that needs air above it.
+  loanActions: { marginTop: 10 },
   signout: { color: T.brass, textAlign: "center", paddingVertical: 12 },
   ro: { color: T.faint, fontSize: 11, textAlign: "center" },
 });

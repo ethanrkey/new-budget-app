@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { sliceFill, DEGRADED_SOLID } from "../engine/palette.ts";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
+import { SPENDING_COPY as COPY } from "../content/spending.ts";
 
 // ---- Where the PLANNED outflow goes, over the Ledger's own window ----
 // Forecast data, labeled as such. It reads the same event list the table
@@ -89,6 +90,14 @@ function SliceLabel({ d }) {
   );
 }
 
+// THE NINTH PRIVATE FORMATTER, and the one the 2026-10-15 sweep
+// missed. It survived because this file was edited for its mobile
+// twin and not for itself, so the caption below reads "Oct 17, 2026"
+// on the web and "10/17/2026" on the phone — one sentence, shared
+// from src/content/spending.ts since 2026-10-17, printed two ways.
+// LEFT ALONE deliberately: the owner is choosing the format for every
+// non-ISO date in one pass (reported 2026-10-17), and this is one of
+// the places on that list.
 function prettyDate(iso) {
   return new Date(iso + "T00:00:00").toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -134,14 +143,11 @@ export default function SpendingMix({ mix, isDark }) {
           <div className="px-3 pb-3">
             {/* Says what this is, every time. It is the forecast. */}
             <p className="text-xs text-gray-400 mb-3">
-              Projected from your rules for {prettyDate(mix.from)} – {prettyDate(mix.to)} — not what you&apos;ve
-              logged. Income is excluded.
+              {COPY.caption(prettyDate(mix.from), prettyDate(mix.to))}
             </p>
 
             {empty ? (
-              <p className="text-sm text-gray-400 py-4 text-center">
-                Nothing going out in this window yet.
-              </p>
+              <p className="text-sm text-gray-400 py-4 text-center">{COPY.empty}</p>
             ) : (
               <BarView data={data} total={mix.total} otherOpen={otherOpen} onToggleOther={setOtherOpen} />
             )}

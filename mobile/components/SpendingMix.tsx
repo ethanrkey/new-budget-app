@@ -5,6 +5,7 @@ import { T, money } from "../lib/theme";
 import { sliceFill, DEGRADED_SOLID } from "../../src/engine/palette.ts";
 import type { SpendingMix as Mix, SpendingSlice } from "../../src/engine/types.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
+import { SPENDING_COPY as COPY } from "../../src/content/spending.ts";
 
 // The web panel, same data and same rules, different primitives.
 // Carried over verbatim because they are rules, not layout:
@@ -41,13 +42,10 @@ export default function SpendingMix({ mix }: { mix: Mix }) {
 
       {open && (
         <View style={styles.body}>
-          <Text style={styles.caption}>
-            Projected from your rules for {fmtDate(mix.from)} – {fmtDate(mix.to)} — not what
-            you&apos;ve logged. Income is excluded.
-          </Text>
+          <Text style={styles.caption}>{COPY.caption(fmtDate(mix.from), fmtDate(mix.to))}</Text>
 
           {empty ? (
-            <Text style={styles.empty}>Nothing going out in this window yet.</Text>
+            <Text style={styles.empty}>{COPY.empty}</Text>
           ) : (
             <>
               {shown.map((sl) => {

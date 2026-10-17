@@ -1,4 +1,10 @@
-import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { act, render, screen, userEvent, waitFor, within } from "@testing-library/react-native";
+import { T } from "../lib/theme";
+
+/** One object out of a style array, the way RN resolves it. */
+const flat = (style: unknown): Record<string, unknown> =>
+  Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
+
 import { pickerProps } from "./setup";
 import { normalize } from "../../src/engine/stateShape.ts";
 
@@ -108,6 +114,40 @@ test("every account card has an Edit, opening the editor Settings opens", async 
   expect(await screen.findByText("Edit account")).toBeOnTheScreen();
   expect(screen.getByLabelText("Name").props.value).toBe("Ally Savings");
   expect(screen.queryByLabelText("Current balance")).toBeNull();
+});
+
+test("Edit is UNDER Log, and Log is the brass one", async () => {
+  // Build 12 shipped them side by side in the card header, which left
+  // neither of them room next to a long account name. Stacked now,
+  // with the one anybody presses on top and in the app's accent.
+  mockLoaded.state = fixture([{ name: "Car loan", owed: 9100 }]);
+  await mount();
+  // The debt section is collapsed by default, and the loan card is
+  // the other place the pair lives.
+  await userEvent.press(screen.getByLabelText("Show 1 loan"));
+  await screen.findByText("Loans");
+
+  for (const [log, edit] of [
+    ["Log a balance for Ally Savings", "Edit Ally Savings"],
+    ["Log a balance for Car loan", "Edit Car loan"],
+  ]) {
+    const logBtn = screen.getByLabelText(log!);
+    const editBtn = screen.getByLabelText(edit!);
+    // One parent, in that order: Edit directly under Log.
+    const stack = logBtn.parent!;
+    expect(editBtn.parent).toBe(stack);
+    const kids = stack.children.filter((c) => typeof c !== "string");
+    expect(kids.indexOf(logBtn)).toBeLessThan(kids.indexOf(editBtn));
+    expect(flat(stack.props.style).flexDirection ?? "column").toBe("column");
+
+    // Brass on Log, and only on Log.
+    expect(flat(logBtn.props.style).borderColor).toBe(T.brass);
+    expect(flat(editBtn.props.style).borderColor).not.toBe(T.brass);
+    expect(flat(within(logBtn).getByText(/^Log( balance)?$/).props.style).color).toBe(T.brass);
+  }
+  // ...and nothing else on the card borrowed it.
+  expect(flat(screen.getByLabelText("Log contribution").props.style).borderColor)
+    .not.toBe(T.brass);
 });
 
 test("...and renaming from the card writes the new name", async () => {
