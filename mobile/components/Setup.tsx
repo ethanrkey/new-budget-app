@@ -8,6 +8,7 @@ import DatePicker from "./DatePicker";
 import DayPicker from "./DayPicker";
 import type { NativeMethods } from "react-native";
 import { T } from "../lib/theme";
+import { FIELD_TEXT } from "../lib/fields";
 import {
   blankSetupDraft, rulesForStep, canAdvance, accountRowErrors, setupAnswers,
   scrollToReveal, stepsFor, contributionRowAt, type SetupDraft, type SetupStepKey,
@@ -173,6 +174,12 @@ export default function Setup({
               <View ref={content} style={styles.body}>
               {step === "paycheck" && (
                 <Question title={COPY.paycheck.title} sub={COPY.paycheck.sub}>
+                  {/* NAME FIRST, and it arrives filled in. The default
+                      is the answer for most people, so the field costs
+                      them one glance; for everyone whose money is not
+                      a paycheck it is the difference between the app
+                      describing their income and renaming it. */}
+                  <Field label={COPY.labels.name} value={d.payName} onChange={(v) => set("payName", v)} />
                   <Money label={COPY.labels.amount} value={d.payAmount} onChange={(v) => set("payAmount", v)} autoFocus />
                   <Cadence label={COPY.labels.cadence} value={d.payCadence} onChange={(v) => set("payCadence", v)} />
 
@@ -799,6 +806,7 @@ const styles = StyleSheet.create({
   why: { color: T.faint, fontSize: 12, lineHeight: 17, marginTop: 12 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 14 },
   input: {
+    ...FIELD_TEXT,
     backgroundColor: T.surface, borderColor: T.border, borderWidth: 1, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16,
     minHeight: 48, marginTop: 6,

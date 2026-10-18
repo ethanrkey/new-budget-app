@@ -40,7 +40,7 @@ const draft = () => blankSetupDraft(TODAY);
 
 // ---- the questions, and their order ---------------------------------
 eq("seven questions", [...STEPS],
-  ["paycheck", "rent", "bills", "groceries", "balance", "accounts", "contributions"]);
+  ["balance", "paycheck", "rent", "bills", "groceries", "accounts", "contributions"]);
 // ...of which the last is conditional. A step listing nothing makes
 // the flow look longer than it is, so it is not in the flow at all
 // until the accounts step has produced something for it to ask about.
@@ -51,10 +51,19 @@ eq("the contributions step is absent with no accounts", stepsFor(draft()).length
   eq("...at the end, so adding an account never moves the step you are on",
     stepsFor(d)[6], "contributions");
 }
-// The ordering decision: accounts last, so quitting there still leaves
-// a working forecast. Worth an assertion rather than a comment, because
+// The ordering decisions, asserted rather than commented, because
 // reordering the list is a one-line change that costs nothing visible.
+//
+// The balance is FIRST (2026-10-17): it is the one answer the forecast
+// cannot be built without and the one question everybody can answer,
+// and it is also the only step that cannot be passed — a gate arriving
+// after four Skips reads as the flow changing its mind.
+eq("the balance is the first question", STEPS[0], "balance");
 eq("the balance comes before the accounts step", STEPS.indexOf("balance") < STEPS.indexOf("accounts"), true);
+// Income is asked AFTER the balance and before everything else, so the
+// one step that may not apply to somebody is never the one that greets
+// them.
+eq("income comes straight after the balance", STEPS[1], "paycheck");
 
 // ---- the blank draft ------------------------------------------------
 {
@@ -72,6 +81,14 @@ eq("the balance comes before the accounts step", STEPS.indexOf("balance") < STEP
 {
   const d = { ...draft(), payAmount: "2100", rentAmount: "1450", groceryAmount: "150" };
   eq("paycheck", rulesForStep("paycheck", d, TODAY).map((r) => r.name), ["Paycheck"]);
+  // THE NAME IS THE ANSWER'S, not the step's. The draft arrives
+  // holding "Paycheck" and anything typed over it reaches the rule —
+  // which is the whole point of the field, for everyone whose money
+  // is benefits, a pension or an invoice.
+  eq("...and whatever it is called is what it is called",
+    rulesForStep("paycheck", { ...d, payName: "Disability" }, TODAY).map((r) => r.name), ["Disability"]);
+  eq("...while a name cleared to nothing falls back rather than vanishing",
+    rulesForStep("paycheck", { ...d, payName: "   " }, TODAY).map((r) => r.name), ["Paycheck"]);
   eq("rent", rulesForStep("rent", d, TODAY).map((r) => r.name), ["Rent"]);
   eq("groceries", rulesForStep("groceries", d, TODAY).map((r) => r.name), ["Groceries"]);
   // The balance is the anchor, not a rule. Reading it off the draft at

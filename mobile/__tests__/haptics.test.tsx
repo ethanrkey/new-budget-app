@@ -88,14 +88,14 @@ test("one write is felt once, however many screens it took", async () => {
     </StateProvider>
   );
   // A blank account is met with setup; finishing it is one commit.
-  await screen.findByText("What's your take-home pay?");
+  await screen.findByText("What's the balance of your primary checking account?");
   haptics.calls.length = 0;
 
-  // Four skips: paycheck, rent, bills, groceries. The balance step has
-  // no Skip, which is the point of it.
-  for (const _ of [0, 1, 2, 3]) await userEvent.press(screen.getByLabelText("Skip"));
+  // The balance first — it has no Skip, which is the point of it — and
+  // then four skips: income, rent, bills, groceries.
   await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
   await userEvent.press(screen.getByLabelText("Continue"));
+  for (const _ of [0, 1, 2, 3]) await userEvent.press(screen.getByLabelText("Skip"));
   await userEvent.press(screen.getByLabelText("Finish"));
   await userEvent.press(await screen.findByLabelText("Go to my budget"));
 

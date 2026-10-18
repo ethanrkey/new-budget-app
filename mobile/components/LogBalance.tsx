@@ -5,6 +5,7 @@ import {
 import FormSheet, { useDiscardGuard } from "./FormSheet";
 import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
+import { FIELD_TEXT } from "../lib/fields";
 import { todayISO } from "../../src/engine/model.ts";
 import { HIDDEN_ROWS_COPY as HIDDEN, DISCARD_BALANCE } from "../../src/content/logBalance.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
@@ -186,7 +187,7 @@ const styles = StyleSheet.create({
   hiddenWhy: { color: T.dim, fontSize: 12, lineHeight: 17, marginTop: 12 },
   hiddenEscape: { color: T.brass, fontSize: 12, lineHeight: 17, marginTop: 8 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 },
-  field: { backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16, minHeight: 48, justifyContent: "center" },
+  field: { ...FIELD_TEXT, backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16, minHeight: 48, justifyContent: "center" },
   warn: { color: T.dim, fontSize: 12, lineHeight: 17, marginTop: 10 },
   row: { flexDirection: "row", gap: 10, marginTop: 16 },
   btn: { flex: 1, minHeight: 48, borderRadius: 12, alignItems: "center", justifyContent: "center" },

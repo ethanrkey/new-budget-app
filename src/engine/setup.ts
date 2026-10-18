@@ -382,6 +382,24 @@ export function removeBillRow(
 }
 
 /**
+ * What an unnamed income rule is called.
+ *
+ * IN THE ENGINE RATHER THAN IN THE COPY, and that is a rule about
+ * imports rather than a judgment about the word: content must not
+ * import the engine and the engine must not import copy, and this is
+ * both the default a form shows and the name a rule ends up with.
+ * Putting it here means the field's default and the rule's fallback
+ * cannot drift apart; putting it in content would need the engine to
+ * reach across.
+ *
+ * The step stopped being only about paychecks on 2026-10-17 — see
+ * SETUP_COPY.paycheck — but this stays the default because it is what
+ * most people are answering about, and the field is there for everyone
+ * it is not.
+ */
+export const DEFAULT_INCOME_NAME = "Paycheck";
+
+/**
  * The paycheck step. Null when nothing usable was typed.
  *
  * `payday` IS THE WHOLE REASON THIS TAKES A FOURTH ARGUMENT. Setup
@@ -399,13 +417,13 @@ export function removeBillRow(
  */
 export function paycheckRule(
   amount: string, cadence: SetupCadence, today: ISODate = todayISO(),
-  payday: ISODate = today,
+  payday: ISODate = today, name: string = DEFAULT_INCOME_NAME,
 ): BudgetItem | null {
   const amt = positive(amount);
   if (amt == null) return null;
   const start = payday >= today ? payday : today;
   return {
-    id: uid(), name: "Paycheck", amount: amt, category: "income",
+    id: uid(), name: name.trim() || DEFAULT_INCOME_NAME, amount: amt, category: "income",
     cadence, startDate: start, dayOfMonth: dayOf(start),
   } as BudgetItem;
 }

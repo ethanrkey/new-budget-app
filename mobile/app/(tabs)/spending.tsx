@@ -4,6 +4,7 @@ import {
 } from "react-native";
 import { useBudget } from "../../components/StateProvider";
 import { T, money } from "../../lib/theme";
+import { FIELD_TEXT } from "../../lib/fields";
 import {
   computeMonthVariance, lastMonthKeys, activeMonthKeys, fixedSoFar,
 } from "../../../src/engine/progress.ts";
@@ -196,6 +197,7 @@ const styles = StyleSheet.create({
   num: { color: T.dim, fontSize: 13, fontVariant: ["tabular-nums"] },
   notDue: { color: T.faint, fontSize: 12 },
   input: {
+    ...FIELD_TEXT,
     minWidth: 74, minHeight: 38, borderWidth: 1, borderColor: T.border, borderRadius: 9,
     backgroundColor: T.bg, color: T.text, fontSize: 13, textAlign: "right",
     paddingHorizontal: 8, fontVariant: ["tabular-nums"],

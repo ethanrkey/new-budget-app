@@ -4,6 +4,7 @@ import {
 } from "react-native";
 import DatePicker from "./DatePicker";
 import { T } from "../lib/theme";
+import { FIELD_TEXT } from "../lib/fields";
 import {
   type CategoryDraft, categoryDraftError,
 } from "../lib/categories";
@@ -225,6 +226,7 @@ const styles = StyleSheet.create({
   title: { color: T.text, fontSize: 17, fontWeight: "700", marginBottom: 4 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 10 },
   field: {
+    ...FIELD_TEXT,
     backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12,
     paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16,
     minHeight: 48, justifyContent: "center",

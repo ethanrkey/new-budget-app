@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { T, money } from "../lib/theme";
+import { FIELD_TEXT } from "../lib/fields";
 import * as feel from "../lib/haptics";
 import { supabase } from "../lib/supabase";
 import { SIGN_OUT_SCOPE } from "../../src/shared/signOutScope.ts";
@@ -304,7 +305,7 @@ const styles = StyleSheet.create({
   noticeTitle: { color: T.brass, fontSize: 14, fontWeight: "700" },
   danger: { color: T.expense },
   sep: { height: StyleSheet.hairlineWidth, backgroundColor: T.border },
-  field: { marginTop: 10, backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, minHeight: 44, color: T.text, fontSize: 15 },
+  field: { ...FIELD_TEXT, marginTop: 10, backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, minHeight: 44, color: T.text, fontSize: 15 },
   btn: { marginTop: 10, minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: T.border, alignItems: "center", justifyContent: "center" },
   btnText: { color: T.dim, fontSize: 14 },
   btnDanger: { backgroundColor: T.expense, borderColor: T.expense },

@@ -6,6 +6,7 @@ import FormSheet, { useDiscardGuard } from "./FormSheet";
 import { DISCARD_CONTRIBUTION } from "../../src/content/logBalance.ts";
 import DatePicker from "./DatePicker";
 import { T } from "../lib/theme";
+import { FIELD_TEXT } from "../lib/fields";
 import { fmtDate } from "../../src/shared/dates.ts";
 import { todayISO } from "../../src/engine/model.ts";
 import { blankContributionRow, type ContributionRow } from "../../src/engine/setup.ts";
@@ -137,7 +138,7 @@ const styles = StyleSheet.create({
   title: { color: T.text, fontSize: 17, fontWeight: "700" },
   dim: { color: T.faint, fontSize: 12, lineHeight: 17, marginTop: 6 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 14 },
-  field: { backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16, minHeight: 48, marginTop: 6 },
+  field: { ...FIELD_TEXT, backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16, minHeight: 48, marginTop: 6 },
   fieldText: { color: T.text, fontSize: 16 },
   pickRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   pickCue: { color: T.brass, fontSize: 13, fontWeight: "600" },

@@ -5362,3 +5362,77 @@ the web does not need because its wizard is always one click away.
   about what might happen is a guess; a statement about what did happen
   is not, and it also catches the bill that genuinely was variable and
   has become fixed, which a warning at flag-time never would.
+
+- **Every TextInput on the phone states its own text attributes**
+  (2026-10-17). From a device: the Amount placeholder in setup read
+  "0 . 0 0". The JS was innocent — no field in the app carries
+  `letterSpacing` except the sign-in code box, and a renderer probe
+  confirmed the style resolving on that input was exactly what the
+  stylesheet says.
+
+  The cause is iOS under the New Architecture: Fabric RECYCLES native
+  text-input views between screens, and `RCTTextInputComponentView`'s
+  `prepareForRecycle` does not clear `defaultTextAttributes`. An
+  attribute one field sets and the next one does not mention therefore
+  rides the pooled view across. The code box kerns at 8 so six digits
+  read as six characters; setup is the screen a new account sees
+  IMMEDIATELY after signing in with that code, so its Amount field was
+  routinely handed the code box's view and its kern. Upstream:
+  facebook/react-native#42589, closed "cannot reproduce" in March 2024
+  and reported again since against 0.87.
+
+  **The fix is a value, because absence is what the stale value fills.**
+  `mobile/lib/fields.ts` exports `FIELD_TEXT` — `letterSpacing: 0` and
+  `fontVariant: []` — and every field style spreads it; the code box
+  then overrides the first on purpose. Both attributes are pinned
+  rather than just the one that was seen, because the leak is not
+  specific to kerning and those two are the only text attributes this
+  app ever sets.
+
+  `tests/mobile-fields.test.mjs` reads the SOURCE rather than a
+  rendered tree, which is the only honest way to test this: the thing
+  that goes wrong is invisible to the renderer, since the JS was always
+  right. It finds every `<TextInput>` in the app, works out which
+  stylesheet entries it wears, and fails if none of them pins the
+  attributes.
+
+  THE LESSON IS ABOUT WHERE TO LOOK. Three sessions of reasoning about
+  the stylesheet would never have found this, because the stylesheet
+  was correct. What settled it was proving the JS right (a probe that
+  printed the resolved style) and then reading the platform's own
+  recycling code — and the owner's first guess, "letter-spacing meant
+  for the 6-digit code box", was the right one.
+
+- **The balance is setup's first question, and income is asked rather
+  than assumed** (2026-10-17). Two changes to the same flow, for the
+  same reason: the order and the wording both assumed a life.
+
+  The balance was fifth of six, behind four questions about money
+  moving. It is the only answer the Ledger cannot be built without —
+  everything is counted forward from it — it is the only step that
+  cannot be passed, and it is the one question every adult can answer.
+  As step five, that gate arrived after four Skips had taught that the
+  flow was optional; as step one it is simply what the app needs to
+  know. Someone who quits on step two now leaves with a working
+  balance.
+
+  The income step asked "What's your take-home pay?", named the rule
+  "Paycheck", and offered no way to say otherwise — which quietly told
+  everyone whose money is benefits, a pension, a stipend or an invoice
+  that the app was built for somebody else. It is now "Any regular
+  income?", its intro says out loud that skipping is a normal answer,
+  and a Name field arrives holding "Paycheck" so the common case still
+  costs a glance. `DEFAULT_INCOME_NAME` lives in the engine rather than
+  in the copy, because it is both the field's default and the rule's
+  fallback and content must not import the engine.
+
+  KNOWN AND DELIBERATELY NOT CHANGED: the Budget's take-home row
+  classifies an income rule by NAME (`PAY_RE` in `src/engine/compute.ts`
+  — `/pay|salary|take.?home/i`), so income named "Disability" counts as
+  "other in" rather than take-home. That is pre-existing behavior —
+  anything added by hand through + Add has always been classified the
+  same way — but the Name field makes it reachable from setup for the
+  first time. Fixing it properly means marking the rule structurally
+  rather than by name, which changes the Budget for every existing
+  account, and that is the owner's call rather than a side effect of
+  this batch.

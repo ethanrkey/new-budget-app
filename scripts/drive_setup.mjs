@@ -56,10 +56,30 @@ const settle = () => new Promise((r) => setTimeout(r, 250));
 
 try {
   await app.load();
-  await page.waitForFunction(() => /take-home pay/.test(document.body.innerText), { timeout: 20_000 });
-  is("a brand-new account is met with the wizard", /take-home pay/.test(await text()));
+  await page.waitForFunction(
+    () => /balance of your primary checking account/.test(document.body.innerText),
+    { timeout: 20_000 },
+  );
+  // THE BALANCE FIRST, since 2026-10-17 — the one answer the forecast
+  // cannot be built without, and the one question everybody can
+  // answer. It was the fifth of six.
+  is("a brand-new account is met with the balance question",
+    /balance of your primary checking account/.test(await text()));
+  await type('input[type="number"]', "4000");
+  await click("Continue");
+  await settle();
 
-  // ---- the paycheck, so the contributions step has a payday to offer
+  // ---- income, so the contributions step has a payday to offer -----
+  const income = await text();
+  is("the second question asks for income, not for a paycheck",
+    income.includes(SETUP_COPY.paycheck.title));
+  is("...and says that having none is a normal answer",
+    income.includes(SETUP_COPY.paycheck.sub));
+  // The name arrives filled in, and is a field at all for everyone
+  // whose money is not a paycheck.
+  eq("income arrives named, so most people answer nothing here",
+    await page.$eval("#setup-income-name", (el) => el.value), "Paycheck");
+  await type("#setup-income-name", "Disability");
   await type('input[type="number"]', "2100");
   await click("Continue");
   await settle();
@@ -86,10 +106,7 @@ try {
   await click("Skip");   // groceries
   await settle();
 
-  // ---- the balance, then the accounts step's new title --------------
-  await type('input[type="number"]', "4000");
-  await click("Continue");
-  await settle();
+  // ---- the accounts step's new title -------------------------------
   const accounts = await text();
   is("the accounts step names the three things it is asking about",
     accounts.includes(SETUP_COPY.accounts.title));

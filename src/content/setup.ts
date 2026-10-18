@@ -26,8 +26,18 @@ export type SetupPlatform = keyof PlatformText;
 
 export const SETUP_COPY = {
   paycheck: {
-    title: "What's your take-home pay?",
-    sub: "We'll set this up as a recurring paycheck so your Ledger and Budget stay current on their own.",
+    // INCOME, NOT A PAYCHECK, since 2026-10-17. The step asked for
+    // "your take-home pay" and offered no way to call it anything
+    // else, which quietly told everyone whose money arrives as
+    // benefits, a pension, a stipend or an invoice that the app was
+    // not built for them — on the step that used to be FIRST. The
+    // question is the same; what it is willing to be called is not.
+    title: "Any regular income?",
+    // SAYS HOW TO LEAVE. Every other step has a Skip that costs
+    // nothing, but this one read as a question with no acceptable
+    // blank answer, and the person most likely to have no regular
+    // income is the person least able to guess that skipping is fine.
+    sub: "A paycheck, benefits, a side gig — anything that comes in on a schedule. Skip this if you don't have regular income; you can add money as it comes in later.",
     // ASKED, NOT ASSUMED. Setup used to start the paycheck today,
     // which is wrong in both directions: paid this morning and the
     // money is already in the balance on the next step, so it gets
@@ -218,13 +228,27 @@ export const ACCOUNT_GROUPS: readonly {
 ];
 
 /**
- * The questions, in order, and the one ordering decision in the flow.
+ * The questions, in order, and the two ordering decisions in the flow.
  *
- * "accounts" comes AFTER the balance on purpose. Everything up to the
- * balance is what a working Ledger needs; the accounts step only fills
- * the Dashboard. Ordering it last means someone who quits there still
- * leaves with the forecast working, which is the thing that makes the
- * app worth reopening.
+ * "balance" IS FIRST, since 2026-10-17. It was fifth, behind four
+ * questions about money moving, and it is the only answer the forecast
+ * cannot be built without — everything in the Ledger is counted
+ * forward from it. It is also the one question everybody can answer:
+ * every adult has a checking account, and plenty of people have no
+ * paycheck. Asking the universal, load-bearing question first means
+ * somebody who quits on step two still leaves with a working balance,
+ * and nobody meets the app with a question that does not apply to them.
+ *
+ * It is also the only step that cannot be passed, which is why its
+ * position matters more than any other's: as step five that gate
+ * arrived after four Skips had taught the flow was optional. As step
+ * one it is simply what the app needs to know, asked first.
+ *
+ * "accounts" comes AFTER the questions about income and bills.
+ * Everything before it is what a working Ledger needs; the accounts
+ * step only fills the Dashboard. Ordering it late means someone who
+ * quits there still leaves with the forecast working, which is the
+ * thing that makes the app worth reopening.
  *
  * "contributions" comes after accounts for the same reason and one
  * more: it can only ask about accounts that step produced. It is
@@ -233,7 +257,7 @@ export const ACCOUNT_GROUPS: readonly {
  * flow look longer than it is.
  */
 export const SETUP_STEPS = [
-  "paycheck", "rent", "bills", "groceries", "balance", "accounts", "contributions",
+  "balance", "paycheck", "rent", "bills", "groceries", "accounts", "contributions",
 ] as const;
 export type SetupStepKey = typeof SETUP_STEPS[number];
 

@@ -5,6 +5,7 @@ import {
   blankAccountRows, incompleteAccountRows, emptyBillRow, removeBillRow,
   emptyAccountRow, removeAccountRow,
   contributionTargets, collectAccountsWith, blankContributionRow, setupPaycheck,
+  DEFAULT_INCOME_NAME,
 } from "../engine/setup.ts";
 import {
   SETUP_COPY as COPY, CADENCE_OPTIONS, ACCOUNT_GROUPS, SETUP_STEPS, WEEKDAY_OPTIONS,
@@ -37,6 +38,9 @@ export default function Onboarding({ initialBalance, onComplete }) {
   const [recurring, setRecurring] = useState([]);
   const [checkInBalance, setCheckInBalance] = useState(initialBalance ?? null);
 
+  // Arrives filled in with the word most people would have typed, and
+  // is a field at all for everyone whose money is not a paycheck.
+  const [payName, setPayName] = useState(DEFAULT_INCOME_NAME);
   const [payAmount, setPayAmount] = useState("");
   const [payCadence, setPayCadence] = useState("biweekly");
   // Defaults to today and cannot go backwards — the input's `min` says
@@ -113,7 +117,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
   // without either client having to remember it.
   const addIf = (rule) => { if (rule) addRule(rule); };
   function submitPaycheck() {
-    addIf(paycheckRule(payAmount, payCadence, todayISO(), payday));
+    addIf(paycheckRule(payAmount, payCadence, todayISO(), payday, payName));
     goNext();
   }
   function submitRent() {
@@ -181,6 +185,15 @@ export default function Onboarding({ initialBalance, onComplete }) {
           <div className="space-y-3">
             <h2 className="text-lg font-semibold">{COPY.paycheck.title}</h2>
             <p className="text-sm text-gray-500">{COPY.paycheck.sub}</p>
+            <div>
+              <label className={label} htmlFor="setup-income-name">{COPY.labels.name}</label>
+              <input
+                id="setup-income-name"
+                className={field}
+                value={payName}
+                onChange={(e) => setPayName(e.target.value)}
+              />
+            </div>
             <div>
               <label className={label}>{COPY.labels.amount}</label>
               <input className={field} type="number" placeholder="0.00" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} autoFocus />

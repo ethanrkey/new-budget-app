@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
+import { FIELD_TEXT } from "../lib/fields";
 import { categoryOnModeChange } from "../../src/shared/entryDefaults.ts";
 import { CADENCES } from "../../src/engine/model.ts";
 import { blankDraft, draftOf, draftError, overrideError, canTrackActuals, draftTouched, type Draft } from "../lib/edit";
@@ -338,7 +339,7 @@ const styles = StyleSheet.create({
   title: { color: T.text, fontSize: 17, fontWeight: "700" },
   dim: { color: T.faint, fontSize: 12, lineHeight: 17, marginBottom: 2 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8, marginBottom: 4 },
-  field: { backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16, minHeight: 48, justifyContent: "center" },
+  field: { ...FIELD_TEXT, backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16, minHeight: 48, justifyContent: "center" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   chip: { borderWidth: 1, borderColor: T.border, backgroundColor: T.bg, borderRadius: 999, paddingHorizontal: 13, minHeight: 38, justifyContent: "center" },
   chipOn: { backgroundColor: T.text, borderColor: T.text },

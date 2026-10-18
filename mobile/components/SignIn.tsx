@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import Svg, { Path } from "react-native-svg";
 import { T } from "../lib/theme";
+import { FIELD_TEXT } from "../lib/fields";
 import {
   CODE_LENGTH, codeReady, isPlausibleEmail, normalizeCode, normalizeEmail,
   resendIn, sendFailureMessage, verifyFailureMessage,
@@ -497,9 +498,14 @@ const styles = StyleSheet.create({
   brand: { color: T.brass, fontSize: 30, fontWeight: "700", letterSpacing: -0.5 },
   sub: { color: T.dim, marginBottom: 20 },
   field: {
+    ...FIELD_TEXT,
     backgroundColor: T.surface, borderColor: T.border, borderWidth: 1,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, color: T.text, fontSize: 16,
   },
+  // THE ONE FIELD IN THE APP THAT WANTS KERNING, and the reason
+  // lib/fields.ts exists: iOS recycles this view onto the next screen's
+  // fields, and until every field stated its own letterSpacing, this
+  // 8 followed the code box into setup's Amount box.
   codeField: { fontSize: 28, letterSpacing: 8, textAlign: "center", fontVariant: ["tabular-nums"] },
   sent: { color: T.dim, fontSize: 14, lineHeight: 20, marginBottom: 4 },
   strong: { color: T.text, fontWeight: "600" },

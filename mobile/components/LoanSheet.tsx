@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import FormSheet, { useDiscardGuard } from "./FormSheet";
 import { DISCARD_ACCOUNT } from "../../src/content/logBalance.ts";
 import { T } from "../lib/theme";
+import { FIELD_TEXT } from "../lib/fields";
 import DatePicker from "./DatePicker";
 import type { TrackerCategory } from "../../src/engine/types.ts";
 
@@ -115,7 +116,7 @@ const styles = StyleSheet.create({
   title: { color: T.text, fontSize: 17, fontWeight: "700" },
   dim: { color: T.faint, fontSize: 12, lineHeight: 17, marginBottom: 4 },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 10, marginBottom: 4 },
-  field: { backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16, minHeight: 48, justifyContent: "center" },
+  field: { ...FIELD_TEXT, backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16, minHeight: 48, justifyContent: "center" },
   row: { flexDirection: "row", gap: 10, alignItems: "center", marginTop: 14 },
   clear: { paddingHorizontal: 12, minHeight: 48, justifyContent: "center" },
   clearText: { color: T.brass, fontSize: 14 },

@@ -3,6 +3,7 @@ import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
   blankAccountRows, incompleteAccountRows, emptyBillRow,
   contributionTargets, collectAccountsWith, blankContributionRow, setupPaycheck,
+  DEFAULT_INCOME_NAME,
   type SetupCadence, type BillRow, type AccountRows, type SetupAnswers,
   type ContributionRows,
 } from "../../src/engine/setup.ts";
@@ -33,6 +34,8 @@ export const STEPS = SETUP_STEPS;
 
 /** Everything typed across the six steps, held at once. */
 export type SetupDraft = {
+  /** What the income is called. Defaults to the engine's own word. */
+  payName: string;
   payAmount: string;
   payCadence: SetupCadence;
   /** The NEXT payday, which setup used to assume was today. */
@@ -52,7 +55,7 @@ export type SetupDraft = {
 
 export function blankSetupDraft(today: string): SetupDraft {
   return {
-    payAmount: "", payCadence: "biweekly", payday: today,
+    payName: DEFAULT_INCOME_NAME, payAmount: "", payCadence: "biweekly", payday: today,
     // The 1st, like the web: it is right more often than today is, and
     // the ledger's ordering turns on it.
     rentAmount: "", rentDay: "1",
@@ -80,7 +83,7 @@ export function blankSetupDraft(today: string): SetupDraft {
 export function rulesForStep(step: SetupStepKey, d: SetupDraft, today: string): BudgetItem[] {
   const one = (r: BudgetItem | null) => (r ? [r] : []);
   switch (step) {
-    case "paycheck": return one(paycheckRule(d.payAmount, d.payCadence, today, d.payday));
+    case "paycheck": return one(paycheckRule(d.payAmount, d.payCadence, today, d.payday, d.payName));
     case "rent": return one(rentRule(d.rentAmount, d.rentDay, today));
     case "bills": return billRules(d.bills, today);
     case "groceries": return one(groceryRule(d.groceryAmount, d.groceryCadence, today, d.groceryDay));

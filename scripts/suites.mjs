@@ -28,4 +28,5 @@ export const SUITES = [
   "tests/personal-gate.test.mjs",
   "tests/mobile-chart.test.mjs",
   "tests/calendar.test.mjs",
+  "tests/mobile-fields.test.mjs",
 ];

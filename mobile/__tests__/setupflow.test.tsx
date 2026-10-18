@@ -79,14 +79,24 @@ async function skip(times: number) {
   for (let i = 0; i < times; i++) await press("Skip");
 }
 
-/** Skip the four optional questions and stop on the balance. */
-const toBalance = () => skip(4);
-
-/** ...and past it, which takes a number, because that step cannot be skipped. */
-async function toAccounts(balance = "0") {
-  await toBalance();
-  await userEvent.type(screen.getByLabelText("Current balance"), balance);
+/**
+ * Answer the balance and move on.
+ *
+ * IT IS THE FIRST STEP, since 2026-10-17, and the only one with no
+ * Skip — so every walk through this flow starts here. That is the
+ * point of the reorder: the one answer the forecast cannot be built
+ * without is the one the app asks for first, and it is also the one
+ * question everybody can answer.
+ */
+async function passBalance(balance = "0") {
+  await userEvent.type(await screen.findByLabelText("Current balance"), balance);
   await press("Continue");
+}
+
+/** Past the balance and the four optional questions, onto the accounts step. */
+async function toAccounts(balance = "0") {
+  await passBalance(balance);
+  await skip(4);
 }
 
 function mount(onComplete: (a: SetupAnswers) => void = () => {}, onSkip = () => {}) {
@@ -95,14 +105,56 @@ function mount(onComplete: (a: SetupAnswers) => void = () => {}, onSkip = () => 
 
 test("it opens on the first question and counts the rest", async () => {
   await mount();
-  expect(screen.getByText("What's your take-home pay?")).toBeOnTheScreen();
+  // THE BALANCE, not the paycheck. It was the fifth question until
+  // 2026-10-17, behind four about money moving — and it is the only
+  // answer the Ledger cannot be built without, the only step that
+  // cannot be passed, and the only question every adult can answer.
+  expect(screen.getByText("What's the balance of your primary checking account?")).toBeOnTheScreen();
   expect(screen.getByText("Step 1 of 6")).toBeOnTheScreen();
   // Nothing to go back to yet.
   expect(screen.queryByLabelText("Back")).toBeNull();
+
+  // ...and income is second: the question that may not apply to
+  // somebody is never the one that greets them.
+  await passBalance("4000");
+  expect(screen.getByText("Any regular income?")).toBeOnTheScreen();
+  expect(screen.getByText("Step 2 of 6")).toBeOnTheScreen();
+});
+
+test("income can be called what it is, and the default is filled in", async () => {
+  // THE STEP ASKED FOR "your take-home pay" AND NAMED THE RULE
+  // "Paycheck", with no way to say otherwise — which told everyone
+  // whose money is benefits, a pension, a stipend or an invoice that
+  // the app was built for somebody else. The question is the same;
+  // what it is willing to be called is not.
+  const got: SetupAnswers[] = [];
+  await mount((a) => got.push(a));
+  await passBalance("4000");
+
+  // It arrives holding the answer most people would have typed, so
+  // the field costs them a glance rather than a decision.
+  expect(screen.getByLabelText("Name")).toHaveDisplayValue("Paycheck");
+  // And the step says, out loud, that having none is a normal answer.
+  expect(screen.getByText(/Skip this if you don't have regular income/)).toBeOnTheScreen();
+
+  await userEvent.clear(screen.getByLabelText("Name"));
+  await userEvent.type(screen.getByLabelText("Name"), "Disability");
+  await userEvent.type(screen.getByLabelText("Amount"), "1480");
+  await press("Continue");
+  await skip(3);                            // rent, bills, groceries
+  await press("Finish");
+  await press("Go to my budget");
+
+  const income = got[0]!.recurring![0]!;
+  expect(income.name).toBe("Disability");
+  // Still income, whatever it is called — the category is what puts it
+  // on the right side of the Ledger.
+  expect(income.category).toBe("income");
 });
 
 test("the phone's paycheck note points at a control the phone has", async () => {
   await mount();
+  await passBalance();
   // The web's version of this sentence names Quick Entry, which the
   // phone does not have and is not getting. A platform variant, not a
   // second string: src/content/setup.ts.
@@ -117,6 +169,7 @@ test("the paycheck step asks when the next payday is, and uses it", async () => 
   // every projected date is off by a week.
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));
+  await passBalance("4000");
 
   const today = new Date();
   const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -136,8 +189,6 @@ test("the paycheck step asks when the next payday is, and uses it", async () => 
   // which is the whole point of Skip.
   await press("Continue");
   await skip(3);                            // rent, bills, groceries
-  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
-  await press("Continue");
   await press("Finish");
   await press("Go to my budget");
 
@@ -167,7 +218,11 @@ test("the keyboard cannot hide a control: every field reports its focus", async 
   const reports = (label: string) =>
     expect(typeof screen.getByLabelText(label).props.onFocus).toBe("function");
 
-  reports("Amount");                                    // paycheck
+  reports("Current balance");                           // balance
+  await passBalance("4000");
+
+  reports("Name");                                      // income
+  reports("Amount");
   // The payday control is not a text field, so it cannot take focus —
   // it says it is a control instead, which is the other half of why
   // it was missed.
@@ -185,9 +240,6 @@ test("the keyboard cannot hide a control: every field reports its focus", async 
   await press("Skip");
   reports("Amount");                                    // groceries
   await press("Skip");
-  reports("Current balance");                           // balance
-  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
-  await press("Continue");
   reports("Savings 1 name");                            // accounts
   reports("Savings 1 amount");
 });
@@ -198,7 +250,8 @@ test("every bill row's due day defaults to today, not to the row above", async (
   // first — 8 if the first was set to the 8th, 4 if it was set to the
   // 4th — directly under a sentence saying it defaults to today.
   await mount();
-  await press("Skip");                      // paycheck
+  await passBalance();
+  await press("Skip");                      // income
   await press("Skip");                      // rent
 
   const today = new Date();
@@ -226,7 +279,8 @@ test("the due day is picked from 1-31, and there is no way to type 50", async ()
   // this asserts there is no text input left to type into: a picker
   // added BESIDE the old field would pass every other check here.
   await mount();
-  await press("Skip");                      // paycheck
+  await passBalance();
+  await press("Skip");                      // income
 
   // Rent's label is a question now. "Due on day" beside a number box
   // was a column heading; above a row that already shows a day it
@@ -271,12 +325,13 @@ test("a picker panel is rounded like the field above it, on all four corners", a
   // don't over-round" — so rounding both to 20 together would be a
   // different decision, not this bug coming back.
   await mount();
+  await passBalance();
   const flat = (st: unknown): Record<string, unknown> =>
     Object.assign({}, ...[st].flat(Infinity).filter(Boolean) as object[]);
   const fieldRadius = flat(screen.getByLabelText("Amount").props.style).borderRadius;
   expect(fieldRadius).toBe(12);
 
-  // The payday calendar, on step one.
+  // The payday calendar, on the income step.
   await userEvent.press(screen.getByLabelText(/^When's your next payday\? .*Change the date\.$/));
   for (const id of ["date-picker-panel"]) {
     const st = flat(screen.getByTestId(id).props.style);
@@ -286,7 +341,7 @@ test("a picker panel is rounded like the field above it, on all four corners", a
   }
   await userEvent.press(screen.getByLabelText("Done"));
 
-  // The day wheel, on step two.
+  // The day wheel, on the rent step.
   await press("Skip");
   await userEvent.press(dayRow("What day of the month is your rent due\\?"));
   const wheel = flat(screen.getByTestId("day-picker-panel").props.style);
@@ -307,7 +362,8 @@ test("the day wheel commits on Done and on nothing else", async () => {
   // broken: turning the wheel changes nothing, Done commits what the
   // wheel is showing, and Cancel leaves the old value alone.
   await mount();
-  await press("Skip");                      // paycheck
+  await passBalance();
+  await press("Skip");                      // income
   const rent = "What day of the month is your rent due\\?";
 
   // 1. The wheel moves and the row does not.
@@ -354,7 +410,8 @@ describe("every row in setup has an \u2715, and the list is never left empty", (
 
   async function threeBills() {
     await mount();
-    await press("Skip");                    // paycheck
+    await passBalance();
+    await press("Skip");                    // income
     await press("Skip");                    // rent
     await userEvent.type(screen.getByLabelText("Bill 1 name"), "Spotify");
     await press("+ Add another bill");
@@ -376,7 +433,8 @@ describe("every row in setup has an \u2715, and the list is never left empty", (
     // Not "past the first": a control that appears at two rows is one
     // nobody finds when they need it at one.
     await mount();
-    await press("Skip");                    // paycheck
+    await passBalance();
+    await press("Skip");                    // income
     await press("Skip");                    // rent
     expect(screen.getByLabelText("Remove bill 1")).toBeOnTheScreen();
     await press("+ Add another bill");
@@ -386,7 +444,8 @@ describe("every row in setup has an \u2715, and the list is never left empty", (
 
   test("removing the last bill row leaves one empty row, not none", async () => {
     await mount();
-    await press("Skip");                    // paycheck
+    await passBalance();
+    await press("Skip");                    // income
     await press("Skip");                    // rent
     await userEvent.type(screen.getByLabelText("Bill 1 name"), "Spotify");
 
@@ -440,7 +499,8 @@ describe("every row in setup has an \u2715, and the list is never left empty", (
 test("groceries ask which day of the week, and the rule starts on it", async () => {
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));
-  await press("Skip");                      // paycheck
+  await passBalance("4000");
+  await press("Skip");                      // income
   await press("Skip");                      // rent
   await press("Skip");                      // bills
 
@@ -454,8 +514,6 @@ test("groceries ask which day of the week, and the rule starts on it", async () 
   expect(screen.getByLabelText("Saturday").props.accessibilityState.selected).toBe(true);
 
   await press("Continue");
-  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
-  await press("Continue");
   await press("Finish");
   await press("Go to my budget");
 
@@ -468,6 +526,7 @@ test("groceries ask which day of the week, and the rule starts on it", async () 
 test("Continue keeps what was typed; Skip discards it", async () => {
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));
+  await passBalance("4000");
 
   await userEvent.type(screen.getByLabelText("Amount"), "2100");
   await press("Continue");
@@ -478,8 +537,6 @@ test("Continue keeps what was typed; Skip discards it", async () => {
 
   await press("Skip");                      // bills
   await press("Skip");                      // groceries
-  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
-  await press("Continue");                  // balance
   await press("Finish");                    // accounts, untouched
   await press("Go to my budget");
 
@@ -491,6 +548,7 @@ test("Continue keeps what was typed; Skip discards it", async () => {
 test("Back brings the typing back, and passing a step twice does not duplicate it", async () => {
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));
+  await passBalance("100");
 
   await userEvent.type(screen.getByLabelText("Amount"), "2100");
   await press("Continue");
@@ -502,8 +560,6 @@ test("Back brings the typing back, and passing a step twice does not duplicate i
 
   await press("Continue");
   await skip(3);                            // rent, bills, groceries
-  await userEvent.type(screen.getByLabelText("Current balance"), "100");
-  await press("Continue");
   await press("Finish");
   await press("Go to my budget");
 
@@ -514,7 +570,6 @@ test("Back brings the typing back, and passing a step twice does not duplicate i
 
 test("the balance step cannot be passed, and says why", async () => {
   await mount();
-  await toBalance();
 
   expect(screen.getByText("What's the balance of your primary checking account?")).toBeOnTheScreen();
   // No Skip on this step at all — every other question is optional and
@@ -576,6 +631,9 @@ test("what reaches applySetup is what was on the screen", async () => {
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));
 
+  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
+  await press("Continue");
+
   await userEvent.type(screen.getByLabelText("Amount"), "2100");
   await press("Every 2 weeks");
   await press("Continue");
@@ -589,9 +647,6 @@ test("what reaches applySetup is what was on the screen", async () => {
   await press("Continue");
 
   await userEvent.type(screen.getByLabelText("Amount"), "150");
-  await press("Continue");
-
-  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
   await press("Continue");
 
   await userEvent.type(screen.getByLabelText("Savings 1 name"), "Ally");
@@ -724,7 +779,7 @@ test("Skip setup leaves without creating anything", async () => {
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a), () => skips.push(1));
 
-  await userEvent.type(screen.getByLabelText("Amount"), "2100");
+  await userEvent.type(screen.getByLabelText("Current balance"), "2100");
   await press("Skip setup");
 
   expect(skips).toHaveLength(1);
@@ -739,7 +794,8 @@ test("a bill can be marked as one that varies, and only that bill is", async () 
   // electric — was the one bill nobody could compare against reality.
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));
-  await skip(2);   // past the paycheck and the rent
+  await passBalance("4000");
+  await skip(2);   // past the income and the rent
 
   await userEvent.type(screen.getByLabelText("Bill 1 name"), "Spotify");
   await userEvent.type(screen.getByLabelText("Bill 1 amount"), "12");
@@ -755,9 +811,7 @@ test("a bill can be marked as one that varies, and only that bill is", async () 
   expect(screen.getByLabelText("Bill 1 varies").props.accessibilityState.checked).toBe(false);
 
   await press("Continue");
-  await skip(1);
-  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
-  await press("Continue");
+  await skip(1);                            // groceries
   await press("Finish");
   await press("Go to my budget");
 
@@ -771,8 +825,9 @@ test("a bill can be marked as one that varies, and only that bill is", async () 
 test("'On my payday' copies the paycheck and puts away the two questions it answers", async () => {
   const got: SetupAnswers[] = [];
   await mount((a) => got.push(a));
+  await passBalance("4000");
 
-  // A paycheck first, because the offer only exists when there is a
+  // Income first, because the offer only exists when there is a
   // payday to be on.
   await userEvent.type(screen.getByLabelText("Amount"), "2100");
   await userEvent.press(screen.getByLabelText("Every 2 weeks"));
@@ -780,8 +835,6 @@ test("'On my payday' copies the paycheck and puts away the two questions it answ
   await press("Continue");
 
   await skip(3);
-  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
-  await press("Continue");
   await userEvent.type(screen.getByLabelText("Savings 1 name"), "Emergency fund");
   await userEvent.type(screen.getByLabelText("Savings 1 amount"), "8200");
   await press("Continue");
@@ -827,14 +880,13 @@ test("the add-another buttons hug their text instead of spanning the screen", as
   // these were targets the full width of the screen: press anywhere
   // in that band, miles from the words, and a row appeared.
   await mount();
-  await skip(2);
+  await passBalance();
+  await skip(2);                            // income, rent
   const bills = screen.getByLabelText("+ Add another bill");
   expect(flatStyle(bills.props.style).alignSelf).toBe("flex-start");
 
-  await press("Continue");
-  await skip(1);
-  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
-  await press("Continue");
+  await press("Continue");                  // bills
+  await skip(1);                            // groceries
   for (const group of ["investments", "savings", "debt"]) {
     const btn = screen.getByLabelText(`+ Add another ${group}`);
     expect(flatStyle(btn.props.style).alignSelf).toBe("flex-start");

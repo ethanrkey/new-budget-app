@@ -63,12 +63,16 @@ async function mount(userId = "u1") {
   await screen.findByText("THE APP");
 }
 
-/** Walk the six questions and press through the Done screen. */
+/**
+ * Walk the six questions and press through the Done screen.
+ *
+ * THE BALANCE IS FIRST and has no Skip, so it is answered before the
+ * four that do — which is the shape of the flow since 2026-10-17.
+ */
 async function finishSetup(balance = "4000") {
-  await screen.findByText("What's your take-home pay?");
-  for (const _ of [0, 1, 2, 3]) await userEvent.press(screen.getByLabelText("Skip"));
   await userEvent.type(await screen.findByLabelText("Current balance"), balance);
   await userEvent.press(screen.getByLabelText("Continue"));
+  for (const _ of [0, 1, 2, 3]) await userEvent.press(screen.getByLabelText("Skip"));
   await userEvent.press(screen.getByLabelText("Finish"));
   await userEvent.press(await screen.findByLabelText("Go to my budget"));
 }
@@ -84,7 +88,9 @@ beforeEach(async () => {
 
 test("a brand-new account is met with the six questions", async () => {
   await mount();
-  expect(await screen.findByText("What's your take-home pay?")).toBeOnTheScreen();
+  // The BALANCE first: the one answer the forecast cannot be built
+  // without, and the one question everybody can answer.
+  expect(await screen.findByText("What's the balance of your primary checking account?")).toBeOnTheScreen();
   expect(screen.getByText("Step 1 of 6")).toBeOnTheScreen();
 });
 
@@ -92,14 +98,14 @@ test("an account that already did setup — on either client — is not asked ag
   // hasSeenOnboarding is ACCOUNT data, so the web's answer counts here.
   mockLoaded.state = seen;
   await mount();
-  expect(screen.queryByText("What's your take-home pay?")).toBeNull();
+  expect(screen.queryByText("What's the balance of your primary checking account?")).toBeNull();
 });
 
 test("Skip setup leaves, and marks the account so it does not come back", async () => {
   await mount();
   await userEvent.press(await screen.findByLabelText("Skip setup"));
 
-  await waitFor(() => expect(screen.queryByText("What's your take-home pay?")).toBeNull());
+  await waitFor(() => expect(screen.queryByText("What's the balance of your primary checking account?")).toBeNull());
   // The flag is account data and is written on the way out, so another
   // device does not ask again either.
   await waitFor(() => expect(mockSaved).toHaveLength(1));
@@ -110,13 +116,12 @@ test("Skip setup leaves, and marks the account so it does not come back", async 
 
 test("finishing writes the rules, the anchor and the flag in ONE save", async () => {
   await mount();
-  await screen.findByText("What's your take-home pay?");
+  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
+  await userEvent.press(screen.getByLabelText("Continue"));
 
   await userEvent.type(screen.getByLabelText("Amount"), "2100");
   await userEvent.press(screen.getByLabelText("Continue"));
   for (const _ of [0, 1, 2]) await userEvent.press(screen.getByLabelText("Skip"));
-  await userEvent.type(screen.getByLabelText("Current balance"), "4000");
-  await userEvent.press(screen.getByLabelText("Continue"));
   await userEvent.press(screen.getByLabelText("Finish"));
   await userEvent.press(await screen.findByLabelText("Go to my budget"));
 
@@ -139,12 +144,7 @@ test("finishing writes the rules, the anchor and the flag in ONE save", async ()
 
 test("...and the tour comes up once, after the FIRST setup", async () => {
   await mount();
-  await screen.findByText("What's your take-home pay?");
-  for (const _ of [0, 1, 2, 3]) await userEvent.press(screen.getByLabelText("Skip"));
-  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
-  await userEvent.press(screen.getByLabelText("Continue"));
-  await userEvent.press(screen.getByLabelText("Finish"));
-  await userEvent.press(await screen.findByLabelText("Go to my budget"));
+  await finishSetup();
 
   expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
 });
@@ -171,7 +171,7 @@ test("A NEW ACCOUNT ON A USED PHONE still gets setup, and then the tour", async 
   mockLoaded.state = blank;
   await mount("acct-b");
 
-  expect(await screen.findByText("What's your take-home pay?")).toBeOnTheScreen();
+  expect(await screen.findByText("What's the balance of your primary checking account?")).toBeOnTheScreen();
   await finishSetup("250");
   await waitFor(() => expect(mockSaved).toHaveLength(1));
   expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
@@ -242,12 +242,7 @@ test("...and NOT again when Setup is re-run from Settings", async () => {
   await userEvent.press(await screen.findByLabelText("Settings, about and export"));
   await userEvent.press(await screen.findByLabelText("Set up your budget"));
 
-  await screen.findByText("What's your take-home pay?");
-  for (const _ of [0, 1, 2, 3]) await userEvent.press(screen.getByLabelText("Skip"));
-  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
-  await userEvent.press(screen.getByLabelText("Continue"));
-  await userEvent.press(screen.getByLabelText("Finish"));
-  await userEvent.press(await screen.findByLabelText("Go to my budget"));
+  await finishSetup();
 
   await waitFor(() => expect(mockSaved).toHaveLength(1));
   // Straight back into the app.
