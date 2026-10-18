@@ -74,19 +74,27 @@ export function isNewAccount(state: BudgetState): boolean {
 }
 
 /**
- * Which of the three steps have actually been done.
+ * Where each of the three steps stands.
  *
- * THIS REPLACED A SINGLE BOOLEAN, and the reason is a bug that reached
- * a phone. `isNewAccount` flips false on the FIRST write, so logging a
- * balance — step one — made the whole guide disappear and left a new
- * user on an empty Ledger with no sign that steps two and three
- * existed. The guide died at exactly the moment it had proved useful.
+ * THREE STATES RATHER THAN A BOOLEAN, since 2026-10-18, because one of
+ * the steps can be finished by having nothing to add. A tick reading
+ * "Income added" over an account with no income is a lie the person
+ * who skipped the step is the only one who ever sees — so the state
+ * says which way it was settled and the card prints the matching
+ * words.
+ *
+ * THIS REPLACED A SINGLE BOOLEAN FOR THE WHOLE GUIDE, and the reason
+ * is a bug that reached a phone. `isNewAccount` flips false on the
+ * FIRST write, so logging a balance — step one — made the whole guide
+ * disappear and left a new user on an empty Ledger with no sign that
+ * steps two and three existed. The guide died at exactly the moment it
+ * had proved useful.
  *
  * A guide has to survive its own first success, so progress is per
- * step and the thing is shown until every step is done or it is
+ * step and the thing is shown until every step is settled or it is
  * dismissed.
  */
-export function firstRunProgress(state: BudgetState): Record<StepKey, boolean> {
+export function firstRunProgress(state: BudgetState): Record<StepKey, StepState> {
   const items = [...(state.recurring ?? []), ...(state.oneoffs ?? [])];
   const directionOf = (c: string) => CATEGORIES[c]?.direction ?? "out";
 
@@ -94,20 +102,28 @@ export function firstRunProgress(state: BudgetState): Record<StepKey, boolean> {
   for (const list of Object.values(state.accountSnapshots ?? {})) {
     if (list.some((s) => !isSeed(s))) { balance = true; break; }
   }
+  // AN ANSWERED QUESTION IS A SETTLED STEP. Setup stopped assuming
+  // everyone has a paycheck on 2026-10-17 — "Any regular income?",
+  // skippable on purpose — and this card went on demanding one anyway,
+  // which made the skip feel like a mistake the app was waiting for
+  // you to correct. `askedAboutIncome` is the only thing that can tell
+  // "has not got one" from "has not got round to it"; without it an
+  // absence is all this function can see.
+  const income = items.some((i) => directionOf(i.category) === "in");
   return {
-    balance,
-    income: items.some((i) => directionOf(i.category) === "in"),
+    balance: balance ? "done" : "todo",
+    income: income ? "done" : state.settings?.askedAboutIncome ? "skipped" : "todo",
     // Anything that leaves: a bill, a one-off, a transfer to savings.
     // Someone who has entered rent has done this step whatever they
     // called the category.
-    bills: items.some((i) => directionOf(i.category) === "out"),
+    bills: items.some((i) => directionOf(i.category) === "out") ? "done" : "todo",
   };
 }
 
 /** How many steps are left. Zero means the guide has finished its job. */
 export function stepsRemaining(state: BudgetState): number {
   const done = firstRunProgress(state);
-  return FIRST_RUN_STEPS.filter((s) => !done[s.key]).length;
+  return FIRST_RUN_STEPS.filter((s) => done[s.key] === "todo").length;
 }
 
 /**
@@ -127,6 +143,15 @@ export function showFirstRun(state: BudgetState, dismissed: boolean): boolean {
 export type StepKey = "balance" | "income" | "bills";
 
 /**
+ * Not done; done; or settled by there being nothing to add.
+ *
+ * Only the income step is ever "skipped" — a balance and an outflow
+ * are things every account has — but the type is per step because the
+ * card reads it per step.
+ */
+export type StepState = "todo" | "done" | "skipped";
+
+/**
  * The three things a fresh account needs, in the order they make sense.
  *
  * The balance first, because it is the one number every projected row is
@@ -135,12 +160,23 @@ export type StepKey = "balance" | "income" | "bills";
  * nothing coming in projects straight down and looks alarming for no
  * reason. Bills last.
  *
+ * Income is the one step with a second finished state, and the one
+ * phrased as a question: setup's step is "Any regular income?" and
+ * says out loud that skipping is a normal answer, so demanding a
+ * paycheck here made that skip read as a mistake the app was waiting
+ * to be corrected. A step settled by having nothing to add says so
+ * rather than claiming income was added.
+ *
  * All three point at controls THAT ALREADY EXIST on the phone. Nothing
  * here is a second way to do anything — which is also the answer to App
  * Review's minimum-functionality question: the app does its whole job
  * on the device, and the only thing that was missing was saying so.
  */
-export const FIRST_RUN_STEPS: readonly { key: StepKey; title: string; body: string; cta: string; done: string }[] = [
+export const FIRST_RUN_STEPS: readonly {
+  key: StepKey; title: string; body: string; cta: string; done: string;
+  /** What a step settled with nothing to add says. Income only. */
+  skipped?: string;
+}[] = [
   {
     key: "balance",
     title: "Log what's actually in checking",
@@ -150,10 +186,19 @@ export const FIRST_RUN_STEPS: readonly { key: StepKey; title: string; body: stri
   },
   {
     key: "income",
-    title: "Add your paycheck",
-    body: "A rule, not a one-off — \"every two weeks from Friday\" — so the forecast keeps going without you.",
+    // A QUESTION, not an instruction, and the only step that is one:
+    // the other two are things every account has and this is the one
+    // whose honest answer can be "none". It asks about anything
+    // coming up rather than about a paycheck, which is both setup's
+    // framing since 2026-10-17 and wider than it — a one-off you know
+    // about belongs in the forecast too.
+    title: "Any upcoming income?",
+    body: "Enter any income you know is coming up, recurring or not.",
     cta: "Add income",
     done: "Income added",
+    // What setup was actually told, which is narrower than the
+    // question above and so is said in its own words.
+    skipped: "No regular income",
   },
   {
     key: "bills",

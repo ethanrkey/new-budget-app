@@ -9,7 +9,10 @@
 // has touched, and the only honest question is "did a person put
 // anything in". Every case below is a way to get that wrong.
 import { normalize } from "../src/engine/stateShape.ts";
-import { isNewAccount, firstRunProgress, stepsRemaining, showFirstRun } from "../mobile/lib/firstRun.ts";
+import {
+  isNewAccount, firstRunProgress, stepsRemaining, showFirstRun, FIRST_RUN_STEPS,
+} from "../mobile/lib/firstRun.ts";
+import { applySetup, markSetupSeen } from "../src/engine/setup.ts";
 import {
   updateAccountBalance, upsertItem, addBalanceSnapshot, addContribution,
 } from "../src/engine/mutate.ts";
@@ -95,12 +98,12 @@ is("a bare object is new, not a crash", isNewAccount({ recurring: [], oneoffs: [
 // disappear and left a new user with two steps to go and nothing
 // saying so.
 {
-  eq("nothing done yet", firstRunProgress(blank), { balance: false, income: false, bills: false });
+  eq("nothing done yet", firstRunProgress(blank), { balance: "todo", income: "todo", bills: "todo" });
   eq("three to go", stepsRemaining(blank), 3);
 
   const afterBalance = updateAccountBalance(blank, "checking", 4000, "2026-11-01");
   eq("step one ticks off and the rest do not",
-    firstRunProgress(afterBalance), { balance: true, income: false, bills: false });
+    firstRunProgress(afterBalance), { balance: "done", income: "todo", bills: "todo" });
   eq("two to go", stepsRemaining(afterBalance), 2);
   is("THE BUG: the guide still shows after step one", showFirstRun(afterBalance, false));
   not("...while isNewAccount alone would have hidden it", isNewAccount(afterBalance));
@@ -110,7 +113,7 @@ is("a bare object is new, not a crash", isNewAccount({ recurring: [], oneoffs: [
     cadence: "biweekly", startDate: "2026-10-09", order: 0,
   });
   eq("income ticks off by DIRECTION, not by category name",
-    firstRunProgress(afterIncome), { balance: true, income: true, bills: false });
+    firstRunProgress(afterIncome), { balance: "done", income: "done", bills: "todo" });
   is("still showing with one to go", showFirstRun(afterIncome, false));
 
   const afterBill = upsertItem(afterIncome, {
@@ -129,6 +132,72 @@ is("a bare object is new, not a crash", isNewAccount({ recurring: [], oneoffs: [
 
   // Put away by hand, with work outstanding.
   not("dismissing hides it even with steps left", showFirstRun(blank, true));
+}
+
+// ---- SKIPPING THE INCOME STEP IS AN ANSWER, NOT A GAP --------------
+//
+// Setup stopped assuming everyone has a paycheck on 2026-10-17 — the
+// step is "Any regular income?" and says skipping is normal — and this
+// card went on demanding one, because an absence was all it could see.
+// `askedAboutIncome` is what makes the two tellable apart.
+{
+  const asked = normalize({ settings: { askedAboutIncome: true } });
+  eq("a skipped income step is settled, not outstanding",
+    firstRunProgress(asked).income, "skipped");
+  eq("...so the guide asks for two things, not three", stepsRemaining(asked), 2);
+  // SKIPPED, NOT DONE, because the card prints different words for it:
+  // a tick reading "Income added" over an account with no income is
+  // only ever read by the person it is wrong for.
+  eq("...and it is not pretending income was added",
+    FIRST_RUN_STEPS.find((s) => s.key === "income").skipped, "No regular income");
+
+  // The other two steps are untouched by it — nothing about income
+  // says anything about a balance or a bill.
+  eq("the balance step is unmoved", firstRunProgress(asked).balance, "todo");
+  eq("the bills step is unmoved", firstRunProgress(asked).bills, "todo");
+
+  // Income entered afterwards is DONE rather than skipped: the words
+  // on the card have to follow the account, not the flag.
+  const thenAdded = upsertItem(asked, {
+    id: "r-pay", name: "Disability", amount: 1100, category: "income",
+    cadence: "monthly", dayOfMonth: 3, startDate: "2026-10-03", order: 0,
+  });
+  eq("...and real income overrides the skip", firstRunProgress(thenAdded).income, "done");
+
+  // The whole guide can finish without any income at all.
+  const noIncomeEver = upsertItem(
+    updateAccountBalance(asked, "checking", 4000, "2026-11-01"),
+    { id: "r-rent", name: "Rent", amount: 1450, category: "bill",
+      cadence: "monthly", dayOfMonth: 1, startDate: "2026-10-01", order: 1 },
+  );
+  eq("nothing left to do with no paycheck in sight", stepsRemaining(noIncomeEver), 0);
+  not("...so the guide goes away on its own", showFirstRun(noIncomeEver, false));
+}
+
+// A completed setup is what writes the flag, and that is the only
+// thing between the two halves above. Asserted against applySetup
+// itself rather than a hand-set setting, because a flag nothing sets
+// is a flag that does not work.
+{
+  const after = applySetup(normalize({}), { recurring: [], checkInBalance: 4000 }, "2026-10-18");
+  is("finishing setup puts the income question on the record",
+    after.settings.askedAboutIncome);
+  eq("...which settles the step for someone who entered none",
+    firstRunProgress(after).income, "skipped");
+
+  const withPay = applySetup(normalize({}), {
+    recurring: [{ id: "p", name: "Paycheck", amount: 2000, category: "income",
+      cadence: "biweekly", startDate: "2026-10-23", order: 0 }],
+    checkInBalance: 4000,
+  }, "2026-10-18");
+  eq("...and someone who entered some is done, not skipped",
+    firstRunProgress(withPay).income, "done");
+
+  // Skipping the WIZARD is not answering the question inside it.
+  const skippedWizard = markSetupSeen(normalize({}));
+  not("closing setup without finishing asks nothing",
+    skippedWizard.settings.askedAboutIncome);
+  eq("...so the step is still a step", firstRunProgress(skippedWizard).income, "todo");
 }
 
 // A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a

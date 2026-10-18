@@ -29,7 +29,8 @@ const CADENCE_LABEL: Record<Cadence, string> = {
 };
 
 export type SheetMode =
-  | { kind: "add" }
+  /** `presetCategory`: opened FOR something — see blankDraft in lib/edit. */
+  | { kind: "add"; presetCategory?: string }
   | { kind: "rule"; item: BudgetItem }
   | { kind: "occurrence"; item: BudgetItem; date: ISODate; current: number | null };
 
@@ -60,13 +61,21 @@ export default function TransactionSheet({
   // measured against. Two calls to blankDraft() would agree today and
   // disagree across midnight, which is the kind of bug that is only
   // ever seen by somebody filling in a form at midnight.
+  const preset = mode.kind === "add" ? mode.presetCategory ?? null : null;
   const initial = useRef({
-    draft: existing ? draftOf(existing) : blankDraft(),
+    draft: existing ? draftOf(existing) : blankDraft(undefined, preset),
     occAmount: mode.kind === "occurrence" ? String(mode.current ?? mode.item.amount) : "",
   });
   const [draft, setDraft] = useState<Draft>(initial.current.draft);
   const [occAmount, setOccAmount] = useState(initial.current.occAmount);
   const [picking, setPicking] = useState<null | "date" | "start" | "end">(null);
+  // HAS SAVE BEEN PRESSED? Nothing is wrong with a form nobody has
+  // filled in yet — it is empty, which is what empty looks like. This
+  // sheet greeted "Add income" from the Ledger guide with a red "Give
+  // it a name." before a single key was pressed, which reads as the
+  // app refusing something that was never asked for. The error waits
+  // for the attempt now, like CategorySheet's always has.
+  const [tried, setTried] = useState(false);
 
   const dirty = mode.kind === "occurrence"
     ? occAmount !== initial.current.occAmount
@@ -89,7 +98,14 @@ export default function TransactionSheet({
       ...d,
       recurring,
       ...(cadence ? { cadence } : {}),
-      category: categoryOnModeChange(recurring ? "recurring" : "oneoff", d.category, { touched: categoryTouched }),
+      // A PRESET OUTRANKS THE CHIPS. Picking a cadence on a form
+      // opened as "Add income" must not quietly turn it into a fixed
+      // bill — the caller already answered this question. Same rule,
+      // same argument, same file as the web's "+ Add a loan".
+      category: categoryOnModeChange(
+        recurring ? "recurring" : "oneoff", d.category,
+        { touched: categoryTouched, presetCategory: preset },
+      ),
     }));
 
   // ---- Occurrence scope: one field, and nothing else is editable -------
@@ -109,8 +125,9 @@ export default function TransactionSheet({
           />
         </Field>
         <Actions
-          busy={busy} disabled={!!err} error={err} cta="Save this date"
-          onClose={onClose} onSubmit={() => onSaveOccurrence(occAmount)}
+          busy={busy} error={tried ? err : null} cta="Save this date"
+          onClose={onClose}
+          onSubmit={() => { setTried(true); if (!err) onSaveOccurrence(occAmount); }}
         />
       </Sheet>
     );
@@ -234,8 +251,7 @@ export default function TransactionSheet({
 
       <Actions
         busy={busy}
-        disabled={!!err}
-        error={err}
+        error={tried ? err : null}
         // ONE PRESS. The web needs two — "Save", then "Save anyway" — because
         // it only learns the orphan count when you submit. This sheet counts
         // them live and shows the warning beside the button, so the warning
@@ -244,7 +260,7 @@ export default function TransactionSheet({
         // back to "Save" between them reads as a bug.
         cta={orphans > 0 ? "Save anyway" : existing ? "Save" : "Add"}
         onClose={onClose}
-        onSubmit={() => onSaveDraft(draft)}
+        onSubmit={() => { setTried(true); if (!err) onSaveDraft(draft); }}
       />
     </Sheet>
   );
@@ -301,24 +317,28 @@ const Chip = ({ on, label, onPress }: { on: boolean; label: string; onPress: () 
   </Pressable>
 );
 
+// VALIDATE ON PRESS RATHER THAN DISABLING THE BUTTON — the same
+// decision CategorySheet records, now that both forms make it. The
+// button always responds and says what is wrong; a dead button with no
+// explanation is the thing people tap twice and then give up on, and a
+// red error over a form nobody has typed in yet is worse again.
 function Actions({
-  busy, disabled, error, cta, onClose, onSubmit,
+  busy, error, cta, onClose, onSubmit,
 }: {
-  busy: boolean; disabled: boolean; error: string | null; cta: string;
+  busy: boolean; error: string | null; cta: string;
   onClose: () => void; onSubmit: () => void;
 }) {
   return (
     <>
-      {/* The reason, not just a dead button. A disabled control with no
-          explanation is the same bug as a silently dropped field. */}
+      {/* The reason, once there is one to give. */}
       {error ? <Text style={styles.err}>{error}</Text> : null}
       <View style={styles.row}>
         <Pressable style={[styles.btn, styles.ghost]} onPress={onClose} disabled={busy} accessibilityRole="button">
           <Text style={styles.ghostText}>Cancel</Text>
         </Pressable>
         <Pressable
-          style={[styles.btn, styles.primary, (disabled || busy) && styles.disabled]}
-          disabled={disabled || busy}
+          style={[styles.btn, styles.primary, busy && styles.disabled]}
+          disabled={busy}
           onPress={onSubmit}
           accessibilityRole="button"
           accessibilityLabel={cta}

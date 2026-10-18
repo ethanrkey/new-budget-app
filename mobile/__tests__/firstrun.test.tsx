@@ -66,6 +66,37 @@ test("THE BUG: finishing step one ticks it off and keeps the other two", async (
   expect(screen.getByText(/2 to go/)).toBeOnTheScreen();
 });
 
+test("a skipped income step is ticked, and says what was actually answered", async () => {
+  // Setup stopped assuming everyone has a paycheck on 2026-10-17 and
+  // this card went on demanding one, which made a deliberate skip
+  // read as a mistake the app was waiting to be corrected.
+  const asked = normalize({ settings: { askedAboutIncome: true } });
+  await render(
+    <FirstRun state={asked} online
+      onLogBalance={() => {}} onAddIncome={() => {}} onAddBill={() => {}} onDismiss={() => {}} />
+  );
+
+  // Ticked, and NOT claiming income was added — the person who
+  // skipped is the only one who ever reads this line.
+  expect(screen.getByText("No regular income")).toBeOnTheScreen();
+  expect(screen.queryByText("Income added")).toBeNull();
+  expect(screen.queryByLabelText("Add income")).toBeNull();
+  expect(screen.getByText(/2 to go/)).toBeOnTheScreen();
+});
+
+test("...and unanswered, it asks rather than instructs", async () => {
+  await render(
+    <FirstRun state={blank} online
+      onLogBalance={() => {}} onAddIncome={() => {}} onAddBill={() => {}} onDismiss={() => {}} />
+  );
+
+  // The words follow setup's: a question with a normal "none"
+  // answer, and wider than a paycheck.
+  expect(screen.getByText("Any upcoming income?")).toBeOnTheScreen();
+  expect(screen.getByText("Enter any income you know is coming up, recurring or not.")).toBeOnTheScreen();
+  expect(screen.queryByText(/paycheck/i)).toBeNull();
+});
+
 test("the guide can be put away by hand", async () => {
   const calls: string[] = [];
   await render(

@@ -200,6 +200,21 @@ export interface Settings {
    *  and someone who skips it on the first screen has been. The tour
    *  stays reachable by hand afterwards — About on both clients. */
   hasSeenTour: boolean;
+  /** Setup has asked whether there is any regular income.
+   *
+   *  WRITTEN BY A COMPLETED SETUP, and it is the answer to a question
+   *  nothing else in the data can answer: an account with no income
+   *  rule has either not got round to it or has not got one, and
+   *  those two want opposite things from the app. The Ledger's "Start
+   *  here" guide asked for a paycheck forever, because an absence is
+   *  all it could see.
+   *
+   *  Not a claim that there IS no income — the person may have one
+   *  and skipped the step. It means the question has been put, which
+   *  is the thing that makes asking again rude. Added 2026-10-18;
+   *  see the migration in stateShape.ts for what existing accounts
+   *  inherit. */
+  askedAboutIncome: boolean;
 }
 
 // ---- The state blob ------------------------------------------------------

@@ -238,6 +238,25 @@ export function normalize(parsed: any): BudgetState {
     settings.hasSeenTour = settings.hasSeenOnboarding;
   }
 
+  // Migration: askedAboutIncome arrived 2026-10-18, the day after the
+  // income step stopped assuming everyone has a paycheck. An account
+  // missing the field inherits hasSeenTour, which is the nearest true
+  // thing the data holds: only a COMPLETED setup writes that flag (see
+  // markTourSeen), and a completed setup has shown the income step.
+  //
+  // Defaulting to false instead would have left every account that had
+  // ALREADY skipped the step — including the one that reported this —
+  // still being asked for a paycheck, which is the entire bug. The
+  // imprecision it inherits is hasSeenTour's own: an account from
+  // before 2026-10-16 got that flag from hasSeenOnboarding, which Skip
+  // also writes, so a long-standing account that skipped the wizard
+  // outright comes out as "asked". The cost of that is a guide that
+  // does not nag someone who never answered; the cost the other way is
+  // the guide nagging someone who did.
+  if (parsed.settings?.askedAboutIncome === undefined) {
+    settings.askedAboutIncome = settings.hasSeenTour;
+  }
+
   // Migration: trackerCategories predates this account (genuinely absent,
   // not an empty array they deliberately cleared) — an existing user gets
   // their legacy 4 preserved as real, editable categories (same ids, so no

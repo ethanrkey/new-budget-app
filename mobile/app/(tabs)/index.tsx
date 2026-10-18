@@ -68,7 +68,11 @@ export default function LedgerScreen() {
       state={state!}
       online={online}
       onLogBalance={logChecking}
-      onAddIncome={() => setSheet({ kind: "add" })}
+      // OPENED FOR INCOME, so the form opens ON income. It landed on
+      // One-off — the default for a form nobody opened for anything —
+      // which made the one button whose whole job is the income step
+      // start by getting the category wrong. See blankDraft.
+      onAddIncome={() => setSheet({ kind: "add", presetCategory: "income" })}
       onAddBill={() => setSheet({ kind: "add" })}
       onDismiss={() => setPref("firstRunDismissedBy", withDismissalBy(prefs.firstRunDismissedBy, userId))}
     />

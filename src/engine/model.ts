@@ -148,6 +148,7 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
         tabOrder: [...TABS],           // drag-reorderable on desktop; see sanitizeTabOrder()
         hasSeenOnboarding: false, // one-time welcome wizard; see storage.js's migration
         hasSeenTour: false,       // the guided tour, once per ACCOUNT; see markTourSeen
+        askedAboutIncome: false,  // setup has put the income question; see applySetup
       },
       // primaryAccount() is the single source of truth for the anchor
       // balance/date. (Phase 1 briefly mirrored it back into settings as a

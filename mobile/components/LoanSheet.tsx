@@ -38,6 +38,13 @@ export default function LoanSheet({
     || from !== (cat.interestStartDate ?? "");
   const requestClose = useDiscardGuard(dirty, DISCARD_ACCOUNT, onClose);
 
+  // HAS SAVE BEEN PRESSED? A loan the card is prompting for terms on
+  // opens with no original amount — that is why the prompt exists —
+  // and this sheet used to greet it with "Enter the original loan
+  // amount." before a key was pressed. The error waits for the
+  // attempt, like CategorySheet's and the transaction form's.
+  const [tried, setTried] = useState(false);
+
   const num = (v: string) => Number(v.trim());
   const error =
     !name.trim() ? "Give it a name."
@@ -86,20 +93,27 @@ export default function LoanSheet({
           ) : null}
         </View>
 
-        {error ? <Text style={styles.err}>{error}</Text> : null}
+        {tried && error ? <Text style={styles.err}>{error}</Text> : null}
         <View style={styles.row}>
           <Pressable style={[styles.btn, styles.ghost]} onPress={requestClose} disabled={busy} accessibilityRole="button">
             <Text style={styles.ghostText}>Cancel</Text>
           </Pressable>
           <Pressable
-            style={[styles.btn, styles.primary, (!!error || busy) && styles.disabled]}
-            disabled={!!error || busy}
-            onPress={() => onSave({
-              name: name.trim(),
-              originalPrincipal: Math.abs(num(original)),
-              interestRate: rate.trim() === "" ? null : Math.abs(num(rate)),
-              interestStartDate: from || null,
-            })}
+            style={[styles.btn, styles.primary, busy && styles.disabled]}
+            disabled={busy}
+            // Validate ON PRESS rather than disabling the button — see
+            // CategorySheet, which has made the same case since it was
+            // written.
+            onPress={() => {
+              setTried(true);
+              if (error) return;
+              onSave({
+                name: name.trim(),
+                originalPrincipal: Math.abs(num(original)),
+                interestRate: rate.trim() === "" ? null : Math.abs(num(rate)),
+                interestStartDate: from || null,
+              });
+            }}
             accessibilityRole="button" accessibilityLabel="Save"
           >
             {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.primaryText}>Save</Text>}

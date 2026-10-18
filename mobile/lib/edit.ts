@@ -9,7 +9,7 @@
 //
 // Everything returns a `(state) => state` so the caller hands it straight
 // to `commit()` and nothing in a component ever touches engine internals.
-import { defaultCategoryFor } from "../../src/shared/entryDefaults.ts";
+import { initialCategory } from "../../src/shared/entryDefaults.ts";
 import { upsertItem, deleteItem, setOverride, clearOverride, orphanedOverrideDates } from "../../src/engine/mutate.ts";
 import { uid, todayISO } from "../../src/engine/model.ts";
 import type { BudgetState, BudgetItem, RecurringItem, ISODate, Cadence } from "../../src/engine/types.ts";
@@ -41,12 +41,23 @@ export type Draft = {
   variable: boolean;
 };
 
-export function blankDraft(today: ISODate = todayISO()): Draft {
+/**
+ * A form with nothing in it yet.
+ *
+ * `presetCategory` is for a caller that opened this form FOR something
+ * — the Ledger guide's "Add income" button, which exists to answer the
+ * income step and so must not land on One-off. It outranks the mode's
+ * own default and survives the Repeats chips, exactly as the web's
+ * "+ Add a loan" shortcut does: see src/shared/entryDefaults.ts, which
+ * has carried the rule since before the phone had a caller for it.
+ */
+export function blankDraft(today: ISODate = todayISO(), presetCategory: string | null = null): Draft {
   return {
-    // A new draft opens on "Just once", so it opens on One-off. The
-    // rule lives in src/shared/entryDefaults.ts because three forms
-    // across two clients had each hard-coded "bill".
-    name: "", amount: "", category: defaultCategoryFor("oneoff"), recurring: false,
+    // A new draft opens on "Just once", so it opens on One-off unless
+    // it was opened for something else. The rule lives in
+    // src/shared/entryDefaults.ts because three forms across two
+    // clients had each hard-coded "bill".
+    name: "", amount: "", category: initialCategory("oneoff", { presetCategory }), recurring: false,
     date: today, cadence: "monthly", startDate: today, endDate: "", variable: false,
   };
 }

@@ -182,6 +182,19 @@ export function applySetup(
     if (seeded && empty) next = deleteCategory(next, c.id);
   }
 
+  // THE INCOME QUESTION HAS BEEN PUT. Reaching here means the flow ran
+  // to its end, and the income step is always in it (`stepsFor` makes
+  // only the contributions step conditional), so everyone who gets
+  // this far has been asked — whether they answered with an amount or
+  // walked past it.
+  //
+  // Set whether or not income was entered, because the flag records
+  // the ASKING and not the answer. When there is income the Ledger's
+  // guide can see it for itself; when there is none, this is the only
+  // thing standing between someone with no paycheck and a checklist
+  // demanding one forever. See Settings.askedAboutIncome.
+  next = { ...next, settings: { ...next.settings, askedAboutIncome: true } };
+
   return next;
 }
 

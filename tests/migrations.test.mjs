@@ -86,6 +86,22 @@ const FIXTURES = {
     settings: { checkInBalance: 500, checkInDate: "2026-03-01", hasSeenOnboarding: true, hasSeenTour: false },
     recurring: [{ id: "r", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-03-02", order: 0 }], oneoffs: [] } },
 
+  // 2c. askedAboutIncome absent -> inherits hasSeenTour, because only a
+  //     COMPLETED setup writes that flag and a completed setup has put
+  //     the income question. Here the tour was seen, so the Ledger's
+  //     guide must not go on demanding a paycheck from an account that
+  //     has already said it has none.
+  incomeAskedInherited: { data: true, state: {
+    settings: { checkInBalance: 500, checkInDate: "2026-03-01", hasSeenOnboarding: true, hasSeenTour: true },
+    recurring: [{ id: "r", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-03-02", order: 0 }], oneoffs: [] } },
+
+  // 2d. ...and the other way: an account that never finished setup has
+  //     not been asked, so the step stays a step. An EXPLICIT false
+  //     survives the same way hasSeenTour's does.
+  incomeNeverAsked: { data: true, state: {
+    settings: { checkInBalance: 500, checkInDate: "2026-03-01", hasSeenOnboarding: true, hasSeenTour: false, askedAboutIncome: false },
+    recurring: [{ id: "r", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-03-02", order: 0 }], oneoffs: [] } },
+
   // 3. trackerCategories absent + data -> the legacy four, same ids
   legacyFourCategories: { data: true, state: {
     settings: { checkInBalance: 200, checkInDate: "2026-04-01" },

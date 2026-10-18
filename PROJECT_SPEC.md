@@ -5486,3 +5486,81 @@ the web does not need because its wizard is always one click away.
   rather than squeezing its role tag off the edge, since the text
   column is narrower than the card. Web is unchanged: its cards never
   stacked the pair.
+
+
+- **Skipping the income step is an answer, and the Ledger's guide
+  takes it** (2026-10-18). Setup stopped assuming everyone has a
+  paycheck the day before; the Ledger's "Start here" card did not get
+  the memo and went on listing "Add your paycheck" as the one thing
+  left to do. A skip offered as normal, answered honestly, and then
+  treated as an outstanding task is worse than never offering it.
+
+  The card could not have known. Its only evidence was the absence of
+  an income rule, and "has not got one" and "has not got round to it"
+  look identical from there. So `settings.askedAboutIncome` records
+  the ASKING — written by `applySetup`, which is where both clients
+  land when the flow runs to its end, and written whether or not
+  income was entered, because it is a fact about the question rather
+  than the answer. Skipping the WIZARD does not write it: that is
+  `markSetupSeen`, and closing a form is not answering what is inside
+  it.
+
+  Existing accounts inherit it from `hasSeenTour`, which only a
+  completed setup writes — otherwise everybody who had already
+  skipped the step, including whoever reported this, would have gone
+  on being asked. That inheritance carries hasSeenTour's own
+  imprecision for accounts older than 2026-10-16, where it came from
+  `hasSeenOnboarding` and Skip writes that too: a long-standing
+  account that skipped the whole wizard reads as "asked". The cost is
+  a guide that does not nag someone who never answered, against a
+  guide that nags someone who did.
+
+  THE STEP HAS THREE STATES NOW, not two. "Income added" over an
+  account with no income is a lie, and the person who skipped is the
+  only one who ever reads that line, so `firstRunProgress` returns
+  todo / done / skipped and the card prints "No regular income" for
+  the third. Income is the only step that can reach it — a balance
+  and an outflow are things every account has.
+
+  The words follow setup's: "Any upcoming income?" with "Enter any
+  income you know is coming up, recurring or not." It is the only
+  step phrased as a question, which is the point — the other two
+  cannot honestly be answered "none". The web has no such checklist,
+  so nothing there changed, but the flag is account data and the web
+  writes it through the same `applySetup`.
+
+- **A form says what is wrong when you try to save it, not when you
+  open it** (2026-10-18). The guide's "Add income" button opened the
+  transaction form onto a red "Give it a name." before a single key
+  had been pressed. Nothing was wrong: the form was empty, which is
+  what empty looks like. An error over an untouched form reads as the
+  app refusing something nobody asked for.
+
+  Both forms that did this now hold the message until Save is pressed
+  — the transaction sheet and the loan sheet — and both stopped
+  disabling the button, because a hidden reason behind a dead button
+  is worse than either half alone. That is the pattern CategorySheet
+  has argued for since it was written ("a disabled button with no
+  explanation is the thing people tap twice and then give up on");
+  it is now what every form on the phone does.
+
+  CHECKED, AND LEFT ALONE: the setup flow shows the balance step's
+  reason as help text rather than an error, and its account rows only
+  complain once a row has been started. LogBalance and
+  ContributionPrompt show no message at all — they disable their
+  button, which is the dead-button half of the same problem but not
+  the reported one. The web's EventForm does the same. Both are worth
+  a pass and neither was in this batch.
+
+- **A form opened FOR something opens on it** (2026-10-18). The
+  guide's income button opened the add form on One-off — the right
+  default for a form nobody opened for anything, and the wrong one
+  for the button whose entire job is the income step. `blankDraft`
+  takes a `presetCategory` and the Ledger passes "income"; picking a
+  cadence afterwards no longer flips it to Fixed bill, because a
+  preset outranks the Repeats chips. The rule and the argument were
+  already in `src/shared/entryDefaults.ts` for the web's "+ Add a
+  loan" shortcut; the phone just never had a caller for it until now.
+  "Add a bill" still opens on the plain default — a bill preset would
+  have to choose a cadence as well, which is a decision rather than a
+  fix.

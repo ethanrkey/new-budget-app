@@ -33,11 +33,11 @@ export default function FirstRun({
   onDismiss: () => void;
   online: boolean;
 }) {
-  const done = firstRunProgress(state);
+  const stepState = firstRunProgress(state);
   const press: Record<StepKey, () => void> = {
     balance: onLogBalance, income: onAddIncome, bills: onAddBill,
   };
-  const left = FIRST_RUN_STEPS.filter((s) => !done[s.key]).length;
+  const left = FIRST_RUN_STEPS.filter((s) => stepState[s.key] === "todo").length;
 
   return (
     <View style={styles.wrap}>
@@ -53,18 +53,25 @@ export default function FirstRun({
           : `${left} to go. The forecast gets more useful with each one.`}
       </Text>
 
-      {FIRST_RUN_STEPS.map((step, i) => (
-        <View key={step.key} style={[styles.step, done[step.key] && styles.stepDone]}>
+      {FIRST_RUN_STEPS.map((step, i) => {
+        const at = stepState[step.key];
+        const settled = at !== "todo";
+        // A STEP SETTLED BY HAVING NOTHING TO ADD SAYS SO. "Income
+        // added" over an account with no income is only ever read by
+        // the one person it is wrong for.
+        const title = at === "skipped" ? step.skipped ?? step.done : at === "done" ? step.done : step.title;
+        return (
+        <View key={step.key} style={[styles.step, settled && styles.stepDone]}>
           <View style={styles.row}>
-            <Text style={[styles.num, done[step.key] && styles.numDone]}>{done[step.key] ? "✓" : i + 1}</Text>
-            <Text style={[styles.title, done[step.key] && styles.titleDone]}>
-              {done[step.key] ? step.done : step.title}
+            <Text style={[styles.num, settled && styles.numDone]}>{settled ? "✓" : i + 1}</Text>
+            <Text style={[styles.title, settled && styles.titleDone]}>
+              {title}
             </Text>
           </View>
           {/* A finished step keeps its tick and loses its instructions.
               Leaving the body and the button there would read as "do it
               again", which is wrong for all three. */}
-          {!done[step.key] && (
+          {!settled && (
             <>
               <Text style={styles.body}>{step.body}</Text>
               <Pressable
@@ -79,7 +86,8 @@ export default function FirstRun({
             </>
           )}
         </View>
-      ))}
+        );
+      })}
 
       {/* Said once, here, and nowhere else: the phone is not a reduced
           version of the web for the things that matter most. */}

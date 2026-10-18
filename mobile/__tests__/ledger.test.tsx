@@ -257,3 +257,30 @@ describe("closing the transaction form", () => {
     restore();
   });
 });
+
+describe("the first-run guide's buttons open the right thing", () => {
+  test("Add income opens the form on Income, not on One-off", async () => {
+    // The guide is on this screen because the account has no income
+    // rule, and its income button exists for exactly one purpose —
+    // which it was undercutting by opening the form on One-off, the
+    // default for a form nobody opened for anything. Asserted through
+    // the SCREEN rather than against the sheet directly, because the
+    // defect was in the wiring and the sheet was innocent.
+    // This screen's usual fixture has already been asked about income
+    // (its setup is marked finished), so the guide has nothing left to
+    // ask and does not appear. One that has not been asked does.
+    const store = require("../lib/store");
+    store.loadState.mockResolvedValueOnce(normalize({
+      ...mockState,
+      settings: { ...mockState.settings, hasSeenTour: false, askedAboutIncome: false },
+    }));
+    await openLedger();
+    await userEvent.press(screen.getByLabelText("Add income"));
+    await screen.findByText("Add transaction");
+
+    expect(screen.getByLabelText("Income").props.accessibilityState?.selected).toBe(true);
+    expect(screen.getByLabelText("One-off").props.accessibilityState?.selected).toBe(false);
+    // ...and nothing is red yet: the form was opened, not failed.
+    expect(screen.queryByText("Give it a name.")).toBeNull();
+  });
+});

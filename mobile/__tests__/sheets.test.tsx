@@ -248,17 +248,52 @@ describe("what the scope sheet offers", () => {
 });
 
 describe("the editor refuses bad input, and says why", () => {
-  test("a nameless item cannot be added, and the reason is on screen", async () => {
+  test("nothing is wrong with a form nobody has filled in yet", async () => {
+    // Reported from the phone: the Ledger guide's "Add income" button
+    // opened this form onto a red "Give it a name." before a single
+    // key was pressed, which reads as the app refusing something
+    // nobody asked for. The error belongs to the attempt.
+    const onSaveDraft = jest.fn();
     await render(
       <BottomSheet visible onClose={() => {}}>
         <TransactionSheet
           mode={{ kind: "add" }} state={state} busy={false} orphanCount={() => 0}
+          onSaveDraft={onSaveDraft} onSaveOccurrence={() => {}} onClose={() => {}}
+        />
+      </BottomSheet>
+    );
+    expect(screen.queryByText("Give it a name.")).toBeNull();
+
+    // ...and the button is pressable, because a dead button with no
+    // explanation is the thing people tap twice and give up on. The
+    // press is what produces the reason.
+    expect(screen.getByLabelText("Add")).not.toBeDisabled();
+    await userEvent.press(screen.getByLabelText("Add"));
+    expect(screen.getByText("Give it a name.")).toBeTruthy();
+    expect(onSaveDraft).not.toHaveBeenCalled();
+  });
+
+  test("opened for income, it opens ON income — and stays there", async () => {
+    // The guide's income step opens this form, and it landed on
+    // One-off: the default for a form nobody opened for anything.
+    await render(
+      <BottomSheet visible onClose={() => {}}>
+        <TransactionSheet
+          mode={{ kind: "add", presetCategory: "income" }} state={state} busy={false}
+          orphanCount={() => 0}
           onSaveDraft={() => {}} onSaveOccurrence={() => {}} onClose={() => {}}
         />
       </BottomSheet>
     );
-    expect(screen.getByText("Give it a name.")).toBeTruthy();
-    expect(screen.getByLabelText("Add")).toBeDisabled();
+    const selected = () => screen.getByLabelText("Income").props.accessibilityState?.selected;
+    expect(selected()).toBe(true);
+    expect(screen.getByLabelText("One-off").props.accessibilityState?.selected).toBe(false);
+
+    // Picking a cadence must not quietly turn it into a fixed bill:
+    // the caller already answered the category question. Income can
+    // be recurring or not, which is what the guide's step now says.
+    await userEvent.press(screen.getByLabelText("Monthly"));
+    expect(selected()).toBe(true);
   });
 
   test("filling it in enables Add, and the handler gets what the screen showed", async () => {
