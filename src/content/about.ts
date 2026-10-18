@@ -115,7 +115,7 @@ export const ABOUT_SECTIONS: AboutSection[] = [
     body: [
       ["p", "The same data as a month-by-month grid. One column per month, one row per thing."],
       ["dl", [
-        ["Take-home", "Every paycheck that actually lands in that month. A three-paycheck month shows three — that's the whole reason this row is computed rather than typed."],
+        ["Take-home", "Every regular income that actually lands in that month — a paycheck, benefits, a pension, anything on a schedule. A three-payday month shows three, which is the whole reason this row is computed rather than typed. Money that arrives once, like a rebate or a repayment from a friend, is listed under it as other income instead."],
         ["Starting point", "What you carry in from the month before."],
         ["Sections", "Income, fixed/recurring, one-off, and saving/debt clustered by category."],
         ["Monthly net / cumulative net", "What the month does to you, and where that leaves you."],

@@ -2131,7 +2131,8 @@ fifth tab never needs a migration.
   rather than silent. The item column shows the transaction's own name and
   nothing else.
 - **Budget** — monthly grid: income (starting point, take-home = every
-  paycheck landing that month, checking, other income), fixed/recurring,
+  RECURRING income landing that month whatever it is called, checking,
+  other income = everything that arrives once), fixed/recurring,
   saving/debt clustered by category, one-offs, totals, cumulative net.
   Reorder rows by arrows or drag (never across a section/cluster). Its own
   horizon slider, still the full 36 months — a monthly grid two years out is
@@ -5426,13 +5427,62 @@ the web does not need because its wizard is always one click away.
   in the copy, because it is both the field's default and the rule's
   fallback and content must not import the engine.
 
-  KNOWN AND DELIBERATELY NOT CHANGED: the Budget's take-home row
-  classifies an income rule by NAME (`PAY_RE` in `src/engine/compute.ts`
-  — `/pay|salary|take.?home/i`), so income named "Disability" counts as
-  "other in" rather than take-home. That is pre-existing behavior —
-  anything added by hand through + Add has always been classified the
-  same way — but the Name field makes it reachable from setup for the
-  first time. Fixing it properly means marking the rule structurally
-  rather than by name, which changes the Budget for every existing
-  account, and that is the owner's call rather than a side effect of
-  this batch.
+  RAISED HERE AND FIXED THE SAME DAY: the Budget's take-home row
+  classified an income rule by NAME, which the Name field made
+  reachable from setup for the first time. See the next entry.
+
+
+- **Take-home is recurring income, not income that sounds like a
+  paycheck** (2026-10-17). The Budget's take-home row was every income
+  event whose NAME matched `/pay|salary|take.?home/i`; everything else
+  income fell into "other in". So the grid's single most load-bearing
+  figure — what comes in every month — depended on a word. "Disability",
+  "Pension", "SSI", "Unemployment", "Stipend", "Child support": none of
+  them is a word that regex knows, and all of them are somebody's whole
+  income. It was always wrong and the income step's new Name field made
+  it reachable without ever opening the Ledger, which is what forced it.
+
+  The split is structural now: a recurring rule is take-home, a one-off
+  is other in. That is the question the row is actually asking — income
+  you can count on arriving again, against money that came once — and
+  it cannot be gotten wrong by typing, because the cadence is picked
+  from a list rather than spelled. `BudgetEvent` carries a `recurring`
+  flag for it, set by `makeEvent`'s caller rather than sniffed off the
+  item, so a rule that somehow landed in `oneoffs` with a cadence on it
+  cannot be counted as income you can rely on.
+
+  THIS CHANGES EXISTING ACCOUNTS, intentionally. Anything recurring and
+  named unlike a paycheck moves up into take-home; a one-off called
+  "Salary top-up" moves down into other in. Nothing moves between money
+  in and money out, so every total, net and cumulative figure is
+  unchanged — only which row a number is printed on. Nothing is stored,
+  so there is no migration: the grid is recomputed from the rules.
+
+  About's Budget section says the new rule in the owner's words, and
+  `incomeItemsExceptPay` is gone. tests/engine.test.mjs scenario B is
+  now the pair of cases that matter: a recurring "Disability" counts,
+  and a one-off "Salary top-up" does not.
+
+- **The Dashboard's account cards put the buttons beside the value,
+  not above it** (2026-10-17). Stacking Edit under Log (earlier the
+  same day) made the card's header row two buttons tall, and a row
+  centers its children: the account name floated in the middle of
+  seventy-odd points of button, with the card's big value stranded
+  below the whole stack. The hole between the name and the number was
+  the first thing anyone saw on the Dashboard.
+
+  Fixed in the LAYOUT rather than by unstacking the buttons, which
+  were stacked for their own good reason. The card's top block is a
+  row of exactly two things: a text column holding the name line, the
+  value and the dated line, and the button stack beside it. Both are
+  top-aligned, so the buttons sit next to the name AND the value
+  instead of pushing anything down, and a card with one button
+  (checking) is built the same way as a card with two.
+
+  All three card kinds — checking, savings/investment and loan —
+  share it. The loan card's pair had been under its paragraph, the
+  one place on the screen they were not in the header; they are
+  beside the name now like everyone else's. The name line wraps
+  rather than squeezing its role tag off the edge, since the text
+  column is narrower than the card. Web is unchanged: its cards never
+  stacked the pair.

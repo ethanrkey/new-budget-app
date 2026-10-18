@@ -437,20 +437,28 @@ function AccountCard({ name, balance, asOf, history, color, chartW, online, onLo
 }) {
   return (
     <View style={styles.card}>
-      <View style={styles.cardHead}>
-        <Text style={styles.cardLabel}>{name}</Text>
+      {/* NAME, VALUE AND DATE IN ONE COLUMN, buttons beside all three.
+          See cardTop in the stylesheet for what this replaced. */}
+      <View style={styles.cardTop}>
+        <View style={styles.cardTopText}>
+          <View style={styles.cardHead}>
+            <Text style={styles.cardLabel}>{name}</Text>
+          </View>
+          <Text style={styles.cardNum}>{money(balance)}</Text>
+          {/* "as of", not "verified" — the owner's word, and the same
+              word the checking bar uses. Every DATED label says it; the
+              conceptual "verified balance" wording on About and in the
+              wipe/delete confirmations is left for the voice pass. */}
+          <Text style={styles.dim}>as of {fmtDate(asOf)}</Text>
+        </View>
         {/* Offline is READ-ONLY by decision, so the control is disabled
             rather than queued — there is no write queue and no replay. */}
-        <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}>
-          <Text style={styles.logText}>{online ? "Update" : "Offline"}</Text>
-        </Pressable>
+        <View style={styles.cardActions}>
+          <Pressable onPress={onLog} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}>
+            <Text style={styles.logText}>{online ? "Update" : "Offline"}</Text>
+          </Pressable>
+        </View>
       </View>
-      <Text style={styles.cardNum}>{money(balance)}</Text>
-      {/* "as of", not "verified" — the owner's word, and the same
-          word the checking bar uses. Every DATED label says it; the
-          conceptual "verified balance" wording on About and in the
-          wipe/delete confirmations is left for the voice pass. */}
-      <Text style={styles.dim}>as of {fmtDate(asOf)}</Text>
       <Sparkline points={history} color={color} width={chartW} />
       <HistoryList entries={history} online={online} onEdit={onEditEntry} onDelete={onDeleteEntry} />
     </View>
@@ -474,13 +482,24 @@ function AssetCard({
 
   return (
     <View style={styles.card}>
-      <View style={styles.cardHead}>
-        <View style={[styles.dot, { backgroundColor: color }]} />
-        <Text style={styles.cardLabel}>{cat.name}</Text>
-        {roleSuffix(cat.name, roleOfTrackerCategory(cat)) && (
-          <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
-        )}
-        <View style={{ flex: 1 }} />
+      {/* NAME, VALUE AND DATE IN ONE COLUMN, buttons beside all three.
+          See cardTop in the stylesheet for what this replaced. */}
+      <View style={styles.cardTop}>
+        <View style={styles.cardTopText}>
+          <View style={styles.cardHead}>
+            <View style={[styles.dot, { backgroundColor: color }]} />
+            <Text style={styles.cardLabel}>{cat.name}</Text>
+            {roleSuffix(cat.name, roleOfTrackerCategory(cat)) && (
+              <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
+            )}
+          </View>
+          <Text style={[styles.cardNum, !latest && { color: T.faint }]}>
+            {latest ? money(latest.amount) : "—"}
+          </Text>
+          <Text style={styles.dim}>
+            {latest ? `logged ${fmtDate(latest.date)}` : "Add what's in it today and the Dashboard can show you where you stand."}
+          </Text>
+        </View>
         {/* STACKED, NOT SIDE BY SIDE, from 2026-10-17. Two pills on one
             line next to a long account name left neither of them room,
             and Log is the one anybody presses — so it goes on top, in
@@ -505,12 +524,6 @@ function AssetCard({
           </Pressable>
         </View>
       </View>
-      <Text style={[styles.cardNum, !latest && { color: T.faint }]}>
-        {latest ? money(latest.amount) : "—"}
-      </Text>
-      <Text style={styles.dim}>
-        {latest ? `logged ${fmtDate(latest.date)}` : "Add what's in it today and the Dashboard can show you where you stand."}
-      </Text>
       <Sparkline points={history.map((h) => ({ date: h.date, amount: h.amount }))} color={color} width={chartW} />
 
       {/* Contributions are LOGGED, never summed from the ledger — the ledger
@@ -581,37 +594,43 @@ function DebtCard({ cat, today, online, onLog, onEdit, onEditEntry, onDeleteEntr
   // not, so a wrong loan balance could only be fixed from a laptop.
   return (
     <View style={styles.card}>
-      <View style={styles.cardHead}>
-        <Text style={styles.cardLabel}>{cat.name}</Text>
-        {roleSuffix(cat.name, roleOfTrackerCategory(cat)) && (
-          <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
-        )}
-        <Text style={styles.loanTag}>Loan</Text>
-      </View>
+      {/* NAME, VALUE AND DATE IN ONE COLUMN, buttons beside all three.
+          See cardTop in the stylesheet for what this replaced. */}
+      <View style={styles.cardTop}>
+        <View style={styles.cardTopText}>
+          <View style={styles.cardHead}>
+            <Text style={styles.cardLabel}>{cat.name}</Text>
+            {roleSuffix(cat.name, roleOfTrackerCategory(cat)) && (
+              <Text style={styles.roleTag}>· {roleSuffix(cat.name, roleOfTrackerCategory(cat))}</Text>
+            )}
+            <Text style={styles.loanTag}>Loan</Text>
+          </View>
 
-      <Text style={[styles.cardNum, p?.outstanding == null && { color: T.faint }]}>
-        {p?.outstanding != null ? money(p.outstanding) : "—"}
-      </Text>
-      <Text style={styles.dim}>
-        {p?.outstanding != null && history.length
-          ? `outstanding · logged ${fmtDate(history[history.length - 1]!.date)}`
-          : "Log what you owe today to see how far along you are."}
-      </Text>
+          <Text style={[styles.cardNum, p?.outstanding == null && { color: T.faint }]}>
+            {p?.outstanding != null ? money(p.outstanding) : "—"}
+          </Text>
+          <Text style={styles.dim}>
+            {p?.outstanding != null && history.length
+              ? `outstanding · logged ${fmtDate(history[history.length - 1]!.date)}`
+              : "Log what you owe today to see how far along you are."}
+          </Text>
+        </View>
 
-      {/* Stacked and brass-on-top, like the asset cards — see the note
-          there. A loan card is the one place the two were already on a
-          line of their own, and they still look the same as the ones
-          that were not. */}
-      <View style={[styles.cardActions, styles.loanActions]}>
-        <Pressable onPress={onLog} disabled={!online}
-          style={[styles.logBtn, styles.logPrimary, !online && styles.logOff]}
-          accessibilityRole="button" accessibilityLabel={`Log a balance for ${cat.name}`}>
-          <Text style={[styles.logText, styles.logTextPrimary]}>{online ? "Log balance" : "Offline"}</Text>
-        </Pressable>
-        <Pressable onPress={onEdit} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
-          accessibilityRole="button" accessibilityLabel={`Edit ${cat.name}`}>
-          <Text style={styles.logText}>Edit</Text>
-        </Pressable>
+        {/* Stacked and brass-on-top, like the asset cards — see the note
+            there. The pair used to sit UNDER the paragraph on this card
+            alone; it is beside the name and the value now, like every
+            other card's. */}
+        <View style={styles.cardActions}>
+          <Pressable onPress={onLog} disabled={!online}
+            style={[styles.logBtn, styles.logPrimary, !online && styles.logOff]}
+            accessibilityRole="button" accessibilityLabel={`Log a balance for ${cat.name}`}>
+            <Text style={[styles.logText, styles.logTextPrimary]}>{online ? "Log balance" : "Offline"}</Text>
+          </Pressable>
+          <Pressable onPress={onEdit} disabled={!online} style={[styles.logBtn, !online && styles.logOff]}
+            accessibilityRole="button" accessibilityLabel={`Edit ${cat.name}`}>
+            <Text style={styles.logText}>Edit</Text>
+          </Pressable>
+        </View>
       </View>
 
       {p?.percentPaid != null && (
@@ -798,9 +817,19 @@ const styles = StyleSheet.create({
   lineV: { color: T.text, fontSize: 13, fontVariant: ["tabular-nums"] },
   caveat: { color: T.faint, fontSize: 11, lineHeight: 15, marginTop: 6 },
   card: { backgroundColor: T.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: T.border, gap: 4 },
-  cardHead: { flexDirection: "row", alignItems: "center", gap: 7 },
+  // THE HEADER IS THE NAME AND NOTHING ELSE, from 2026-10-17. Stacking
+  // Edit under Log made this row two buttons tall, and a row centers its
+  // children: the name floated in the middle of 70-odd points with the
+  // card's big value stranded below the whole stack. `cardTop` is the
+  // row now — one text column (name, value, date) and the buttons beside
+  // it, both top-aligned — and `cardHead` is just the name line inside
+  // that column. It wraps rather than squeezing the role tag off the
+  // edge, since the column is narrower than the card.
+  cardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  cardTopText: { flex: 1, gap: 4 },
+  cardHead: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  cardLabel: { color: T.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
+  cardLabel: { color: T.dim, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, flexShrink: 1 },
   cardNum: { color: T.text, fontSize: 24, fontWeight: "700", fontVariant: ["tabular-nums"] },
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   dim: { color: T.faint, fontSize: 12, lineHeight: 16 },
@@ -863,9 +892,6 @@ const styles = StyleSheet.create({
   // A column that hugs its widest child, so Log and Edit come out the
   // same width stacked rather than ragged.
   cardActions: { alignSelf: "flex-start", alignItems: "stretch", gap: 6 },
-  // The loan card's pair sits under a paragraph rather than in the
-  // header row, so it is the one that needs air above it.
-  loanActions: { marginTop: 10 },
   signout: { color: T.brass, textAlign: "center", paddingVertical: 12 },
   ro: { color: T.faint, fontSize: 11, textAlign: "center" },
 });

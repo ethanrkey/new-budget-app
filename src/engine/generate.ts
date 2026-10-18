@@ -48,14 +48,14 @@ export function buildAllEvents(state: BudgetState, horizonISO: ISODate): BudgetE
   // 1) expand each recurring rule
   for (const rule of state.recurring) {
     for (const dt of occurrenceDates(rule, horizonISO)) {
-      events.push(makeEvent(rule, dt, overrides[rule.id]?.[dt]));
+      events.push(makeEvent(rule, dt, true, overrides[rule.id]?.[dt]));
     }
   }
 
   // 2) add one-offs within horizon
   for (const o of state.oneoffs) {
     if (parse(o.date) <= horizon) {
-      events.push(makeEvent(o, o.date));
+      events.push(makeEvent(o, o.date, false));
     }
   }
 
@@ -98,7 +98,9 @@ export function buildEvents(state: BudgetState, horizonISO: ISODate): BudgetEven
 // contributions never write back either. Logged actuals still exist and are
 // still yours — the Spending tab compares them against the rule. Nothing
 // logged anywhere changes a forecast number.
-function makeEvent(src: BudgetItem, date: ISODate, override?: number): BudgetEvent {
+function makeEvent(
+  src: BudgetItem, date: ISODate, recurring: boolean, override?: number,
+): BudgetEvent {
   const dir = CATEGORIES[src.category]?.direction ?? "out";
   const overridden = override !== undefined;
   return {
@@ -110,6 +112,11 @@ function makeEvent(src: BudgetItem, date: ISODate, override?: number): BudgetEve
     color: src.color ?? null, // optional per-item palette-index override
     order: src.order,
     overridden,
+    // PASSED IN BY THE CALLER, not sniffed off `src`. The two loops
+    // above already know which list they are reading, and a rule that
+    // somehow reached `oneoffs` with a cadence on it would otherwise
+    // be counted as income you can rely on. See BudgetEvent.recurring.
+    recurring,
     date,
   };
 }

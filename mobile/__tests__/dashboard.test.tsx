@@ -150,6 +150,54 @@ test("Edit is UNDER Log, and Log is the brass one", async () => {
     .not.toBe(T.brass);
 });
 
+test("the name and the value are one block, with the buttons beside both", async () => {
+  // Build 13 stacked Edit under Log inside the header ROW, which a row
+  // centers: the header became two buttons tall and the account name
+  // floated in the middle of it, leaving a hole between the name and
+  // the big value underneath. The buttons are beside the name AND the
+  // value now, and all three cards are built the same way.
+  // A loan with its terms filled in, so the card has a real number on
+  // it: "—" would sit where the gap was and prove nothing.
+  const st = fixture([{ name: "Car loan", owed: 9100 }]) as
+    { trackerCategories: { id: string; originalPrincipal?: number; interestRate?: number }[] };
+  const loan = st.trackerCategories.find((c) => c.id === "loan0")!;
+  loan.originalPrincipal = 14200;
+  loan.interestRate = 5.8;
+  mockLoaded.state = st;
+  await mount();
+  await userEvent.press(screen.getByLabelText("Show 1 loan"));
+  await screen.findByText("Loans");
+
+  /** The nearest ancestor laid out as a row — the card's top block. */
+  const rowAbove = (node: { parent: unknown }) => {
+    let at: any = node;
+    while (at) {
+      if (flat(at.props?.style).flexDirection === "row") return at;
+      at = at.parent;
+    }
+    throw new Error("no row ancestor");
+  };
+
+  for (const [button, name, value, dated] of [
+    // The checking card, whose one button is Update rather than a pair.
+    ["Update", "Checking", "$4,000.00", "as of 10/01/2026"],
+    ["Log", "Ally Savings", "$8,200.00", "logged 10/01/2026"],
+    ["Log balance", "Car loan", "$9,100.00", "outstanding · logged 10/01/2026"],
+  ]) {
+    const row = rowAbove(screen.getByText(button!));
+    // Top-aligned, so a two-button stack cannot push the text down or
+    // center it against itself.
+    expect(flat(row.props.style).alignItems).toBe("flex-start");
+    // Two children and no more: the text column, and the buttons.
+    expect(row.children.filter((c: unknown) => typeof c !== "string")).toHaveLength(2);
+    // All three lines of text are INSIDE that row, beside the buttons,
+    // rather than below it.
+    expect(within(row).getByText(name!)).toBeOnTheScreen();
+    expect(within(row).getByText(value!)).toBeOnTheScreen();
+    expect(within(row).getByText(dated!)).toBeOnTheScreen();
+  }
+});
+
 test("...and renaming from the card writes the new name", async () => {
   mockLoaded.state = fixture([]);
   await mount();

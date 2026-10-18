@@ -68,7 +68,8 @@ function sectionFor(category: CategoryRef): SectionKey {
 
 // From computeBudget()'s output plus the user's own trackerCategories list
 // (for cluster order — see savingGroups below), work out:
-// - otherIncomeNames: non-paycheck income rows, in manual order
+// - otherIncomeNames: one-time income rows, in manual order (recurring
+//   income is the take-home row — see computeBudget)
 // - sectionItems: { bill, saving, oneoff } -> names in display order
 // - savingGroups: sectionItems.saving split into one array per tracker
 //   category, in the user's own category order (the investing/saving/debt

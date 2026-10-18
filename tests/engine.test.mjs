@@ -58,13 +58,19 @@ check("Oct take-home (3 paydays)", byKeyA["2026-10"].takeHome, 6000);
 // Dec 2026: paydays 12/11, 12/25 -> 2 checks
 check("Dec take-home (2 paydays)", byKeyA["2026-12"].takeHome, 4000);
 
-// ---------- Scenario B: two differently-named checks in one month ----------
+// ---------- Scenario B: take-home is RECURRING income, whatever it is called ----------
+// The split was a regex over the name until 2026-10-17 (/pay|salary|
+// take.?home/i), so this scenario asserts the two halves of the rule that
+// replaced it: a recurring income no regex would recognize counts, and a
+// one-off that reads exactly like a paycheck does not.
 const stateB = {
   settings: { checkInBalance: 0, checkInDate: "2026-09-01", budgetHorizon: "2026-10-01",
     ledgerHorizon: "2026-10-01", theme: "light", showCumulative: false },
   recurring: [
     { id: "payA", name: "BU Paycheck", amount: 1800, category: "income",
       cadence: "monthly", startDate: "2026-09-15", endDate: null, dayOfMonth: 15 },
+    { id: "payC", name: "Disability", amount: 1100, category: "income",
+      cadence: "monthly", startDate: "2026-09-03", endDate: null, dayOfMonth: 3 },
   ],
   oneoffs: [
     { id: "payB", name: "Salary top-up", amount: 700, category: "income", date: "2026-09-20" },
@@ -72,9 +78,16 @@ const stateB = {
 };
 const budgetB = computeBudget(stateB, stateB.settings.budgetHorizon);
 const sepB = budgetB.find((c) => c.key === "2026-09");
-console.log("\n== Scenario B: two differently-named paychecks in Sep ==");
-console.log(`  Sep take-home=${money(sepB.takeHome)}`);
-check("Sep take-home (1800 + 700)", sepB.takeHome, 2500);
+console.log("\n== Scenario B: recurring income is take-home, one-time income is not ==");
+console.log(`  Sep take-home=${money(sepB.takeHome)} otherIn=${money(sepB.otherIn)}`);
+check("Sep take-home (1800 + 1100 recurring)", sepB.takeHome, 2900);
+check("...counting both rules, not one", sepB.payCount, 2);
+check("a one-off that reads like a paycheck is other in", sepB.otherIn, 700);
+// eq is declared below and hoisted; these two are not numbers.
+eq("...and is listed there by name", Object.keys(sepB.otherInItems), ["Salary top-up"]);
+eq("...while neither recurring rule is", sepB.otherInItems["Disability"], undefined);
+// Nothing moved between rows: the month's total in is the same either way.
+check("total in is unchanged by where the rows sit", sepB.totalIn, 2900 + 700);
 
 // ---------- Scenario C: tracker categories step the cumulative columns ----------
 const stateC = {

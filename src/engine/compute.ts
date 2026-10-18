@@ -51,10 +51,6 @@ export function groupByMonth(rows: LedgerRow[]): Array<{ label: string; rows: Le
   return groups;
 }
 
-// An income item counts as "take-home" (a paycheck) when its name matches this;
-// anything else income is "other in" (a repayment from a friend, a rebate).
-const PAY_RE = /pay|salary|take.?home/i;
-
 // Group rows by calendar day for the Ledger's calendar view. Returns a Map
 // keyed by ISO date so a month grid can look a day up directly, in the row
 // order the ledger already produced.
@@ -91,24 +87,54 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
     const months = monthsBetween(primaryAccount(state).balanceAsOf, horizonISO);
 
     const byMonth: Record<string, any> = {};
-    for (const m of months) byMonth[m.key] = { items: {}, takeHome: 0, payCount: 0 };
+    for (const m of months) {
+      byMonth[m.key] = { items: {}, otherItems: {}, takeHome: 0, payCount: 0, otherIn: 0 };
+    }
 
+    // WHAT INCOME IS SPLIT BY, since 2026-10-17: whether it recurs, not
+    // what it is called.
+    //
+    // This row used to be everything whose NAME matched /pay|salary|
+    // take.?home/i, which meant the budget's single most load-bearing
+    // figure depended on a word. Income called "Disability", "Pension",
+    // "SSI" or "Unemployment" — none of them a word that regex knows —
+    // dropped out of take-home and landed in "other in", understating
+    // the one row that answers "what comes in every month". Setup's
+    // income step learned to take a name on the same day, which made
+    // that reachable without ever opening the Ledger.
+    //
+    // Recurring is the honest test because it is the question the row
+    // actually asks: take-home is income you can count on arriving
+    // again, and a one-time payment is not, whatever either is called.
+    // It also cannot be gotten wrong by typing — the cadence is picked
+    // from a list.
     for (const e of events) {
       const key = e.date.slice(0, 7);
       if (!byMonth[key]) continue;
       const b = byMonth[key];
-      const signed = e.direction === "in" ? e.amount : -e.amount;
+      if (e.category === "income") {
+        if (e.recurring) {
+          // The SUM of every recurring income landing in this month, not
+          // one rule's amount: 2 biweekly paydays is 2x and a 3-payday
+          // month is 3x, which is the whole reason this row is computed.
+          b.takeHome += e.amount;
+          b.payCount += 1;
+        } else {
+          // A repayment from a friend, a rebate, a bonus: real money in,
+          // and not a thing to plan next month around.
+          b.otherIn += e.amount;
+          b.otherItems[e.name] = {
+            val: (b.otherItems[e.name]?.val || 0) + e.amount,
+            order: e.order,
+          };
+        }
+        continue;
+      }
       b.items[e.name] = {
-        val: (b.items[e.name]?.val || 0) + signed,
+        val: (b.items[e.name]?.val || 0) - e.amount,
         category: e.category,
         order: e.order,
       };
-      // take-home is the SUM of every paycheck event landing in this month
-      // (2 biweekly = 2x, a 3-payday month = 3x), independent of how they're named.
-      if (e.category === "income" && PAY_RE.test(e.name)) {
-        b.takeHome += e.amount;
-        b.payCount += 1;
-      }
     }
 
     // starting point chains from prior month's cumulative; first month = check-in balance
@@ -118,17 +144,14 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
     const cols = months.map((m, idx) => {
       const b = byMonth[m.key];
       const takeHome = b.takeHome;
-      // split the aggregated-by-name items into non-paycheck income vs expenses
-      let otherIn = 0, out = 0;
-      const incomeItems: Record<string, any> = {}, expenseItems: Record<string, any> = {};
+      const otherIn = round(b.otherIn);
+      // Income was split as it arrived; `items` holds the expenses alone,
+      // still aggregated by name and still stored signed-negative.
+      let out = 0;
+      const expenseItems: Record<string, any> = {};
       for (const [name, obj] of Object.entries(b.items) as Array<[string, any]>) {
-        if (obj.category === "income") {
-          if (!PAY_RE.test(name)) otherIn += obj.val;
-          incomeItems[name] = { val: obj.val, order: obj.order };
-        } else {
-          out += -obj.val;
-          expenseItems[name] = { val: -obj.val, category: obj.category, order: obj.order };
-        }
+        out += -obj.val;
+        expenseItems[name] = { val: -obj.val, category: obj.category, order: obj.order };
       }
 
       const startingPoint = idx === 0 ? 0 : prevCumulative;
@@ -143,7 +166,7 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
         startingPoint: round(startingPoint),
         takeHome: round(takeHome),
         payCount: b.payCount,
-        otherIn, otherInItems: incomeItemsExceptPay(incomeItems),
+        otherIn, otherInItems: b.otherItems,
         tdChecking: round(tdChecking),
         totalIn: round(totalIn),
         totalOut: round(out),
@@ -156,14 +179,6 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
     return cols;
 }
   
-function incomeItemsExceptPay(incomeItems: Record<string, any>): Record<string, any> {
-    const out: Record<string, any> = {};
-    for (const [name, obj] of Object.entries(incomeItems)) {
-      if (!PAY_RE.test(name)) out[name] = obj;
-    }
-    return out;
-}
-
 // ---- helpers ----
 function round(n: number): number { return Math.round(n * 100) / 100; }
 

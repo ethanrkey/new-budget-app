@@ -248,6 +248,13 @@ export interface BudgetEvent {
    *  from the rule. The Ledger marks it: an amount that disagrees with its
    *  own rule looks like a bug without one. */
   overridden: boolean;
+  /** This occurrence came from a RECURRING RULE rather than a one-off.
+   *  Carried on the event because it is the only thing that can tell
+   *  the Budget's take-home row from its "other in" row: recurring
+   *  income is what you can count on arriving again, and a one-time
+   *  payment is not, whatever either of them is called. The split used
+   *  to be a regex over the item's name. */
+  recurring: boolean;
   date: ISODate;
 }
 
