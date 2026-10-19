@@ -183,14 +183,29 @@ export function computeDebtSummary(state: BudgetState): DebtSummary {
 //  - Never above principal: unchanged — (1 − owed/original).
 //  - Ever above principal (`everAboveOriginal`): the denominator becomes
 //    `peak`, the most this loan has ever been worth owing, and the numerator
-//    is measured from `bestOwed`, the LOWEST balance ever logged. Using the
-//    low-water balance rather than today's is what makes the bar monotonic:
-//    a month of interest with no payment can't walk it backwards, because
-//    min-so-far can only fall. The trade the user chose deliberately: the
-//    number then reflects the best you've got it down to, not owed ÷ peak
-//    today. The branch is sticky (it keys off peak, not today's balance), so
-//    crossing back under the original principal can't jump the bar backwards
-//    by swapping denominators mid-payoff.
+//    is measured from `bestOwed`, the lowest balance logged SINCE the peak.
+//    Using the low-water balance rather than today's is what makes the bar
+//    monotonic: a month of interest with no payment can't walk it
+//    backwards, because the minimum can only fall. The trade the user chose
+//    deliberately: the number then reflects the best you've got it down to,
+//    not owed ÷ peak today. The branch is sticky (it keys off peak, not
+//    today's balance), so crossing back under the original principal can't
+//    jump the bar backwards by swapping denominators mid-payoff.
+//
+//    SINCE THE PEAK, not all-time, fixed 2026-10-19. `bestOwed` was the
+//    minimum of every snapshot ever, and the peak was the maximum of
+//    them — so logging a balance ABOVE the old peak grew the
+//    denominator while the numerator stayed where it was, and the bar
+//    went UP while the debt did. Reported with real figures: peak
+//    $2,302.73 against a best of $2,154.65 reads 6.43%, and logging
+//    $2,400 took it to 10.22% for owing more than ever.
+//
+//    A new high-water mark is a new starting line. Measuring from the
+//    LAST time the balance was at its peak makes that bar read 0% and
+//    climb again from there, which is the only honest answer: nothing
+//    has been paid off relative to the most this has ever been worth.
+//    Monotonicity is untouched below the peak, which is what it was
+//    for.
 export function computeLoanProgress(state: BudgetState, cat: TrackerCategory, asOfISO: ISODate): LoanProgress | null {
   if (!isLoanConfigured(cat)) return null;
   const snaps = sortedSnapshots(state, cat.id);
@@ -201,7 +216,15 @@ export function computeLoanProgress(state: BudgetState, cat: TrackerCategory, as
 
   const amounts = snaps.map((s) => s.amount);
   const peak = Math.max(original, ...(amounts.length ? amounts : [original]));
-  const bestOwed = amounts.length ? Math.min(...amounts) : null;
+  // From the LAST snapshot that hit the peak — re-reaching an old high is
+  // as much a reset as setting a new one, and taking the first occurrence
+  // would let a dip from years ago go on crediting a balance that has
+  // since climbed all the way back.
+  // -1 when the peak IS the original principal and no snapshot reached
+  // it — in which case everAboveOriginal is false and nothing below
+  // reads bestOwed.
+  const peakAt = amounts.lastIndexOf(peak);
+  const bestOwed = peakAt < 0 ? null : Math.min(...amounts.slice(peakAt));
   const everAboveOriginal = peak > original;
   const basis = everAboveOriginal ? peak : original;
 

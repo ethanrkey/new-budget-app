@@ -1638,11 +1638,16 @@ Conventions worth knowing before touching numbers:
   principal: `1 − owed/original`, unchanged. Ever above principal (interest
   outran payments, which an unsubsidized loan does from day one): the
   denominator becomes `peak` — the most that loan has ever been worth owing —
-  and the numerator is measured from `bestOwed`, the lowest balance ever
-  logged, which is what keeps the bar monotonic (a no-payment month of
-  interest can't walk it backwards; min-so-far only falls). The branch keys
-  off `peak`, not today's balance, so crossing back under the original
-  principal can't jump the bar backwards by swapping denominators. While
+  and the numerator is measured from `bestOwed`, the lowest balance logged
+  **on or after the peak snapshot**, which is what keeps the bar monotonic
+  (a no-payment month of interest can't walk it backwards; the minimum only
+  falls). The branch keys off `peak`, not today's balance, so crossing back
+  under the original principal can't jump the bar backwards by swapping
+  denominators. `bestOwed` was the all-time minimum until 2026-10-19, and
+  that made the bar go UP when a new high was logged: the denominator grew
+  while the numerator sat still (peak $2,302.73 / best $2,154.65 = 6.43%;
+  log $2,400 and it read 10.22% for owing more than ever). A new
+  high-water mark is a new starting line — it reads 0% from there. While
   owed > borrowed the card replaces "of $X" with `owed · borrowed · accrued
   interest`; that third figure is `owed − borrowed`, i.e. interest net of
   anything already paid, since payments made before the earliest logged
@@ -4473,6 +4478,39 @@ the web does not need because its wizard is always one click away.
 
 ## 11. Decision log (why things are the way they are)
 
+- **A BUDGET ROW IS AN ITEM, NOT A NAME** (2026-10-19). `expenseItems`
+  and `otherInItems` are keyed by the item's id and carry `name` as a
+  label; `computeBudgetLayout` returns `{ key, name }` rows; `swapOrder`
+  and `reorderList` take ids; `BudgetEvent` carries `srcId`. The whole
+  chain used to be the display name, and two items may legitimately
+  share one — a $375 one-off "Discover Bill" and a $680 monthly
+  "Discover Bill" became a single entry per month, listed once under
+  ONE-OFF and once under FIXED, both rows reading that one entry. Each
+  month printed the same figure twice while the totals stayed right,
+  which is what made it read as a rendering fault. Reported from a
+  phone; identical on the web, which shares the engine. The same change
+  made the Spending mix's broken-out items sum per rule rather than per
+  name, and `itemsByName` — which existed only so the web's Budget
+  could guess which item a clicked row meant, and gave up when two
+  shared a name — is deleted.
+- **A fixed bill that varies is not called a fixed bill** (2026-10-19).
+  `categoryLabelOf(category, { variable, plural }, trackerCategories)`
+  in `model.ts` is the only place a category's display label is
+  produced; `BudgetEvent.variable` carries the flag so a renderer never
+  has to go back to the item. A bill the user has marked "this bill
+  varies" reads "Variable bill" / "Variable bills" in the Ledger's
+  spending mix, the ledger CSV's Category column, both calendars and
+  the web's quick-entry list. Labeling only — same category, same
+  section, same arithmetic. There were four copies of that mapping
+  before this (CATEGORIES, the CSV exporter's, and one hard-coded
+  object in each client's calendar), which is four places for the two
+  clients to disagree.
+- **"As of" is a claim about a moment; a contribution happened ON a
+  day** (2026-10-19). `DATE_LABEL` in `content/logBalance.ts`; the
+  shared amount-and-date form takes it as a prop defaulting to "As of",
+  and only the two contribution call sites pass "On". Balance logging —
+  checking, and any tracked account — keeps "As of", because a reading
+  is a statement that holds good as of a date.
 - Categories are user-defined with a validated 8-color palette because the
   old fixed four clashed with income-green / bill-purple.
 - Bills get no automatic color or bold; only a user-picked color

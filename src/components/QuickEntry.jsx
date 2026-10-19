@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
+import { CATEGORIES, CADENCES, categoryLabelOf, uid, todayISO } from "../engine/model.ts";
 import { defaultCategoryFor, categoryOnModeChange } from "../shared/entryDefaults.ts";
 import { fmtDate } from "../shared/dates.ts";
 
@@ -31,7 +31,7 @@ export default function QuickEntry({ onAdd, onRemove, onClose, trackerCategories
   };
   const [date, setDate] = useState(todayISO());
   const sortedCats = [...trackerCategories].sort((a, b) => a.order - b.order);
-  const categoryLabel = (id) => CATEGORIES[id]?.label ?? trackerCategories.find((c) => c.id === id)?.name ?? id;
+  const categoryLabel = (it) => categoryLabelOf(it.category, { variable: it.variable }, trackerCategories);
   const [cadence, setCadence] = useState("monthly");
   const [startDate, setStartDate] = useState(todayISO());
   const [endDate, setEndDate] = useState("");
@@ -188,7 +188,7 @@ export default function QuickEntry({ onAdd, onRemove, onClose, trackerCategories
                 <span className="truncate">
                   {it.name}{" "}
                   <span className="text-gray-400">
-                    — {categoryLabel(it.category)}
+                    — {categoryLabel(it)}
                     {it.cadence ? ` · ${CADENCE_LABEL[it.cadence]}` : ` · ${fmtDate(it.date)}`}
                   </span>
                 </span>

@@ -253,6 +253,12 @@ export type RawState = Record<string, unknown>;
 export interface BudgetEvent {
   /** `${itemId}@${date}` — only the item half is ever parsed back out. */
   id: string;
+  /** The rule or one-off this came from. THE IDENTITY OF THE ROW, and the
+   *  reason it exists as its own field: the Budget grid used to key its
+   *  rows by `name`, so a one-off and a recurring bill both called
+   *  "Discover Bill" were one row shown twice, each printing the other's
+   *  figures. A name is a label; this is who the money is. */
+  srcId: string;
   name: string;
   amount: number;
   direction: Direction;
@@ -270,13 +276,25 @@ export interface BudgetEvent {
    *  payment is not, whatever either of them is called. The split used
    *  to be a regex over the item's name. */
   recurring: boolean;
+  /** The rule's amount is an estimate — "this bill varies". Carried on
+   *  the event so anything rendering a row can call it a Variable bill
+   *  without going back to the item; only recurring bills can be one. */
+  variable: boolean;
   date: ISODate;
 }
 
 // ---- Budget grid (derived, never stored) ---------------------------------
 
-/** One named row's value inside a month column. */
+/** One row's value inside a month column.
+ *
+ * KEYED BY THE ITEM'S ID, not by its name — so the name has to ride
+ * along, because the key is no longer readable. Two items may share a
+ * name (a one-off "Discover Bill" and a monthly one); they are two
+ * rows, and before 2026-10-19 they were one row rendered twice with
+ * whichever figure the lookup happened to find. */
 export interface BudgetRowValue {
+  /** What to print in the label column. Not unique, and not the key. */
+  name: string;
   val: number;
   order: number;
 }

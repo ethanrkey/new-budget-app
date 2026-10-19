@@ -25,9 +25,12 @@ const money = (n) =>
   (n < 0 ? "-" : "") +
   Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-export default function BudgetView({ budget, settings, setSettings, trackerCategories = [], accountName = "Checking", onEditName, onReorder, onReorderDrop, onOpenOnboarding }) {
-  const [dragName, setDragName] = useState(null);
-  const [overName, setOverName] = useState(null);
+export default function BudgetView({ budget, settings, setSettings, trackerCategories = [], accountName = "Checking", onEditRow, onReorder, onReorderDrop, onOpenOnboarding }) {
+  // The ROW being dragged and the row it is over, by key — the item's id.
+  // Both were names, which is why a drag could not tell two items with
+  // the same name apart.
+  const [dragKey, setDragKey] = useState(null);
+  const [overKey, setOverKey] = useState(null);
 
   const horizonControl = settings && setSettings ? (
     <HorizonSlider
@@ -69,70 +72,73 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
     );
   }
 
-  // `nameCat` (row -> category id) is deliberately not destructured: the
+  // `rowCat` (row -> category id) is deliberately not destructured: the
   // only thing that used it was the per-row role color, retired
   // 2026-10-06. The layout still groups by category — that is `savingGroups`.
-  const { otherIncomeNames, sectionItems, savingGroups } = computeBudgetLayout(budget, trackerCategories);
+  const { otherIncome, sectionItems, savingGroups } = computeBudgetLayout(budget, trackerCategories);
   const th = "py-2 px-3 text-right font-semibold whitespace-nowrap";
-  const editRow = (name) => onEditName && (() => onEditName(name));
+  const editRow = (key) => onEditRow && (() => onEditRow(key));
 
-  // Per-name arrow (▲▼) + drag-and-drop wiring, scoped to exactly `names` —
+  // Per-row arrow (▲▼) + drag-and-drop wiring, scoped to exactly `rows` —
   // a drag can never be dropped into a different group (section, or Saving/
   // Debt category cluster) because the drop handler only accepts a drag
-  // whose source is a member of its own `names` list.
-  function rowMeta(names) {
-    return names.map((name, i) => {
+  // whose source is a member of its own `rows` list.
+  function rowMeta(rows) {
+    const keys = rows.map((r) => r.key);
+    return rows.map((row, i) => {
+      const key = row.key;
       const dragProps = onReorderDrop
         ? {
             draggable: true,
             onDragStart: (e) => {
               e.dataTransfer.effectAllowed = "move";
-              e.dataTransfer.setData("text/plain", name);
-              setDragName(name);
+              e.dataTransfer.setData("text/plain", row.name);
+              setDragKey(key);
             },
             onDragOver: (e) => {
-              if (dragName && names.includes(dragName)) {
+              if (dragKey && keys.includes(dragKey)) {
                 e.preventDefault();
-                if (overName !== name) setOverName(name);
+                if (overKey !== key) setOverKey(key);
               }
             },
-            onDragLeave: () => setOverName((o) => (o === name ? null : o)),
+            onDragLeave: () => setOverKey((o) => (o === key ? null : o)),
             onDrop: (e) => {
               e.preventDefault();
-              const from = dragName;
-              setDragName(null);
-              setOverName(null);
-              if (!from || from === name || !names.includes(from)) return;
+              const from = dragKey;
+              setDragKey(null);
+              setOverKey(null);
+              if (!from || from === key || !keys.includes(from)) return;
               const rect = e.currentTarget.getBoundingClientRect();
               const dropAfter = e.clientY - rect.top > rect.height / 2;
-              const idx = names.indexOf(name);
-              onReorderDrop(names, from, dropAfter ? names[idx + 1] ?? null : name);
+              const idx = keys.indexOf(key);
+              onReorderDrop(keys, from, dropAfter ? keys[idx + 1] ?? null : key);
             },
-            onDragEnd: () => { setDragName(null); setOverName(null); },
+            onDragEnd: () => { setDragKey(null); setOverKey(null); },
           }
         : undefined;
 
       return {
-        name,
-        up: onReorder && i > 0 ? () => onReorder(name, names[i - 1]) : null,
-        down: onReorder && i < names.length - 1 ? () => onReorder(name, names[i + 1]) : null,
+        key,
+        name: row.name,
+        up: onReorder && i > 0 ? () => onReorder(key, keys[i - 1]) : null,
+        down: onReorder && i < rows.length - 1 ? () => onReorder(key, keys[i + 1]) : null,
         dragProps,
-        isDragging: dragName === name,
-        isDragOver: overName === name && dragName !== name,
+        isDragging: dragKey === key,
+        isDragOver: overKey === key && dragKey !== key,
       };
     });
   }
 
   function renderSection(sec) {
-    const names = sectionItems[sec.key];
-    if (!names.length) return null;
+    const rows = sectionItems[sec.key];
+    if (!rows.length) return null;
     return (
       <>
         <SectionHeader label={sec.label} span={budget.length + 1} />
-        {rowMeta(names).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
-          <DataRow key={name} label={name} cols={budget}
-            pick={(c) => c.expenseItems[name]?.val || 0} tone="expense" hideZero
-            onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
+        {rowMeta(rows).map(({ key, name, up, down, dragProps, isDragging, isDragOver }) => (
+          <DataRow key={key} label={name} cols={budget}
+            pick={(c) => c.expenseItems[key]?.val || 0} tone="expense" hideZero
+            onLabelClick={editRow(key)} onMoveUp={up} onMoveDown={down}
             dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
         ))}
       </>
@@ -162,10 +168,10 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
           <DataRow label="Starting point" cols={budget} pick={(c) => c.startingPoint} muted />
           <DataRow label="Take-home" cols={budget} pick={(c) => c.takeHome} tone="income" />
           <DataRow label={accountName} cols={budget} pick={(c) => c.tdChecking} tone="income" hideZero />
-          {rowMeta(otherIncomeNames).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
-            <DataRow key={name} label={name} cols={budget} tone="income"
-              pick={(c) => c.otherInItems?.[name]?.val || 0} hideZero
-              onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
+          {rowMeta(otherIncome).map(({ key, name, up, down, dragProps, isDragging, isDragOver }) => (
+            <DataRow key={key} label={name} cols={budget} tone="income"
+              pick={(c) => c.otherInItems?.[key]?.val || 0} hideZero
+              onLabelClick={editRow(key)} onMoveUp={up} onMoveDown={down}
               dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
           ))}
           <TotalRow label="TOTAL IN" cols={budget} pick={(c) => c.totalIn} tone="income" fill="income" />
@@ -189,11 +195,11 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
             ) : sectionItems.saving.length ? (
               <Fragment key={section.key}>
                 <SectionHeader label={section.label} span={budget.length + 1} />
-                {savingGroups.map((names) =>
-                  rowMeta(names).map(({ name, up, down, dragProps, isDragging, isDragOver }) => (
-                    <DataRow key={name} label={name} cols={budget}
-                      pick={(c) => c.expenseItems[name]?.val || 0} hideZero
-                      onLabelClick={editRow(name)} onMoveUp={up} onMoveDown={down}
+                {savingGroups.map((rows) =>
+                  rowMeta(rows).map(({ key, name, up, down, dragProps, isDragging, isDragOver }) => (
+                    <DataRow key={key} label={name} cols={budget}
+                      pick={(c) => c.expenseItems[key]?.val || 0} hideZero
+                      onLabelClick={editRow(key)} onMoveUp={up} onMoveDown={down}
                       dragProps={dragProps} isDragging={isDragging} isDragOver={isDragOver} />
                   ))
                 )}

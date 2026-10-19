@@ -15,9 +15,45 @@ import type {
 // `CATEGORIES[cat]?.direction ?? "out"` shape every caller already uses.
 export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
     income: { label: "Income",     color: "#0B7A0B", direction: "in"  },
-    bill:   { label: "Fixed Bill", color: "#7030A0", direction: "out" },
+    bill:   { label: "Fixed bill", color: "#7030A0", direction: "out" },
     oneoff: { label: "One-off",    color: "#C0392B", direction: "out" },
   };
+
+/**
+ * What to call a transaction's category on screen.
+ *
+ * A FIXED BILL THAT VARIES IS NOT A FIXED BILL. "This bill varies"
+ * (`variable` — groceries, gas, electric) is already a flag the user
+ * sets and the Spending tab is built on, and everywhere else went on
+ * calling it a fixed bill: the one word on screen that says what kind
+ * of number this is said the opposite of what the user had told it.
+ * Same category, same arithmetic, honest label.
+ *
+ * ONE FUNCTION rather than a label per view. There were four copies of
+ * this mapping — this table, the CSV exporter's, and a hard-coded
+ * object in each client's calendar — and a fifth would have been a
+ * fifth place for the two clients to disagree.
+ *
+ * `plural` is for a heading over a group of them ("Rent · Fixed
+ * bills"); singular is one row's own category. Only the bill labels
+ * have a plural anybody shows — "One-off" is already what the group of
+ * them is called — so it is the only one the flag touches.
+ */
+export function categoryLabelOf(
+  category: string,
+  opts: { variable?: boolean; plural?: boolean } = {},
+  trackerCategories: readonly TrackerCategory[] = [],
+): string {
+  if (category === "bill") {
+    const kind = opts.variable ? "Variable bill" : "Fixed bill";
+    return opts.plural ? kind + "s" : kind;
+  }
+  if (CATEGORIES[category]) return CATEGORIES[category]!.label;
+  // A tracker category is whatever the user named it — already the right
+  // word in both numbers. An orphaned id falls through to itself, which
+  // is what every other lookup here does.
+  return trackerCategories.find((c) => c.id === category)?.name ?? category;
+}
 
   // A curated, validated set of 8 colors for user-defined tracker categories
   // (savings/debt/investment) and optional per-item color overrides. Chosen

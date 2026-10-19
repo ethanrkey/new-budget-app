@@ -5,6 +5,7 @@ import {
   calendarMonths, buildCalendarMonth, addMonthKey, cellAmountCompact,
   netAmountCompact, type CalendarDay,
 } from "../../src/engine/calendar.ts";
+import { categoryLabelOf } from "../../src/engine/model.ts";
 import { CALENDAR_COPY as COPY } from "../../src/content/calendar.ts";
 import { fmtDate, fmtLongDay, fmtMonthYear } from "../../src/shared/dates.ts";
 import type { BudgetState, LedgerRow, TrackerCategory } from "../../src/engine/types.ts";
@@ -89,9 +90,10 @@ export default function CalendarView({
   const atFirst = idx <= 0;
   const atLast = idx < 0 || idx >= months.length - 1;
 
-  const catName = (id: string) =>
-    id === "bill" ? "Fixed bill" : id === "oneoff" ? "One-off" : id === "income" ? "Income"
-      : categories.find((c) => c.id === id)?.name ?? "Uncategorized";
+  // The engine's own mapping, not the phone's copy of it — see the web's
+  // identical call. A bill flagged "this bill varies" reads as one.
+  const catName = (row: LedgerRow) =>
+    categoryLabelOf(row.category, { variable: row.variable }, categories);
 
   function goMonth(n: number) {
     const next = addMonthKey(monthKey, n);
@@ -221,7 +223,7 @@ export default function CalendarView({
             <Pressable key={r.id} style={styles.detailRow} onPress={() => onPick?.(r.id)}>
               <Text style={styles.detailName} numberOfLines={1}>{r.name}</Text>
               {/* Identity never rests on color: the category in words. */}
-              <Text style={styles.detailCat}>{catName(r.category)}</Text>
+              <Text style={styles.detailCat}>{catName(r)}</Text>
               <Text style={[styles.detailAmt, { color: r.direction === "in" ? T.income : T.expense }]}>
                 {r.direction === "in" ? "+" : "−"}{money(r.amount).replace("-", "")}
               </Text>

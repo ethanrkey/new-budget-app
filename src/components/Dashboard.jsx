@@ -12,7 +12,7 @@ import AssetSetupModal from "./AssetSetupModal.jsx";
 import { fmtDate, fmtDay } from "../shared/dates.ts";
 import { blankContributionRow, contributionRuleFor } from "../engine/setup.ts";
 import { SETUP_COPY as COPY, CADENCE_OPTIONS, CONTRIBUTION_PROMPT as PROMPT } from "../content/setup.ts";
-import { LOG_BALANCE_TITLE } from "../content/logBalance.ts";
+import { LOG_BALANCE_TITLE, DATE_LABEL } from "../content/logBalance.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -142,6 +142,9 @@ export default function Dashboard({
           blurb="What you actually put in, and when. Log each contribution as it happens — this is the record of what you really did, not what the ledger plans."
           amountLabel="Amount contributed"
           cta="Log contribution"
+          // A contribution HAPPENED on a day; it is not a reading that
+          // holds good as of one. See DATE_LABEL.
+          dateLabel={DATE_LABEL.contribution}
           onConfirm={(amount, date) => { onAddContribution(contribCat.id, amount, date); setContribFor(null); }}
           onClose={() => setContribFor(null)}
         />

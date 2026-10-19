@@ -1,10 +1,10 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay, rowsHiddenByAnchor } from "../src/engine/compute.ts";
-import { upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
+import { upsertItem, deleteItem, deleteItems, findItem, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys, activeMonthKeys, fixedSoFar } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
 import { buildAllEvents } from "../src/engine/generate.ts";
-import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, TABS, PRIMARY_ACCOUNT_ID, LEDGER_MAX_MONTHS, ledgerHorizonOf, blankState } from "../src/engine/model.ts";
+import { monthsDiff, addMonthsISO, toISODate, todayISO, endOfMonthISO, paletteColor, primaryAccount, sanitizeTabOrder, categoryLabelOf, TABS, PRIMARY_ACCOUNT_ID, LEDGER_MAX_MONTHS, ledgerHorizonOf, blankState } from "../src/engine/model.ts";
 import { normalize, legacyTrackerCategories } from "../src/engine/stateShape.ts";
 import { anchorMatchesNewestSnapshot } from "../src/engine/entities.ts";
 import { computeBudgetLayout, BUDGET_SECTIONS } from "../src/engine/budgetLayout.ts";
@@ -84,8 +84,10 @@ check("Sep take-home (1800 + 1100 recurring)", sepB.takeHome, 2900);
 check("...counting both rules, not one", sepB.payCount, 2);
 check("a one-off that reads like a paycheck is other in", sepB.otherIn, 700);
 // eq is declared below and hoisted; these two are not numbers.
-eq("...and is listed there by name", Object.keys(sepB.otherInItems), ["Salary top-up"]);
-eq("...while neither recurring rule is", sepB.otherInItems["Disability"], undefined);
+eq("...and is listed there, keyed by the item and labeled by name",
+  Object.values(sepB.otherInItems).map((v) => v.name), ["Salary top-up"]);
+eq("...under the one-off's own id", Object.keys(sepB.otherInItems), ["payB"]);
+eq("...while neither recurring rule is", sepB.otherInItems["payA"], undefined);
 // Nothing moved between rows: the month's total in is the same either way.
 check("total in is unchanged by where the rows sit", sepB.totalIn, 2900 + 700);
 
@@ -147,7 +149,7 @@ eq("one-off -> recurring: now in recurring", s.recurring.some((r) => r.id === "b
 
 // lookups
 eq("findItem by bare id", findItem(s, "a")?.name, "Rent");
-eq("itemsByName unique", itemsByName(s, "Roth IRA").length, 1);
+eq("findItem on a missing id", findItem(s, "nope"), null);
 
 // delete
 s = deleteItem(s, "a");
@@ -174,16 +176,18 @@ const stateE = {
 // has to carry each item's order through so the UI can.
 let budgetE = computeBudget(stateE, stateE.settings.budgetHorizon);
 let sepE = budgetE.find((c) => c.key === "2026-09");
-check("order carried onto expenseItems", sepE.expenseItems.Internet.order, 0);
-check("order carried onto expenseItems (2)", sepE.expenseItems.Rent.order, 1);
+// Keyed by the ITEM'S ID, with the name along for the label.
+check("order carried onto expenseItems", sepE.expenseItems.e1.order, 0);
+check("order carried onto expenseItems (2)", sepE.expenseItems.e2.order, 1);
+eq("the name rides along as a label", sepE.expenseItems.e1.name, "Internet");
 
-const swapped = swapOrder(stateE, "Internet", "Rent");
+const swapped = swapOrder(stateE, "e1", "e2");
 check("swapOrder: Internet now order 1", swapped.recurring.find((r) => r.id === "e1").order, 1);
 check("swapOrder: Rent now order 0", swapped.recurring.find((r) => r.id === "e2").order, 0);
 budgetE = computeBudget(swapped, swapped.settings.budgetHorizon);
 sepE = budgetE.find((c) => c.key === "2026-09");
 eq("Budget respects the swap (order-wise; caller sorts by .order)",
-  Object.entries(sepE.expenseItems).sort((a, b) => a[1].order - b[1].order).map(([n]) => n),
+  Object.entries(sepE.expenseItems).sort((a, b) => a[1].order - b[1].order).map(([, v]) => v.name),
   ["Rent", "Internet"]);
 
 // ---------- Scenario F: mark-paid is GONE ----------
@@ -261,20 +265,41 @@ let sI = {
   ],
   oneoffs: [],
 };
-const namesI = ["A", "B", "C", "D"];
+// The group is a list of ITEM IDS — the same keys computeBudgetLayout
+// hands the view. It was a list of names until 2026-10-19, which meant a
+// drag moved every item sharing the dragged one's name.
+const idsI = ["i1", "i2", "i3", "i4"];
 const orderedNames = (s) => [...s.recurring].sort((a, b) => a.order - b.order).map((r) => r.name);
 
 // drag D to before B -> A, D, B, C
-let moved = reorderList(sI, namesI, "D", "B");
+let moved = reorderList(sI, idsI, "i4", "i2");
 eq("drag D before B", orderedNames(moved), ["A", "D", "B", "C"]);
 
-// drag A to the end (beforeName = null) -> B, C, D, A
-moved = reorderList(sI, namesI, "A", null);
+// drag A to the end (beforeId = null) -> B, C, D, A
+moved = reorderList(sI, idsI, "i1", null);
 eq("drag A to end", orderedNames(moved), ["B", "C", "D", "A"]);
 
-// dragging a name not in this group is a no-op that doesn't corrupt the list
-moved = reorderList(sI, namesI, "not-in-group", "B");
+// dragging an id not in this group is a no-op that doesn't corrupt the list
+moved = reorderList(sI, idsI, "not-in-group", "i2");
 eq("drag from outside the group is inert", orderedNames(moved), ["A", "B", "C", "D"]);
+
+// TWO ITEMS, ONE NAME, ONE OF THEM MOVED. The whole point of keying by
+// id: "Discover Bill" the one-off and "Discover Bill" the monthly bill
+// are two rows, and dragging one has to leave the other where it was.
+const sameName = {
+  recurring: [
+    { id: "n1", name: "Discover Bill", amount: 680, category: "bill", cadence: "monthly", order: 0 },
+    { id: "n2", name: "Water", amount: 40, category: "bill", cadence: "monthly", order: 1 },
+  ],
+  oneoffs: [{ id: "n3", name: "Discover Bill", amount: 375, category: "bill", date: "2026-11-02", order: 2 }],
+};
+const movedOne = reorderList(sameName, ["n1", "n2", "n3"], "n3", "n1");
+eq("only the dragged twin moves", [...movedOne.recurring, ...movedOne.oneoffs]
+  .sort((a, b) => a.order - b.order).map((i) => i.id), ["n3", "n1", "n2"]);
+const swappedTwin = swapOrder(sameName, "n1", "n3");
+eq("swapOrder moves exactly the two ids given",
+  [swappedTwin.recurring[0].order, swappedTwin.recurring[1].order, swappedTwin.oneoffs[0].order],
+  [2, 1, 0]);
 
 // ---------- Scenario J: computeBudgetLayout matches BudgetView's own sorting ----------
 console.log("\n== Scenario J: computeBudgetLayout ==");
@@ -292,9 +317,11 @@ const stateJ = {
 };
 const budgetJ = computeBudget(stateJ, stateJ.settings.budgetHorizon);
 const layoutJ = computeBudgetLayout(budgetJ, stateJ.trackerCategories);
-eq("bill section sorted by order (Rent order=2, Internet order=3)", layoutJ.sectionItems.bill, ["Rent", "Internet"]);
+const names = (rows) => rows.map((r) => r.name);
+eq("bill section sorted by order (Rent order=2, Internet order=3)", names(layoutJ.sectionItems.bill), ["Rent", "Internet"]);
+eq("rows carry the item's id as their key", layoutJ.sectionItems.bill.map((r) => r.key), ["j-bill1", "j-bill2"]);
 eq("saving section clusters by category (roth before loans) despite order (loans=0, roth=1)",
-  layoutJ.sectionItems.saving, ["Roth IRA", "Loan pmt"]);
+  names(layoutJ.sectionItems.saving), ["Roth IRA", "Loan pmt"]);
 // Only clusters with at least one item survive (saved/brokerage are empty
 // here and dropped, not rendered as blank groups) — roth's cluster (len 1)
 // then loans' (len 1), in category order.
@@ -585,7 +612,7 @@ const stateOrphan = {
 const budgetOrphan = computeBudget(stateOrphan, stateOrphan.settings.budgetHorizon);
 const layoutOrphan = computeBudgetLayout(budgetOrphan, stateOrphan.trackerCategories);
 eq("an orphaned category's item still renders, in the trailing null cluster",
-  layoutOrphan.savingGroups[layoutOrphan.savingGroups.length - 1], ["Old Crypto Stash"]);
+  layoutOrphan.savingGroups[layoutOrphan.savingGroups.length - 1].map((r) => r.name), ["Old Crypto Stash"]);
 // A card that reads "SAVINGS · Savings" is the DEFAULT state of a new
 // account, not an edge case: the seeded categories are named after their
 // own roles.
@@ -979,10 +1006,10 @@ const stateZ = {
 const budgetZ = computeBudget(stateZ, stateZ.settings.budgetHorizon);
 const monthKeysZ = budgetZ.map((c) => c.key);
 eq("3 columns: Sep, Oct, Nov (checkInDate's month through horizon's month)", monthKeysZ, ["2026-09", "2026-10", "2026-11"]);
-check("Sep (not the last column) already had Rent correctly", budgetZ.find((c) => c.key === "2026-09").expenseItems.Rent?.val, 1500);
-check("Oct (not the last column) already had Rent correctly", budgetZ.find((c) => c.key === "2026-10").expenseItems.Rent?.val, 1500);
+check("Sep (not the last column) already had Rent correctly", budgetZ.find((c) => c.key === "2026-09").expenseItems["rent-z"]?.val, 1500);
+check("Oct (not the last column) already had Rent correctly", budgetZ.find((c) => c.key === "2026-10").expenseItems["rent-z"]?.val, 1500);
 check("Nov (the LAST column) now ALSO has Rent — this was the bug: Rent due the 25th, horizon date is only the 5th",
-  budgetZ.find((c) => c.key === "2026-11").expenseItems.Rent?.val, 1500);
+  budgetZ.find((c) => c.key === "2026-11").expenseItems["rent-z"]?.val, 1500);
 check("Nov's TOTAL OUT correctly includes the Nov 25th Rent, not $0", budgetZ.find((c) => c.key === "2026-11").totalOut, 1500);
 
 // ---------- Scenario AA: account-shaped migration (Phase 1 rebuild) ----------
@@ -1459,6 +1486,39 @@ check("paid off entirely reaches 100%", computeLoanProgress(mkAB([
   { id: "s2", date: "2027-06-01", amount: 0 },
 ]), abCat, "2027-06-02").percentPaid, 100);
 
+// A NEW HIGH IS A NEW STARTING LINE (2026-10-19). Reported with these
+// figures: peak 2302.73 against a best of 2154.65 reads 6.43%, and
+// logging 2400 took it to 10.22% — the bar went UP for owing more than
+// ever, because the peak grew while the all-time minimum stayed put.
+const abPeak = [
+  { id: "s1", date: "2026-09-01", amount: 2302.73 },
+  { id: "s2", date: "2026-10-01", amount: 2154.65 },
+];
+check("before: 6.43% against the old peak", computeLoanProgress(mkAB(abPeak), abCat, "2026-10-02").percentPaid, 6.43);
+const abNewPeak = computeLoanProgress(
+  mkAB([...abPeak, { id: "s3", date: "2026-11-01", amount: 2400 }]), abCat, "2026-11-02");
+check("a balance above the old peak does not raise the bar", abNewPeak.percentPaid < 6.43, true);
+check("it resets to 0% — nothing is paid off against the most ever owed", abNewPeak.percentPaid, 0);
+check("...and the peak is what was just logged", abNewPeak.peak, 2400);
+// From the new peak the bar climbs again, measured from there and not
+// from a low-water mark that predates it.
+check("paying down from the new peak counts from the new peak", computeLoanProgress(
+  mkAB([...abPeak, { id: "s3", date: "2026-11-01", amount: 2400 }, { id: "s4", date: "2026-12-01", amount: 2300 }]),
+  abCat, "2026-12-02").percentPaid, round2((1 - 2300 / 2400) * 100));
+// Reaching an OLD high again is as much a reset as setting a new one:
+// measuring from the first time the balance was at its peak would go on
+// crediting a dip the loan has since climbed all the way back out of.
+check("the peak anchor is the LAST time it was reached", computeLoanProgress(mkAB([
+  { id: "s1", date: "2026-09-01", amount: 2400 },
+  { id: "s2", date: "2026-10-01", amount: 2100 },
+  { id: "s3", date: "2026-11-01", amount: 2400 },
+  { id: "s4", date: "2026-12-01", amount: 2300 },
+]), abCat, "2026-12-02").percentPaid, round2((1 - 2300 / 2400) * 100));
+
+// The property the low-water rule exists for is untouched below the peak.
+check("interest below the peak still cannot walk it backwards", computeLoanProgress(
+  mkAB([...abPeak, { id: "s3", date: "2026-11-01", amount: 2200 }]), abCat, "2026-11-02").percentPaid, 6.43);
+
 // A loan that has never been above its principal behaves exactly as before.
 const aaCat = { id: "aa", name: "Student Loan AA", color: 6, order: 1, kind: "debt", originalPrincipal: 18000, interestRate: 5.8 };
 const aa = computeLoanProgress(normalize({
@@ -1654,12 +1714,18 @@ const byKey = (m) => Object.fromEntries(m.slices.map((s) => [s.key, s.amount]));
 
 eq("income is never a slice", mixAL.slices.some((s) => s.key === "income"), false);
 // The fixed buckets always break out; tracker categories never do.
+// Keyed by the ITEM'S id, not its name — two rules may share a name.
 eq("bills arrive as their own transactions, one-offs too",
-  mixAL.slices.map((s) => s.key).sort(), ["bill::Groceries", "bill::Rent", "oneoff::Trip", "rothcat"]);
-check("3x rent is one slice, not three", byKey(mixAL)["bill::Rent"], 4500);
-check("3x groceries likewise", byKey(mixAL)["bill::Groceries"], 1200);
+  mixAL.slices.map((s) => s.key).sort(), ["bill::gro", "bill::rent", "oneoff::trip", "rothcat"]);
+check("3x rent is one slice, not three", byKey(mixAL)["bill::rent"], 4500);
+check("3x groceries likewise", byKey(mixAL)["bill::gro"], 1200);
 check("the tracker category stays whole", byKey(mixAL).rothcat, 1500);
-check("the one-off is its own transaction", byKey(mixAL)["oneoff::Trip"], 300);
+check("the one-off is its own transaction", byKey(mixAL)["oneoff::trip"], 300);
+eq("...and is still labeled with its name", mixAL.slices.find((s) => s.key === "bill::rent").label, "Rent");
+// A BILL THAT VARIES SAYS SO. Groceries carries `variable: true`; Rent
+// does not, and they sit in the same bucket.
+eq("a flagged bill is a Variable bill", mixAL.slices.find((s) => s.key === "bill::gro").parentLabel, "Variable bills");
+eq("an unflagged one in the same bucket is still Fixed", mixAL.slices.find((s) => s.key === "bill::rent").parentLabel, "Fixed bills");
 check("total is the sum of the slices", mixAL.total, 7500);
 eq("sorted biggest first", mixAL.slices.map((s) => s.amount), [4500, 1500, 1200, 300]);
 check("percents sum to 100", Math.round(mixAL.slices.reduce((t, s) => t + s.percent, 0)), 100);
@@ -1682,7 +1748,7 @@ const items = mixAL.slices.filter((s) => s.bucket === "item");
 eq("a slice carries no color of its own",
   [...items, rothSlice].every((s) => !("color" in s) && !("shade" in s)), true);
 eq("each names the bucket it came from, so it can't pass as a category",
-  items.map((s) => s.parentLabel).sort(), ["Fixed bills", "Fixed bills", "One-off"]);
+  items.map((s) => s.parentLabel).sort(), ["Fixed bills", "One-off", "Variable bills"]);
 eq("and names that bucket's kind, so the two ramps can differ",
   [...new Set(items.map((s) => s.parentBucket))].sort(), ["bill", "oneoff"]);
 check("slices come back biggest-first, so index IS rank",
@@ -2037,6 +2103,90 @@ eq("the ledger stops at the cap", cappedLedger.rows.every((r) => r.date <= capIS
 eq("and the spending chart covers exactly the same window", cappedMix.to, capISO);
 check("a capped ledger is shorter than the uncapped one would be",
   cappedLedger.rows.length < computeLedger(overCap, addMonthsISO(todayISO(), 30)).rows.length, true);
+
+// ---------- Scenario AT: two items, one name (2026-10-19) ----------
+// REPORTED FROM A PHONE, and true on the web for the same reason. A $375
+// one-off "Discover Bill" on Nov 2 and a separate $680 monthly "Discover
+// Bill" from Jan 8. Both rows showed $375 in November and $680 from
+// January on: the one-off row mirrored the fixed one, because the Budget
+// aggregated by NAME and so had one entry for the two of them, which the
+// layout then listed once under ONE-OFF and once under FIXED.
+//
+// The totals were right the whole time — the money was only ever counted
+// once — which is exactly what made it look like a rendering fault.
+console.log("\n== Scenario AT: a one-off and a bill sharing a name are two rows ==");
+const stateAT = normalize({
+  settings: { checkInBalance: 1000, checkInDate: "2026-11-01", budgetHorizon: "2027-02-01", ledgerHorizon: "2027-02-01" },
+  recurring: [
+    { id: "disc-rule", name: "Discover Bill", amount: 680, category: "bill", cadence: "monthly", dayOfMonth: 8, startDate: "2027-01-08", order: 1 },
+  ],
+  oneoffs: [{ id: "disc-once", name: "Discover Bill", amount: 375, category: "oneoff", date: "2026-11-02", order: 0 }],
+  trackerCategories: [],
+});
+const budgetAT = computeBudget(stateAT, "2027-02-01");
+const colAT = (k) => budgetAT.find((c) => c.key === k);
+eq("each item has its own entry", Object.keys(colAT("2027-01").expenseItems), ["disc-rule"]);
+// The one-off, month by month: November only.
+eq("the one-off row is 375 in November and nothing after",
+  budgetAT.map((c) => c.expenseItems["disc-once"]?.val ?? 0), [375, 0, 0, 0]);
+// The rule, month by month: nothing until it starts.
+eq("the fixed row is 0, 0, 680, 680 — not a copy of the one-off",
+  budgetAT.map((c) => c.expenseItems["disc-rule"]?.val ?? 0), [0, 0, 680, 680]);
+check("November's total out counts Discover once", colAT("2026-11").totalOut, 375);
+check("January's total out counts Discover once", colAT("2027-01").totalOut, 680);
+
+// AND IN A MONTH THEY BOTH LAND IN, which is where a name key did its
+// worst: the two summed into a single $730 entry that both rows then
+// printed, so the grid claimed $1,460 of Discover against a $730 total.
+const sharedAT = computeBudget({
+  ...stateAT,
+  oneoffs: [...stateAT.oneoffs, { id: "disc-again", name: "Discover Bill", amount: 50, category: "oneoff", date: "2027-01-20", order: 2 }],
+}, "2027-02-01");
+const janAT = sharedAT.find((c) => c.key === "2027-01");
+eq("two rows in the same column, each with its own figure",
+  [janAT.expenseItems["disc-rule"].val, janAT.expenseItems["disc-again"].val], [680, 50]);
+check("...and the total is still the sum of them", janAT.totalOut, 730);
+
+// The layout is where the two rows are actually produced: same name,
+// different sections, each keyed to its own item.
+const layoutAT = computeBudgetLayout(budgetAT, []);
+eq("one row under FIXED", layoutAT.sectionItems.bill.map((r) => [r.key, r.name]), [["disc-rule", "Discover Bill"]]);
+eq("one row under ONE-OFF", layoutAT.sectionItems.oneoff.map((r) => [r.key, r.name]), [["disc-once", "Discover Bill"]]);
+
+// And the CSV, which renders from the same layout: two lines, same
+// label, different figures. The label column is for a human; the lookup
+// behind it is not.
+const csvAT = budgetToCSV(budgetAT, []).split("\r\n");
+eq("the one-off's CSV line", csvAT.find((l) => l.startsWith("Discover Bill") && l.includes("375")), "Discover Bill,375.00,0.00,0.00,0.00");
+eq("the bill's CSV line", csvAT.find((l) => l.startsWith("Discover Bill") && l.includes("680")), "Discover Bill,0.00,0.00,680.00,680.00");
+
+// ---------- Scenario AU: a bill that varies is called one (2026-10-19) ----------
+console.log("\n== Scenario AU: Variable bill, wherever the label shows ==");
+const stateAU = normalize({
+  settings: { checkInBalance: 500, checkInDate: "2026-11-01", budgetHorizon: "2026-12-01", ledgerHorizon: "2026-11-30" },
+  recurring: [
+    { id: "gro", name: "Groceries", amount: 400, category: "bill", cadence: "monthly", dayOfMonth: 6, startDate: "2026-11-06", order: 0, variable: true },
+    { id: "rent", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", dayOfMonth: 2, startDate: "2026-11-02", order: 1 },
+  ],
+  oneoffs: [{ id: "gift", name: "Gift", amount: 30, category: "oneoff", date: "2026-11-09", order: 2 }],
+  trackerCategories: [],
+});
+eq("the flag reaches the event", buildAllEvents(stateAU, "2026-11-30").find((e) => e.srcId === "gro").variable, true);
+eq("...and is false on one that does not carry it", buildAllEvents(stateAU, "2026-11-30").find((e) => e.srcId === "rent").variable, false);
+eq("...and on a one-off, which can never carry it", buildAllEvents(stateAU, "2026-11-30").find((e) => e.srcId === "gift").variable, false);
+// The CSV's Category column: the one place a spreadsheet can see what
+// kind of number the amount is.
+const csvAU = ledgerToCSV(computeLedger(stateAU, "2026-11-30"), []).split("\r\n");
+eq("a flagged bill exports as Variable bill", csvAU.find((l) => l.includes("Groceries")).split(",")[2], "Variable bill");
+eq("an unflagged one is still a Fixed bill", csvAU.find((l) => l.includes("Rent")).split(",")[2], "Fixed bill");
+eq("a one-off is unaffected", csvAU.find((l) => l.includes("Gift")).split(",")[2], "One-off");
+// Labeling only: the category is untouched, so nothing about the
+// arithmetic or the section it files under moves.
+eq("the category itself does not change", stateAU.recurring.find((r) => r.id === "gro").category, "bill");
+eq("...so it is still a FIXED / RECURRING row",
+  computeBudgetLayout(computeBudget(stateAU, "2026-12-01"), []).sectionItems.bill.map((r) => r.key).sort(), ["gro", "rent"]);
+eq("the singular and plural forms", [categoryLabelOf("bill", { variable: true }), categoryLabelOf("bill", { variable: true, plural: true })],
+  ["Variable bill", "Variable bills"]);
 
 // ---------- Scenario AM: groupByDay (the Ledger's calendar cells) ----------
 console.log("\n== Scenario AM: groupByDay ==");

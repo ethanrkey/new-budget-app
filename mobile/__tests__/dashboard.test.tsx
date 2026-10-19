@@ -376,3 +376,26 @@ describe("after a new account is added", () => {
     });
   });
 });
+
+// "AS OF" IS A CLAIM ABOUT A MOMENT; A CONTRIBUTION IS AN EVENT.
+// The two forms are the same component with copy overrides, and the
+// date field meant different things in each: a logged balance holds
+// good AS OF a date, and money you put in simply happened ON one.
+test("logging a balance asks 'As of'; logging a contribution asks 'On'", async () => {
+  mockLoaded.state = fixture([]);
+  await mount();
+  const user = userEvent.setup();
+
+  await user.press(screen.getByLabelText("Log a balance for Ally Savings"));
+  expect(await screen.findByText("As of")).toBeOnTheScreen();
+  expect(screen.queryByText("On")).toBeNull();
+  // The date control says the same thing to VoiceOver as it does on
+  // screen — it was hard-coded separately from the label.
+  expect(screen.getByLabelText(/^As of .*Change the date\.$/)).toBeOnTheScreen();
+  await user.press(screen.getByLabelText("Cancel"));
+
+  await user.press(screen.getByLabelText("Log contribution"));
+  expect(await screen.findByText("On")).toBeOnTheScreen();
+  expect(screen.queryByText("As of")).toBeNull();
+  expect(screen.getByLabelText(/^On .*Change the date\.$/)).toBeOnTheScreen();
+});

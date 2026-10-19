@@ -93,3 +93,38 @@ test("every total row carries the rule, so the block has no gaps in it", async (
     expect(styleOf(rowCell(label)).borderTopWidth).toBe(2);
   }
 });
+
+// TWO ITEMS WITH THE SAME NAME ARE TWO ROWS, and the grid is where the
+// difference has to be visible: a one-off Discover Bill in November and
+// a monthly one from January are both called "Discover Bill", and until
+// 2026-10-19 the rows were keyed by that name, so each printed the
+// other's figures. Reported from a phone with these exact numbers.
+test("a one-off and a bill sharing a name print their own figures", async () => {
+  mockLoaded.state = normalize({
+    accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 4000, balanceAsOf: "2026-11-01", order: 0 }],
+    settings: { budgetHorizon: "2027-02-01", ledgerHorizon: "2027-02-01" },
+    trackerCategories: [],
+    recurring: [
+      { id: "disc-rule", name: "Discover Bill", amount: 680, category: "bill", cadence: "monthly", dayOfMonth: 8, startDate: "2027-01-08", order: 1 },
+      // So that no row's own figure can be mistaken for a column total.
+      { id: "rent", name: "Rent", amount: 1450, category: "bill", cadence: "monthly", dayOfMonth: 1, startDate: "2026-11-01", order: 2 },
+    ],
+    oneoffs: [{ id: "disc-once", name: "Discover Bill", amount: 375, category: "oneoff", date: "2026-11-02", order: 0 }],
+  });
+  await mount();
+
+  // Two rows, under their own section headings.
+  expect(screen.getAllByText("Discover Bill")).toHaveLength(2);
+
+  // The one-off is $375 in November and blank after; the rule is blank
+  // until January. The grid prints nothing in a zero cell, so each
+  // figure appears exactly as many times as it is true — and when the
+  // rows were keyed by name, BOTH of them read the same single entry,
+  // which put $375.00 on screen twice and $680.00 four times.
+  expect(screen.getAllByText("$375.00")).toHaveLength(1);
+  expect(screen.getAllByText("$680.00")).toHaveLength(2);  // Jan and Feb, once each
+  // The totals never doubled, which is what made this look like a
+  // rendering fault rather than an arithmetic one. November owes Rent
+  // plus the one-off and nothing else.
+  expect(screen.getAllByText("$1,825.00")).toHaveLength(1);
+});

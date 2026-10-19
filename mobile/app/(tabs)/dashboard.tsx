@@ -32,7 +32,7 @@ import { primaryAccount, todayISO } from "../../../src/engine/model.ts";
 import { accountColor, roleOfTrackerCategory, roleSuffix, LOAN_COLOR, DEGRADED_SOLID } from "../../../src/engine/palette.ts";
 import type { BalanceSnapshot, TrackerCategory } from "../../../src/engine/types.ts";
 import { fmtDate } from "../../../src/shared/dates.ts";
-import { LOG_BALANCE_TITLE } from "../../../src/content/logBalance.ts";
+import { LOG_BALANCE_TITLE, DATE_LABEL } from "../../../src/content/logBalance.ts";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -333,6 +333,9 @@ export default function DashboardScreen() {
         <LogBalance
           title={`Log a contribution to ${cats.find((c) => c.id === contributing)?.name ?? ""}`}
           cta="Log contribution"
+          // A contribution HAPPENED on a day; it is not a reading that
+          // holds good as of one. See DATE_LABEL.
+          dateLabel={DATE_LABEL.contribution}
           busy={saving}
           onClose={() => setContributing(null)}
           onSubmit={async (amount, date) => {

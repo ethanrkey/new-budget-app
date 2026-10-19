@@ -35,9 +35,6 @@ type Cell = {
   /** A heavy rule above this row — what separates the totals block
    *  from the rows it totals. */
   rule?: boolean;
-  /** The item this row stands for, when there is exactly one. Totals and
-   *  section summaries have none and stay inert. */
-  itemName?: string;
 };
 
 export default function BudgetScreen() {
@@ -69,25 +66,28 @@ export default function BudgetScreen() {
     out.push({ key: "start", label: "Starting point", values: (c) => c.startingPoint });
     out.push({ key: "take", label: "Take-home", values: (c) => c.takeHome, tone: T.income });
     out.push({ key: "checking", label: "Checking", values: (c) => c.tdChecking, tone: T.income });
-    for (const n of layout.otherIncomeNames) {
-      out.push({ key: `oi-${n}`, label: n, values: (c) => c.otherInItems[n]?.val ?? 0, tone: T.income });
+    // KEYED BY THE ITEM'S ID, labeled by its name. Both were the name,
+    // so two items sharing one were a single row drawn twice, each
+    // printing whichever figure the lookup found. See budgetLayout.ts.
+    for (const r of layout.otherIncome) {
+      out.push({ key: `oi-${r.key}`, label: r.name, values: (c) => c.otherInItems[r.key]?.val ?? 0, tone: T.income });
     }
     out.push({ key: "totalIn", label: "TOTAL IN", values: (c) => c.totalIn, tone: T.income, bold: true, fill: T.tintIn, rule: true });
 
     for (const sec of BUDGET_SECTIONS) {
-      const names = sec.key === "saving" ? layout.savingGroups.flat() : layout.sectionItems[sec.key];
-      if (names.length === 0) continue;
+      const rows = sec.key === "saving" ? layout.savingGroups.flat() : layout.sectionItems[sec.key];
+      if (rows.length === 0) continue;
       out.push({ section: sec.label });
-      for (const n of names) {
-        const catId = layout.nameCat[n];
+      for (const r of rows) {
+        const catId = layout.rowCat[r.key];
         // Red is money GONE. A transfer to savings, a contribution or a
         // loan payment leaves the account without being spent, so it
         // prints plain — the same rule the web uses, from the same engine
         // function so the two cannot drift.
         const retained = isRetainedOutflow(roleOfCategory(catId, cats));
         out.push({
-          key: `e-${n}`, label: n, itemName: n,
-          values: (c) => Math.abs(c.expenseItems[n]?.val ?? 0),
+          key: `e-${r.key}`, label: r.name,
+          values: (c) => Math.abs(c.expenseItems[r.key]?.val ?? 0),
           ...(retained ? {} : { tone: T.expense }),
         });
       }

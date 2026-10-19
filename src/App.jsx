@@ -10,7 +10,7 @@ import { getSession, onAuthChange, signOut, takeInvoluntarySignOut } from "./aut
 import { getDeviceTheme, setDeviceTheme } from "./theme.js";
 import { computeLedger, computeBudget, rowsHiddenByAnchor } from "./engine/compute.ts";
 import {
-  upsertItem, deleteItem, deleteItems, findItem, itemsByName, swapOrder, reorderList,
+  upsertItem, deleteItem, deleteItems, findItem, swapOrder, reorderList,
   setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
@@ -132,17 +132,18 @@ export default function App() {
 
   // Open the edit form for a ledger row id ("<itemId>@<date>") or a bare
   // item id. The DATE half is kept: it is what lets the form offer "this
-  // date" as a scope. A bare id (the Budget's row names) has no occurrence,
+  // date" as a scope. A bare id (a Budget row's key) has no occurrence,
   // so that form edits the rule, which is the only thing it could mean.
+  //
+  // THE BUDGET USES THIS ONE NOW. It had its own, which looked the row
+  // up by the name on it and gave up when two items shared one — so
+  // clicking either of two bills called "Discover Bill" did nothing at
+  // all. The rows carry ids since 2026-10-19 and there is nothing left
+  // to guess.
   function editById(id) {
     const [itemId, date] = id.split("@");
     const it = findItem(state, itemId);
     if (it) { setEditing(it); setEditingDate(date ?? null); }
-  }
-  // open the edit form from a Budget row name — only when it maps to exactly one item
-  function editByName(name) {
-    const matches = itemsByName(state, name);
-    if (matches.length === 1) { setEditing(matches[0]); setEditingDate(null); }
   }
 
   // ---- Per-occurrence overrides ----
@@ -154,11 +155,11 @@ export default function App() {
     setState((s) => clearOverride(s, ruleId, date));
     closeForm();
   }
-  function reorderNames(nameA, nameB) {
-    setState((s) => swapOrder(s, nameA, nameB));
+  function reorderRows(idA, idB) {
+    setState((s) => swapOrder(s, idA, idB));
   }
-  function reorderDrop(names, name, beforeName) {
-    setState((s) => reorderList(s, names, name, beforeName));
+  function reorderDrop(ids, id, beforeId) {
+    setState((s) => reorderList(s, ids, id, beforeId));
   }
   // Tracker category (savings/debt/investment) CRUD — deleting one never
   // touches items still tagged with it (see mutate.ts's addCategory et al.).
@@ -644,8 +645,8 @@ export default function App() {
             trackerCategories={state.trackerCategories}
             isDark={isDark}
             accountName={account.name}
-            onEditName={editByName}
-            onReorder={reorderNames}
+            onEditRow={editById}
+            onReorder={reorderRows}
             onReorderDrop={reorderDrop}
             onOpenOnboarding={() => setShowOnboarding(true)}
           />

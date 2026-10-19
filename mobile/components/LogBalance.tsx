@@ -7,7 +7,7 @@ import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
 import { FIELD_TEXT } from "../lib/fields";
 import { todayISO } from "../../src/engine/model.ts";
-import { HIDDEN_ROWS_COPY as HIDDEN, DISCARD_BALANCE } from "../../src/content/logBalance.ts";
+import { HIDDEN_ROWS_COPY as HIDDEN, DISCARD_BALANCE, DATE_LABEL } from "../../src/content/logBalance.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
 
 // The first write surface on the phone, and the right one to be first:
@@ -22,9 +22,14 @@ export type HiddenRow = { id: string; name: string; date: string; amount: number
 
 export default function LogBalance({
   title, currentLabel, cta, warn, busy, onSubmit, onClose, hiddenRows,
+  dateLabel = DATE_LABEL.balance,
 }: {
   title: string; currentLabel?: string; cta: string; warn?: boolean;
   busy: boolean; onSubmit: (amount: number, date: string) => void; onClose: () => void;
+  /** What the date field is called. "As of" for a reading; "On" for a
+   *  contribution, which is an event and not a statement about a
+   *  moment. See DATE_LABEL. */
+  dateLabel?: string;
   /** Rows that would drop off the Ledger if the anchor moved to this
    *  date. Only the checking balance passes it — a tracked account's
    *  reading does not move the forecast's starting point. */
@@ -124,12 +129,12 @@ export default function LogBalance({
             autoFocus
           />
 
-          <Text style={styles.label}>As of</Text>
+          <Text style={styles.label}>{dateLabel}</Text>
           <Pressable
             style={styles.field}
             onPress={() => setPicking(true)}
             accessibilityRole="button"
-            accessibilityLabel={`As of ${fmtDate(date)}. Change the date.`}
+            accessibilityLabel={`${dateLabel} ${fmtDate(date)}. Change the date.`}
           >
             <Text style={{ color: T.text, fontSize: 16 }}>{fmtDate(date)}</Text>
           </Pressable>

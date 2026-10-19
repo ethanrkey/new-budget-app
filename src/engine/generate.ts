@@ -105,6 +105,11 @@ function makeEvent(
   const overridden = override !== undefined;
   return {
     id: src.id + "@" + date,
+    // The item itself, beside the composite id. Every caller that wanted
+    // it was splitting the string on "@" (mobile/lib/edit.ts still does,
+    // for the date half); the Budget grid needs it as a map key, where a
+    // parse per row per column is not the shape to reach for.
+    srcId: src.id,
     name: src.name,
     amount: Math.abs(overridden ? override : src.amount),
     direction: dir,
@@ -117,6 +122,10 @@ function makeEvent(
     // somehow reached `oneoffs` with a cadence on it would otherwise
     // be counted as income you can rely on. See BudgetEvent.recurring.
     recurring,
+    // Only a recurring bill can carry the flag, so a one-off is
+    // always false. Coerced rather than passed through, because the
+    // event type promises a boolean to everything that labels a row.
+    variable: "variable" in src ? !!src.variable : false,
     date,
   };
 }

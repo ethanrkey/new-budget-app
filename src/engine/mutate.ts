@@ -148,27 +148,25 @@ export function findItem(state: BudgetState, id: string): BudgetItem | null {
 }
 
 // All items that carry exactly this name (used to edit from a Budget row).
-export function itemsByName(state: BudgetState, name: string): BudgetItem[] {
-  return [...state.recurring, ...state.oneoffs].filter((it) => it.name === name);
-}
-
 function nextOrder(state: BudgetState): number {
   const all = [...state.recurring, ...state.oneoffs];
   return all.reduce((m, x) => Math.max(m, x.order ?? 0), -1) + 1;
 }
 
-// Swap the `order` of every item named nameA with every item named nameB —
-// used by the Budget's manual up/down reordering (names are 1:1 with an item
-// in normal use).
-export function swapOrder(state: BudgetState, nameA: string, nameB: string): BudgetState {
-  const orderOf = (name: string) =>
-    (state.recurring.find((it) => it.name === name) ||
-      state.oneoffs.find((it) => it.name === name))?.order ?? 0;
-  const orderA = orderOf(nameA);
-  const orderB = orderOf(nameB);
+// Swap the `order` of two items — the Budget's manual up/down reordering.
+//
+// BY ID, since 2026-10-19. It took two NAMES, and moved every item
+// carrying either of them: with two bills both called "Discover Bill",
+// nudging one of them up re-ordered both, and the pair could never be
+// separated. The Budget's rows are keyed by id now (see budgetLayout.ts)
+// and this takes the same keys the row list hands out.
+export function swapOrder(state: BudgetState, idA: string, idB: string): BudgetState {
+  const orderOf = (id: string) => findItem(state, id)?.order ?? 0;
+  const orderA = orderOf(idA);
+  const orderB = orderOf(idB);
   const swap = (it: any) => {
-    if (it.name === nameA) return { ...it, order: orderB };
-    if (it.name === nameB) return { ...it, order: orderA };
+    if (it.id === idA) return { ...it, order: orderB };
+    if (it.id === idB) return { ...it, order: orderA };
     return it;
   };
   return {
@@ -178,19 +176,19 @@ export function swapOrder(state: BudgetState, nameA: string, nameB: string): Bud
   };
 }
 
-// Move the item named `name` to sit immediately before the item named
-// `beforeName` (or to the end of the group, if `beforeName` is null),
-// renumbering `order` sequentially across exactly this list of names — used
-// by drag-and-drop. `names` must be the full ordered list of the group being
-// reordered within (a section, or a Saving/Debt category cluster) so the
-// drag never crosses into a different group.
-export function reorderList(state: BudgetState, names: string[], name: string, beforeName: string | null): BudgetState {
-  const rest = names.filter((n) => n !== name);
-  const insertAt = beforeName ? rest.indexOf(beforeName) : rest.length;
-  const next = insertAt < 0 ? [...rest, name] : [...rest.slice(0, insertAt), name, ...rest.slice(insertAt)];
+// Move item `id` to sit immediately before item `beforeId` (or to the end
+// of the group, if `beforeId` is null), renumbering `order` sequentially
+// across exactly this list of ids — used by drag-and-drop. `ids` must be
+// the full ordered list of the group being reordered within (a section, or
+// a Saving/Debt category cluster) so the drag never crosses into a
+// different group. Ids rather than names, for swapOrder's reason.
+export function reorderList(state: BudgetState, ids: string[], id: string, beforeId: string | null): BudgetState {
+  const rest = ids.filter((x) => x !== id);
+  const insertAt = beforeId ? rest.indexOf(beforeId) : rest.length;
+  const next = insertAt < 0 ? [...rest, id] : [...rest.slice(0, insertAt), id, ...rest.slice(insertAt)];
 
-  const orderOf = new Map(next.map((n, i) => [n, i]));
-  const patch = (it: any) => (orderOf.has(it.name) ? { ...it, order: orderOf.get(it.name) } : it);
+  const orderOf = new Map(next.map((x, i) => [x, i]));
+  const patch = (it: any) => (orderOf.has(it.id) ? { ...it, order: orderOf.get(it.id) } : it);
   return {
     ...state,
     recurring: state.recurring.map(patch),

@@ -1,8 +1,8 @@
 // ---- CSV export: pure string builders, no DOM/File APIs here ----
 // (those live in the component that triggers the actual download)
-import { CATEGORIES } from "./model.ts";
+import { categoryLabelOf } from "./model.ts";
 import { computeBudgetLayout, BUDGET_SECTIONS } from "./budgetLayout.ts";
-import type { BudgetColumn, CategoryRef, Ledger, TrackerCategory } from "./types.ts";
+import type { BudgetColumn, Ledger, TrackerCategory } from "./types.ts";
 
 function csvCell(v: unknown): string {
   const s = v === null || v === undefined ? "" : String(v);
@@ -13,11 +13,6 @@ function csvRow(cells: unknown[]): string {
 }
 function fmt(n: number | null | undefined): string {
   return n || n === 0 ? Number(n).toFixed(2) : "";
-}
-
-function categoryLabel(cat: CategoryRef, trackerCategories: TrackerCategory[]): string {
-  if (CATEGORIES[cat]) return CATEGORIES[cat].label;
-  return trackerCategories.find((c) => c.id === cat)?.name ?? cat;
 }
 
 // Every ledger row, one per line: date, item, category, in/out, running
@@ -35,7 +30,10 @@ export function ledgerToCSV(ledger: Ledger, trackerCategories: TrackerCategory[]
     lines.push(csvRow([
       r.date,
       r.name,
-      categoryLabel(r.category, cats),
+      // A bill the user flagged as varying exports as "Variable bill",
+      // not "Fixed bill" — the Category column is the one place a
+      // spreadsheet can see what kind of number the amount is.
+      categoryLabelOf(r.category, { variable: r.variable }, cats),
       r.direction === "in" ? fmt(r.amount) : "",
       r.direction === "out" ? fmt(r.amount) : "",
       fmt(r.balance),
@@ -60,7 +58,9 @@ export function budgetToCSV(budget: BudgetColumn[], trackerCategories: TrackerCa
   // A FIXED label, not the account's name: parseBudgetCSV() keys the
   // starting-balance row off it. It accepts the legacy "TD checking" too.
   row("Checking", (c) => c.tdChecking);
-  for (const name of layout.otherIncomeNames) row(name, (c) => c.otherInItems?.[name]?.val || 0);
+  // Keyed by id, labeled by name: two rows legitimately share a label
+  // (see budgetLayout.ts), and the lookup must not.
+  for (const r of layout.otherIncome) row(r.name, (c) => c.otherInItems?.[r.key]?.val || 0);
   row("TOTAL IN", (c) => c.totalIn);
 
   // Straight through BUDGET_SECTIONS, which IS the display order. This
@@ -68,7 +68,7 @@ export function budgetToCSV(budget: BudgetColumn[], trackerCategories: TrackerCa
   // comment promising to match the screen.
   for (const section of BUDGET_SECTIONS) {
     lines.push(csvRow([section.label]));
-    for (const name of layout.sectionItems[section.key]) row(name, (c) => c.expenseItems[name]?.val || 0);
+    for (const r of layout.sectionItems[section.key]) row(r.name, (c) => c.expenseItems[r.key]?.val || 0);
   }
 
   row("TOTAL OUT", (c) => c.totalOut);

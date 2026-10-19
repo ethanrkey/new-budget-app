@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { todayISO, primaryAccount, ledgerHorizonOf } from "../engine/model.ts";
+import { categoryLabelOf, todayISO, primaryAccount, ledgerHorizonOf } from "../engine/model.ts";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, cellAmountFull, netAmountFull,
 } from "../engine/calendar.ts";
@@ -92,9 +92,11 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
   // THE DOT MEANS "something happened here" AND NOTHING ELSE — one
   // marker, secondary-text gray, since the cell's room went to the
   // balance. Identity lives in the detail panel, in words.
-  const catName = (categoryId) =>
-    trackerCategories.find((c) => c.id === categoryId)?.name ??
-    ({ income: "Income", bill: "Fixed bill", oneoff: "One-off" }[categoryId] ?? "Uncategorized");
+  // The engine's own mapping, not a copy of it — there were four, and a
+  // bill flagged "this bill varies" has to read "Variable bill" in all
+  // of them. `row` carries that flag (see BudgetEvent.variable).
+  const catName = (row) =>
+    categoryLabelOf(row.category, { variable: row.variable }, trackerCategories);
 
   const first = months[0] ?? monthKey;
   const last = months[months.length - 1] ?? monthKey;
@@ -303,7 +305,7 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
                 <span className="flex items-baseline gap-2 min-w-0">
                   <span className="truncate text-gray-700 dark:text-gray-300">{r.name}</span>
                   {r.overridden && <span className="text-xs text-gray-400 shrink-0">· edited</span>}
-                  <span className="text-xs text-gray-400 shrink-0">{catName(r.category)}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{catName(r)}</span>
                 </span>
                 <span className={`shrink-0 tabular-nums ${r.direction === "in" ? "text-income" : "text-expense"}`}>
                   {r.direction === "in" ? "+" : "−"}{money(r.amount)}

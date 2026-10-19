@@ -47,13 +47,30 @@ export const BUDGET_SECTIONS: ReadonlyArray<{ key: SectionKey; label: string }> 
  */
 export const LEGACY_SAVING_SECTION_LABEL = "SAVING / DEBT";
 
+/**
+ * One row of the grid: which item it is, and what to print for it.
+ *
+ * IT USED TO BE A BARE NAME, everywhere — the row list, the drag
+ * groups, the reorder calls, the map key into each column. Two items
+ * may share a name, and then they shared a row: a one-off "Discover
+ * Bill" and a monthly "Discover Bill" were listed twice and printed
+ * the same figures both times. The key is the item's id now and the
+ * name is only ever a label.
+ */
+export interface BudgetRow {
+  /** The item's id. Unique; what every column is keyed by. */
+  key: string;
+  /** What to print. May be shared with another row, legitimately. */
+  name: string;
+}
+
 export interface BudgetLayout {
-  otherIncomeNames: string[];
-  sectionItems: Record<SectionKey, string[]>;
+  otherIncome: BudgetRow[];
+  sectionItems: Record<SectionKey, BudgetRow[]>;
   /** sectionItems.saving, split into one array per tracker category. */
-  savingGroups: string[][];
-  nameCat: Record<string, CategoryRef>;
-  nameOrder: Record<string, number>;
+  savingGroups: BudgetRow[][];
+  rowCat: Record<string, CategoryRef>;
+  rowOrder: Record<string, number>;
 }
 
 // Which section a category belongs to. "bill" and "oneoff" are the only
@@ -68,9 +85,9 @@ function sectionFor(category: CategoryRef): SectionKey {
 
 // From computeBudget()'s output plus the user's own trackerCategories list
 // (for cluster order — see savingGroups below), work out:
-// - otherIncomeNames: one-time income rows, in manual order (recurring
+// - otherIncome: one-time income rows, in manual order (recurring
 //   income is the take-home row — see computeBudget)
-// - sectionItems: { bill, saving, oneoff } -> names in display order
+// - sectionItems: { bill, saving, oneoff } -> rows in display order
 // - savingGroups: sectionItems.saving split into one array per tracker
 //   category, in the user's own category order (the investing/saving/debt
 //   section clusters by
@@ -78,34 +95,38 @@ function sectionFor(category: CategoryRef): SectionKey {
 //   cluster, and reordering never crosses a cluster boundary). An orphaned
 //   category (deleted, or absent for any reason) gets its own trailing
 //   "Uncategorized" cluster rather than being dropped.
-// - nameCat / nameOrder: name -> its category / manual order, for callers
-//   that need to know which reorder group a name belongs to
+// - rowCat / rowOrder: item id -> its category / manual order, for callers
+//   that need to know which reorder group a row belongs to
 export function computeBudgetLayout(
   budget: BudgetColumn[],
   trackerCategories: TrackerCategory[] = []
 ): BudgetLayout {
-  const sectionItems = { bill: [], saving: [], oneoff: [] } as Record<SectionKey, string[]>;
-  const otherIncomeNames: string[] = [];
-  const nameCat: Record<string, CategoryRef> = {};
-  const nameOrder: Record<string, number> = {};
+  const sectionItems = { bill: [], saving: [], oneoff: [] } as Record<SectionKey, BudgetRow[]>;
+  const otherIncome: BudgetRow[] = [];
+  const rowCat: Record<string, CategoryRef> = {};
+  const rowOrder: Record<string, number> = {};
 
+  // A row exists if any month has it; `seen` is what keeps one item from
+  // being listed once per column it appears in. By id — the thing that
+  // used to be a name check, and so used to fold two items together.
+  const seen = new Set<string>();
   for (const col of budget) {
-    for (const [name, obj] of Object.entries(col.expenseItems)) {
+    for (const [id, obj] of Object.entries(col.expenseItems)) {
       const secKey = sectionFor(obj.category);
-      if (!sectionItems[secKey].includes(name)) sectionItems[secKey].push(name);
-      nameCat[name] = obj.category;
-      nameOrder[name] = obj.order ?? 0;
+      if (!seen.has(id)) { seen.add(id); sectionItems[secKey].push({ key: id, name: obj.name }); }
+      rowCat[id] = obj.category;
+      rowOrder[id] = obj.order ?? 0;
     }
-    for (const [name, obj] of Object.entries(col.otherInItems || {})) {
-      if (!otherIncomeNames.includes(name)) otherIncomeNames.push(name);
-      nameOrder[name] = obj.order ?? 0;
+    for (const [id, obj] of Object.entries(col.otherInItems || {})) {
+      if (!seen.has(id)) { seen.add(id); otherIncome.push({ key: id, name: obj.name }); }
+      rowOrder[id] = obj.order ?? 0;
     }
   }
 
-  // `?? 0` only where the compiler cannot see that every name was just
-  // written into nameOrder above — the runtime result is unchanged.
-  const ord = (n: string) => nameOrder[n] ?? 0;
-  otherIncomeNames.sort((a, b) => ord(a) - ord(b));
+  // `?? 0` only where the compiler cannot see that every id was just
+  // written into rowOrder above — the runtime result is unchanged.
+  const ord = (r: BudgetRow) => rowOrder[r.key] ?? 0;
+  otherIncome.sort((a, b) => ord(a) - ord(b));
   sectionItems.bill.sort((a, b) => ord(a) - ord(b));
   sectionItems.oneoff.sort((a, b) => ord(a) - ord(b));
 
@@ -119,12 +140,12 @@ export function computeBudgetLayout(
     return i < 0 ? catOrder.length : i; // unknown/orphaned categories cluster last, together
   };
   sectionItems.saving.sort((a, b) => {
-    const catDiff = clusterIndex(nameCat[a]) - clusterIndex(nameCat[b]);
+    const catDiff = clusterIndex(rowCat[a.key]) - clusterIndex(rowCat[b.key]);
     return catDiff !== 0 ? catDiff : ord(a) - ord(b);
   });
-  const savingGroups: string[][] = [...catOrder, null] // null = the trailing orphaned-category cluster
-    .map((cat) => sectionItems.saving.filter((n) => (cat === null ? clusterIndex(nameCat[n]) === catOrder.length : nameCat[n] === cat)))
+  const savingGroups: BudgetRow[][] = [...catOrder, null] // null = the trailing orphaned-category cluster
+    .map((cat) => sectionItems.saving.filter((r) => (cat === null ? clusterIndex(rowCat[r.key]) === catOrder.length : rowCat[r.key] === cat)))
     .filter((g) => g.length > 0);
 
-  return { otherIncomeNames, sectionItems, savingGroups, nameCat, nameOrder };
+  return { otherIncome, sectionItems, savingGroups, rowCat, rowOrder };
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { todayISO } from "../engine/model.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
-import { HIDDEN_ROWS_COPY as HIDDEN } from "../content/logBalance.ts";
+import { HIDDEN_ROWS_COPY as HIDDEN, DATE_LABEL } from "../content/logBalance.ts";
 import { fmtDate } from "../shared/dates.ts";
 
 const money = (n) =>
@@ -29,7 +29,7 @@ const money = (n) =>
 // Also used, with copy overrides, to log a contribution — it is already
 // exactly amount + date + Confirm, and a near-identical second modal would
 // be two places to fix every future change to this interaction.
-export default function UpdateBalanceModal({ account, onConfirm, onClose, title, blurb, amountLabel, cta, hiddenRows }) {
+export default function UpdateBalanceModal({ account, onConfirm, onClose, title, blurb, amountLabel, cta, hiddenRows, dateLabel }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayISO());
   // The rows about to disappear, once Confirm has been pressed and
@@ -117,7 +117,9 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
             />
           </div>
           <div>
-            <label className={label}>As of</label>
+            {/* "As of" for a reading, "On" for a contribution — the
+                phone's distinction, from the same constant. */}
+            <label className={label}>{dateLabel ?? DATE_LABEL.balance}</label>
             <input className={field} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </div>

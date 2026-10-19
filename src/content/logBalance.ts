@@ -64,6 +64,25 @@ export const DISCARD_CONTRIBUTION = {
 export const LOG_BALANCE_TITLE = (account: string) =>
   `Log the current balance of ${account}`;
 
+/**
+ * What the date field on these sheets is called.
+ *
+ * TWO DIFFERENT QUESTIONS THROUGH ONE FORM. Logging a balance asks
+ * "as of" — the reading is a statement about an account at a moment,
+ * and the date says which moment it describes. A contribution is not
+ * a statement about a moment: it is a thing that happened, and the
+ * date is simply when. "As of" over it reads as though the money
+ * might have been put in earlier and only counted from then.
+ *
+ * Same form, because amount + date + a button twice over is two
+ * places to fix everything — so the word is a prop with a default,
+ * and it lives here where both clients read it.
+ */
+export const DATE_LABEL = {
+  balance: "As of",
+  contribution: "On",
+} as const;
+
 export const HIDDEN_ROWS_COPY = {
   title: "This will hide rows already in your ledger",
   /** "3 rows dated before Oct 14 will drop off:" */

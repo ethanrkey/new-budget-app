@@ -1,6 +1,6 @@
 // ---- Compute everything the UI shows, from events + starting balance ----
 import { buildEvents } from "./generate.ts";
-import { CATEGORIES, endOfMonthISO, primaryAccount, toISODate } from "./model.ts";
+import { CATEGORIES, categoryLabelOf, endOfMonthISO, primaryAccount, toISODate } from "./model.ts";
 import { roleOfCategory } from "./palette.ts";
 import type {
   BudgetColumn, BudgetState, DayGroup, ISODate, Ledger, LedgerRow, MonthKey, SpendingMix, SpendingSlice,
@@ -108,6 +108,18 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
     // again, and a one-time payment is not, whatever either is called.
     // It also cannot be gotten wrong by typing — the cadence is picked
     // from a list.
+    //
+    // WHAT A ROW IS KEYED BY, since 2026-10-19: the item's id, with the
+    // name carried alongside as a label.
+    //
+    // It was keyed by the name, and a name is not an identity. A $375
+    // one-off "Discover Bill" and a $680 monthly "Discover Bill" are
+    // two rules, and they collapsed into one entry per month — so the
+    // layout listed the name once under ONE-OFF and once under FIXED,
+    // both rows read the same single entry, and each month printed the
+    // same figure twice. The totals were right the whole time, which is
+    // what made it look like a display fault rather than a data one: it
+    // was. Reported from a phone, true on the web for the same reason.
     for (const e of events) {
       const key = e.date.slice(0, 7);
       if (!byMonth[key]) continue;
@@ -123,15 +135,19 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
           // A repayment from a friend, a rebate, a bonus: real money in,
           // and not a thing to plan next month around.
           b.otherIn += e.amount;
-          b.otherItems[e.name] = {
-            val: (b.otherItems[e.name]?.val || 0) + e.amount,
+          b.otherItems[e.srcId] = {
+            name: e.name,
+            val: (b.otherItems[e.srcId]?.val || 0) + e.amount,
             order: e.order,
           };
         }
         continue;
       }
-      b.items[e.name] = {
-        val: (b.items[e.name]?.val || 0) - e.amount,
+      // Still SUMMED per key, because one rule can fire more than once in
+      // a month — a biweekly bill is two occurrences and one row.
+      b.items[e.srcId] = {
+        name: e.name,
+        val: (b.items[e.srcId]?.val || 0) - e.amount,
         category: e.category,
         order: e.order,
       };
@@ -146,12 +162,12 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
       const takeHome = b.takeHome;
       const otherIn = round(b.otherIn);
       // Income was split as it arrived; `items` holds the expenses alone,
-      // still aggregated by name and still stored signed-negative.
+      // keyed by item id and stored signed-negative.
       let out = 0;
       const expenseItems: Record<string, any> = {};
-      for (const [name, obj] of Object.entries(b.items) as Array<[string, any]>) {
+      for (const [id, obj] of Object.entries(b.items) as Array<[string, any]>) {
         out += -obj.val;
-        expenseItems[name] = { val: -obj.val, category: obj.category, order: obj.order };
+        expenseItems[id] = { name: obj.name, val: -obj.val, category: obj.category, order: obj.order };
       }
 
       const startingPoint = idx === 0 ? 0 : prevCumulative;
@@ -249,7 +265,7 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
 
   const describe = (categoryId: string): Pick<SpendingSlice, "label" | "bucket" | "role" | "hue"> => {
     const role = roleOfCategory(categoryId, cats);
-    if (categoryId === "bill") return { label: "Fixed bills", bucket: "bill", role };
+    if (categoryId === "bill") return { label: categoryLabelOf("bill", { plural: true }), bucket: "bill", role };
     if (categoryId === "oneoff") return { label: "One-off", bucket: "oneoff", role };
     const cat = cats.find((c) => c.id === categoryId);
     if (!cat) return { label: "Uncategorized", bucket: "uncategorized", role };
@@ -259,15 +275,26 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
     return { label: cat.name, bucket: "category", role, hue: cat.hue ?? null };
   };
 
-  // The transactions inside one bucket, biggest first, same-named ones
-  // summed — three months of "Rent" is one slice, not three.
-  const itemsOf = (categoryId: string): [string, number][] => {
-    const byItem = new Map<string, number>();
+  /** One broken-out transaction: who it is, what to call it, what it cost. */
+  type MixItem = { id: string; name: string; amount: number; variable: boolean };
+
+  // The transactions inside one bucket, biggest first, each RULE summed —
+  // three months of "Rent" is one slice, not three.
+  //
+  // Summed by item id rather than by name, since 2026-10-19, for the
+  // reason computeBudget is: two rules can share a name, and merging
+  // them made one slice that belonged to neither. It also makes the
+  // label below answerable — "this bill varies" is a property of a
+  // rule, and a merged pair can have one of each.
+  const itemsOf = (categoryId: string): MixItem[] => {
+    const byItem = new Map<string, MixItem>();
     for (const e of events) {
       if (e.direction !== "out" || e.category !== categoryId) continue;
-      byItem.set(e.name, round((byItem.get(e.name) ?? 0) + e.amount));
+      const at = byItem.get(e.srcId);
+      if (at) at.amount = round(at.amount + e.amount);
+      else byItem.set(e.srcId, { id: e.srcId, name: e.name, amount: round(e.amount), variable: e.variable });
     }
-    return [...byItem.entries()].sort((a, b) => b[1] - a[1]);
+    return [...byItem.values()].sort((a, b) => b.amount - a.amount);
   };
 
   const total = round([...totals.values()].reduce((s, v) => s + v, 0));
@@ -279,15 +306,19 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
     const fixed = d.bucket === "bill" || d.bucket === "oneoff" ? d.bucket : null;
     const items = fixed ? itemsOf(key) : [];
     if (fixed && items.length > 0) {
-      items.forEach(([name, amt]) => slices.push({
-        key: `${key}::${name}`,
-        label: name,
-        amount: amt,
+      items.forEach((it) => slices.push({
+        key: `${key}::${it.id}`,
+        label: it.name,
+        amount: it.amount,
         percent: 0,
         bucket: "item",
         role: d.role,
         parentBucket: fixed,
-        parentLabel: d.label,
+        // THE ITEM'S OWN LABEL, not the bucket's. A bill the user has
+        // marked as varying reads "Groceries · Variable bills" — the
+        // bucket is still `bill` and the arithmetic is untouched, but
+        // the word beside it now agrees with what they told the form.
+        parentLabel: categoryLabelOf(key, { plural: true, variable: it.variable }, cats),
       }));
       continue;
     }

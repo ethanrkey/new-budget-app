@@ -1143,6 +1143,72 @@ const MUTATIONS = [
    "components/CalendarView.tsx",
    "                <Text style={styles.bal} numberOfLines={1}>\n                  {cellAmountCompact(c.logged)}\n                </Text>",
    "                <><Text style={styles.bal} numberOfLines={1}>{cellAmountCompact(c.logged)}</Text><Text style={styles.bal}>logged</Text></>"],
+
+  // ---- the 2026-10-19 batch: row identity, variable bills, the loan bar ----
+
+  // 1. a Budget row is an item, not a name.
+  ["the Budget keys its rows by name again", "../src/engine/compute.ts",
+   "      b.items[e.srcId] = {\n        name: e.name,\n        val: (b.items[e.srcId]?.val || 0) - e.amount,",
+   "      b.items[e.name] = {\n        name: e.name,\n        val: (b.items[e.name]?.val || 0) - e.amount,"],
+  ["one-time income is keyed by name again", "../src/engine/compute.ts",
+   "          b.otherItems[e.srcId] = {\n            name: e.name,",
+   "          b.otherItems[e.name] = {\n            name: e.name,"],
+  ["a row loses the label it is printed with", "../src/engine/compute.ts",
+   "        expenseItems[id] = { name: obj.name, val: -obj.val,",
+   "        expenseItems[id] = { name: id, val: -obj.val,"],
+  ["every occurrence becomes its own row", "../src/engine/generate.ts",
+   "    srcId: src.id,", '    srcId: src.id + "@" + date,'],
+  ["the layout dedupes rows by name again", "../src/engine/budgetLayout.ts",
+   "      if (!seen.has(id)) { seen.add(id); sectionItems[secKey].push({ key: id, name: obj.name }); }",
+   "      if (!seen.has(obj.name)) { seen.add(obj.name); sectionItems[secKey].push({ key: id, name: obj.name }); }"],
+  ["the phone looks a row's figures up by its label", "app/(tabs)/budget.tsx",
+   "          values: (c) => Math.abs(c.expenseItems[r.key]?.val ?? 0),",
+   "          values: (c) => Math.abs(c.expenseItems[r.name]?.val ?? 0),"],
+  ["the phone prints the row's key instead of its name", "app/(tabs)/budget.tsx",
+   "          key: `e-${r.key}`, label: r.name,", "          key: `e-${r.key}`, label: r.key,"],
+  ["reordering moves every item sharing a name", "../src/engine/mutate.ts",
+   "  const patch = (it: any) => (orderOf.has(it.id) ? { ...it, order: orderOf.get(it.id) } : it);",
+   "  const patch = (it: any) => (orderOf.has(it.name) ? { ...it, order: orderOf.get(it.name) } : it);"],
+  ["the up/down arrows swap by name again", "../src/engine/mutate.ts",
+   "    if (it.id === idA) return { ...it, order: orderB };\n    if (it.id === idB) return { ...it, order: orderA };",
+   "    if (it.name === idA) return { ...it, order: orderB };\n    if (it.name === idB) return { ...it, order: orderA };"],
+
+  // 2. a bill that varies is called one.
+  ["the varies flag never reaches the event", "../src/engine/generate.ts",
+   '    variable: "variable" in src ? !!src.variable : false,', "    variable: false,"],
+  ["a bill that varies is labeled fixed anyway", "../src/engine/model.ts",
+   '    const kind = opts.variable ? "Variable bill" : "Fixed bill";',
+   '    const kind = "Fixed bill";'],
+  ["the label never pluralizes", "../src/engine/model.ts",
+   '    return opts.plural ? kind + "s" : kind;', "    return kind;"],
+  ["the CSV stops asking whether the bill varies", "../src/engine/csv.ts",
+   "      categoryLabelOf(r.category, { variable: r.variable }, cats),",
+   "      categoryLabelOf(r.category, {}, cats),"],
+  ["the spending mix labels every bill the bucket's way", "../src/engine/compute.ts",
+   "        parentLabel: categoryLabelOf(key, { plural: true, variable: it.variable }, cats),",
+   "        parentLabel: d.label,"],
+  ["the mix merges two rules that share a name", "../src/engine/compute.ts",
+   "      const at = byItem.get(e.srcId);", "      const at = byItem.get(e.name);"],
+
+  // 3. the contribution form's date field.
+  ["a contribution is logged as of a date rather than on one",
+   "../src/content/logBalance.ts", '  contribution: "On",', '  contribution: "As of",'],
+  ["the date label is hard-coded back onto the sheet", "components/LogBalance.tsx",
+   "          <Text style={styles.label}>{dateLabel}</Text>",
+   '          <Text style={styles.label}>As of</Text>'],
+  ["the date control tells a screen reader something else than the label says",
+   "components/LogBalance.tsx",
+   "            accessibilityLabel={`${dateLabel} ${fmtDate(date)}. Change the date.`}",
+   "            accessibilityLabel={`As of ${fmtDate(date)}. Change the date.`}"],
+  ["the contribution sheet stops asking for its own label", "app/(tabs)/dashboard.tsx",
+   "          dateLabel={DATE_LABEL.contribution}", "          dateLabel={DATE_LABEL.balance}"],
+
+  // 4. the loan bar cannot rise for owing more.
+  ["a new high-water balance raises the paid-off bar", "../src/engine/loans.ts",
+   "  const bestOwed = peakAt < 0 ? null : Math.min(...amounts.slice(peakAt));",
+   "  const bestOwed = amounts.length ? Math.min(...amounts) : null;"],
+  ["the bar measures from the FIRST time it hit the peak", "../src/engine/loans.ts",
+   "  const peakAt = amounts.lastIndexOf(peak);", "  const peakAt = amounts.indexOf(peak);"],
 ];
 
 const killedBy = new Map();
