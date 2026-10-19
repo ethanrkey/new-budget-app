@@ -85,7 +85,7 @@ function Chevron({ open }) {
 
 // Identity never rests on color alone, and with one hue it cannot: the
 // label carries it. An item slice names the bucket it came out of inline,
-// so "Rent" reads as "Rent · Fixed bills" rather than passing as a
+// so "Rent" reads as "Rent · Fixed bill" rather than passing as a
 // category of its own.
 function SliceLabel({ d }) {
   return (

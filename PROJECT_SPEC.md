@@ -686,6 +686,32 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 9, 2026-10-19, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  from `mobile/` before publishing; unchanged, no native code touched.
+  Update group `3d93b8fd-e80e-48d0-b0dd-94175e804bd8`, iOS update
+  `01a1541e`, commit `e85e03e`.
+
+  Four fixes, all reported from a phone. A Budget row is keyed by the
+  item rather than by its display name, so a one-off and a bill
+  sharing one stop printing each other's figures — and, found with
+  it, the up/down arrows and the drag no longer move every item
+  carrying that name, and clicking either row on the web opens the
+  right one. A bill flagged "this bill varies" reads **Variable
+  bill** wherever its category is shown. "Log a contribution" asks
+  **On** rather than **As of**, on both clients. The loan bar
+  measures from the lowest balance logged since the peak, so a new
+  high-water mark reads 0% and climbs from there instead of rising
+  for owing more.
+
+  Amended the same day: the Ledger's planned-spending rows said
+  "Variable bills" / "Fixed bills" where each row is one item —
+  singular now, on the owner's call. See §11.
+
+  **OTA UPDATES 6, 7 and 8 were published and never written down
+  here.** Recorded as a gap rather than reconstructed from memory:
+  what they contained is in the git log between OTA 5 and this one.
+
 - **OTA UPDATE 5, 2026-10-17** — the web calendar compacted (see the
   Ledger section) and **every form on the phone moved into a UIKit
   page sheet.** Fingerprint unchanged; `presentationStyle` and
@@ -2124,7 +2150,7 @@ fifth tab never needs a migration.
   each mode — light steps on the dark card, dark steps on the white one —
   which is why the two arrays run in opposite directions. Item slices are
   no longer tints of anything, so the color rule applies at its strictest:
-  every item slice carries its parent's name inline ("Rent · Fixed bills")
+  every item slice carries its parent's name inline ("Rent · Fixed bill")
   in the legend, the bars and the tooltip, because that label is now the
   only thing distinguishing it.
 
@@ -4478,6 +4504,49 @@ the web does not need because its wizard is always one click away.
 
 ## 11. Decision log (why things are the way they are)
 
+- **THE TAB BAR FLOATS OVER THE CONTENT, SO THE CONTENT HAS TO END
+  ABOVE IT** (2026-10-19). `mobile/lib/tabInset.ts` exports
+  `useTabScrollInset()`, and every one of the four tabs pads its
+  scroll content with it. `NativeTabs` is a real
+  `UITabBarController`; on iOS 26 its bar is Liquid Glass, which
+  recolors itself against what scrolls underneath and therefore
+  requires the content to pass underneath. That is right while
+  scrolling and wrong at rest: at full scroll the last row stops under
+  the bar and nothing can move it out. Reported on the Ledger's
+  calendar, where what was stuck under the glass was the bottom edge
+  of the selected-day card.
+
+  THE NUMBER COMES FROM THE SCREEN, not from a table of phones.
+  expo-router wraps each tab's content in its own `SafeAreaProvider`
+  (`native-tabs/NativeTabsView.ios`), so `useSafeAreaInsets().bottom`
+  INSIDE a tab is the bar plus the home indicator rather than the
+  window's home indicator alone. `components/Chrome.tsx` sits outside
+  the tabs host and so still reads the window, which is what its
+  `insets.top` wants.
+
+  ONE MECHANISM, DELIBERATELY. react-native-screens also tries to
+  solve this: `RNSScrollViewHelper` finds the first scroll view in the
+  first descendant chain of a tab screen and flips its
+  `contentInsetAdjustmentBehavior` from `never` to `automatic`. It is
+  turned off — `disableAutomaticContentInsets` on every trigger in
+  `app/(tabs)/_layout.tsx` — because two mechanisms for one inset
+  agree only by luck: a screen the finder reaches would get the space
+  twice and a screen it misses would get it once, and no JavaScript
+  can see which happened. Off, every tab is padded from one place and
+  a test can read the number.
+
+  The four hand-picked numbers this replaced were 40 (Spending), 36
+  (Dashboard), 28 (Ledger), 28 (the calendar's own, nested, ScrollView)
+  and nothing at all on the Budget — whose last row is CUMULATIVE NET.
+  The calendar now adds none of its own: it is nested inside the
+  Ledger's list, which is the surface that actually scrolls, and a
+  second number there is the one nobody remembers to update.
+
+  THE SHEETS ARE NOT AFFECTED and were checked: Settings, About,
+  Categories, Export, Setup, the transaction form and the balance log
+  all present inside a `Modal` (`NativeSheet` is `pageSheet`), which
+  covers the tab bar, and all already clear the home indicator.
+
 - **A BUDGET ROW IS AN ITEM, NOT A NAME** (2026-10-19). `expenseItems`
   and `otherInItems` are keyed by the item's id and carry `name` as a
   label; `computeBudgetLayout` returns `{ key, name }` rows; `swapOrder`
@@ -4498,13 +4567,23 @@ the web does not need because its wizard is always one click away.
   in `model.ts` is the only place a category's display label is
   produced; `BudgetEvent.variable` carries the flag so a renderer never
   has to go back to the item. A bill the user has marked "this bill
-  varies" reads "Variable bill" / "Variable bills" in the Ledger's
-  spending mix, the ledger CSV's Category column, both calendars and
-  the web's quick-entry list. Labeling only — same category, same
-  section, same arithmetic. There were four copies of that mapping
-  before this (CATEGORIES, the CSV exporter's, and one hard-coded
-  object in each client's calendar), which is four places for the two
-  clients to disagree.
+  varies" reads "Variable bill" in the Ledger's spending mix, the
+  ledger CSV's Category column, both calendars and the web's
+  quick-entry list. Labeling only — same category, same section, same
+  arithmetic. There were four copies of that mapping before this
+  (CATEGORIES, the CSV exporter's, and one hard-coded object in each
+  client's calendar), which is four places for the two clients to
+  disagree.
+
+  SINGULAR WHEREVER ONE ITEM SHOWS ITS CATEGORY (2026-10-19, same
+  day, on the owner's call). The planned-spending rows shipped as
+  "Groceries · Variable bills", and a plural beside a single row
+  reads as a claim about a group it is not making. `plural: true`
+  now has exactly one caller left: the whole-bucket slice in
+  `describe()`, which is a group — and which no input can currently
+  reach, because every bill and one-off bucket always breaks out
+  into its items. The option is kept, not deleted, so the fallback
+  cannot silently start calling a bucket by a row's name.
 - **"As of" is a claim about a moment; a contribution happened ON a
   day** (2026-10-19). `DATE_LABEL` in `content/logBalance.ts`; the
   shared amount-and-date form takes it as a prop defaulting to "As of",

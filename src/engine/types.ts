@@ -369,7 +369,9 @@ export interface SpendingSlice {
    *  off that bucket's own neutral rather than a shared one. */
   parentBucket?: "bill" | "oneoff";
   /** `item` slices only: the bucket they were broken out of, named so the
-   *  slice can say "Rent · Fixed bills" rather than passing as a category. */
+   *  slice can say "Rent · Fixed bill" rather than passing as a category.
+   *  SINGULAR — a slice is one item, and the plural was reading as a
+   *  claim about a group. */
   parentLabel?: string;
   /** `other` slices only: the slices folded into it, in the order they
    *  would have had, each with its percent OF THE WINDOW.

@@ -13,6 +13,7 @@ import ScopeSheet from "../../components/ScopeSheet";
 import TransactionSheet, { type SheetMode } from "../../components/TransactionSheet";
 import FirstRun from "../../components/FirstRun";
 import { T, money } from "../../lib/theme";
+import { useTabScrollInset } from "../../lib/tabInset";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
 import { ledgerHorizonOf } from "../../../src/engine/model.ts";
 import { showFirstRun } from "../../lib/firstRun";
@@ -34,6 +35,11 @@ export default function LedgerScreen() {
   // opens it (AnchorStrip) is on every tab. Step one of the guide
   // reaches the same modal rather than drawing a second one.
   const { logChecking } = useChrome();
+  // Both lists on this tab end under the floating tab bar without it.
+  // The calendar is where it was reported — the selected-day card is
+  // the last thing on the page and its bottom edge sat under the
+  // glass at full scroll. See lib/tabInset.ts.
+  const tabInset = useTabScrollInset();
   const [horizon, setHorizon] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [calendar, setCalendar] = useState(false);
@@ -239,6 +245,7 @@ export default function LedgerScreen() {
           sections={[{ title: "", data: [0] }]}
           keyExtractor={() => "cal"}
           ListHeaderComponent={header}
+          contentContainerStyle={{ paddingBottom: tabInset }}
           renderSectionHeader={() => null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
           renderItem={() => (
@@ -251,7 +258,7 @@ export default function LedgerScreen() {
           keyExtractor={(r) => r.id}
           stickySectionHeadersEnabled
           ListHeaderComponent={header}
-          contentContainerStyle={styles.listPad}
+          contentContainerStyle={{ paddingBottom: tabInset }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
           renderSectionHeader={({ section }) => <Text style={styles.month}>{section.title}</Text>}
           renderItem={({ item }) => (
@@ -359,7 +366,6 @@ const styles = StyleSheet.create({
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 },
   endingLine: { color: T.faint, fontSize: 12, paddingHorizontal: 16, paddingBottom: 10 },
   endingValue: { color: T.dim, fontVariant: ["tabular-nums"] },
-  listPad: { paddingBottom: 28 },
   month: { backgroundColor: T.bg, color: T.brass, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, paddingHorizontal: 16, paddingVertical: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 16, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.border },
   day: { color: T.faint, width: 22, fontVariant: ["tabular-nums"] },

@@ -34,10 +34,13 @@ export const CATEGORIES: Readonly<Record<string, FixedCategoryMeta>> = {
  * object in each client's calendar — and a fifth would have been a
  * fifth place for the two clients to disagree.
  *
- * `plural` is for a heading over a group of them ("Rent · Fixed
- * bills"); singular is one row's own category. Only the bill labels
- * have a plural anybody shows — "One-off" is already what the group of
- * them is called — so it is the only one the flag touches.
+ * `plural` IS FOR A LABEL THAT COVERS A GROUP, and nothing else.
+ * Anywhere a single item shows its own category — a planned-spending
+ * row, a CSV line, a day in the calendar — it is singular: "Rent ·
+ * Fixed bill". It shipped plural on those rows and read as a claim
+ * about a group that was not there. Only the bill labels have a
+ * plural anybody shows — "One-off" is already what the group of them
+ * is called — so it is the only one the flag touches.
  */
 export function categoryLabelOf(
   category: string,

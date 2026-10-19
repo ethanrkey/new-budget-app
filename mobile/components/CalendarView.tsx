@@ -103,8 +103,13 @@ export default function CalendarView({
     setPicked(`${next}-01`);
   }
 
+  // NO BOTTOM PADDING OF ITS OWN. This ScrollView is nested inside the
+  // Ledger's list, which is the surface that actually scrolls and
+  // which owns the inset clearing the floating tab bar. A second
+  // number here would be the one that is wrong on a phone nobody has
+  // tried yet.
   return (
-    <ScrollView contentContainerStyle={styles.pad}>
+    <ScrollView>
       <View style={styles.monthBar}>
         <Pressable onPress={() => !atFirst && goMonth(-1)} hitSlop={12}
           accessibilityRole="button" accessibilityLabel="Previous month">
@@ -253,7 +258,6 @@ function ariaFor(c: CalendarDay): string {
 }
 
 const styles = StyleSheet.create({
-  pad: { paddingBottom: 28 },
   monthBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 10 },
   monthName: { color: T.text, fontSize: 16, fontWeight: "700" },
   arrow: { color: T.brass, fontSize: 28, paddingHorizontal: 10 },

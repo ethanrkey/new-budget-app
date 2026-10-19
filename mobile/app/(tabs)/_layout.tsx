@@ -35,6 +35,14 @@ import * as feel from "../../lib/haptics";
 // circle, which reads as a DIFFERENT icon rather than a selected one —
 // worse than no fill. Those two are marked by the tint alone, which is
 // what iOS does by default anyway.
+//
+// EVERY TRIGGER TURNS OFF AUTOMATIC CONTENT INSETS, and the tabs pad
+// their own scroll content instead — `lib/tabInset.ts`, which is
+// where the reasoning is. The short version: react-native-screens
+// quietly flips the first scroll view it can find in each tab to
+// `contentInsetAdjustmentBehavior = automatic`, which is one answer
+// for the screens it finds and no answer for the ones it does not,
+// and nothing in JavaScript can see which happened.
 export default function TabLayout() {
   return (
     <NativeTabs
@@ -47,7 +55,7 @@ export default function TabLayout() {
       backgroundColor={T.surface}
       blurEffect="systemChromeMaterialDark"
     >
-      <NativeTabs.Trigger name="index">
+      <NativeTabs.Trigger name="index" disableAutomaticContentInsets>
         <NativeTabs.Trigger.Label>Ledger</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="list.bullet" />
       </NativeTabs.Trigger>
@@ -55,17 +63,17 @@ export default function TabLayout() {
       {/* The pie is gone from this app, so a pie icon for the tab that
           no longer has one would be a small lie. A rising line is what
           the Dashboard actually shows. */}
-      <NativeTabs.Trigger name="dashboard">
+      <NativeTabs.Trigger name="dashboard" disableAutomaticContentInsets>
         <NativeTabs.Trigger.Label>Dashboard</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="chart.line.uptrend.xyaxis" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="budget">
+      <NativeTabs.Trigger name="budget" disableAutomaticContentInsets>
         <NativeTabs.Trigger.Label>Budget</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "tablecells", selected: "tablecells.fill" }} />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="spending">
+      <NativeTabs.Trigger name="spending" disableAutomaticContentInsets>
         <NativeTabs.Trigger.Label>Spending</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
       </NativeTabs.Trigger>

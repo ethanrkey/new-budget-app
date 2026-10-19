@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useBudget } from "../../components/StateProvider";
 import { T, money } from "../../lib/theme";
+import { useTabScrollInset } from "../../lib/tabInset";
 import { computeBudget } from "../../../src/engine/compute.ts";
 import { BUDGET_SECTIONS, computeBudgetLayout } from "../../../src/engine/budgetLayout.ts";
 import { roleOfCategory, isRetainedOutflow } from "../../../src/engine/palette.ts";
@@ -39,6 +40,10 @@ type Cell = {
 
 export default function BudgetScreen() {
   const { state, pullToRefresh, refreshing } = useBudget();
+  // The grid ran all the way to the bottom edge, so CUMULATIVE NET —
+  // the last row and the one the screen exists for — was the row
+  // under the bar. See lib/tabInset.ts.
+  const tabInset = useTabScrollInset();
   // THE BUDGET IS READ-ONLY ON THE PHONE, decided 2026-10-13 after
   // fat-fingering into the transaction editor while scrolling.
   //
@@ -109,6 +114,7 @@ export default function BudgetScreen() {
     <>
     <ScrollView
       style={styles.wrap}
+      contentContainerStyle={{ paddingBottom: tabInset }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
     >
       {/* Said once, and now it says the opposite of what it used to.

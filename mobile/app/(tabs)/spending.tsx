@@ -5,6 +5,7 @@ import {
 import { useBudget } from "../../components/StateProvider";
 import { T, money } from "../../lib/theme";
 import { FIELD_TEXT } from "../../lib/fields";
+import { useTabScrollInset } from "../../lib/tabInset";
 import {
   computeMonthVariance, lastMonthKeys, activeMonthKeys, fixedSoFar,
 } from "../../../src/engine/progress.ts";
@@ -30,13 +31,16 @@ const monthLabel = (key: string) => {
 
 export default function SpendingScreen() {
   const { state, pullToRefresh, refreshing, commit, online } = useBudget();
+  // The floating tab bar sits over the bottom of this list — see
+  // lib/tabInset.ts.
+  const tabInset = useTabScrollInset();
   const items = state!.recurring.filter((r) => r.variable);
   const months = lastMonthKeys(todayISO(), 6);
 
   return (
     <ScrollView
       style={styles.wrap}
-      contentContainerStyle={styles.pad}
+      contentContainerStyle={[styles.pad, { paddingBottom: tabInset }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
     >
       <Text style={styles.intro}>
@@ -178,7 +182,8 @@ function MonthRow({
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: T.bg },
-  pad: { padding: 16, paddingBottom: 40, gap: 14 },
+  // paddingBottom is supplied per-render from useTabScrollInset.
+  pad: { padding: 16, gap: 14 },
   intro: { color: T.faint, fontSize: 12, lineHeight: 17 },
   empty: { color: T.faint, fontSize: 14, lineHeight: 20, textAlign: "center", marginTop: 32 },
   card: { backgroundColor: T.surface, borderRadius: 14, borderWidth: 1, borderColor: T.border, padding: 14, gap: 2 },

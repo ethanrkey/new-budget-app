@@ -315,10 +315,17 @@ export function computeSpendingByCategory(state: BudgetState, horizonISO: ISODat
         role: d.role,
         parentBucket: fixed,
         // THE ITEM'S OWN LABEL, not the bucket's. A bill the user has
-        // marked as varying reads "Groceries · Variable bills" — the
+        // marked as varying reads "Groceries · Variable bill" — the
         // bucket is still `bill` and the arithmetic is untouched, but
         // the word beside it now agrees with what they told the form.
-        parentLabel: categoryLabelOf(key, { plural: true, variable: it.variable }, cats),
+        //
+        // SINGULAR, because this row is ONE item. The plural reads as
+        // a claim about a group, and the only group label left is the
+        // whole-bucket slice in `describe()` — which, as it happens,
+        // no input reaches, since a bill or one-off bucket always
+        // breaks out into its items. It keeps the plural anyway, so
+        // the fallback cannot start calling a bucket by a row's name.
+        parentLabel: categoryLabelOf(key, { variable: it.variable }, cats),
       }));
       continue;
     }

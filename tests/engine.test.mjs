@@ -1724,8 +1724,10 @@ check("the one-off is its own transaction", byKey(mixAL)["oneoff::trip"], 300);
 eq("...and is still labeled with its name", mixAL.slices.find((s) => s.key === "bill::rent").label, "Rent");
 // A BILL THAT VARIES SAYS SO. Groceries carries `variable: true`; Rent
 // does not, and they sit in the same bucket.
-eq("a flagged bill is a Variable bill", mixAL.slices.find((s) => s.key === "bill::gro").parentLabel, "Variable bills");
-eq("an unflagged one in the same bucket is still Fixed", mixAL.slices.find((s) => s.key === "bill::rent").parentLabel, "Fixed bills");
+// SINGULAR: a slice is one item, so the label beside it is about one
+// thing. The plural belongs to a label that covers a group.
+eq("a flagged bill is a Variable bill", mixAL.slices.find((s) => s.key === "bill::gro").parentLabel, "Variable bill");
+eq("an unflagged one in the same bucket is still Fixed", mixAL.slices.find((s) => s.key === "bill::rent").parentLabel, "Fixed bill");
 check("total is the sum of the slices", mixAL.total, 7500);
 eq("sorted biggest first", mixAL.slices.map((s) => s.amount), [4500, 1500, 1200, 300]);
 check("percents sum to 100", Math.round(mixAL.slices.reduce((t, s) => t + s.percent, 0)), 100);
@@ -1748,7 +1750,7 @@ const items = mixAL.slices.filter((s) => s.bucket === "item");
 eq("a slice carries no color of its own",
   [...items, rothSlice].every((s) => !("color" in s) && !("shade" in s)), true);
 eq("each names the bucket it came from, so it can't pass as a category",
-  items.map((s) => s.parentLabel).sort(), ["Fixed bills", "One-off", "Variable bills"]);
+  items.map((s) => s.parentLabel).sort(), ["Fixed bill", "One-off", "Variable bill"]);
 eq("and names that bucket's kind, so the two ramps can differ",
   [...new Set(items.map((s) => s.parentBucket))].sort(), ["bill", "oneoff"]);
 check("slices come back biggest-first, so index IS rank",

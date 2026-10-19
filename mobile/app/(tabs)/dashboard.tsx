@@ -22,6 +22,7 @@ import { contributionRuleFor } from "../../../src/engine/setup.ts";
 import { Sparkline, HBar } from "../../lib/charts";
 import HistoryList from "../../components/HistoryList";
 import { T, money } from "../../lib/theme";
+import { useTabScrollInset } from "../../lib/tabInset";
 import { supabase } from "../../lib/supabase";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -48,6 +49,9 @@ const providerNames = (p?: string[]) =>
 
 export default function DashboardScreen() {
   const { state, pullToRefresh, refreshing, commit, online, saving, prefs, setPref } = useBudget();
+  // The floating tab bar sits over the bottom of this page — see
+  // lib/tabInset.ts.
+  const tabInset = useTabScrollInset();
   // null = closed; "checking" = the account; otherwise a category id.
   const [logging, setLogging] = useState<string | null>(null);
   const { logChecking } = useChrome();
@@ -99,7 +103,7 @@ export default function DashboardScreen() {
   return (
     <ScrollView
       style={styles.wrap}
-      contentContainerStyle={styles.pad}
+      contentContainerStyle={[styles.pad, { paddingBottom: tabInset }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
     >
       {/* FOLDING AWAY HIDES THE NUMBER, which is the whole point of the
@@ -810,7 +814,8 @@ function DebtOverviewCard({
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: T.bg },
-  pad: { padding: 16, gap: 12, paddingBottom: 36 },
+  // paddingBottom is supplied per-render from useTabScrollInset.
+  pad: { padding: 16, gap: 12 },
   hero: { backgroundColor: T.surface, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: T.border, gap: 4 },
   heroHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   heroNum: { color: T.text, fontSize: 34, fontWeight: "700", fontVariant: ["tabular-nums"] },

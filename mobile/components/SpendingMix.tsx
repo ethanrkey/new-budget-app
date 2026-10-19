@@ -10,7 +10,7 @@ import { SPENDING_COPY as COPY } from "../../src/content/spending.ts";
 // The web panel, same data and same rules, different primitives.
 // Carried over verbatim because they are rules, not layout:
 //   - every slice carries its label inline (identity never rests on color)
-//   - item slices carry their parent's name ("Rent · Fixed bills")
+//   - item slices carry their parent's name ("Rent · Fixed bill")
 //   - the pie NEVER re-shapes; Other expands in the legend only
 //   - the bar expands rows in place
 //   - open replaces the Other row rather than nesting under it
