@@ -686,6 +686,26 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 10, 2026-10-19, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  from `mobile/` before publishing; unchanged. Update group
+  `b0cc4e28-806f-4550-856e-7d3961667153`, iOS update `01a154a5`,
+  commit `f90936a`.
+
+  Two things. The planned-spending rows say **Fixed bill** /
+  **Variable bill**, singular, because each row is one item — the
+  plural stays only where a label covers a group. And **no tab's
+  last row hides under the floating tab bar** any more: it was
+  reported on the calendar and it was all four tabs. See §11 for
+  both.
+
+  **PUBLISH WITH `--platform ios`.** `eas update` with no platform
+  exports `--platform=all`, and the web export fails: expo-router's
+  `NativeTabsView.web.js` imports `@radix-ui/react-tabs`, which this
+  project has never installed because the phone client is iOS only.
+  The error reads as a broken bundle rather than as a platform that
+  was never asked for.
+
 - **OTA UPDATE 9, 2026-10-19, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   from `mobile/` before publishing; unchanged, no native code touched.
@@ -704,9 +724,8 @@ written here in the same sitting** — there is no other record of it.
   high-water mark reads 0% and climbs from there instead of rising
   for owing more.
 
-  Amended the same day: the Ledger's planned-spending rows said
-  "Variable bills" / "Fixed bills" where each row is one item —
-  singular now, on the owner's call. See §11.
+  Amended the same day by OTA 10: the Ledger's planned-spending rows
+  said "Variable bills" / "Fixed bills" where each row is one item.
 
   **OTA UPDATES 6, 7 and 8 were published and never written down
   here.** Recorded as a gap rather than reconstructed from memory:
