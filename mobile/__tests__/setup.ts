@@ -235,7 +235,7 @@ jest.mock("expo-haptics", () => {
   const { haptics: h } = require("./setup");
   return {
     NotificationFeedbackType: { Success: "success", Warning: "warning", Error: "error" },
-    ImpactFeedbackStyle: { Light: "light" },
+    ImpactFeedbackStyle: { Light: "light", Medium: "medium" },
     notificationAsync: async (t: string) => { h.calls.push(t); },
     impactAsync: async (t: string) => { h.calls.push(`impact:${t}`); },
     selectionAsync: async () => { h.calls.push("selection"); },

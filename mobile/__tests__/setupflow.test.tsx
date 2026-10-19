@@ -1,4 +1,5 @@
 import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { ScrollView } from "react-native";
 import { dayPickerProps, pickerProps } from "./setup";
 import { fmtDate } from "../../src/shared/dates.ts";
 import Setup from "../components/Setup";
@@ -199,6 +200,42 @@ test("the paycheck step asks when the next payday is, and uses it", async () => 
   expect(pickerProps.current!.minimumDate).toBeInstanceOf(Date);
 });
 
+test("every step starts at its own top — Continue, Skip and Back", async () => {
+  // From a device: scroll down the bills step, tap Continue, and the
+  // next step arrives still scrolled, with its title and intro above
+  // the fold under the step counter. The scroll position belonged to
+  // the step that was scrolled; nothing handed it back.
+  //
+  // Spying on the ScrollView rather than reading an offset, because
+  // under the test renderer there is no scroll view to have an
+  // offset — what is checkable is that the component asks, on every
+  // one of the three ways a step can change, and asks for the top
+  // rather than for somewhere.
+  const scrollTo = jest.spyOn(ScrollView.prototype as never, "scrollTo");
+  try {
+    await mount();
+    await passBalance("4000");                      // Continue
+    expect(scrollTo).toHaveBeenCalledWith({ y: 0, animated: false });
+
+    scrollTo.mockClear();
+    await press("Skip");                            // Skip
+    expect(scrollTo).toHaveBeenCalledWith({ y: 0, animated: false });
+
+    scrollTo.mockClear();
+    await press("Back");                            // Back
+    expect(scrollTo).toHaveBeenCalledWith({ y: 0, animated: false });
+
+    // NOT ON EVERY RENDER, only when the step changes. Typing into a
+    // field would otherwise yank the page to the top under the
+    // finger, which is a worse bug than the one being fixed.
+    scrollTo.mockClear();
+    await userEvent.type(await screen.findByLabelText("Amount"), "100");
+    expect(scrollTo).not.toHaveBeenCalled();
+  } finally {
+    scrollTo.mockRestore();
+  }
+});
+
 test("the keyboard cannot hide a control: every field reports its focus", async () => {
   // From a device: "the payday date field is below the fold with the
   // keypad up, and nothing shows it's there. I tried to tap it,
@@ -232,7 +269,7 @@ test("the keyboard cannot hide a control: every field reports its focus", async 
   reports("Amount");                                    // rent
   // The due day is a picker row rather than a field, so like the
   // payday control it cannot take focus — it says it is a control.
-  expect(dayRow("What day of the month is your rent due\\?")).toBeOnTheScreen();
+  expect(dayRow("What day of the month is your rent/mortgage payment due\\?")).toBeOnTheScreen();
   await press("Skip");
   reports("Bill 1 name");                               // bills
   reports("Bill 1 amount");
@@ -285,8 +322,8 @@ test("the due day is picked from 1-31, and there is no way to type 50", async ()
   // Rent's label is a question now. "Due on day" beside a number box
   // was a column heading; above a row that already shows a day it
   // reads as something already answered.
-  const rent = "What day of the month is your rent due\\?";
-  expect(screen.getByText("What day of the month is your rent due?")).toBeOnTheScreen();
+  const rent = "What day of the month is your rent/mortgage payment due\\?";
+  expect(screen.getByText("What day of the month is your rent/mortgage payment due?")).toBeOnTheScreen();
   expect(screen.queryByText("Due on day")).toBeNull();
 
   // Closed until asked for.
@@ -343,7 +380,7 @@ test("a picker panel is rounded like the field above it, on all four corners", a
 
   // The day wheel, on the rent step.
   await press("Skip");
-  await userEvent.press(dayRow("What day of the month is your rent due\\?"));
+  await userEvent.press(dayRow("What day of the month is your rent/mortgage payment due\\?"));
   const wheel = flat(screen.getByTestId("day-picker-panel").props.style);
   expect(wheel.borderRadius).toBe(fieldRadius);
   expect(wheel.borderTopLeftRadius).toBeUndefined();
@@ -364,7 +401,7 @@ test("the day wheel commits on Done and on nothing else", async () => {
   await mount();
   await passBalance();
   await press("Skip");                      // income
-  const rent = "What day of the month is your rent due\\?";
+  const rent = "What day of the month is your rent/mortgage payment due\\?";
 
   // 1. The wheel moves and the row does not.
   await userEvent.press(dayRow(rent));
@@ -639,7 +676,7 @@ test("what reaches applySetup is what was on the screen", async () => {
   await press("Continue");
 
   await userEvent.type(screen.getByLabelText("Amount"), "1450");
-  await pickDay("What day of the month is your rent due\\?", 5);
+  await pickDay("What day of the month is your rent/mortgage payment due\\?", 5);
   await press("Continue");
 
   await userEvent.type(screen.getByLabelText("Bill 1 name"), "Spotify");

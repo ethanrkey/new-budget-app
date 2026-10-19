@@ -44,7 +44,12 @@ export const SETUP_COPY = {
     // counted twice; paid next Friday and every projected date is off
     // by a week.
     paydayLabel: "When's your next payday?",
-    paydayHelp: "Not the last one — the next one. If you were paid today, say today.",
+    // ONE SENTENCE, 2026-10-19. It was "Not the last one — the next
+    // one. If you were paid today, say today." The first half argued
+    // with a misreading of the label above it before anybody had
+    // made it, and the second half is the only part that answers a
+    // question somebody actually has.
+    paydayHelp: "If you were paid today, select today.",
     note: {
       web: "Have more than one income source (a second job, side income, a partner's paycheck)? Add just one here — you can add the rest afterward with Quick Entry or the + Add button.",
       mobile: "Have more than one income source (a second job, side income, a partner's paycheck)? Add just one here — you can add the rest afterward with + Add on the Ledger.",
@@ -52,16 +57,22 @@ export const SETUP_COPY = {
   },
   rent: {
     title: "What's your rent or mortgage?",
-    sub: "This becomes a recurring bill so it shows up every month without re-entering it.",
+    // SAYS HOW TO LEAVE, like the income step above it. Every step
+    // here has a Skip, and the two that name a thing not everybody
+    // pays are the two where somebody can read the question as an
+    // instruction.
+    sub: "This becomes a recurring bill so it shows up every month without re-entering it. Skip this if you don't have rent or mortgage payments.",
     // A QUESTION, not a two-word column heading. "Due on day" beside a
     // number box was the label when the box was a number box; now that
     // it is a picker with the day already in it, the row has to say
     // what the day is FOR or it reads as something already answered.
-    dayLabel: "What day of the month is your rent due?",
+    // NAMES BOTH, because the title does and the field is the one
+    // place the answer gets typed.
+    dayLabel: "What day of the month is your rent/mortgage payment due?",
   },
   bills: {
     title: "Any other monthly bills?",
-    sub: "Phone, internet, subscriptions, utilities — anything that comes due each month. Set the day each one is due, and check 'This bill varies' for ones like electric that change month to month.",
+    sub: "Phone, internet, subscriptions, utilities — anything that is a monthly cost. Set the day each one is due, and check 'This bill varies' for bills that change month to month (e.g. electric).",
     add: "+ Add another bill",
     // THE SPENDING TAB'S DOOR. A bill marked this way is `variable:
     // true`, which is what puts it on Spending where plan is compared
@@ -107,7 +118,11 @@ export const SETUP_COPY = {
   // you have, this one asks what you are doing about it, and the
   // first is worth answering even when the second is skipped.
   contributions: {
-    title: "Are you putting money in regularly?",
+    // A QUESTION ABOUT WHAT YOU WANT, not about what you already do.
+    // "Are you putting money in regularly?" asks the person to report
+    // on themselves, and the honest answer for most people on the
+    // step that offers to set it up is no.
+    title: "Want to put in money regularly?",
     sub: "Set up a transfer or payment for any of these and it will show up in your Ledger and Budget on its own. Leave anything blank to skip it.",
     // EVERY CADENCE, since 2026-10-15. This was "Payment day" and was
     // shown only for a monthly contribution; weekly and biweekly ones
@@ -267,8 +282,8 @@ export type SetupStepKey = typeof SETUP_STEPS[number];
  *
  * Same words where they are the same question — the amount and day
  * labels come from SETUP_COPY.contributions — and its own title,
- * because "Are you putting money in regularly?" over a single
- * account reads as a survey rather than as an offer.
+ * because setup's "Want to put in money regularly?" asks about all
+ * of them at once and this one is about the account just added.
  *
  * DISMISSIBLE, and the dismissal is a real button rather than an X in
  * a corner: this is an offer, and an offer with no visible way to

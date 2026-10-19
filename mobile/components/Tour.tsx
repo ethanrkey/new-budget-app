@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { T } from "../lib/theme";
+import * as feel from "../lib/haptics";
 import { TOUR_STOPS } from "../../src/content/tour.ts";
 
 // The web's guided tour, on a phone. Same four stops from
@@ -36,7 +37,12 @@ export default function Tour({ onClose }: { onClose: () => void }) {
   const stop = TOUR_STOPS[i]!;
   const last = i === TOUR_STOPS.length - 1;
 
+  // ONE PLACE FOR THE TICK, because every move between cards also
+  // changes the tab underneath — moving forward is a light bump and
+  // going back is the quietest tick there is, the same pair setup
+  // uses. See lib/haptics.ts.
   const go = (next: number) => {
+    if (next > i) feel.light(); else feel.selection();
     setI(next);
     router.replace(ROUTE[TOUR_STOPS[next]!.tab]! as never);
   };
@@ -63,7 +69,10 @@ export default function Tour({ onClose }: { onClose: () => void }) {
               </Pressable>
             )}
             <Pressable
-              onPress={() => (last ? leave() : go(i + 1))}
+              // Done is a medium bump: bigger than Next, because it
+              // ends the sequence, and smaller than setup's Finish,
+              // because four cards is not seven questions.
+              onPress={() => { if (last) { feel.medium(); leave(); } else go(i + 1); }}
               style={[styles.btn, styles.primary]}
               accessibilityRole="button"
               accessibilityLabel={last ? "Done" : "Next"}

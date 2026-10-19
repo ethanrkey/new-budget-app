@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { todayISO } from "../engine/model.ts";
 import {
   paycheckRule, rentRule, billRules, groceryRule, balanceAnswer,
@@ -73,6 +73,16 @@ export default function Onboarding({ initialBalance, onComplete }) {
   const dropAccountRow = (group, i) =>
     setAccounts((a) => ({ ...a, [group]: removeAccountRow(a[group], i) }));
   const step = STEPS[stepIndex];
+
+  // EVERY STEP STARTS AT ITS OWN TOP, same as the phone's wizard and
+  // reported there: scroll down a long step, go on, and the next one
+  // arrives already scrolled, with the question it is asking above
+  // the fold. This modal is its own scroll box (`overflow-y-auto`),
+  // so the position survives the step it belonged to unless
+  // something resets it. Not smooth-scrolled: the content underneath
+  // has already been replaced.
+  const box = useRef(null);
+  useEffect(() => { box.current?.scrollTo({ top: 0 }); }, [stepIndex]);
   // The accounts this run can ask about contributions for. Empty means
   // that step is not in the flow at all — a step listing nothing makes
   // the flow look longer than it is.
@@ -166,7 +176,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
     // explicit button, so a stray click can't leave hasSeenOnboarding unset
     // and pop this right back up on the next unrelated state change.
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800">
+      <div ref={box} className="bg-white dark:bg-gray-900 rounded-2xl p-5 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800">
         {step !== "done" && (
           <div className="flex items-center justify-between mb-4">
             <div className="flex-1 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden mr-3">

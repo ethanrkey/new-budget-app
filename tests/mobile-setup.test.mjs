@@ -22,6 +22,8 @@ import {
 import {
   dismissedBy, withDismissalBy, withoutDismissalBy, DISMISSAL_CAP,
 } from "../mobile/lib/dismissal.ts";
+import { SETUP_COPY } from "../src/content/setup.ts";
+import { TOUR_STOPS } from "../src/content/tour.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -249,6 +251,45 @@ eq("income comes straight after the balance", STEPS[1], "paycheck");
   eq("an unmeasured window does nothing",
     scrollToReveal({ y: 999, height: 48 }, { offset: 0, height: 0 }), null);
 }
+
+// ---- the words themselves (2026-10-19) ------------------------------
+// WRITTEN OUT, NOT READ BACK. Every other check here asks what the
+// flow DOES; these ask what it SAYS, and the only way for that to
+// mean anything is for the sentence to be in the test as well as in
+// the content file. Reading SETUP_COPY on both sides would pass
+// whatever it was changed to. Every one was dictated by the owner.
+console.log("\n== setup's words ==");
+eq("the payday help is one sentence, about today",
+  SETUP_COPY.paycheck.paydayHelp,
+  "If you were paid today, select today.");
+eq("...and the note about a second income is untouched beside it",
+  SETUP_COPY.paycheck.note.mobile.startsWith("Have more than one income source"), true);
+eq("the rent step says you can walk past it",
+  SETUP_COPY.rent.sub.endsWith("Skip this if you don't have rent or mortgage payments."), true);
+eq("...and its day field names the mortgage too",
+  SETUP_COPY.rent.dayLabel,
+  "What day of the month is your rent/mortgage payment due?");
+eq("the bills step says what a monthly cost is, and gives the example last",
+  SETUP_COPY.bills.sub,
+  "Phone, internet, subscriptions, utilities \u2014 anything that is a monthly cost. "
+  + "Set the day each one is due, and check 'This bill varies' for bills that change month to month (e.g. electric).");
+eq("the contributions step asks what you want, not what you do",
+  SETUP_COPY.contributions.title, "Want to put in money regularly?");
+
+console.log("\n== the tour's words ==");
+const stopFor = (tab) => TOUR_STOPS.find((t) => t.tab === tab);
+eq("the Ledger card says what the forecast is built from",
+  stopFor("ledger").body.includes(
+    "It's built from the planned transactions you've entered, so you can see a shortfall weeks before you reach it."),
+  true);
+eq("...and keeps the rest of what it said",
+  stopFor("ledger").body.endsWith("The forecast is only as accurate as what's in it."), true);
+eq("the Budget card", stopFor("budget").body,
+  "Monthly income and outflow. These are the same transactions/numbers from the Ledger. "
+  + "View where all of your money is going each month.");
+eq("the Spending card", stopFor("spending").body,
+  "For bills that move \u2014 groceries, electric \u2014 log what you actually spent and this is "
+  + "where you can compare what you had planned on spending vs what actually was spent.");
 
 // A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a
 // bad edit truncated tests/signin.test.mjs to its header on 2026-10-14

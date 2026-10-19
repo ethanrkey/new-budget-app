@@ -4523,6 +4523,57 @@ the web does not need because its wizard is always one click away.
 
 ## 11. Decision log (why things are the way they are)
 
+- **A STEP STARTS AT ITS OWN TOP** (2026-10-19). Setup resets its
+  scroll to 0 whenever the step changes — Continue, Skip and Back
+  alike (`useEffect` on the step index in `mobile/components/Setup.tsx`,
+  and a ref on the modal box in `src/components/Onboarding.jsx`).
+  Reported from a phone: scroll down the bills step, tap Continue,
+  and step 7 arrives still scrolled, its title and intro above the
+  fold under the step counter — so the question the screen is asking
+  is the one thing not on it. The scroll position belongs to the step
+  that was scrolled, and nothing was handing it back.
+
+  Not animated, because the content underneath has already been
+  replaced and an animated scroll would slide the NEW step up past
+  rows it never had. `window.current.offset` is reset beside it: the
+  phone's `reveal` reads that ref to decide how far to scroll a
+  focused field, and a stale offset sends the first field tapped on
+  the new step to the wrong place.
+
+  THE WEB HAD IT TOO and was fixed in the same commit, though only
+  the phone was reported. Its wizard is a `max-h-[90vh]
+  overflow-y-auto` modal, which is the same box with the same memory.
+
+- **A FLOW THAT IS A SEQUENCE FEELS LIKE ONE** (2026-10-19). Setup
+  and the tour are the only two places in this app where the same
+  button is pressed four to seven times running, and the last press
+  means something the others do not. Both now use the same
+  three-way split: forward is `light`, Back is `selection` (the
+  quietest tick there is, because going back undoes rather than
+  does), and the tap that ends the sequence is bigger — `success`
+  for setup's Finish, which ends seven questions, and `medium` for
+  the tour's Done and setup's "Go to my budget", which only close
+  something.
+
+  `medium` IS A SIXTH WORD in `mobile/lib/haptics.ts`, which had
+  five on purpose. The file's own rule is that a short vocabulary is
+  what stops the next feature inventing a word for itself, so the
+  reason is written next to it: with five words the only way to say
+  "this ended the sequence" was `success`, the three-part
+  notification, which is far too much for the Done button on a
+  four-card tour.
+
+  SKIP IS SILENT, on both. Continue is a step taken and Skip is a
+  step declined, and a row of buttons that all feel the same stops
+  telling you which one you hit.
+
+  THE SETUP WRITE IS COMMITTED `"none"` (`Chrome.finishSetup`) — the
+  only write in the app that is felt by the taps either side of it
+  rather than by itself. Finish buzzes on press and "Go to my
+  budget" buzzes on press; a third buzz when the write lands, half a
+  second after the second, reads as the phone stuttering. A FAILED
+  write still buzzes, because that one is news.
+
 - **THE TAB BAR FLOATS OVER THE CONTENT, SO THE CONTENT HAS TO END
   ABOVE IT** (2026-10-19). `mobile/lib/tabInset.ts` exports
   `useTabScrollInset()`, and every one of the four tabs pads its

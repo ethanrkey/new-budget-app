@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
@@ -8,6 +8,7 @@ import DatePicker from "./DatePicker";
 import DayPicker from "./DayPicker";
 import type { NativeMethods } from "react-native";
 import { T } from "../lib/theme";
+import * as feel from "../lib/haptics";
 import { FIELD_TEXT } from "../lib/fields";
 import {
   blankSetupDraft, rulesForStep, canAdvance, accountRowErrors, setupAnswers,
@@ -96,6 +97,25 @@ export default function Setup({
   const scroll = useRef<ScrollView>(null);
   const content = useRef<View>(null);
   const window = useRef({ offset: 0, height: 0 });
+
+  // EVERY STEP STARTS AT ITS OWN TOP. Reported from a phone: scroll
+  // down the bills step, tap Continue, and the next step arrives
+  // already scrolled — its title and intro above the fold, under the
+  // step counter, so the question the screen is asking is the one
+  // thing not on it. The scroll position belongs to the step that was
+  // scrolled, not to the component, and nothing was resetting it on
+  // Continue, Skip or Back.
+  //
+  // Not animated: the content underneath has already been replaced,
+  // so an animated scroll would slide the NEW step up past rows it
+  // never had. `window.current.offset` is set by hand beside it
+  // because `reveal` reads that ref to decide how far to scroll a
+  // focused field, and a stale offset there sends the first tapped
+  // field on the new step to the wrong place.
+  useEffect(() => {
+    scroll.current?.scrollTo({ y: 0, animated: false });
+    window.current.offset = 0;
+  }, [i]);
 
   const reveal = useCallback((node: Measurable | null) => {
     if (!node?.measureLayout || !content.current) return;
@@ -436,7 +456,10 @@ export default function Setup({
               {i > 0 && (
                 <Pressable
                   style={[styles.btn, styles.ghost]}
-                  onPress={() => setI(i - 1)}
+                  // The quietest tick in the vocabulary, because going
+                  // back is the one move in this flow that undoes
+                  // rather than does. See lib/haptics.ts.
+                  onPress={() => { feel.selection(); setI(i - 1); }}
                   accessibilityRole="button" accessibilityLabel="Back"
                 >
                   <Text style={styles.ghostText}>Back</Text>
@@ -456,7 +479,12 @@ export default function Setup({
               <Pressable
                 style={[styles.btn, styles.primary, !canAdvance(step, d) && styles.off]}
                 disabled={!canAdvance(step, d)}
-                onPress={() => advance(true)}
+                // A STEP FEELS DIFFERENT FROM THE LAST STEP. Every
+                // Continue is a light bump; Finish is the full
+                // success notification, because it is the tap that
+                // ends seven questions. Both sit beside a screen that
+                // visibly changes — see lib/haptics.ts.
+                onPress={() => { if (last) feel.success(); else feel.light(); advance(true); }}
                 accessibilityRole="button"
                 // The LAST step, not a named one: whether that is
                 // accounts or contributions depends on whether there
@@ -486,7 +514,11 @@ function Done({ count, busy, onGo }: { count: number; busy: boolean; onGo: () =>
       <Pressable
         style={[styles.btn, styles.primary, styles.wide, busy && styles.off]}
         disabled={busy}
-        onPress={onGo}
+        // Medium, not success: the account is written by the tap
+        // BEFORE this one (Finish), and this button's job is to put
+        // the wizard away. See lib/haptics.ts, and the `"none"` the
+        // write itself is committed with in Chrome.
+        onPress={() => { feel.medium(); onGo(); }}
         accessibilityRole="button" accessibilityLabel={COPY.done.cta}
       >
         {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.primaryText}>{COPY.done.cta}</Text>}

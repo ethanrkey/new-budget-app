@@ -81,7 +81,14 @@ export function Chrome({ session, children }: { session: Session; children: Reac
     const firstTime = !state?.settings.hasSeenTour;
     // One commit, so a half-applied setup cannot exist: the rules, the
     // anchor, the accounts and BOTH flags land together or not at all.
-    const ok = await commit((s) => markTourSeen(markSetupSeen(applySetup(s, answers))), "Setup");
+    // `"none"`: the only write in the app that is felt by the taps
+    // either side of it instead of by itself. Finish is a success
+    // notification and "Go to my budget" is a medium bump, both on
+    // press — a third buzz when the write lands, half a second
+    // after the second one, reads as the phone stuttering rather
+    // than as confirmation. A FAILED write still buzzes, because
+    // that one is news. See mobile/lib/haptics.ts.
+    const ok = await commit((s) => markTourSeen(markSetupSeen(applySetup(s, answers))), "Setup", "none");
     if (!ok) return;          // the Done screen stays up; the failure modal explains
     setPref("setupDismissedBy", withDismissalBy(prefs.setupDismissedBy, userId));
     setSetupAgain(false);

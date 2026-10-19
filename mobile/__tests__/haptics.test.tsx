@@ -81,7 +81,15 @@ test("a wrong code fails, a right one succeeds, and neither fires per keystroke"
   await waitFor(() => expect(haptics.calls).toEqual(["success"]));
 });
 
-test("one write is felt once, however many screens it took", async () => {
+// SETUP IS A SEQUENCE, AND IT FEELS LIKE ONE (2026-10-19). The write
+// itself is committed `"none"` — see Chrome — and what is felt is the
+// taps: a light bump per step, the success notification on Finish,
+// and a medium bump on the button that puts the wizard away. The
+// test this replaced asserted exactly one `success` for the whole
+// flow, which was true while the only buzz in setup came from the
+// commit; a third buzz landing half a second after the second one is
+// what that rule was guarding against, and it still cannot happen.
+test("setup is felt step by step, and the write itself is silent", async () => {
   await render(
     <StateProvider userId="u1">
       <Chrome session={session}><Text>THE APP</Text></Chrome>
@@ -100,6 +108,14 @@ test("one write is felt once, however many screens it took", async () => {
   await userEvent.press(await screen.findByLabelText("Go to my budget"));
 
   await waitFor(() => expect(mockSaved).toHaveLength(1));
-  // ONE success for one write, however many screens it took to get here.
-  expect(haptics.calls).toEqual(["success"]);
+  // SKIP IS SILENT, and the four of them in the middle are why this
+  // list is three long. Continue is a step taken and Skip is a step
+  // declined, and a flow where every button in the row feels the
+  // same is a flow that stops telling you which one you hit.
+  // Nothing is appended when the write lands.
+  expect(haptics.calls).toEqual([
+    "impact:light",    // Continue, off the balance step
+    "success",         // Finish
+    "impact:medium",   // Go to my budget
+  ]);
 });

@@ -13,17 +13,22 @@ export const TOUR_STOPS: TourStop[] = [
   {
     tab: "ledger",
     title: "This is the Ledger — your plan",
-    body: "Every transaction you expect, dated, with a running balance. It's built from the rules you just entered, so you can see a shortfall weeks before you reach it. After you finish setup, add any one-off transactions you know are coming up — and keep adding and updating them over time. The forecast is only as accurate as what's in it.",
+    // "THE PLANNED TRANSACTIONS YOU'VE ENTERED", not "the rules you
+    // just entered" (2026-10-19). The tour is reachable from About
+    // at any time, not only off the end of setup, so "just entered"
+    // is wrong for most of the times it is read — and "rules" is
+    // the engine's word for them, not the screen's.
+    body: "Every transaction you expect, dated, with a running balance. It's built from the planned transactions you've entered, so you can see a shortfall weeks before you reach it. After you finish setup, add any one-off transactions you know are coming up — and keep adding and updating them over time. The forecast is only as accurate as what's in it.",
   },
   {
     tab: "budget",
     title: "The Budget is the same plan, by month",
-    body: "Income against outflow, projected as far out as you want. Same numbers as the Ledger — one is day by day, the other month by month.",
+    body: "Monthly income and outflow. These are the same transactions/numbers from the Ledger. View where all of your money is going each month.",
   },
   {
     tab: "spending",
     title: "Spending is plan against reality",
-    body: "For bills that move — groceries, electric — log what you actually spent and this is where the two get compared.",
+    body: "For bills that move — groceries, electric — log what you actually spent and this is where you can compare what you had planned on spending vs what actually was spent.",
   },
   // SPELLED OUT, 2026-10-15, from the owner's own first run: "the
   // Dashboard's value isn't obvious right after setup". The old copy

@@ -1,4 +1,5 @@
 import { render, screen, userEvent } from "@testing-library/react-native";
+import { haptics } from "./setup";
 import { TOUR_STOPS } from "../../src/content/tour.ts";
 
 // WHERE THE TOUR PUTS YOU DOWN.
@@ -26,7 +27,7 @@ jest.mock("expo-router", () => ({
 const Tour = require("../components/Tour").default;
 const LEDGER = "/(tabs)";
 
-beforeEach(() => { routes.length = 0; });
+beforeEach(() => { routes.length = 0; haptics.calls.length = 0; });
 
 test("it opens on the Ledger and walks the stops in order", async () => {
   const onClose = jest.fn();
@@ -82,4 +83,38 @@ test("the Dashboard stop names the four things on the Dashboard", async () => {
   for (const word of ["checking", "savings", "investments", "debt"]) {
     expect(String(body.props.children).toLowerCase()).toContain(word);
   }
+});
+
+// THE TOUR IS A SEQUENCE AND IT FEELS LIKE ONE (2026-10-19), the same
+// three-way split setup uses: forward is a light bump, back is the
+// quietest tick there is, and the tap that ends it is bigger than
+// the ones that did not. Worth a test because a haptic is the one
+// thing in this app that leaves no mark on the screen — a missing
+// one looks exactly like a working one.
+test("forward, back and done each feel different", async () => {
+  await render(<Tour onClose={jest.fn()} />);
+
+  await userEvent.press(screen.getByLabelText("Next"));
+  expect(haptics.calls).toEqual(["impact:light"]);
+
+  await userEvent.press(screen.getByLabelText("Back"));
+  expect(haptics.calls).toEqual(["impact:light", "selection"]);
+
+  // Back at the first card, so it is three more Nexts to the last.
+  haptics.calls.length = 0;
+  for (const _ of TOUR_STOPS.slice(1)) await userEvent.press(screen.getByLabelText("Next"));
+  await userEvent.press(screen.getByLabelText("Done"));
+  expect(haptics.calls).toEqual([
+    ...TOUR_STOPS.slice(1).map(() => "impact:light"),
+    "impact:medium",
+  ]);
+});
+
+// Skip says nothing, on purpose. Leaving is not a step and the card
+// is gone either way; a bump there would make "I am not doing this"
+// feel like progress.
+test("Skip is silent", async () => {
+  await render(<Tour onClose={jest.fn()} />);
+  await userEvent.press(screen.getByLabelText("Skip the tour"));
+  expect(haptics.calls).toEqual([]);
 });

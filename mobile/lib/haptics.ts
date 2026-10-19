@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import * as Haptics from "expo-haptics";
 
-// The phone's five feelings, named for what they MEAN rather than for
+// The phone's six feelings, named for what they MEAN rather than for
 // what the Taptic Engine does.
 //
 // THE ONE RULE, agreed before any of this was written: NOTHING MAY BE
@@ -23,8 +23,19 @@ import * as Haptics from "expo-haptics";
 //   2. a screen asking for "success" is making a statement about what
 //      happened. A screen asking for `NotificationFeedbackType.Success`
 //      is making a decision about hardware, and decisions about
-//      hardware spread. Keeping the vocabulary to five words is what
-//      stops the next feature inventing a sixth.
+//      hardware spread. Keeping the vocabulary SHORT is what stops
+//      the next feature inventing a word for itself.
+//
+// IT WENT FROM FIVE WORDS TO SIX on 2026-10-19, and the rule above
+// is why it took a reason rather than a call site. Setup and the
+// tour are the two flows in this app that are a SEQUENCE: four to
+// seven taps on the same button, and the last tap means something
+// the others do not. With five words the only way to say "this one
+// finished the sequence" was `success`, which is the thumping
+// three-part notification and far too much for the Done button on a
+// four-card tour. `medium` is the step between `light` and
+// `success`: more than moving on, less than being finished with the
+// whole of setup.
 //
 // iOS ONLY, which is not a portability hedge: Android is never
 // shipping (decided 2026-10-09). The guard exists so the jest
@@ -72,3 +83,12 @@ export const selection = () => fire(() => Haptics.selectionAsync());
 
 /** A small bump for something that completed quietly: a refresh that actually fetched. */
 export const light = () => fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+
+/**
+ * Bigger than `light`, smaller than `success`: the end of a short
+ * sequence. The tour's Done, and "Go to my budget" on setup's last
+ * screen — both of which close something, neither of which is the
+ * moment the work landed. Setup's own Finish keeps `success`,
+ * because that is the tap that writes the account.
+ */
+export const medium = () => fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
