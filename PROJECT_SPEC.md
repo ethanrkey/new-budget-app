@@ -686,6 +686,21 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 11, 2026-10-19, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  from `mobile/` before publishing; unchanged. Update group
+  `c0c18065-4e70-4c57-9783-3c925f0e7adc`, iOS update `01a154e4`,
+  commit `ea23a3b`. Published with `--platform ios`, per the note
+  on OTA 10.
+
+  Setup and tour polish, all of it the owner's own words or his own
+  report. Five dictated sentences across the income, rent, bills and
+  contributions steps, and three tour cards. Every step now starts
+  at its own top — on the web too, which had the same defect and was
+  not reported. And both flows feel like the sequences they are:
+  forward is a light bump, Back is the quietest tick, and the tap
+  that ends it is bigger. See §11 for both.
+
 - **OTA UPDATE 10, 2026-10-19, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   from `mobile/` before publishing; unchanged. Update group
