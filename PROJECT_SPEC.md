@@ -688,7 +688,11 @@ written here in the same sitting** — there is no other record of it.
 
 - **OTA UPDATE 12, 2026-10-20, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
-  from `mobile/`; unchanged.
+  from `mobile/`; unchanged. Update group
+  `fa3c3fb8-ed1d-42d9-aa0c-217a24cf8686`, iOS update `01a15971`,
+  commit `ef1445b`. **The first update published through
+  `mobile/scripts/ota.mjs`**, which checked the clean tree, the
+  pushed HEAD and the fingerprint before running anything.
 
   The Budget's one-off section heading is **"ONE-OFF"**, not
   "ONE-OFF / SEASONAL". It was the last place in the app glossing a
