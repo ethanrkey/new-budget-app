@@ -1,0 +1,141 @@
+// Connected checking: every word of it, in one place, because this is
+// the copy where being wrong is not a typo.
+//
+// THE RULE FOR THIS FILE: every sentence here must be checkable
+// against code. "We never receive your transactions" is true because
+// the Transactions product is never requested and no endpoint that
+// returns one is reachable — see supabase/functions/_shared/plaid.ts,
+// where the endpoint list is closed. If a sentence here cannot be
+// traced to something in that file or in supabase/plaid.sql, it does
+// not belong here.
+//
+// AND THE OTHER RULE, which decides tone throughout: MANUAL ENTRY IS
+// THE PRODUCT. Connecting a bank is an optional extra. Nothing below
+// may imply that connecting is expected, recommended, better, or what
+// a serious user does. It is a convenience with a cost, described
+// plainly, and "Not now" is a complete answer.
+
+/**
+ * WHAT PLAID'S OWN SCREEN WILL SAY, and why our screen has to agree
+ * with it.
+ *
+ * Plaid does not accept `balance` in the Link products array and the
+ * array cannot be empty, so exactly one product is named purely to
+ * get Balance initialized. Plaid's Data Transparency Messaging then
+ * lists that product's data scopes on its own consent screen —
+ * BEFORE the user ever sees a bank login — and those scopes describe
+ * what Plaid may reach, not what we intend to read.
+ *
+ * With `products: ["identity"]`, Plaid's screen shows:
+ *
+ *   Account and balance info — "account name, type, description,
+ *     balances, and masked account number"
+ *   Contact info — "account owner name, email, phone, and address"
+ *
+ * With `products: ["auth"]` it adds a third:
+ *
+ *   Account and routing number — "account number and financial
+ *     institution routing numbers"
+ *
+ * THE COPY BELOW IS WRITTEN FOR `identity`, which is what
+ * _shared/plaid.ts asks for. If that constant changes, the bullet
+ * marked PLAID-SCOPES changes in the same commit. A consent screen
+ * that is out of date is worse than no consent screen: it is a
+ * promise the software is not keeping.
+ */
+export const PLAID_SCOPE_NOTE = "Plaid will have access to your account and balance info and your contact info.";
+
+export interface ConsentScreen {
+  title: string;
+  bullets: string[];
+  footer: string;
+  footerLinkText: string;
+  footerLinkUrl: string;
+  confirm: string;
+  cancel: string;
+}
+
+export const CONNECT_CONSENT: ConsentScreen = {
+  title: "Connect your bank (balance only)",
+  bullets: [
+    // What WE do. First, because it is the only part of this we
+    // control and the only part we can be held to.
+    "Key Budget only reads your checking balance. Nothing else — we never receive, see, or store your transactions.",
+    // PLAID-SCOPES. What PLAID gets, which is more than we use, and
+    // saying so is the entire point of this screen. The old draft
+    // said "Plaid only asks for your balance", which was not true:
+    // Plaid's own screen names more than that, and a user who read
+    // ours first would have thought Plaid's was the lie.
+    "Your bank connection is handled by Plaid. Plaid will have access to your account and balance info and your contact info — more than Key Budget uses. Plaid's own screen will tell you this too.",
+    "Your bank login goes to Plaid and your bank. Key Budget never sees it.",
+    "Disconnect anytime in Settings. That removes Key Budget's access right away. Balances already pulled stay in your history, the same as ones you typed.",
+    // Their rights against PLAID, which we cannot exercise for them
+    // and must therefore name. Without this the screen quietly
+    // implies that disconnecting here is the end of it.
+    "To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.",
+  ],
+  footer: "Connections are handled by Plaid.",
+  footerLinkText: "Plaid's privacy policy",
+  footerLinkUrl: "https://plaid.com/legal/#end-user-privacy-policy",
+  confirm: "Continue",
+  cancel: "Not now",
+};
+
+/**
+ * The same Plaid Portal note, beside Disconnect in Settings.
+ *
+ * Repeated rather than cross-referenced because the two are read
+ * months apart: the consent screen is read once, at the beginning,
+ * and this is read by someone who has decided to leave.
+ */
+export const DISCONNECT_NOTE =
+  "Disconnecting removes Key Budget's access right away. Balances already pulled stay in your history. To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.";
+
+export const PLAID_PORTAL_URL = "https://my.plaid.com";
+
+/**
+ * The line on the Log balance sheet while connected features are off.
+ *
+ * NOT IN SETUP, on the owner's call, and the reason generalizes: a
+ * person deciding whether to use this app at all is the wrong person
+ * to offer a bank connection to. This appears to someone who has
+ * logged a balance by hand and therefore knows what the manual path
+ * costs them.
+ *
+ * It loads no Plaid code. It is a sentence and a link to Settings.
+ */
+export const CONNECT_HINT = "Want this automatic? Turn on connected features in Settings.";
+export const CONNECT_HINT_DISMISS = "Don't show again";
+
+/**
+ * The Checking pill, exactly as dictated 2026-10-20.
+ *
+ * TEXT ONLY, NO ICON. Five states, and the thing they have in common
+ * is that the balance is in the same place and reads the same way in
+ * all of them — the connection is a detail about where the number
+ * came from, never a different kind of number.
+ */
+export const PILL = {
+  /** Not connected, which is the ordinary case and reads as one. */
+  manual: (amount: string, date: string) => `${amount} · as of ${date}`,
+  /** Connected and recently synced. */
+  synced: (amount: string, time: string) => `${amount} · synced ${time}`,
+  /** Connected, but today's number is one the user typed. Manual wins. */
+  loggedToday: (amount: string) => `${amount} · logged today`,
+  /** Connected, pulls are failing, so the last GOOD time is shown. */
+  stale: (amount: string, when: string) => `${amount} · synced ${when}`,
+  /**
+   * The bank wants the user back. Gold, because it is the one state
+   * that asks for something — and it names the action rather than
+   * the problem, since "disconnected" tells you nothing to do.
+   */
+  reconnect: (amount: string) => `${amount} · Reconnect`,
+} as const;
+
+/** The sheet behind the pill when connected. */
+export const PILL_SHEET = {
+  refresh: "Refresh now",
+  manual: "Log manually",
+  /** e.g. "Last synced 8:14 AM". */
+  lastSynced: (when: string) => `Last synced ${when}`,
+} as const;

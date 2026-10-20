@@ -29,4 +29,5 @@ export const SUITES = [
   "tests/mobile-chart.test.mjs",
   "tests/calendar.test.mjs",
   "tests/mobile-fields.test.mjs",
+  "tests/connect.test.mjs",
 ];

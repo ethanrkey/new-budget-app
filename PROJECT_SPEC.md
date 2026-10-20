@@ -2713,12 +2713,28 @@ resolve.
 
 ## 10. Roadmap
 
-### Connected checking via Plaid — BALANCE ONLY. Design agreed 2026-10-20; not built.
+### Connected checking via Plaid — BALANCE ONLY. Decided 2026-10-20.
+### Server side BUILT 2026-10-20 (schema, RLS, four edge functions). No UI yet.
 
-Opt-in, per account, off by default. The owner's brief, plus the four
-things he asked to be told before anything was chosen. **Nothing in
-this section is implemented yet.** Plaid team "Key Budget" exists;
+Opt-in, per account, off by default. Plaid team "Key Budget" exists;
 sandbox first, Trial plan being applied for (10 connections).
+
+**WHAT IS BUILT:** `supabase/plaid.sql` (six tables, the RLS, the
+collision rule as a SECURITY DEFINER function, and the purge hook)
+and four edge functions — `plaid-link-token`, `plaid-exchange`,
+`plaid-balance`, `plaid-disconnect` — plus `src/content/connect.ts`,
+which is every user-facing word of the feature. **WHAT IS NOT:** any
+UI at all. No toggle, no pill state, no consent screen rendered, no
+Link opened. Nothing in the shipped app reaches any of this, and the
+SQL has not been run against the project yet.
+
+**THE GUIDING PRINCIPLE, the owner's, 2026-10-20: TWO FIRST-CLASS
+PATHS.** Manual entry is the core product and stays complete and
+great on its own. Connecting a bank is an optional extra, described
+with the honest truth about what it involves. **Nothing may imply
+that connecting is expected, recommended or better** — there is a
+test for that, in `tests/connect.test.mjs`, which greps the whole
+copy surface for the words a sales pitch uses.
 
 **THE PRODUCT RULE THAT CONSTRAINS EVERY OTHER DECISION: checking
 only, balance only, and the Transactions product is NEVER requested.**
@@ -2734,9 +2750,20 @@ of Plaid at all. `BalanceSnapshot` grows `source` and `externalId`
 exactly as `Contribution` already has them (§4) — the precedent is
 there and the shape should not be invented twice.
 
-**THE SAME-DATE COLLISION — the manual log wins, and the pull is
-kept.** Asked for before choosing; this is the recommendation and the
-reasoning, and it is one line to reverse if the owner disagrees.
+**THE SAME-DATE COLLISION — the manual log wins.** Decided
+2026-10-20. And the implementation detail that was not obvious when
+it was being discussed as a policy: **`budget_entities` keys
+snapshots by date**, so a pull and a manual log on the same day are
+not two rows to arbitrate between — they are ONE ROW, and somebody
+has to lose. The rule therefore lives in SQL, as one statement
+(`plaid_write_balance`), so a manual log written in the same second
+cannot be lost between a read and a write.
+
+A ROW WITH NO `source` IS MANUAL — every snapshot written before this
+feature existed — so the condition is
+`coalesce(data->>'source','manual') = 'plaid'`. A tombstone also
+wins: if the user deleted that date's snapshot, a pull does not
+resurrect it.
 
 Both rows are stored and both are visible in history, each labeled
 with its source. For the forecast anchor on that date, the manual
@@ -2762,19 +2789,21 @@ measurement is better. If the owner weighs that higher, the rule
 becomes "newest by wall clock wins" and the change is confined to the
 anchor selector.
 
-**Current vs available: both stored, AVAILABLE proposed for the
-forecast.** Available already subtracts pending holds, which is
-nearer to "money this forecast can spend" than current is. While
-testing, the Checking pill shows which one it used, so the owner can
-overturn this by looking rather than by reasoning.
+**AVAILABLE is the balance, and the only one a user ever sees.**
+Decided 2026-10-20. It already nets pending holds, which is nearer to
+what the next two weeks can spend; "current" and "available" are a
+distinction banks make and people do not, and showing both invites
+the question "which one is my money". `last_current` is stored on
+`plaid_accounts`, where no UI can reach it, because the day a number
+looks wrong the first question is "wrong compared to what".
 
 **PULL TIMING.** No schedule. On app open, web and iOS, if the last
 pull is older than `BALANCE_STALE_AFTER_HOURS = 12` — one constant,
 checked PER ACCOUNT server-side, so one pull serves every device the
 owner is signed in on. Plus "Refresh now".
 
-**The proposed manual cap: 4 per account per day, with a 60-second
-debounce**, and the button saying "Refreshed just now" rather than
+**The manual cap: 4 per account per day, with a 60-second
+debounce** (decided 2026-10-20), and the button saying "Refreshed just now" rather than
 failing silently. Worst case is then 2 automatic + 4 manual = 6 calls
 per item per day, about 180 a month, which is a number worth knowing
 before a bill arrives rather than after. Both numbers are single
@@ -2787,9 +2816,91 @@ not a guess.
 **LATER, NOT NOW:** plan-aware pulls the morning after a scheduled
 paycheck or a large bill.
 
-**SECURITY.** Access tokens live only in a table with RLS and **no
-client read policy at all**, reachable only by edge functions holding
-the service role key. Never sent to a client, never logged, never in
+**WHICH PLAID PRODUCT, AND WHAT PLAID'S OWN SCREEN THEN SAYS.**
+Researched 2026-10-20 against Plaid's docs, because the consent copy
+has to match it exactly.
+
+`balance` **cannot** be in the Link `products` array — Plaid's own
+words: "the Balance product does not require explicit initialization
+and will automatically be initialized when any other product is
+initialized" — and the array must not be empty. So exactly one
+product is named purely to get Balance switched on, and no endpoint
+of that product is ever called.
+
+Plaid's Data Transparency Messaging then lists that product's data
+scopes on **Plaid's own consent screen**, before the user ever sees a
+bank login:
+
+| products | what Plaid's screen shows |
+|---|---|
+| `["identity"]` | Account and balance info · Contact info |
+| `["auth"]` (Instant Auth / Instant Match) | Account and balance info · Contact info · **Account and routing number** |
+
+Plaid's own scope descriptions: *Account and balance info* is
+"account name, type, description, balances, and masked account
+number"; *Contact info* is "account owner name, email, phone, and
+address"; *Account and routing number* is "account number and
+financial institution routing numbers".
+
+**SO THE SETUP IS `products: ["identity"]`, not `auth`.** It is a
+strict subset, and the scope it drops is the one that matters most —
+an account and routing number is what moves money. We call neither
+`/auth/get` nor `/identity/get`; the point is what the USER is shown,
+and the only honest way to shorten that list is to ask for less.
+`PRODUCTS` in `supabase/functions/_shared/plaid.ts` is one constant,
+and the bullet marked PLAID-SCOPES in `src/content/connect.ts`
+changes in the same commit if it ever moves.
+
+**THE CONSENT SCREEN'S HARDEST SENTENCE** is the second bullet, and
+the first draft of it was false: "Plaid only asks for your checking
+balance" would have made Plaid's own screen — which names contact
+info — look like the lie. It now says Plaid's access is wider than
+ours, in those words.
+
+**THE ENDPOINT LIST IS CLOSED.** `PLAID_ENDPOINTS` in
+`_shared/plaid.ts` is the only door to Plaid in this codebase, and
+`/auth/get`, `/identity/get` and `/transactions/*` are not in it. The
+claim "we never receive your transactions" is checkable rather than
+promised.
+
+**PLAID PORTAL (my.plaid.com) IS NAMED IN TWO PLACES** — the consent
+screen and beside Disconnect — because disconnecting ends OUR access
+and does not touch Plaid's copy. Plaid's own help center is explicit
+that disconnecting an app "stops future data sharing but leaves
+existing data in place". A screen that omits this quietly implies
+Disconnect is the end of it.
+
+**SECURITY. TWO LOCKS ON THE TOKEN, NOT ONE** — the owner's call
+2026-10-20, and the right one. RLS answers "can a client read this
+row". **Encryption at rest answers the question RLS cannot**: what a
+database backup, a disk image, a logged statement or a mistaken
+`select *` by something holding the service role actually contains. A
+Plaid access token is a standing credential against somebody's bank,
+and it is the one value in this project where "behind a policy" is
+not the same as "safe".
+
+So `plaid_tokens` holds **no token** — it holds a Supabase Vault
+secret id. The ciphertext is in `vault.secrets`, the key is not
+readable from SQL, and the only path back to plaintext is
+`plaid_read_token()`, a SECURITY DEFINER function revoked from
+`public`, `anon` and `authenticated`. The removal queue works the
+same way, and the ciphertext is deleted on a successful
+`/item/remove` while the row stays, so "did we actually remove this"
+keeps an answer.
+
+**WHY A FUNCTION AND NEVER A PLAIN INSERT:** Supabase logs statements
+by default, so `insert into vault.secrets (secret) values
+('access-sandbox-…')` would write the token to the logs in clear.
+`vault.create_secret()` exists to avoid exactly that, and every write
+goes through it.
+
+**STILL TO CONFIRM ON FIRST RUN:** the file is written against the
+documented `vault.decrypted_secrets (id, decrypted_secret)` and has
+not been run against the project yet. `\d vault.decrypted_secrets`
+settles it, and the three proof queries are at the foot of
+`supabase/plaid.sql`.
+
+Tokens are never sent to a client, never logged, never in
 an error message. Account deletion's purge calls `/item/remove` and
 deletes the token row. `ITEM_LOGIN_REQUIRED` and its relatives raise
 a reconnect prompt (Link update mode) rather than letting the balance
@@ -2803,6 +2914,18 @@ Functions → Secrets. Never in the repo, never in `app.json`, never in
 any `.env` that gets bundled into a client, and never pasted into a
 chat. `supabase secrets list` confirms the names without printing the
 values.
+
+**WEBHOOK FORGERY, AND THE ONE THING STILL OWED.** Hosted Link
+reports a finished session by webhook, which arrives unauthenticated.
+The handler treats the body as A TRIGGER AND NOTHING ELSE: nothing in
+it is stored, the `link_token` is looked up in `plaid_link_sessions`
+(a row only this app could have written), and the answer is then
+asked of PLAID via `/link/token/get`. Someone who guesses a
+link_token can cause us to ask Plaid a question about our own
+session; they cannot tell us the answer. **Still owed before
+production: Plaid's own `Plaid-Verification` JWT check**, which is
+the proper answer to a forgery that costs us a call. Written down
+rather than quietly skipped.
 
 **IOS CAN SHIP WITHOUT A NEW BUILD — Plaid Hosted Link, verified
 2026-10-20.** `react-native-plaid-link-sdk` is native code and needs a
@@ -2852,6 +2975,54 @@ owner submits):
 - Third-party partner disclosure: Plaid, as a service provider.
 - The App Store description and any screenshot copy that says the app
   never connects to a bank has to stop saying it.
+
+**THE PILL, EXACTLY AS DICTATED 2026-10-20.** Text only, no icon.
+Five states, and what they have in common is that the balance is in
+the same place and reads the same way in all of them — the
+connection is a detail about where the number came from, never a
+different kind of number. There is a test for that too.
+
+| state | pill |
+|---|---|
+| not connected | `$X · as of 10/17` |
+| connected, fresh | `$X · synced 8:14 AM` |
+| connected, manual log today | `$X · logged today` |
+| connected, pulls failing | `$X · synced [last good date/time]` |
+| needs reconnect | `$X · Reconnect` (gold) |
+
+Tap when connected opens a sheet: Refresh now / Log manually / last
+synced time. "Logged today" rather than "synced today" is the
+collision rule surfacing: the number on screen is the one the user
+typed, and claiming a sync would be claiming the wrong number.
+
+**OTHER DECISIONS, 2026-10-20:** one linked checking account per user
+— enforced by `plaid_items_one_per_user`, which is an INDEX and not a
+table shape, so savings or brokerage later is `drop index` and
+nothing else. Disconnect keeps every balance already pulled, as
+ordinary history. Bank name appears only in Settings (Account page on
+web, account info at the top of Settings on iOS). Beta allowlist: any
+TestFlight tester who asks, up to the ten Trial slots, added by hand
+with the insert written out at the top of `supabase/plaid.sql`.
+
+**THE ALLOWLIST IS NOT A BETA FLAG AND DOES NOT COME OFF AT LAUNCH**
+(2026-10-20). Plaid's Trial terms limit live connections to people
+the owner personally knows, so Connect stays allowlist-gated through
+the public App Store release and comes off when the plan does, not
+when the app ships. It is checked in every edge function, not only at
+the toggle: a feature gated in the UI alone is not gated. Everyone
+else sees an ordinary, complete, manual app — which is the guiding
+principle holding rather than a consolation.
+
+**WHAT NAME PLAID LINK SHOWS THE USER:** `client_name` from
+`/link/token/create`, which this app sends as **"Key Budget"** (Plaid
+substitutes "This Application" only above 30 characters). So Link
+reads correctly in sandbox today regardless of the dashboard saying
+"Individual account". **The dashboard profile is what Plaid Portal
+shows** when someone manages the connection there — and this app's
+own consent screen sends them to Plaid Portal, so leaving it as
+"Individual account" would point users at a page that does not name
+the app they are managing. Fix it in the dashboard before production;
+it is not blocking sandbox.
 
 **THE SANDBOX END-TO-END, which is the acceptance test:** toggle on →
 consent → connect → pull on open writes a snapshot → disconnect

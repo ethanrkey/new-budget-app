@@ -147,6 +147,27 @@ export interface BalanceSnapshot {
   id: string;
   date: ISODate;
   amount: number;
+  /**
+   * Where the reading came from. ABSENT MEANS MANUAL, which is every
+   * snapshot written before connected checking existed, and the
+   * reason nothing may treat `undefined` as unknown.
+   *
+   * The same pair `Contribution` already carries, deliberately: an
+   * imported reading is the same shape as a typed one, not a parallel
+   * system. The Ledger, the Calendar and the history chart read these
+   * without ever asking which is which, and that is the whole
+   * integration — there is only one kind of balance.
+   *
+   * IT DECIDES EXACTLY ONE THING: who wins when a pull and a manual
+   * log land on the same date, since snapshots are keyed by date and
+   * the two are one row. Manual wins. See `plaid_write_balance` in
+   * supabase/plaid.sql, where the rule is one statement so a log
+   * written in the same second cannot be lost between a read and a
+   * write.
+   */
+  source?: "manual" | "plaid";
+  /** The provider's own id for the account, so a re-pull can tell. */
+  externalId?: string;
 }
 
 /** Where a contribution came from. An importer writes its own source. */

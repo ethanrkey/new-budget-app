@@ -1312,6 +1312,28 @@ const MUTATIONS = [
   ["a pre-rename CSV loses every one-off, in silence", "../src/engine/csvImport.ts",
    'const ONEOFF_SECTION_HEADERS = headersFor("oneoff", LEGACY_ONEOFF_SECTION_LABEL);',
    'const ONEOFF_SECTION_HEADERS = headersFor("oneoff");'],
+  // ---- connected checking's copy (2026-10-20) ----
+  // The consent screen is the one place in this app where a wrong
+  // sentence is a broken promise rather than a typo.
+  ["the consent screen hides that Plaid gets more than we use", "../src/content/connect.ts",
+   "Plaid will have access to your account and balance info and your contact info — more than Key Budget uses. Plaid's own screen will tell you this too.",
+   "Plaid only asks for your checking balance."],
+  ["the consent screen stops naming Plaid Portal", "../src/content/connect.ts",
+   '"To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.",',
+   '"Plaid handles the connection.",'],
+  ["disconnecting stops saying the history is kept", "../src/content/connect.ts",
+   "Disconnecting removes Key Budget's access right away. Balances already pulled stay in your history. To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.",
+   "Disconnecting removes Key Budget's access right away."],
+  ["the pill claims a sync on a day the number was typed", "../src/content/connect.ts",
+   'loggedToday: (amount: string) => `${amount} · logged today`,',
+   'loggedToday: (amount: string) => `${amount} · synced today`,'],
+  ["the reconnect pill names the problem instead of the action", "../src/content/connect.ts",
+   'reconnect: (amount: string) => `${amount} · Reconnect`,',
+   'reconnect: (amount: string) => `${amount} · Disconnected`,'],
+  ["a pulled reading loses its source on the way to the database", "../src/engine/stateShape.ts",
+   "for (const s of list) byDate.set(s.date, s); // later wins, as a correction",
+   "for (const s of list) byDate.set(s.date, { id: s.id, date: s.date, amount: s.amount });"],
+
   ["the importer stops recognizing its own current heading", "../src/engine/csvImport.ts",
    'const headersFor = (key: SectionKey, ...legacy: string[]) => new Set([labelOf(key), ...legacy]);',
    'const headersFor = (key: SectionKey, ...legacy: string[]) => new Set([...legacy, ...(legacy.length ? [] : [labelOf(key)])]);'],
