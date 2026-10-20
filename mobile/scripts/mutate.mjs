@@ -117,9 +117,10 @@
 // script reported every mutation as surviving and "All 0 tests" — loudly
 // wrong, which is the only acceptable way for a verification tool to
 // break, but still wrong.
-import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { exec, execSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SUITES } from "../../scripts/suites.mjs";
 
 // Every plain-node suite, from the one list — see scripts/suites.mjs
@@ -1303,17 +1304,73 @@ const MUTATIONS = [
   ["medium is just light with another name", "lib/haptics.ts",
    "export const medium = () => fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));",
    "export const medium = () => fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));"],
+
+  // ---- the one-off section's name (2026-10-20) ----
+  ["the one-off heading glosses itself again", "../src/engine/budgetLayout.ts",
+   '{ key: "oneoff", label: "ONE-OFF" },',
+   '{ key: "oneoff", label: "ONE-OFF / SEASONAL" },'],
+  ["a pre-rename CSV loses every one-off, in silence", "../src/engine/csvImport.ts",
+   'const ONEOFF_SECTION_HEADERS = headersFor("oneoff", LEGACY_ONEOFF_SECTION_LABEL);',
+   'const ONEOFF_SECTION_HEADERS = headersFor("oneoff");'],
+  ["the importer stops recognizing its own current heading", "../src/engine/csvImport.ts",
+   'const headersFor = (key: SectionKey, ...legacy: string[]) => new Set([labelOf(key), ...legacy]);',
+   'const headersFor = (key: SectionKey, ...legacy: string[]) => new Set([...legacy, ...(legacy.length ? [] : [labelOf(key)])]);'],
 ];
 
-const killedBy = new Map();
-const survived = [];
+// ---------------------------------------------------------------
+// NOTHING ABOVE OR BELOW THIS LINE RUNS ON IMPORT.
+//
+// It used to. The whole runner was top-level code, so
+// `import("./scripts/mutate.mjs")` — typed once to check whether the
+// preflight was happy — started the full catalog, and killing it left
+// a mutated file on disk: `components/TransactionSheet.tsx` with
+// `if (false)` where a mode check had been. Caught in `git status`
+// before it was committed, which is luck, not a process.
+//
+// So: `main()` is a function, it only runs when this file IS the
+// program, and every file it writes is restored by a handler that
+// fires on the ways a run can end early.
+// ---------------------------------------------------------------
+
+// EVERY TEST RUN IS AWAITED, NOT `execSync`, and that is the whole
+// difference between a signal handler that works and one that reads
+// as if it does.
+//
+// Node runs a signal handler when the event loop next turns. The loop
+// below used to be synchronous from the first mutation to the last —
+// `execSync` all the way down — so the loop NEVER turned, and a
+// SIGINT sat queued until the entire run finished. Measured on
+// 2026-10-20: interrupt a real run and the handler did not fire at
+// all; the file was still mutated two minutes later. The handlers
+// were there. They could not run.
+//
+// `await` gives the loop somewhere to turn, so the handler fires
+// while jest is still going — and `current` is how it takes jest
+// down with it instead of orphaning a test run.
+let current = null;
+
+/**
+ * Run a command; hand back its output and whether it exited zero.
+ *
+ * BOTH, because the two callers need different halves. jest's result
+ * is read out of the text; a node harness that dies on a TypeError
+ * prints no "FAIL" line at all and is only detectable by its exit
+ * code. Every command here is already `2>&1`, so stderr is in `out`.
+ */
+function capture(cmd) {
+  return new Promise((done) => {
+    current = exec(cmd, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+      current = null;
+      done({ out: stdout || err?.stdout || "", ok: !err });
+    });
+  });
+}
 
 /** Names of the node-harness checks that FAIL right now, if any. */
-function runNodeHarness() {
+async function runNodeHarness() {
   for (const suite of NODE_SUITES) {
-    let out = "";
-    try { execSync(`node ../${suite} 2>&1`, { encoding: "utf8" }); continue; }
-    catch (e) { out = e.stdout || ""; }
+    const { out, ok } = await capture(`node ../${suite} 2>&1`);
+    if (ok) continue;
     const failed = [...out.matchAll(/^FAIL  (.+)$/gm)].map((m) => `${suite}: ${m[1].trim()}`);
     // A harness that exits non-zero without naming a check still counts
     // as a kill — silence here would read as "nothing noticed".
@@ -1323,129 +1380,255 @@ function runNodeHarness() {
   return [];
 }
 
-// PREFLIGHT: every mutation must still find its target, checked BEFORE
-// anything runs.
-//
-// A SKIP used to be one line in the middle of a hundred, and the
-// standing rule — treat a SKIP as a failure — depended on somebody
-// reading it. On 2026-10-14 eleven mutations went stale in one commit,
-// because the sign-in logic moved to src/ and the seed rule moved into
-// the engine, and the run still ended "every mutation was caught". It
-// had caught eleven fewer things than it said.
-//
-// So a moved target is fatal, and fatal up front: a run that cannot
-// break what it claims to break has nothing to report.
-const stale = MUTATIONS.filter(([, file, find]) => !readFileSync(file, "utf8").includes(find));
-if (stale.length) {
-  console.log(`${stale.length} MUTATION(S) POINT AT CODE THAT HAS MOVED — fix or drop each one:\n`);
-  for (const [label, file] of stale) console.log(`  ${label}  (${file})`);
-  console.log("\nNothing was run. A mutation that cannot break anything is not evidence.");
-  process.exit(1);
+// THE DIRTY LIST: every file this process has written, mapped to what
+// was there before it. One entry at a time in practice — a mutation
+// touches one file and is put back before the next one starts — but
+// it is a map rather than a pair of variables so that the handlers
+// below cannot restore the wrong thing, or half of two things.
+const dirty = new Map();
+
+// AND THE SAME LIST ON DISK, because the one signal nothing catches
+// is SIGKILL, and `kill -9` on a mutation run is how a file stays
+// broken through a reboot. The journal is written before the file is
+// and deleted after it is put back, so if it exists at startup the
+// last run died badly — and the next run repairs the tree before it
+// does anything else.
+const JOURNAL = ".mutate-restore.json";
+
+function writeJournal() {
+  if (dirty.size === 0) { rmSync(JOURNAL, { force: true }); return; }
+  writeFileSync(JOURNAL, JSON.stringify(Object.fromEntries(dirty)));
 }
 
-// DIFF-SCOPED, and the default. `--changed <base>` keeps only the
-// mutations whose target file differs from `base` — the batch's own
-// blast radius — and `--all` is the full list. A run with no argument
-// is the full list too, so a release run is the plain command.
-//
-// A path is compared after resolving it, because an entry's file is
-// relative to mobile/ and git reports repo-relative paths.
-const arg = process.argv.indexOf("--changed");
-let selected = MUTATIONS;
-if (arg !== -1) {
-  const base = process.argv[arg + 1];
-  if (!base) { console.log("--changed needs a base, e.g. --changed origin/main"); process.exit(1); }
-  const out = execSync(`git -C .. diff --name-only ${base}`, { encoding: "utf8" });
-  const changed = new Set(out.split("\n").filter(Boolean));
-  const inDiff = (f) => {
-    const abs = resolve(process.cwd(), f);
-    const repo = relative(resolve(process.cwd(), ".."), abs);
-    return changed.has(repo);
-  };
-  // NEWEST FIRST, and that is about the cap rather than about taste.
-  // The list is append-ordered, so the entries written for the batch
-  // being audited are at the END of it — and a run that hits the
-  // thirty-minute cap stops where it is. Running in list order means
-  // the cap cuts exactly the mutations that have never been proved,
-  // and keeps the ones that have passed every run for a month. So a
-  // scoped run walks it backwards. A full release run does not: it
-  // has to finish anyway, and its order is the file's.
-  selected = MUTATIONS.filter(([, file]) => inDiff(file)).reverse();
-  console.log(`${selected.length} of ${MUTATIONS.length} mutations touch files changed since ${base}`);
-  console.log("newest first, so the cap cuts the oldest rather than the newest\n");
-  if (selected.length === 0) {
-    console.log("Nothing to break. Either the batch changed no file a mutation points at —");
-    console.log("which means the batch's new behavior has no mutation yet — or the base is wrong.");
-    process.exit(1);
-  }
+/** Put back whatever a killed run left behind. Returns the files repaired. */
+export function recoverJournal() {
+  if (!existsSync(JOURNAL)) return [];
+  const saved = JSON.parse(readFileSync(JOURNAL, "utf8"));
+  for (const [file, orig] of Object.entries(saved)) writeFileSync(file, orig);
+  rmSync(JOURNAL, { force: true });
+  return Object.keys(saved);
 }
 
-// THE CAP. A run that outlives the reason for it gets stopped and
-// says where it got to; a partial number that arrives is worth more
-// than a complete one nobody waited for.
-const CAP_MS = 30 * 60 * 1000;
-const startedAt = Date.now();
-let cappedAfter = null;
-
-for (const [label, file, find, repl] of selected) {
-  if (Date.now() - startedAt > CAP_MS) { cappedAfter = label; break; }
-  const orig = readFileSync(file, "utf8");
+function applyMutation(file, orig, find, repl) {
+  dirty.set(file, orig);
+  writeJournal();
   writeFileSync(file, orig.replace(find, repl));
-  let out = "";
-  try { out = execSync("npx jest --verbose 2>&1", { encoding: "utf8" }); }
-  catch (e) { out = e.stdout || ""; }
-  // The OTHER suite. `lib/` is imported by the plain-node harness as well
-  // as by the renderer, and a mutation this file can only reach through
-  // logic would otherwise be reported as surviving while a test in
-  // tests/signin.test.mjs was failing loudly one directory up.
-  // "Can anything kill these tests" has to mean anything.
-  const node = runNodeHarness();
-  writeFileSync(file, orig);          // always restore, pass or fail
-
-  const dead = [...out.matchAll(/\u2715 (.+?) \(/g)].map((m) => m[1]);
-  dead.push(...node);
-  for (const d of dead) killedBy.set(d, (killedBy.get(d) ?? 0) + 1);
-  if (dead.length === 0) { survived.push(label); console.log(`SURVIVED  ${label}`); }
-  else console.log(`killed ${String(dead.length).padStart(2)}  ${label}`);
 }
 
-// A PARTIAL RUN MUST NOT ANSWER THE SECOND QUESTION, and getting this
-// wrong would be the worst thing in the file. "Which tests can nothing
-// kill" is computed by diffing every test name against the ones that
-// died — which is only meaningful if every mutation ran. A scoped or
-// capped run would list almost the whole suite as unverified, and a
-// report that cries wolf is a report nobody reads.
-const partial = selected.length !== MUTATIONS.length || cappedAfter != null;
-
-console.log("\nkilled, with how many mutations each test caught:");
-for (const [t, n] of [...killedBy].sort((a, b) => a[0].localeCompare(b[0]))) {
-  console.log(`  ${String(n).padStart(2)}x  ${t}`);
-}
-
-let neverKilled = [];
-if (partial) {
-  console.log(`\n${selected.length} of ${MUTATIONS.length} mutations ran, so "which tests can nothing kill"`);
-  console.log("is not answered here — that needs the full list. Run it before external testers.");
-} else {
-  // THE OTHER DIRECTION, and the more useful one: a test that nothing
-  // can kill. Every name in the suite, diffed against the ones that died.
-  let baseline = "";
-  try { baseline = execSync("npx jest --verbose 2>&1", { encoding: "utf8" }); }
-  catch (e) { baseline = e.stdout || ""; }
-  const allTests = [...baseline.matchAll(/[\u2713\u2715] (.+?)(?: \(\d+ ms\))?$/gm)].map((m) => m[1].trim());
-  neverKilled = allTests.filter((t) => !killedBy.has(t));
-  if (neverKilled.length) {
-    console.log("\nNO MUTATION KILLED THESE — each is unverified until one is written:");
-    neverKilled.forEach((t) => console.log(`  ${t}`));
-  } else {
-    console.log(`\nAll ${allTests.length} tests die to at least one mutation.`);
+/**
+ * Put every mutated file back. Safe to call twice.
+ *
+ * `announce` is on for every path except the ordinary one at the
+ * bottom of the loop, which happens 341 times and would bury the
+ * report in its own housekeeping. A restore after a Ctrl-C says so,
+ * because a silent one there reads exactly like a run that left the
+ * tree dirty.
+ */
+function restoreAll(why, announce = true) {
+  if (dirty.size === 0) return;
+  const files = [...dirty.keys()];
+  for (const f of files) {
+    try { writeFileSync(f, dirty.get(f)); } catch (e) { console.error(`COULD NOT RESTORE ${f}: ${e.message}`); }
   }
+  dirty.clear();
+  writeJournal();
+  if (announce) console.log(`\nrestored ${files.length} mutated file(s) after ${why}: ${files.join(", ")}`);
 }
 
-if (cappedAfter) {
-  const reached = selected.findIndex(([l]) => l === cappedAfter);
-  console.log(`\nSTOPPED AT THE 30-MINUTE CAP after ${reached} of ${selected.length}.`);
-  console.log(`The next one would have been: ${cappedAfter}`);
+/**
+ * Arm the ways a run can end without reaching the end of the loop.
+ *
+ * SIGKILL AND A POWER CUT ARE NOT ON THIS LIST and cannot be — no
+ * process catches SIGKILL. Those are what the journal above and the
+ * clean-tree check in scripts/ota.mjs are for: the handlers make the
+ * common cases safe, the journal repairs the uncatchable ones on the
+ * next run, and the publish gate makes them visible in the meantime.
+ *
+ * `exit` is the backstop and runs after the others, including after
+ * every ordinary `process.exit()` path in `main`. Only synchronous
+ * work is allowed in it, which `writeFileSync` is.
+ */
+function armGuards() {
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    process.on(sig, () => { current?.kill("SIGKILL"); restoreAll(sig); process.exit(130); });
+  }
+  process.on("uncaughtException", (e) => { restoreAll("an uncaught exception"); console.error(e); process.exit(1); });
+  process.on("unhandledRejection", (e) => { restoreAll("an unhandled rejection"); console.error(e); process.exit(1); });
+  process.on("exit", () => restoreAll("exit"));
 }
-console.log(survived.length ? `\n${survived.length} MUTATION(S) SURVIVED` : "\nEvery mutation that ran was caught.");
-process.exit(survived.length === 0 && neverKilled.length === 0 ? 0 : 1);
+
+/**
+ * PREFLIGHT: every mutation must still find its target, checked
+ * BEFORE anything runs. Returns the entries whose target has moved.
+ *
+ * A SKIP used to be one line in the middle of a hundred, and the
+ * standing rule — treat a SKIP as a failure — depended on somebody
+ * reading it. On 2026-10-14 eleven mutations went stale in one commit,
+ * because the sign-in logic moved to src/ and the seed rule moved into
+ * the engine, and the run still ended "every mutation was caught". It
+ * had caught eleven fewer things than it said.
+ *
+ * So a moved target is fatal, and fatal up front: a run that cannot
+ * break what it claims to break has nothing to report.
+ */
+export function preflight(list = MUTATIONS) {
+  return list.filter(([, file, find]) => !readFileSync(file, "utf8").includes(find));
+}
+
+export { MUTATIONS };
+
+/** @returns the process exit code. Writes files; call it from a program, not a test. */
+export async function main(argv = process.argv) {
+  const repaired = recoverJournal();
+  if (repaired.length) {
+    console.log(`A PREVIOUS RUN DIED WITHOUT CLEANING UP. Restored before starting: ${repaired.join(", ")}\n`);
+  }
+
+  const stale = preflight();
+  if (stale.length) {
+    console.log(`${stale.length} MUTATION(S) POINT AT CODE THAT HAS MOVED — fix or drop each one:\n`);
+    for (const [label, file] of stale) console.log(`  ${label}  (${file})`);
+    console.log("\nNothing was run. A mutation that cannot break anything is not evidence.");
+    return 1;
+  }
+
+  // --preflight-only answers "is the catalog still pointed at real
+  // code" and writes nothing at all. The question that started a
+  // 338-mutation run by accident, now with an answer that takes a
+  // second and cannot leave a file changed.
+  if (argv.includes("--preflight-only")) {
+    console.log(`PREFLIGHT OK — all ${MUTATIONS.length} mutations still find their target. Nothing was run, nothing was written.`);
+    return 0;
+  }
+
+  // DIFF-SCOPED, and the default. `--changed <base>` keeps only the
+  // mutations whose target file differs from `base` — the batch's own
+  // blast radius — and a run with no argument is the full list, so a
+  // release run is the plain command.
+  //
+  // A path is compared after resolving it, because an entry's file is
+  // relative to mobile/ and git reports repo-relative paths.
+  const arg = argv.indexOf("--changed");
+  let selected = MUTATIONS;
+  if (arg !== -1) {
+    const base = argv[arg + 1];
+    if (!base) { console.log("--changed needs a base, e.g. --changed origin/main"); return 1; }
+    const out = execSync(`git -C .. diff --name-only ${base}`, { encoding: "utf8" });
+    const changed = new Set(out.split("\n").filter(Boolean));
+    const inDiff = (f) => {
+      const abs = resolve(process.cwd(), f);
+      const repo = relative(resolve(process.cwd(), ".."), abs);
+      return changed.has(repo);
+    };
+    // NEWEST FIRST, and that is about the cap rather than about taste.
+    // The list is append-ordered, so the entries written for the batch
+    // being audited are at the END of it — and a run that hits the
+    // thirty-minute cap stops where it is. Running in list order means
+    // the cap cuts exactly the mutations that have never been proved,
+    // and keeps the ones that have passed every run for a month. So a
+    // scoped run walks it backwards. A full release run does not: it
+    // has to finish anyway, and its order is the file's.
+    selected = MUTATIONS.filter(([, file]) => inDiff(file)).reverse();
+    console.log(`${selected.length} of ${MUTATIONS.length} mutations touch files changed since ${base}`);
+    console.log("newest first, so the cap cuts the oldest rather than the newest\n");
+    if (selected.length === 0) {
+      console.log("Nothing to break. Either the batch changed no file a mutation points at —");
+      console.log("which means the batch's new behavior has no mutation yet — or the base is wrong.");
+      return 1;
+    }
+  }
+
+  armGuards();
+
+  const killedBy = new Map();
+  const survived = [];
+
+  // THE CAP. A run that outlives the reason for it gets stopped and
+  // says where it got to; a partial number that arrives is worth more
+  // than a complete one nobody waited for.
+  const CAP_MS = 30 * 60 * 1000;
+  const startedAt = Date.now();
+  let cappedAfter = null;
+
+  for (const [label, file, find, repl] of selected) {
+    if (Date.now() - startedAt > CAP_MS) { cappedAfter = label; break; }
+    const orig = readFileSync(file, "utf8");
+    let out = "";
+    let node = [];
+    // THE RESTORE IS IN A `finally`, not after the run. A jest
+    // invocation that threw something the old `execSync` call did not
+    // wrap, or a harness that blew up, used to skip the restore and
+    // leave the file broken for every mutation after it — which reads
+    // as "everything from here on was caught".
+    try {
+      applyMutation(file, orig, find, repl);
+      out = (await capture("npx jest --verbose 2>&1")).out;
+      // The OTHER suite. `lib/` is imported by the plain-node harness as well
+      // as by the renderer, and a mutation this file can only reach through
+      // logic would otherwise be reported as surviving while a test in
+      // tests/signin.test.mjs was failing loudly one directory up.
+      // "Can anything kill these tests" has to mean anything.
+      node = await runNodeHarness();
+    } finally {
+      restoreAll(`"${label}"`, false);
+    }
+    // AND THEN CHECK, because a restore that silently did not happen
+    // is the failure this whole section exists to prevent.
+    if (readFileSync(file, "utf8") !== orig) {
+      console.log(`\n${file} IS STILL MUTATED AFTER THE RESTORE. Stopping — run \`git diff\` before anything else.`);
+      return 1;
+    }
+
+    const dead = [...out.matchAll(/✕ (.+?) \(/g)].map((m) => m[1]);
+    dead.push(...node);
+    for (const d of dead) killedBy.set(d, (killedBy.get(d) ?? 0) + 1);
+    if (dead.length === 0) { survived.push(label); console.log(`SURVIVED  ${label}`); }
+    else console.log(`killed ${String(dead.length).padStart(2)}  ${label}`);
+  }
+
+  // A PARTIAL RUN MUST NOT ANSWER THE SECOND QUESTION, and getting this
+  // wrong would be the worst thing in the file. "Which tests can nothing
+  // kill" is computed by diffing every test name against the ones that
+  // died — which is only meaningful if every mutation ran. A scoped or
+  // capped run would list almost the whole suite as unverified, and a
+  // report that cries wolf is a report nobody reads.
+  const partial = selected.length !== MUTATIONS.length || cappedAfter != null;
+
+  console.log("\nkilled, with how many mutations each test caught:");
+  for (const [t, n] of [...killedBy].sort((a, b) => a[0].localeCompare(b[0]))) {
+    console.log(`  ${String(n).padStart(2)}x  ${t}`);
+  }
+
+  let neverKilled = [];
+  if (partial) {
+    console.log(`\n${selected.length} of ${MUTATIONS.length} mutations ran, so "which tests can nothing kill"`);
+    console.log("is not answered here — that needs the full list. Run it before external testers.");
+  } else {
+    // THE OTHER DIRECTION, and the more useful one: a test that nothing
+    // can kill. Every name in the suite, diffed against the ones that died.
+    const { out: baseline } = await capture("npx jest --verbose 2>&1");
+    const allTests = [...baseline.matchAll(/[✓✕] (.+?)(?: \(\d+ ms\))?$/gm)].map((m) => m[1].trim());
+    neverKilled = allTests.filter((t) => !killedBy.has(t));
+    if (neverKilled.length) {
+      console.log("\nNO MUTATION KILLED THESE — each is unverified until one is written:");
+      neverKilled.forEach((t) => console.log(`  ${t}`));
+    } else {
+      console.log(`\nAll ${allTests.length} tests die to at least one mutation.`);
+    }
+  }
+
+  if (cappedAfter) {
+    const reached = selected.findIndex(([l]) => l === cappedAfter);
+    console.log(`\nSTOPPED AT THE 30-MINUTE CAP after ${reached} of ${selected.length}.`);
+    console.log(`The next one would have been: ${cappedAfter}`);
+  }
+  console.log(survived.length ? `\n${survived.length} MUTATION(S) SURVIVED` : "\nEvery mutation that ran was caught.");
+  return survived.length === 0 && neverKilled.length === 0 ? 0 : 1;
+}
+
+// THE ONE SIDE EFFECT, and it is guarded. `process.argv[1]` is the
+// script node was asked to run; when that is this file, run. When
+// this file was imported by something else, define and stop.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exit(await main());
+}

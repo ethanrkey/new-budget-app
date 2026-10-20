@@ -6,7 +6,8 @@
 // reconstruction it can and returns `warnings` describing every guess, so
 // the caller can show them before committing anything to state.
 import { uid } from "./model.ts";
-import { BUDGET_SECTIONS, LEGACY_SAVING_SECTION_LABEL } from "./budgetLayout.ts";
+import { BUDGET_SECTIONS, LEGACY_ONEOFF_SECTION_LABEL, LEGACY_SAVING_SECTION_LABEL } from "./budgetLayout.ts";
+import type { SectionKey } from "./budgetLayout.ts";
 import type { CategoryRef, ISODate, MonthKey, OneOffItem, RecurringItem, TrackerCategory } from "./types.ts";
 
 /**
@@ -23,17 +24,29 @@ export interface ParsedImport {
   totalRows?: number;
 }
 
-// BOTH LABELS FOR THE SAVING SECTION, and that is the point of
-// importing a file somebody exported months ago. It was renamed to
-// "INVESTING / SAVING / DEBT" on 2026-10-16 because it holds
-// investments; every CSV written before then says "SAVING / DEBT",
-// and an unrecognized section header makes the importer skip rows
-// rather than fail, so dropping the old name would quietly lose a
-// third of an old export.
-const SAVING_SECTION = BUDGET_SECTIONS.find((s) => s.key === "saving")!.label;
-const SAVING_SECTION_HEADERS = new Set([SAVING_SECTION, LEGACY_SAVING_SECTION_LABEL]);
-const SECTION_HEADERS = new Set([
-  "INCOME", "FIXED / RECURRING", "ONE-OFF / SEASONAL", ...SAVING_SECTION_HEADERS,
+// EVERY NAME A SECTION HAS EVER HAD, and that is the point of
+// importing a file somebody exported months ago. Two sections have
+// been renamed — "SAVING / DEBT" became "INVESTING / SAVING / DEBT"
+// on 2026-10-16 because it holds investments, and "ONE-OFF /
+// SEASONAL" became "ONE-OFF" on 2026-10-20 to match the category's
+// own name — and an unrecognized section header makes the importer
+// SKIP ROWS rather than fail, so dropping an old name would quietly
+// lose a third of an old export without saying so.
+//
+// Built from BUDGET_SECTIONS rather than retyped. The literals used
+// to be written out here a second time, which meant renaming a
+// section silently stopped the importer recognizing its own current
+// heading — the next rename would have lost the NEW files, not the
+// old ones.
+const labelOf = (key: SectionKey) => BUDGET_SECTIONS.find((s) => s.key === key)!.label;
+const headersFor = (key: SectionKey, ...legacy: string[]) => new Set([labelOf(key), ...legacy]);
+
+const BILL_SECTION_HEADERS = headersFor("bill");
+const ONEOFF_SECTION_HEADERS = headersFor("oneoff", LEGACY_ONEOFF_SECTION_LABEL);
+const SAVING_SECTION_HEADERS = headersFor("saving", LEGACY_SAVING_SECTION_LABEL);
+const SECTION_HEADERS = new Set<string>([
+  "INCOME",
+  ...BILL_SECTION_HEADERS, ...ONEOFF_SECTION_HEADERS, ...SAVING_SECTION_HEADERS,
 ]);
 const SKIP_ROWS = new Set(["Starting point", "TOTAL IN", "TOTAL OUT", "MONTHLY NET", "CUMULATIVE NET"]);
 // Indexed by a parsed string, so keyed by string — the `in` guard in
@@ -138,8 +151,8 @@ export function parseBudgetCSV(text: string, trackerCategories: TrackerCategory[
     const name = label === "Take-home" ? "Paycheck" : label;
     const category =
       section === "INCOME" ? "income" :
-      section === "FIXED / RECURRING" ? "bill" :
-      section === "ONE-OFF / SEASONAL" ? "oneoff" :
+      BILL_SECTION_HEADERS.has(section) ? "bill" :
+      ONEOFF_SECTION_HEADERS.has(section) ? "oneoff" :
       guessSavingCategory(name, trackerCategories);
 
     if (SAVING_SECTION_HEADERS.has(section)) {

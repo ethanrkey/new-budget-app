@@ -385,6 +385,18 @@ eq("...and the old label is not written any more",
     [true, true]);
 }
 
+// THE ONE-OFF SECTION IS CALLED WHAT THE CATEGORY IS CALLED. It read
+// "ONE-OFF / SEASONAL" until 2026-10-20, which was the last place in
+// the app glossing "one-off" with a second word, and a heading that
+// does that reads as a fourth category you can pick. Same treatment
+// as the saving rename above: the exporter writes only the new name,
+// the importer still answers to the old one.
+eq("budget CSV has a ONE-OFF section marker", budgetLines.includes("ONE-OFF"), true);
+eq("...and the old label is not written any more",
+  budgetLines.includes("ONE-OFF / SEASONAL"), false);
+// The round-trip half of this is in Scenario L, which is the fixture
+// that actually has a one-off row in it.
+
 // ---- ONE ORDER, read by everything that draws the grid ---------------
 //
 // There were three. The web rendered BUDGET_SECTIONS[0] then [2] and
@@ -455,6 +467,21 @@ check("Dec paycheck sum (2 paydays) — previously missing entirely due to the l
 const giftL = parsedL.oneoffs.find((o) => o.name === "Birthday gift");
 eq("Birthday gift reconstructed as a one-off", !!giftL, true);
 check("Birthday gift amount", giftL.amount, 60);
+
+eq("Birthday gift is a one-off, not a bill", giftL.category, "oneoff");
+
+// A CSV EXPORTED BEFORE THE 2026-10-20 RENAME STILL IMPORTS. The
+// section header read "ONE-OFF / SEASONAL" then. An unrecognized
+// header makes the importer skip its rows in silence, so an old
+// export would have lost every one-off without saying a word.
+{
+  const legacyCSV = budgetToCSV(budgetL, stateL.trackerCategories).replace("ONE-OFF", "ONE-OFF / SEASONAL");
+  eq("...the old file really does say the old thing", legacyCSV.includes("ONE-OFF / SEASONAL"), true);
+  const legacyL = parseBudgetCSV(legacyCSV, stateL.trackerCategories);
+  const legacyGift = legacyL.oneoffs.find((o) => o.name === "Birthday gift");
+  eq("...and its one-off still arrives, in the one-off category",
+    [!!legacyGift, legacyGift?.amount, legacyGift?.category], [true, 60, "oneoff"]);
+}
 
 eq("Roth IRA category guessed", parsedL.recurring.find((r) => r.name === "Roth IRA")?.category, "roth");
 eq("Student Loan category guessed", parsedL.recurring.find((r) => r.name === "Student Loan")?.category, "loans");

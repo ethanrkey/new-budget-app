@@ -686,6 +686,32 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 12, 2026-10-20, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  from `mobile/`; unchanged.
+
+  The Budget's one-off section heading is **"ONE-OFF"**, not
+  "ONE-OFF / SEASONAL". It was the last place in the app glossing a
+  category with a second word, and a heading that does that reads as
+  a fourth category you can pick. One line in
+  `src/engine/budgetLayout.ts` reaches all three surfaces — the web
+  grid, the phone's grid and the CSV export — because they all
+  iterate `BUDGET_SECTIONS`.
+
+  **The importer still answers to the old name**, same treatment as
+  "SAVING / DEBT" got on 2026-10-16 and for the same reason: an
+  unrecognized section header makes the importer SKIP those rows in
+  silence, so an old export would have lost every one-off without
+  saying a word. While changing it, the importer's three section
+  literals were replaced with sets derived from `BUDGET_SECTIONS` —
+  they had been retyped, which meant a rename silently stopped the
+  importer recognizing its own CURRENT heading. The next rename
+  would have lost the NEW files, not the old ones.
+
+  Also in this update, neither of them user-facing: the mutation
+  runner can no longer leave the tree broken, and OTAs now go out
+  through a script that refuses a dirty tree. See §9.
+
 - **OTA UPDATE 11, 2026-10-19, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   from `mobile/` before publishing; unchanged. Update group
@@ -2346,6 +2372,48 @@ harness that blames the next test. In each case the tool was trusted
 because it was green, and in each case the fix was to reproduce the
 tool's own behavior on something with a known answer.
 
+### The mutation runner could not clean up after itself (2026-10-20)
+
+Twice in a week an interrupted `mobile/scripts/mutate.mjs` left a
+source file mutated on disk — once `components/TransactionSheet.tsx`
+with `if (false)` where a mode check had been. Both were caught in
+`git status` before a commit, which is luck rather than a process.
+Three separate faults, and only the first was the obvious one:
+
+1. **Importing the file ran it.** The whole runner was top-level
+   code, so `import("./scripts/mutate.mjs")` — typed once to check
+   whether the preflight was happy — started all 338 mutations. It is
+   `main()` now, called only when `process.argv[1]` is this file, and
+   `--preflight-only` answers that question in a second while writing
+   nothing.
+
+2. **The signal handlers could not fire.** This is the one worth
+   remembering. Handlers were added first and *looked* right; a real
+   interrupt was then driven at a real run, and the file was still
+   mutated two minutes later. Node runs a signal handler when the
+   event loop next turns, and the loop was `execSync` from the first
+   mutation to the last — **it never turned**, so SIGINT sat queued
+   until the run it was meant to stop had finished. Every test run is
+   `await`ed now, which is what actually fixes it; the handler also
+   kills the in-flight jest instead of orphaning it.
+
+   The standing shape again, from a new angle: a safety mechanism
+   that is present, reviewed, and inert. Nothing but driving the real
+   interrupt would have found it — **prove the guard can fail before
+   believing it works.**
+
+3. **SIGKILL is uncatchable, so there is a journal.** `.mutate-restore.json`
+   (gitignored) is written before a file is mutated and deleted after
+   it is put back. If it exists at startup the last run died badly,
+   and the next run repairs the tree before doing anything else.
+   Verified by `kill -9`-ing a real run and watching the next one
+   restore the file.
+
+The loop also restores in a `finally` and then **re-reads the file to
+confirm it matches**, stopping the run if it does not. A restore that
+silently did not happen is the failure the whole section exists to
+prevent.
+
 ### A harness landmine: a synthetic PanResponder drag that measures zero
 
 Found 2026-10-15 while testing swipe-to-dismiss on the sheet.
@@ -2640,6 +2708,151 @@ resolve.
    `mobile/lib/version.ts`.
 
 ## 10. Roadmap
+
+### Connected checking via Plaid — BALANCE ONLY. Design agreed 2026-10-20; not built.
+
+Opt-in, per account, off by default. The owner's brief, plus the four
+things he asked to be told before anything was chosen. **Nothing in
+this section is implemented yet.** Plaid team "Key Budget" exists;
+sandbox first, Trial plan being applied for (10 connections).
+
+**THE PRODUCT RULE THAT CONSTRAINS EVERY OTHER DECISION: checking
+only, balance only, and the Transactions product is NEVER requested.**
+Not "not used" — not requested, so there is nothing to leak, nothing
+to subpoena and nothing to answer for on the privacy questionnaire.
+`/link/token/create` asks for `products: ["balance"]` and nothing
+else, and the only read endpoint is `/accounts/balance/get`.
+
+**A pulled balance is an ordinary balance snapshot.** Written as of
+the pull date into the same `balanceSnapshots` the Log balance sheet
+writes to, so the Ledger, the Calendar and history need no knowledge
+of Plaid at all. `BalanceSnapshot` grows `source` and `externalId`
+exactly as `Contribution` already has them (§4) — the precedent is
+there and the shape should not be invented twice.
+
+**THE SAME-DATE COLLISION — the manual log wins, and the pull is
+kept.** Asked for before choosing; this is the recommendation and the
+reasoning, and it is one line to reverse if the owner disagrees.
+
+Both rows are stored and both are visible in history, each labeled
+with its source. For the forecast anchor on that date, the manual
+entry is the one that counts. Three reasons:
+
+1. **The principle is already written down.** `overrides` says "an
+   override is a statement about a date". A snapshot is the same kind
+   of thing. A manual log is the USER's statement about a date and a
+   pull is the APP's; the user's own statement outranks the app's on
+   the same day.
+2. **The reverse rule discards something a person deliberately
+   typed, silently.** The common case is not hypothetical: you log a
+   balance in the evening knowing a check has not cleared, the app
+   opens at 11pm and pulls, and your number is gone with no event
+   anywhere to tell you. "The bank is more authoritative" is true
+   about the bank's ledger and false about what you know.
+3. **It is self-correcting and costs at most one day.** Tomorrow's
+   pull has a newer date and takes over with nothing to undo.
+
+The case against, recorded because it is real: a bank balance is a
+measurement and a typed one is a memory, and on average the
+measurement is better. If the owner weighs that higher, the rule
+becomes "newest by wall clock wins" and the change is confined to the
+anchor selector.
+
+**Current vs available: both stored, AVAILABLE proposed for the
+forecast.** Available already subtracts pending holds, which is
+nearer to "money this forecast can spend" than current is. While
+testing, the Checking pill shows which one it used, so the owner can
+overturn this by looking rather than by reasoning.
+
+**PULL TIMING.** No schedule. On app open, web and iOS, if the last
+pull is older than `BALANCE_STALE_AFTER_HOURS = 12` — one constant,
+checked PER ACCOUNT server-side, so one pull serves every device the
+owner is signed in on. Plus "Refresh now".
+
+**The proposed manual cap: 4 per account per day, with a 60-second
+debounce**, and the button saying "Refreshed just now" rather than
+failing silently. Worst case is then 2 automatic + 4 manual = 6 calls
+per item per day, about 180 a month, which is a number worth knowing
+before a bill arrives rather than after. Both numbers are single
+constants.
+
+Every Plaid call is logged server-side — user, timestamp, and trigger
+(`open` | `refresh`) — so "pulls per user per month" is a query and
+not a guess.
+
+**LATER, NOT NOW:** plan-aware pulls the morning after a scheduled
+paycheck or a large bill.
+
+**SECURITY.** Access tokens live only in a table with RLS and **no
+client read policy at all**, reachable only by edge functions holding
+the service role key. Never sent to a client, never logged, never in
+an error message. Account deletion's purge calls `/item/remove` and
+deletes the token row. `ITEM_LOGIN_REQUIRED` and its relatives raise
+a reconnect prompt (Link update mode) rather than letting the balance
+quietly go stale — a stale number that looks live is worse than no
+number.
+
+**WHERE THE CREDENTIALS GO:** Supabase **Edge Function secrets**, set
+from the CLI (`supabase secrets set PLAID_CLIENT_ID=… PLAID_SECRET=…
+PLAID_ENV=sandbox`, or `--env-file`) or in the dashboard under Edge
+Functions → Secrets. Never in the repo, never in `app.json`, never in
+any `.env` that gets bundled into a client, and never pasted into a
+chat. `supabase secrets list` confirms the names without printing the
+values.
+
+**IOS CAN SHIP WITHOUT A NEW BUILD — Plaid Hosted Link, verified
+2026-10-20.** `react-native-plaid-link-sdk` is native code and needs a
+binary, and the owner is out of builds until the monthly reset. Hosted
+Link is Plaid's own answer for "the SDKs cannot be used": Link runs on
+a Plaid-hosted page in a browser. **`expo-web-browser` is already a
+dependency of build 13**, so opening that page adds no native input
+and the fingerprint does not move.
+
+The one real consequence: Hosted Link has NO frontend callback. The
+`public_token` arrives server-side, via the `SESSION_FINISHED` webhook
+and `/link/token/get`. That suits this feature rather than hurting it
+— the app has nothing to do with the token anyway, and when the
+browser sheet closes the client simply re-reads its own connection
+state. It also means the missing Universal Links work (§10) does not
+block this.
+
+Plaid's own position is that the native SDKs convert better and feel
+better, so the plan is: **Hosted Link now, the native SDK on the next
+binary, with the server side identical either way.** Everything behind
+`/link/token/create` is shared, so the swap is the opening gesture and
+nothing else.
+
+**iOS MUST FULLY SUPPORT AN ACCOUNT CONNECTED ON THE WEB** from the
+first release of this, independently of where Link can be opened: the
+Checking pill shows the connection and last sync, Settings shows bank
+name / last sync / Disconnect, and pull-on-open and Refresh now both
+work because both are server-side. Only the initial Connect needs Link
+on the device.
+
+**PRIVACY PAGES AND APP STORE LABELS — listed, not submitted** (the
+owner submits):
+
+- `src/components/Privacy.jsx` — a "Connected accounts (optional)"
+  section: what is requested (checking balance), what is never
+  requested (transactions), that credentials go to Plaid and the bank
+  and never to this app, that Plaid is the processor, and that
+  disconnecting deletes the connection immediately.
+- The same page needs Plaid named as a sub-processor, with a link to
+  Plaid's end-user privacy policy.
+- A data-retention line: how long a disconnected item's row survives
+  (proposal: deleted at disconnect, not tombstoned).
+- App Store Connect → App Privacy: **Financial Info → Other Financial
+  Info** becomes collected, linked to the user, used for App
+  Functionality only; **not** used for tracking. "Purchase History" and
+  "Payment Info" stay NO — balance is neither.
+- Third-party partner disclosure: Plaid, as a service provider.
+- The App Store description and any screenshot copy that says the app
+  never connects to a bank has to stop saying it.
+
+**THE SANDBOX END-TO-END, which is the acceptance test:** toggle on →
+consent → connect → pull on open writes a snapshot → disconnect
+removes the item → toggle off cleans up every token.
+
 
 **Gated decision — the storage model: DECIDED 2026-10-02.** Moving from one
 `state` jsonb document per user to one row per entity, before the Expo client
@@ -4102,7 +4315,26 @@ a port.
     OTA-capable build is a new one. There is no way to add OTA over
     the air.
 
-    **THE PUBLISH COMMAND, with the two things that bite:**
+    **THE PUBLISH COMMAND IS A SCRIPT NOW, 2026-10-20:**
+
+        cd mobile && node scripts/ota.mjs \
+          --runtime 78c21cd1… --message "what changed"
+
+    It refuses to publish unless the tree is clean, HEAD is pushed,
+    and the fingerprint is the runtime named on the command line, and
+    only then runs the real command with the flags below baked in.
+
+    **THE CLEAN-TREE CHECK IS THE POINT OF IT.** An OTA is built from
+    the WORKING TREE, not from a commit — so a publish with a dirty
+    tree ships whatever happens to be on disk, and the commit hash
+    printed beside the update is then a lie about what the update
+    contains. Twice in a week an interrupted mutation run left a
+    source file broken on disk (see §8); either one could have gone
+    out with a green gate behind it. `--runtime` is required for the
+    same kind of reason: an update published to the wrong runtime
+    installs on nothing and reports success.
+
+    *The command it runs, and the two things that bite:*
 
         cd mobile && npx eas-cli update \
           --channel production --environment production --platform ios \

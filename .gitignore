@@ -64,3 +64,7 @@ src/mobile-preview-entry.jsx
 # Regenerable and dated relative to the day it is made, so a committed
 # copy would go stale the way the hand-taken landing screenshots did.
 demo-account.json
+
+# The mutation runner's crash journal — what a killed run has to put back.
+# Never committed: it holds a copy of a source file mid-mutation.
+mobile/.mutate-restore.json

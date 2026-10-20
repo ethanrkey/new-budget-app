@@ -28,9 +28,25 @@ export type SectionKey = "bill" | "saving" | "oneoff";
  */
 export const BUDGET_SECTIONS: ReadonlyArray<{ key: SectionKey; label: string }> = [
   { key: "bill", label: "FIXED / RECURRING" },
-  { key: "oneoff", label: "ONE-OFF / SEASONAL" },
+  { key: "oneoff", label: "ONE-OFF" },
   { key: "saving", label: "INVESTING / SAVING / DEBT" },
 ];
+
+/**
+ * What the one-off section was called before 2026-10-20:
+ * "ONE-OFF / SEASONAL".
+ *
+ * The category itself is called "One-off" in every other place that
+ * names it — the planned-spending rows, the transaction form, the
+ * calendar — and the heading was the one survivor of an older name.
+ * "Seasonal" was never a separate thing you could pick; it was a
+ * gloss on "one-off", and a heading that glosses a word the rest of
+ * the app uses plainly reads as a fourth category.
+ *
+ * Kept, not deleted, for the same reason as the saving one below:
+ * it is in every CSV anybody has already exported.
+ */
+export const LEGACY_ONEOFF_SECTION_LABEL = "ONE-OFF / SEASONAL";
 
 /**
  * What this section was called before 2026-10-16: "SAVING / DEBT".
