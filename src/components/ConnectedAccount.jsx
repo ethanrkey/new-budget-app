@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CONNECT_CONSENT, DISCONNECT_NOTE, PLAID_PORTAL_URL } from "../content/connect.ts";
 import { canSeeToggle } from "../shared/connect.ts";
-import { disconnect as apiDisconnect, isAllowlisted, readConnection, startLink, finishLink } from "../shared/plaidApi.ts";
+import { disconnect as apiDisconnect, isAllowlisted, pullBalance, readConnection, startLink, finishLink } from "../shared/plaidApi.ts";
 import { fmtDate } from "../shared/dates.ts";
 
 // Connected checking, on the web. The Settings → Account half: the
@@ -37,7 +37,7 @@ function loadLinkScript() {
   });
 }
 
-export default function ConnectedAccount({ supabase, settings, onSetSettings }) {
+export default function ConnectedAccount({ supabase, settings, onSetSettings, onPulled }) {
   const on = !!settings.connectedFeatures;
   const [allowlisted, setAllowlisted] = useState(null);
   const [connection, setConnection] = useState(null);
@@ -101,9 +101,21 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings }) 
       token: started.linkToken,
       onSuccess: async (publicToken) => {
         const ok = await finishLink(supabase, publicToken);
-        setBusy(false);
-        if (!ok) { setSaid("Your bank connected, but we couldn't finish saving it. Try again."); return; }
+        if (!ok) { setBusy(false); setSaid("Your bank connected, but we couldn't finish saving it. Try again."); return; }
+        // PULL STRAIGHT AWAY. Connecting and then seeing nothing
+        // happen is the worst possible first impression of a feature
+        // whose entire promise is that the number keeps itself up to
+        // date — and without this the first balance waits for the
+        // next app open.
+        //
+        // Trigger "open" rather than "refresh" on purpose: a brand
+        // new Item has never synced, so the staleness check passes
+        // on its own and this does not spend one of the four daily
+        // refreshes on the connection itself.
+        await pullBalance(supabase, "open");
         await refresh();
+        setBusy(false);
+        onPulled?.();
       },
       // A user who closes Link has declined. That is an answer, not
       // an error, and it gets no message.

@@ -24,7 +24,7 @@ function providerNames(providers) {
   return list.length ? list.join(" and ") : "—";
 }
 
-export default function AccountScreen({ email, providers, createdAt, settings, setSettings, onSignOut, onBack, onClose }) {
+export default function AccountScreen({ email, providers, createdAt, settings, setSettings, onPulled, onSignOut, onBack, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
       <div
@@ -60,7 +60,7 @@ export default function AccountScreen({ email, providers, createdAt, settings, s
             about this account, next to how you signed in and when you
             joined. It draws nothing at all unless this account is on
             Plaid's allowlist — see ConnectedAccount.jsx. */}
-        <ConnectedAccount supabase={supabase} settings={settings} onSetSettings={setSettings} />
+        <ConnectedAccount supabase={supabase} settings={settings} onSetSettings={setSettings} onPulled={onPulled} />
 
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-gray-100 dark:border-gray-800 pt-4">
           <p className="text-xs text-gray-500">

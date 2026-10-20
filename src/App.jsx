@@ -821,6 +821,7 @@ export default function App() {
           createdAt={session?.user?.created_at}
           settings={state.settings}
           setSettings={setSettings}
+          onPulled={() => { void reloadFromServer(); }}
           onSignOut={() => signOut()}
           onBack={() => { setAccountOpen(false); setSettingsOpen(true); }}
           onClose={() => setAccountOpen(false)}

@@ -10,7 +10,7 @@ import { fmtDate } from "../../src/shared/dates.ts";
 import { CONNECT_CONSENT, DISCONNECT_NOTE, PLAID_PORTAL_URL } from "../../src/content/connect.ts";
 import { canSeeToggle } from "../../src/shared/connect.ts";
 import {
-  disconnect as apiDisconnect, isAllowlisted, readConnection, startLink,
+  disconnect as apiDisconnect, isAllowlisted, pullBalance, readConnection, startLink,
   type Connected as ConnectionRow,
 } from "../../src/shared/plaidApi.ts";
 
@@ -40,7 +40,7 @@ import {
 // re-read our own connection. See supabase/functions/plaid-exchange.
 
 export default function Connected() {
-  const { state, commit } = useBudget();
+  const { state, commit, refresh: resyncState } = useBudget();
   const on = !!state?.settings.connectedFeatures;
 
   const [allowlisted, setAllowlisted] = useState<boolean | null>(null);
@@ -131,7 +131,21 @@ export default function Connected() {
     // result to the server, not to us. So we re-read, and a session
     // the user abandoned simply leaves nothing to find.
     await WebBrowser.openAuthSessionAsync(started.hostedUrl);
-    const row = await refreshConnection();
+    // The browser closing tells us nothing, so the first question is
+    // whether a connection now exists. If it does, PULL STRAIGHT
+    // AWAY — connecting and then seeing nothing happen is the worst
+    // first impression of a feature whose whole promise is that the
+    // number keeps itself current.
+    //
+    // Trigger "open", not "refresh": a brand new Item has never
+    // synced, so the staleness check passes on its own and this does
+    // not spend one of the four daily refreshes on the connection.
+    let row = await refreshConnection();
+    if (row) {
+      await pullBalance(supabase as never, "open");
+      row = await refreshConnection();
+      await resyncState();
+    }
     setBusy(false);
     if (row) feel.success();
   }

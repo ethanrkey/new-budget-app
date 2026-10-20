@@ -2714,7 +2714,8 @@ resolve.
 ## 10. Roadmap
 
 ### Connected checking via Plaid — BALANCE ONLY. Decided 2026-10-20.
-### Server side AND UI BUILT 2026-10-20. Not yet run against the project; sandbox E2E outstanding.
+### Server side AND UI BUILT 2026-10-20. SQL run and functions DEPLOYED
+### 2026-10-20; sandbox end-to-end outstanding.
 
 Opt-in, per account, off by default. Plaid team "Key Budget" exists;
 sandbox first, Trial plan being applied for (10 connections).
@@ -2730,10 +2731,41 @@ on both: the toggle and connection block in Settings, the consent
 screen, all five pill states, the Refresh/Log manually sheet, and
 the "want this automatic?" line on the balance form.
 
-**WHAT IS NOT:** the SQL has not been run against the project, the
-functions are not deployed, and the sandbox end-to-end has not been
-done. Until a row exists in `plaid_beta` nothing in either client
-draws anything — which is also the first proof that the gate works.
+**DEPLOYED AND PROVEN, 2026-10-20.** The SQL is run: the owner
+confirmed `vault.decrypted_secrets (id uuid, decrypted_secret text)`,
+proof queries 3a, 3b and 4 all pass, he is in `plaid_beta`, and
+`drain-plaid-removals` is scheduled at `43 * * * *`. All four
+functions are deployed to `kjcvtpmorftjyejjskwm`, with
+`--no-verify-jwt` on `plaid-exchange` alone.
+
+**THE SECRETS ARE PROVEN PRESENT WITHOUT PRINTING ONE**, and the
+reasoning is worth keeping because the obvious check does not prove
+it. `plaid-balance` with an anon bearer answered **our** 401
+`{"error":"not signed in"}` rather than the gateway's error shape —
+and `readConfig()` runs BEFORE the auth check and refuses an
+unrecognized `PLAID_ENV`, so reaching that line at all means all
+three secrets arrived and the environment is one of the two it
+accepts. `plaid-exchange` with no auth at all answered 200
+`{"ignored":"no public_token"}`, which proves the same thing from the
+other side and that its JWT verification really is off.
+`plaid-link-token` with no auth answered the GATEWAY's
+`UNAUTHORIZED_NO_AUTH_HEADER`, which is how you can tell verification
+is still on for the other three.
+
+**WHAT IS NOT PROVEN FROM HERE:** anything on Plaid's side. Whether
+Identity is enabled on the account, whether the sandbox credentials
+work, and whether Link opens are all answered by the end-to-end and
+by nothing before it.
+
+**CONNECTING PULLS IMMEDIATELY**, added the same day while writing
+the end-to-end steps and noticing the hole: `plaid-exchange` stores
+the Item but does not fetch a balance, so without this the first
+number waited for the next app open — a feature whose whole promise
+is that the balance keeps itself current, doing nothing visible at
+the moment you connect it. Both clients call `plaid-balance` with
+trigger **`open`**, not `refresh`: a brand new Item has never synced
+so the staleness check passes on its own, and the connection does
+not cost one of the four daily refreshes.
 
 **THE DECISIONS LIVE IN ONE PURE MODULE**, `src/shared/connect.ts`,
 and that is why the two clients cannot disagree about the five pill
