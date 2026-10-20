@@ -16,7 +16,8 @@ import {
   BALANCE_STALE_AFTER_HOURS, MAX_MANUAL_REFRESHES_PER_DAY, REFRESH_DEBOUNCE_SECONDS,
   PLAID_ENDPOINTS, callPlaid, isoDate, needsReconnect, readConfig,
 } from "../_shared/plaid.ts";
-import { adminClient, callerId, isAllowlisted, json } from "../_shared/caller.ts";
+import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
+import { preflight } from "../_shared/cors.ts";
 
 interface BalanceResult {
   accounts?: Array<{
@@ -26,6 +27,13 @@ interface BalanceResult {
 }
 
 Deno.serve(async (req) => {
+  // BEFORE THE METHOD CHECK, not after: a preflight is an OPTIONS
+  // request, so a handler that answers 405 first kills the real POST
+  // that would have followed.
+  const pre = preflight(req);
+  if (pre) return pre;
+
+  const json = responder(req);
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
   const conf = readConfig();

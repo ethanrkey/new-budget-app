@@ -2738,6 +2738,53 @@ proof queries 3a, 3b and 4 all pass, he is in `plaid_beta`, and
 functions are deployed to `kjcvtpmorftjyejjskwm`, with
 `--no-verify-jwt` on `plaid-exchange` alone.
 
+**CORS — THE WEB'S FIRST CONNECT FAILED ON IT, 2026-10-20.** Every
+edge function in this project had been written for the phone, which
+is not a browser and sends no Origin, so no preflight had ever had to
+succeed. `OPTIONS /functions/v1/plaid-link-token` came back with no
+`Access-Control-Allow-Origin` and the web could not start Link.
+
+**THE TELL IS WORTH REMEMBERING:** the function logs showed BOOTS and
+`plaid_api_log` stayed empty. The browser never sent the POST, so
+nothing server-side noticed anything was wrong — a failure that is
+completely silent on the server and completely fatal on the client.
+
+`supabase/functions/_shared/cors.ts` is the fix: an allowlist
+(`keybudget.app`, `key-budget-app.vercel.app`, `localhost:5173`),
+echoed rather than wildcarded, with `Vary: Origin` whether or not the
+origin matched. **No wildcard** — `*` cannot carry credentials
+anyway, but the real reason is that these functions mint Link tokens
+and remove bank connections on behalf of whoever's JWT is attached.
+
+Three things that are easy to get wrong and are each tested:
+
+- **The preflight runs BEFORE the method check.** `OPTIONS` is not
+  `POST`, so a handler that checks the method first answers 405 to
+  the preflight and the real request is never sent.
+- **Every response carries the headers, not just the preflight.** A
+  browser that is allowed to ask still discards an answer without
+  them, so `responder(req)` binds each reply to its request's origin
+  and a CORS-less reply is something you would have to go out of your
+  way to write.
+- **`plaid-exchange` needed it too**, which is easy to talk yourself
+  out of: it is "the webhook function", and a webhook is not a
+  browser. But the WEB posts the public_token to it directly
+  (`finishLink`), and leaving it out would have moved the failure
+  from the FIRST step of connecting to the LAST — after the Item
+  already existed at Plaid and this app had no record of it. Plaid's
+  own webhook sends no Origin and takes the no-header path, so it is
+  unaffected.
+
+`key-budget-app.vercel.app` IS A LOAN. It is a live origin today, so
+omitting it would be the same bug somewhere else — and it is already
+on the list for deletion (§10, item 27). **That item now has a second
+line to delete**, and `tests/cors.test.mjs` asserts the list exactly,
+so removing the domain without removing the entry fails the build.
+
+Verified against the deployed functions, not just in a test: all four
+answer `OPTIONS` with 204 and the echoed origin, a disallowed origin
+gets no header at all, and the real POST responses carry it too.
+
 **THE SECRETS ARE PROVEN PRESENT WITHOUT PRINTING ONE**, and the
 reasoning is worth keeping because the obvious check does not prove
 it. `plaid-balance` with an anon bearer answered **our** 401
@@ -3572,6 +3619,12 @@ Needs no build and no TestFlight, so none of it is blocked by band A.
 27. **Remove `key-budget-app.vercel.app`** from the Vercel domains and
     the Supabase redirect allow-list. A second origin that can complete
     an auth redirect is a second thing to get wrong.
+
+    **AND FROM `ALLOWED_ORIGINS`** in
+    `supabase/functions/_shared/cors.ts`, added 2026-10-20 — the
+    functions' CORS allowlist is now a third place that origin is
+    written down. `tests/cors.test.mjs` asserts the list exactly, so
+    this cannot be half-done silently.
 
 30. **Universal Links**, after Apple approval. A magic link tapped on
     the phone opens Safari, not the app — the one place the emailed

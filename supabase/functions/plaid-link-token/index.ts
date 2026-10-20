@@ -16,11 +16,19 @@
 //   npx supabase functions deploy plaid-link-token --project-ref <ref>
 // JWT verification stays ON: this mints a credential tied to a user.
 import { PRODUCTS, ACCOUNT_FILTERS, PLAID_ENDPOINTS, callPlaid, readConfig } from "../_shared/plaid.ts";
-import { adminClient, callerId, isAllowlisted, json } from "../_shared/caller.ts";
+import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
+import { preflight } from "../_shared/cors.ts";
 
 interface LinkTokenCreated { link_token: string; hosted_link_url?: string; expiration: string }
 
 Deno.serve(async (req) => {
+  // BEFORE THE METHOD CHECK, not after: a preflight is an OPTIONS
+  // request, so a handler that answers 405 first kills the real POST
+  // that would have followed.
+  const pre = preflight(req);
+  if (pre) return pre;
+
+  const json = responder(req);
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
   const conf = readConfig();

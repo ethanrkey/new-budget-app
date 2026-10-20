@@ -23,11 +23,24 @@
 // can still make us spend a call, and the signature is the proper
 // answer to that. Written down rather than quietly skipped.
 //
+// IT NEEDS CORS TOO, which is easy to talk yourself out of: this is
+// "the webhook function", and a webhook is not a browser. But the WEB
+// path above is a browser — `finishLink` in src/shared/plaidApi.ts
+// posts the public_token straight from the page — and leaving CORS
+// off here would have moved the failure from the FIRST step of
+// connecting to the LAST, after the Item already existed at Plaid and
+// this app had no record of it. That is strictly the worse place for
+// it to break.
+//
+// Plaid's own webhook sends no Origin, takes the no-header path in
+// _shared/cors.ts, and is unaffected by any of this.
+//
 // Deploy with JWT verification OFF — Plaid does not carry a Supabase
 // token:
 //   npx supabase functions deploy plaid-exchange --no-verify-jwt --project-ref <ref>
 import { PLAID_ENDPOINTS, callPlaid, readConfig } from "../_shared/plaid.ts";
-import { adminClient, callerId, isAllowlisted, json } from "../_shared/caller.ts";
+import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
+import { preflight } from "../_shared/cors.ts";
 
 interface Exchanged { access_token: string; item_id: string }
 interface LinkSession { link_sessions?: Array<{ results?: { item_add_results?: Array<{ public_token?: string }> } }> }
@@ -36,6 +49,13 @@ interface Institution { institution?: { name?: string } }
 interface BalanceAccounts { accounts?: Array<{ account_id: string; name?: string; mask?: string; type?: string; subtype?: string }> }
 
 Deno.serve(async (req) => {
+  // BEFORE THE METHOD CHECK, not after: a preflight is an OPTIONS
+  // request, so a handler that answers 405 first kills the real POST
+  // that would have followed.
+  const pre = preflight(req);
+  if (pre) return pre;
+
+  const json = responder(req);
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
   const conf = readConfig();

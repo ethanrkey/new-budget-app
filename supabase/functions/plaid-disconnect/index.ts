@@ -20,12 +20,20 @@
 // Deploy:
 //   npx supabase functions deploy plaid-disconnect --project-ref <ref>
 import { PLAID_ENDPOINTS, callPlaid, readConfig } from "../_shared/plaid.ts";
-import { adminClient, callerId, json } from "../_shared/caller.ts";
+import { adminClient, callerId, responder } from "../_shared/caller.ts";
+import { preflight } from "../_shared/cors.ts";
 
 /** An hour between attempts on the same row, same as the Apple drain. */
 const RETRY_AFTER_MS = 3600_000;
 
 Deno.serve(async (req) => {
+  // BEFORE THE METHOD CHECK, not after: a preflight is an OPTIONS
+  // request, so a handler that answers 405 first kills the real POST
+  // that would have followed.
+  const pre = preflight(req);
+  if (pre) return pre;
+
+  const json = responder(req);
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
   const conf = readConfig();

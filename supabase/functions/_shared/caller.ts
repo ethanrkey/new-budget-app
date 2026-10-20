@@ -4,9 +4,24 @@
 // come from the caller's own JWT, never from the request body. A user
 // id in a payload is a user id anyone can type.
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { corsHeaders } from "./cors.ts";
 
-export const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+/**
+ * A JSON responder bound to ONE request's origin.
+ *
+ * THE PREFLIGHT IS ONLY HALF OF CORS. A browser that is allowed to
+ * ask still discards the answer unless the real response carries
+ * `Access-Control-Allow-Origin` too — so every response has to know
+ * which request it is answering, and a free `json(status, body)`
+ * cannot. Each handler starts with `const json = responder(req)`,
+ * which makes a CORS-less reply something you would have to go out
+ * of your way to write.
+ */
+export const responder = (req: Request) => (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders(req.headers.get("Origin")) },
+  });
 
 /** The service-role client. Bypasses RLS; never handed anything from a request. */
 export const adminClient = () =>

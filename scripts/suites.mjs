@@ -30,4 +30,5 @@ export const SUITES = [
   "tests/calendar.test.mjs",
   "tests/mobile-fields.test.mjs",
   "tests/connect.test.mjs",
+  "tests/cors.test.mjs",
 ];
