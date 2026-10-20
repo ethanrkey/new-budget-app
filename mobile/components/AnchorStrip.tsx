@@ -2,8 +2,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import { T, money } from "../lib/theme";
 import { useBudget } from "./StateProvider";
-import { primaryAccount } from "../../src/engine/model.ts";
+import { primaryAccount, todayISO } from "../../src/engine/model.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
+import { pillIsAction, pillStateOf, pillSuffixOf, type Connection } from "../../src/shared/connect.ts";
 
 // The verified checking balance, on every tab.
 //
@@ -77,11 +78,43 @@ import { fmtDate } from "../../src/shared/dates.ts";
 // balance, any account name, or any date. The first line shrinks the
 // ACCOUNT NAME instead, which is the one piece of it that is both
 // user-supplied and the least load-bearing.
-export default function AnchorStrip({ onPress }: { onPress?: () => void }) {
+export default function AnchorStrip({ onPress, connection }: {
+  onPress?: () => void;
+  /**
+   * The bank connection, or null. Passed in rather than read here:
+   * this component is on every tab, and four copies of it must not
+   * each ask the server the same question.
+   *
+   * THE BANK'S NAME IS NOT ON THIS STRIP, on the owner's call. The
+   * pill says WHEN, not WHO — who is a fact about the account and
+   * lives in Settings. What changes here is the second line.
+   */
+  connection?: Connection | null;
+}) {
   const { state, online } = useBudget();
   if (!state) return null;
   const account = primaryAccount(state);
   const live = !!onPress && online;
+
+  // Which of the newest snapshot's sources the number on screen came
+  // from — not the last pull's. That is the whole point of "logged
+  // today": when the manual log won the date, saying "synced" would
+  // attribute the user's own figure to their bank.
+  const newest = (state.accountSnapshots[account.id] ?? []).at(-1);
+  const pill = pillStateOf(
+    connection ?? null,
+    newest?.date === account.balanceAsOf ? newest?.source : undefined,
+    account.balanceAsOf,
+    todayISO(),
+  );
+  const syncedAt = connection?.lastSyncedAt ? new Date(connection.lastSyncedAt) : null;
+  const suffix = pillSuffixOf(pill, {
+    asOf: fmtDate(account.balanceAsOf),
+    syncedTime: syncedAt ? syncedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "",
+    syncedWhen: syncedAt
+      ? `${fmtDate(connection!.lastSyncedAt!.slice(0, 10))} ${syncedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+      : "never",
+  });
 
   return (
     <View style={styles.slot} testID="anchor-slot">
@@ -93,7 +126,7 @@ export default function AnchorStrip({ onPress }: { onPress?: () => void }) {
       accessibilityRole={live ? "button" : "summary"}
       accessibilityLabel={
         live
-          ? `${account.name} ${money(account.balance)}, as of ${fmtDate(account.balanceAsOf)}. Update the balance.`
+          ? `${account.name} ${money(account.balance)}, ${suffix}. Update the balance.`
           : undefined
       }
     >
@@ -126,7 +159,11 @@ export default function AnchorStrip({ onPress }: { onPress?: () => void }) {
           cannot be placed in time, and "the date is half the exception"
           is the whole reason the anchor is allowed in at all. It owns
           this line, with no sibling to be squeezed by. */}
-      <Text style={styles.asOf}>as of {fmtDate(account.balanceAsOf)}</Text>
+      {/* GOLD ONLY WHEN IT ASKS FOR SOMETHING. Four of the five
+          states describe; "Reconnect" is the one that wants a tap,
+          and the accent is spent on it for that reason and not
+          because a bank connection is exciting. */}
+      <Text style={[styles.asOf, pillIsAction(pill) && styles.action]}>{suffix}</Text>
     </Pressable>
     </View>
   );
@@ -179,5 +216,6 @@ const styles = StyleSheet.create({
   // NO flexShrink. That is the fix, and it only holds because nothing
   // shares this line with it.
   asOf: { color: T.faint, fontSize: 11 },
+  action: { color: T.brass, fontWeight: "700" },
   fallbackCue: { color: T.dim, fontSize: 15 },
 });

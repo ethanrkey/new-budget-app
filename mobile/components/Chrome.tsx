@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
@@ -20,6 +20,8 @@ import Setup from "./Setup";
 import { shouldRunSetup } from "../lib/setup";
 import { dismissedBy, withDismissalBy } from "../lib/dismissal";
 import { applySetup, markSetupSeen, markTourSeen, type SetupAnswers } from "../../src/engine/setup.ts";
+import { load as loadConnection, useConnection } from "../lib/connection";
+import ConnectedSheet from "./ConnectedSheet";
 
 // WHERE THE WEB'S FIVE HEADER ITEMS LIVE ON A PHONE.
 //
@@ -111,14 +113,42 @@ export function Chrome({ session, children }: { session: Session; children: Reac
     if (online) void commit(markSetupSeen, "Setup skipped");
   }
 
+  // ONE LOAD PER APP OPEN, and none at all with the feature off:
+  // `load` returns immediately when the account is not allowlisted or
+  // has not opted in, so an ordinary manual user makes no request.
+  const { connection } = useConnection();
+  const [connectedSheet, setConnectedSheet] = useState(false);
+  const connectedFeatures = !!state?.settings.connectedFeatures;
+  useEffect(() => { void loadConnection({ connectedFeatures }); }, [connectedFeatures]);
+
   return (
     <ChromeCtx.Provider value={value}>
       {/* Above everything, on every tab: the one number the rest are
-          computed forward from. See AnchorStrip. */}
+          computed forward from. See AnchorStrip.
+          THE CONNECTION IS READ ONCE, HERE, and handed down. The strip
+          is on all four tabs and must not ask the server four times
+          for the same row. */}
       <View style={{ paddingTop: insets.top + 10 }}>
-        <AnchorStrip onPress={() => setLogging(true)} />
+        <AnchorStrip
+          connection={connection}
+          onPress={() => {
+            // CONNECTED OPENS A CHOICE, NOT A FORM. Someone with a
+            // bank may want either door — refresh, or type a number
+            // they know is right — and the manual one must never be
+            // buried, because manual entry stays the product.
+            if (connection) setConnectedSheet(true);
+            else setLogging(true);
+          }}
+        />
       </View>
       {children}
+
+      <ConnectedSheet
+        open={connectedSheet}
+        connection={connection}
+        onClose={() => setConnectedSheet(false)}
+        onLogManually={() => { setConnectedSheet(false); setLogging(true); }}
+      />
 
       {/* The one affordance. Floating over the content rather than in a
           header, because each tab draws its own and a shared header
@@ -187,6 +217,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
           for that warning to drift. */}
       {logging && state && (
         <LogBalance
+          onOpenSettings={() => { setLogging(false); setScreen("settings"); }}
           title={`Update ${primaryAccount(state).name} balance`}
           currentLabel={currently(primaryAccount(state).balance, primaryAccount(state).balanceAsOf)}
           cta="Confirm"

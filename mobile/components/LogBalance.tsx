@@ -2,6 +2,10 @@ import { useState } from "react";
 import {
   ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
+import { CONNECT_HINT, CONNECT_HINT_DISMISS } from "../../src/content/connect.ts";
+import { shouldOfferHint } from "../../src/shared/connect.ts";
+import { useBudget } from "./StateProvider";
+import { allowlistedNow } from "../lib/connection";
 import FormSheet, { useDiscardGuard } from "./FormSheet";
 import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
@@ -21,7 +25,7 @@ import { fmtDate } from "../../src/shared/dates.ts";
 export type HiddenRow = { id: string; name: string; date: string; amount: number };
 
 export default function LogBalance({
-  title, currentLabel, cta, warn, busy, onSubmit, onClose, hiddenRows,
+  title, currentLabel, cta, warn, busy, onSubmit, onClose, hiddenRows, onOpenSettings,
   dateLabel = DATE_LABEL.balance,
 }: {
   title: string; currentLabel?: string; cta: string; warn?: boolean;
@@ -34,7 +38,20 @@ export default function LogBalance({
    *  date. Only the checking balance passes it — a tracked account's
    *  reading does not move the forecast's starting point. */
   hiddenRows?: (date: string) => HiddenRow[];
+  /**
+   * Opens Settings, for the "want this automatic?" line.
+   *
+   * ONLY THE CHECKING BALANCE PASSES IT, which is also what gates
+   * the line: this sheet has five call sites — a tracked account's
+   * reading, a contribution, two edits — and a bank connection is
+   * about checking. A prop nobody else hands in is a cleaner gate
+   * than a flag everybody has to remember to leave false.
+   */
+  onOpenSettings?: () => void;
 }) {
+  const { state, commit } = useBudget();
+  const offerHint = !!onOpenSettings && !!state
+    && shouldOfferHint(state.settings, allowlistedNow());
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayISO());
   const [picking, setPicking] = useState(false);
@@ -169,6 +186,34 @@ export default function LogBalance({
               {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.primaryText}>{cta}</Text>}
             </Pressable>
           </View>
+
+          {/* THE ONE PLACE THIS IS EVER MENTIONED to someone who has
+              not turned it on, and NOT IN SETUP, on the owner's call.
+              The reason generalizes: somebody deciding whether to use
+              this app at all is the wrong person to offer a bank
+              connection to. This is read by somebody who has just
+              typed a balance by hand and therefore knows exactly what
+              the manual path costs them.
+
+              IT LOADS NO PLAID CODE. It is a sentence, a link to
+              Settings, and a way to never see it again. */}
+          {offerHint && (
+            <View style={styles.hint}>
+              <Pressable
+                onPress={onOpenSettings}
+                accessibilityRole="link" accessibilityLabel={CONNECT_HINT}
+              >
+                <Text style={styles.hintText}>{CONNECT_HINT}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => { void commit((st) => ({ ...st, settings: { ...st.settings, hideConnectHint: true } }), "Hint dismissed", "none"); }}
+                accessibilityRole="button" accessibilityLabel={CONNECT_HINT_DISMISS}
+                hitSlop={8}
+              >
+                <Text style={styles.hintDismiss}>{CONNECT_HINT_DISMISS}</Text>
+              </Pressable>
+            </View>
+          )}
           </>
           )}
       </>
@@ -183,6 +228,11 @@ const styles = StyleSheet.create({
   // NO SCRIM AND NO CARD IN HERE. A page sheet is the card — see
   // FormSheet, which owns the padding this used to carry.
   title: { color: T.text, fontSize: 17, fontWeight: "700" },
+  // QUIET, and below the buttons. It is an aside on a form somebody
+  // opened to do something else; anything louder would be an ad.
+  hint: { marginTop: 18, gap: 4 },
+  hintText: { color: T.dim, fontSize: 13, lineHeight: 19 },
+  hintDismiss: { color: T.faint, fontSize: 12 },
   dim: { color: T.faint, fontSize: 12, marginBottom: 4 },
   hiddenList: { maxHeight: 190, marginTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: T.border },
   hiddenRow: { flexDirection: "row", alignItems: "baseline", gap: 10, paddingVertical: 6 },

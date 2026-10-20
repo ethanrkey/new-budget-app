@@ -20,6 +20,10 @@ import {
   CONNECT_CONSENT, CONNECT_HINT, CONNECT_HINT_DISMISS, DISCONNECT_NOTE,
   PILL, PILL_SHEET, PLAID_PORTAL_URL,
 } from "../src/content/connect.ts";
+import {
+  pillStateOf, pillTextOf, pillSuffixOf, pillIsAction, shouldPullOnOpen, canOfferConnect,
+  canSeeToggle, shouldOfferHint, refreshOutcome,
+} from "../src/shared/connect.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -167,6 +171,114 @@ console.log("\n== a pulled snapshot is an ordinary snapshot ==");
   eq("a snapshot from before this feature carries no source at all",
     old.accountSnapshots.acct[0].source, undefined);
 }
+
+console.log("\n== which pill state, decided once for both clients ==");
+
+const conn = (over = {}) => ({ institutionName: "Example Bank", status: "ok", lastSyncedAt: "2026-10-20T13:14:00Z", ...over });
+const TODAY = "2026-10-20";
+
+eq("nothing connected is the ordinary case",
+  pillStateOf(null, undefined, "2026-10-17", TODAY), "manual");
+eq("connected and synced",
+  pillStateOf(conn(), "plaid", TODAY, TODAY), "synced");
+// MANUAL WINS, and the pill has to say so: the number beside the word
+// came from the user, and "synced" would attribute their figure to
+// their bank.
+eq("today's number was typed, so it says so",
+  pillStateOf(conn(), "manual", TODAY, TODAY), "loggedToday");
+eq("...and a snapshot with no source at all counts as typed",
+  pillStateOf(conn(), undefined, TODAY, TODAY), "loggedToday");
+eq("yesterday's manual log does not claim today",
+  pillStateOf(conn(), "manual", "2026-10-19", TODAY), "synced");
+eq("pulls failing", pillStateOf(conn({ status: "error" }), "plaid", "2026-10-19", TODAY), "stale");
+
+// WORST NEWS FIRST. Reconnect is the only state that asks for an
+// action, so it outranks every description — including a manual log
+// made today, which would otherwise hide the fact that the
+// connection is dead.
+eq("needs reconnect, even on a day the user logged by hand",
+  pillStateOf(conn({ status: "login_required" }), "manual", TODAY, TODAY), "reconnect");
+eq("...and even when it has never synced",
+  pillStateOf(conn({ status: "login_required", lastSyncedAt: null }), "plaid", TODAY, TODAY), "reconnect");
+// Connected but never successfully pulled: there is no sync to name,
+// so the pill reads exactly as it did before they connected.
+eq("connected but never synced reads as manual",
+  pillStateOf(conn({ lastSyncedAt: null }), "manual", "2026-10-17", TODAY), "manual");
+
+is("only reconnect is an action", pillIsAction("reconnect"));
+for (const st of ["manual", "synced", "loggedToday", "stale"]) {
+  not(`...and ${st} is not`, pillIsAction(st));
+}
+
+// The state picks the string; neither client assembles its own.
+{
+  const parts = { amount: "$1,204.19", asOf: "10/17", syncedTime: "8:14 AM", syncedWhen: "10/18 7:02 AM" };
+  eq("every state maps to the owner's own sentence",
+    ["manual", "synced", "loggedToday", "stale", "reconnect"].map((st) => pillTextOf(st, parts)),
+    ["$1,204.19 · as of 10/17", "$1,204.19 · synced 8:14 AM", "$1,204.19 · logged today",
+     "$1,204.19 · synced 10/18 7:02 AM", "$1,204.19 · Reconnect"]);
+}
+
+// THE PHONE DRAWS THE SAME WORDS IN TWO LINES, because its anchor
+// strip was measured at 260pt and the date was given its own line.
+// The suffix is the half after the dot, from the same source, so a
+// change to the owner's wording cannot reach one client and not the
+// other.
+{
+  const parts = { asOf: "10/17", syncedTime: "8:14 AM", syncedWhen: "10/18 7:02 AM" };
+  const states = ["manual", "synced", "loggedToday", "stale", "reconnect"];
+  eq("the phone's half-line, same words",
+    states.map((st) => pillSuffixOf(st, parts)),
+    ["as of 10/17", "synced 8:14 AM", "logged today", "synced 10/18 7:02 AM", "Reconnect"]);
+  // And the two really are one source: the web's line is the balance,
+  // the separator, and exactly this.
+  is("the web's line is the balance plus the phone's half",
+    states.every((st) => pillTextOf(st, { amount: "$9.00", ...parts }) === `$9.00 · ${pillSuffixOf(st, parts)}`));
+}
+
+console.log("\n== the gate, which is two questions and not one ==");
+
+const SET = (over = {}) => ({ connectedFeatures: false, hideConnectHint: false, ...over });
+
+// Allowlisted is Plaid's Trial term; the toggle is the user's choice.
+// Neither one alone opens the door.
+not("not allowlisted, toggle on -> nothing", canOfferConnect(SET({ connectedFeatures: true }), false));
+not("allowlisted, toggle off -> nothing", canOfferConnect(SET(), true));
+is("both -> Connect is offered", canOfferConnect(SET({ connectedFeatures: true }), true));
+is("the toggle itself follows the allowlist only", canSeeToggle(true));
+not("...and is absent otherwise", canSeeToggle(false));
+
+// A user who is not allowlisted must not be able to tell the
+// difference between "not on the list" and "no such feature".
+not("no hint for someone who cannot have it", shouldOfferHint(SET(), false));
+is("the hint goes to someone who could turn it on and has not", shouldOfferHint(SET(), true));
+not("...not to someone who already did", shouldOfferHint(SET({ connectedFeatures: true }), true));
+not("...and not to someone who said don't show again", shouldOfferHint(SET({ hideConnectHint: true }), true));
+
+console.log("\n== pulling on open ==");
+not("nothing to pull with the feature off", shouldPullOnOpen(SET(), conn()));
+not("nothing to pull with no connection", shouldPullOnOpen(SET({ connectedFeatures: true }), null));
+is("otherwise ask the server", shouldPullOnOpen(SET({ connectedFeatures: true }), conn()));
+// THE CLIENT DOES NOT SECOND-GUESS THE 12-HOUR WINDOW. The server
+// owns that clock, per account, so one pull serves every device —
+// and this codebase does not trust device clocks (syncGuard.ts). A
+// client that skipped the call because its own clock said "too soon"
+// is the one way to end up with a balance nobody ever refreshed.
+is("even when the last sync was a minute ago — the server decides",
+  shouldPullOnOpen(SET({ connectedFeatures: true }), conn({ lastSyncedAt: new Date().toISOString() })));
+
+console.log("\n== a refresh that does nothing says what, exactly ==");
+// None of these is an error. The button did nothing because nothing
+// needed doing. "Failed" would be wrong; silence reads as a dead
+// button.
+eq("a double tap", refreshOutcome("just_now"), "Refreshed just now");
+eq("already fresh", refreshOutcome("fresh"), "Already up to date");
+eq("the daily cap, said without scolding",
+  refreshOutcome("daily_cap"), "You've refreshed a few times today — try again tomorrow");
+eq("the bank returned nothing", refreshOutcome("no_balance"), "Your bank didn't return a balance");
+eq("a reason we do not have a sentence for says nothing at all",
+  refreshOutcome("something_new"), null);
+eq("...and so does no reason", refreshOutcome(undefined), null);
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);
 process.exit(failures === 0 ? 0 : 1);

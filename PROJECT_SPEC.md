@@ -2714,19 +2714,37 @@ resolve.
 ## 10. Roadmap
 
 ### Connected checking via Plaid — BALANCE ONLY. Decided 2026-10-20.
-### Server side BUILT 2026-10-20 (schema, RLS, four edge functions). No UI yet.
+### Server side AND UI BUILT 2026-10-20. Not yet run against the project; sandbox E2E outstanding.
 
 Opt-in, per account, off by default. Plaid team "Key Budget" exists;
 sandbox first, Trial plan being applied for (10 connections).
 
-**WHAT IS BUILT:** `supabase/plaid.sql` (six tables, the RLS, the
-collision rule as a SECURITY DEFINER function, and the purge hook)
-and four edge functions — `plaid-link-token`, `plaid-exchange`,
-`plaid-balance`, `plaid-disconnect` — plus `src/content/connect.ts`,
-which is every user-facing word of the feature. **WHAT IS NOT:** any
-UI at all. No toggle, no pill state, no consent screen rendered, no
-Link opened. Nothing in the shipped app reaches any of this, and the
-SQL has not been run against the project yet.
+**WHAT IS BUILT:** `supabase/plaid.sql` (seven tables, the RLS, the
+Vault functions, the collision rule as a SECURITY DEFINER function,
+and the purge hook) and four edge functions — `plaid-link-token`,
+`plaid-exchange`, `plaid-balance`, `plaid-disconnect`. On the client:
+`src/content/connect.ts` (every user-facing word),
+`src/shared/connect.ts` (every decision, as pure functions both
+clients call) and `src/shared/plaidApi.ts` (the four calls). The UI
+on both: the toggle and connection block in Settings, the consent
+screen, all five pill states, the Refresh/Log manually sheet, and
+the "want this automatic?" line on the balance form.
+
+**WHAT IS NOT:** the SQL has not been run against the project, the
+functions are not deployed, and the sandbox end-to-end has not been
+done. Until a row exists in `plaid_beta` nothing in either client
+draws anything — which is also the first proof that the gate works.
+
+**THE DECISIONS LIVE IN ONE PURE MODULE**, `src/shared/connect.ts`,
+and that is why the two clients cannot disagree about the five pill
+states, about who may see the toggle, or about when the hint
+appears. `tests/connect.test.mjs` asks those questions without a
+renderer. The one place the clients genuinely differ is layout: the
+web draws `$X · as of 10/17` on one line and the phone cannot,
+because the anchor strip was measured at 260pt and the date was
+given its own line — so `PILL_SUFFIX` is the half after the dot and
+`PILL` is the balance plus it. A test asserts that the web's line IS
+the phone's half, so the two can never drift into two wordings.
 
 **THE GUIDING PRINCIPLE, the owner's, 2026-10-20: TWO FIRST-CLASS
 PATHS.** Manual entry is the core product and stays complete and
@@ -3012,6 +3030,28 @@ when the app ships. It is checked in every edge function, not only at
 the toggle: a feature gated in the UI alone is not gated. Everyone
 else sees an ordinary, complete, manual app — which is the guiding
 principle holding rather than a consolation.
+
+**THE PER-ITEM FEE IS REAL, 2026-10-20.** Asked before production,
+answered from Plaid's own docs: a product in the REQUIRED `products`
+array is billed at Item creation under the one-time fee model
+"regardless of how many API calls are made for it" — so **Identity
+costs its per-Item fee even though `/identity/get` is never called.**
+The escape in Plaid's docs does not apply here: `optional_products`
+and `additional_consented_products` are not billed until used, but
+`products` must contain at least one entry and `balance` cannot be
+one, so something always lands in the billed array.
+
+Balance itself is billed **per successful request**, which makes the
+recurring cost the one to watch rather than the connection fee.
+Worst case under the current constants is 2 automatic + 4 manual =
+6 calls per item per day, about **180 a month per connection** —
+and Plaid does not publish rates, so the real number arrives with
+Production access. Both knobs are single constants in
+`_shared/plaid.ts`: `BALANCE_STALE_AFTER_HOURS` (12) and
+`MAX_MANUAL_REFRESHES_PER_DAY` (4). If the per-call rate makes 180 a
+month uncomfortable, raising the staleness window is the cheaper
+lever than lowering the cap, because the automatic pulls are the
+ones the user never asked for.
 
 **WHAT NAME PLAID LINK SHOWS THE USER:** `client_name` from
 `/link/token/create`, which this app sends as **"Key Budget"** (Plaid

@@ -3,6 +3,7 @@ import { todayISO } from "../engine/model.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 import { HIDDEN_ROWS_COPY as HIDDEN, DATE_LABEL } from "../content/logBalance.ts";
 import { fmtDate } from "../shared/dates.ts";
+import { CONNECT_HINT, CONNECT_HINT_DISMISS } from "../content/connect.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -29,7 +30,7 @@ const money = (n) =>
 // Also used, with copy overrides, to log a contribution — it is already
 // exactly amount + date + Confirm, and a near-identical second modal would
 // be two places to fix every future change to this interaction.
-export default function UpdateBalanceModal({ account, onConfirm, onClose, title, blurb, amountLabel, cta, hiddenRows, dateLabel }) {
+export default function UpdateBalanceModal({ account, onConfirm, onClose, title, blurb, amountLabel, cta, hiddenRows, dateLabel, offerConnectHint, onOpenSettings, onHideHint }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayISO());
   // The rows about to disappear, once Confirm has been pressed and
@@ -136,6 +137,28 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
             {cta ?? "Confirm"}
           </button>
         </div>
+
+        {/* THE ONE PLACE THIS IS EVER MENTIONED to someone who has not
+            turned it on, and NOT IN SETUP, on the owner's call. The
+            reason generalizes: somebody deciding whether to use this
+            app at all is the wrong person to offer a bank connection
+            to. This is read by somebody who has just typed a balance
+            by hand and therefore knows what that costs them.
+
+            IT LOADS NO PLAID CODE — a sentence, a link to Settings,
+            and a way never to see it again. The script is only
+            fetched at the moment of consent; see
+            ConnectedAccount.jsx. */}
+        {offerConnectHint && (
+          <div className="mt-5 flex items-baseline justify-between gap-3">
+            <button onClick={onOpenSettings} className="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 underline text-left">
+              {CONNECT_HINT}
+            </button>
+            <button onClick={onHideHint} className="shrink-0 text-xs text-gray-400 hover:text-gray-600">
+              {CONNECT_HINT_DISMISS}
+            </button>
+          </div>
+        )}
         </>
         )}
       </div>

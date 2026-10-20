@@ -115,21 +115,41 @@ export const CONNECT_HINT_DISMISS = "Don't show again";
  * all of them — the connection is a detail about where the number
  * came from, never a different kind of number.
  */
-export const PILL = {
+/**
+ * THE HALF AFTER THE DOT, which is the half that varies.
+ *
+ * It is split out because the two clients lay the pill out
+ * differently and must not therefore word it differently. The web
+ * puts the whole thing on one line. The phone cannot: the anchor
+ * strip was measured at 260pt and the date was given its own line
+ * precisely because one line truncates at the narrowest width (see
+ * mobile/components/AnchorStrip.tsx, which has the arithmetic). So
+ * the phone draws the balance and then THIS, and the sentence is
+ * still the owner's.
+ */
+export const PILL_SUFFIX = {
   /** Not connected, which is the ordinary case and reads as one. */
-  manual: (amount: string, date: string) => `${amount} · as of ${date}`,
+  manual: (date: string) => `as of ${date}`,
   /** Connected and recently synced. */
-  synced: (amount: string, time: string) => `${amount} · synced ${time}`,
+  synced: (time: string) => `synced ${time}`,
   /** Connected, but today's number is one the user typed. Manual wins. */
-  loggedToday: (amount: string) => `${amount} · logged today`,
+  loggedToday: () => "logged today",
   /** Connected, pulls are failing, so the last GOOD time is shown. */
-  stale: (amount: string, when: string) => `${amount} · synced ${when}`,
+  stale: (when: string) => `synced ${when}`,
   /**
    * The bank wants the user back. Gold, because it is the one state
    * that asks for something — and it names the action rather than
    * the problem, since "disconnected" tells you nothing to do.
    */
-  reconnect: (amount: string) => `${amount} · Reconnect`,
+  reconnect: () => "Reconnect",
+} as const;
+
+export const PILL = {
+  manual: (amount: string, date: string) => `${amount} · ${PILL_SUFFIX.manual(date)}`,
+  synced: (amount: string, time: string) => `${amount} · ${PILL_SUFFIX.synced(time)}`,
+  loggedToday: (amount: string) => `${amount} · ${PILL_SUFFIX.loggedToday()}`,
+  stale: (amount: string, when: string) => `${amount} · ${PILL_SUFFIX.stale(when)}`,
+  reconnect: (amount: string) => `${amount} · ${PILL_SUFFIX.reconnect()}`,
 } as const;
 
 /** The sheet behind the pill when connected. */

@@ -37,6 +37,9 @@ import GuidedTour from "./components/GuidedTour.jsx";
 import SignIn from "./components/SignIn.jsx";
 import SyncNotice from "./components/SyncNotice.jsx";
 import CategoryManager from "./components/CategoryManager.jsx";
+import { supabase } from "./supabase.js";
+import { isAllowlisted as plaidAllowlisted, pullBalance, readConnection } from "./shared/plaidApi.ts";
+import { shouldPullOnOpen, shouldOfferHint } from "./shared/connect.ts";
 
 export default function App() {
   // undefined = still checking for a session, null = signed out, object = signed in
@@ -392,6 +395,51 @@ export default function App() {
     setSyncNotice({ kind, stashed });
   }, []);
 
+  // Re-read the server's copy with nothing to discard. Used after a
+  // balance was pulled server-side: the write happened in an edge
+  // function, so nothing in this tab would otherwise notice.
+  const reloadFromServer = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const { state: fresh } = await loadState(session.user.id);
+    skipNextSave.current = true;
+    setState(fresh);
+  }, [session?.user?.id]);
+
+  // THE BANK CONNECTION, read once and handed to the strip.
+  //
+  // Inert with connected features off: the effect returns before it
+  // asks anything, so an ordinary manual account makes no request and
+  // Plaid's script is never added to the page. The 12-hour staleness
+  // window belongs to the SERVER — per account, so one pull serves
+  // every device — and this only decides whether to make the call.
+  const [connection, setConnection] = useState(null);
+  const [plaidBeta, setPlaidBeta] = useState(false);
+  const connectedFeatures = !!state?.settings?.connectedFeatures;
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      const ok = await plaidAllowlisted(supabase);
+      if (dead) return;
+      setPlaidBeta(ok);
+      if (!ok) return;
+      // THE HINT'S AUDIENCE HAS THE FEATURE OFF, so the allowlist is
+      // read either way and only the connection read is gated.
+      if (!connectedFeatures) { setConnection(null); return; }
+      const row = await readConnection(supabase);
+      if (dead || !row) return;
+      setConnection(row);
+      if (!shouldPullOnOpen({ connectedFeatures }, row)) return;
+      const result = await pullBalance(supabase, "open");
+      if (dead || !result) return;
+      setConnection((c) => c && { ...c, status: result.status ?? c.status, lastSyncedAt: result.lastSyncedAt ?? c.lastSyncedAt });
+      // A pull that actually wrote changed a snapshot on the server,
+      // and nothing in this tab would have noticed.
+      if (result.synced && result.applied === "written") void reloadFromServer();
+    })();
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectedFeatures]);
+
   // Persist on every change, once loaded. Same reasoning as above: keyed on
   // the user id, not the whole session object. Guarded on `state` being set,
   // which (per above) never happens after a load error.
@@ -506,6 +554,7 @@ export default function App() {
   const isDark = theme === "dark";
   const account = primaryAccount(state); // the one account everything anchors to (Phase 1: single-account)
 
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Header */}
@@ -551,7 +600,12 @@ export default function App() {
 
       {/* Account strip — read-only; the balance only changes via the
           Update balance modal's Confirm. Replaces the old live-edit bar. */}
-      <AccountStrip account={account} onUpdateClick={() => setUpdateBalanceOpen(true)} />
+      <AccountStrip
+        account={account}
+        connection={connection}
+        newestSnapshot={(state.accountSnapshots?.[account.id] ?? []).at(-1)}
+        onUpdateClick={() => setUpdateBalanceOpen(true)}
+      />
 
       {/* Global add — sits just above the tab navigation */}
       {/* The action row is what you DO with your data. Quick Setup and
@@ -765,6 +819,8 @@ export default function App() {
           email={session?.user?.email}
           providers={session?.user?.app_metadata?.providers}
           createdAt={session?.user?.created_at}
+          settings={state.settings}
+          setSettings={setSettings}
           onSignOut={() => signOut()}
           onBack={() => { setAccountOpen(false); setSettingsOpen(true); }}
           onClose={() => setAccountOpen(false)}
@@ -776,6 +832,9 @@ export default function App() {
           account={account}
           onConfirm={confirmBalance}
           onClose={() => setUpdateBalanceOpen(false)}
+          offerConnectHint={shouldOfferHint(state.settings, plaidBeta)}
+          onOpenSettings={() => { setUpdateBalanceOpen(false); setAccountOpen(true); }}
+          onHideHint={() => setSettings({ hideConnectHint: true })}
           // Only the CHECKING balance moves the forecast's starting
           // point, so only this one previews what it hides. The
           // contribution modal below reuses this component and passes

@@ -236,6 +236,23 @@ export interface Settings {
    *  see the migration in stateShape.ts for what existing accounts
    *  inherit. */
   askedAboutIncome: boolean;
+  /**
+   * Connected checking is switched on for this account.
+   *
+   * OFF BY DEFAULT, and the default is the product: manual entry is
+   * complete on its own and connecting a bank is an optional extra.
+   * While this is false there is no Connect entry point anywhere, and
+   * no Plaid code is loaded — no Link script on the web, no browser
+   * opened on the phone. "Not loaded" rather than "hidden", because a
+   * hidden feature still ships its third party's JavaScript.
+   *
+   * PER ACCOUNT, NOT PER DEVICE. It is a decision somebody made about
+   * their own bank, and it has to mean the same thing on their phone
+   * as in their browser.
+   */
+  connectedFeatures: boolean;
+  /** "Want this automatic?" on the Log balance sheet, dismissed for good. */
+  hideConnectHint: boolean;
 }
 
 // ---- The state blob ------------------------------------------------------

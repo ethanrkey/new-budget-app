@@ -16,6 +16,111 @@
 --   supabase secrets set PLAID_CLIENT_ID=... PLAID_SECRET=... PLAID_ENV=sandbox
 --   supabase secrets list        -- names only; values are never printed
 --
+-- ===========================================================================
+-- RUNNING IT, STEP BY STEP. Dashboard -> SQL Editor -> New query.
+--
+-- STEP 0. Turn off statement logging for the session you are about to
+-- paste a token-handling file into. Nothing below puts a secret in a
+-- statement, but the Vault guide is explicit that logged INSERTs are
+-- how plaintext ends up in logs, and the cost of being careful here
+-- is one line:
+--
+--   set log_statement = 'none';
+--
+-- STEP 1. Paste this whole file and Run. It is idempotent: safe to
+-- re-run, and re-running is how you apply a later edit. Expect
+-- "Success. No rows returned".
+--
+-- STEP 2. CONFIRM THE VAULT VIEW'S COLUMN NAMES. This file is written
+-- against `vault.decrypted_secrets (id, decrypted_secret)`, from
+-- Supabase's docs, and if that view ever renames a column then
+-- plaid_read_token returns nothing and every pull fails with
+-- "connection is incomplete". The SQL editor has no `\d`, so:
+--
+--   select column_name, data_type
+--     from information_schema.columns
+--    where table_schema = 'vault' and table_name = 'decrypted_secrets'
+--    order by ordinal_position;
+--
+-- Expect `id uuid` and `decrypted_secret text` among them. If either
+-- is named differently, fix plaid_read_token and
+-- plaid_read_removal_token before going further.
+--
+-- STEP 3. THE THREE PROOF QUERIES, which are the point of the whole
+-- file. Run them now, before any data exists — they should all come
+-- back the right shape and empty — and run them AGAIN after the first
+-- sandbox connection, when they have something to prove.
+--
+--   -- 3a. RLS on, and ZERO policies, on everything secret.
+--   --     Policies, not "no policies I remember writing": RLS with
+--   --     one permissive policy allows whatever that policy says.
+--   select c.relname                     as table_name,
+--          c.relrowsecurity              as rls_enabled,
+--          (select count(*) from pg_policies p
+--             where p.schemaname = 'public' and p.tablename = c.relname) as policies
+--     from pg_class c join pg_namespace n on n.oid = c.relnamespace
+--    where n.nspname = 'public'
+--      and c.relname in ('plaid_tokens', 'plaid_removals',
+--                        'plaid_api_log', 'plaid_link_sessions')
+--    order by c.relname;
+--   -- expect four rows, rls_enabled = true, policies = 0, every one.
+--
+--   -- 3b. The three client-readable tables: exactly one SELECT policy
+--   --     each, and no INSERT, UPDATE or DELETE policy anywhere.
+--   select tablename, policyname, cmd from pg_policies
+--    where schemaname = 'public'
+--      and tablename in ('plaid_items', 'plaid_accounts', 'plaid_beta')
+--    order by tablename, cmd;
+--   -- expect exactly three rows, all cmd = SELECT.
+--
+--   -- 3c. No plaintext token exists anywhere. Empty before the first
+--   --     connection; after one, plaid_tokens shows a uuid and
+--   --     vault.secrets shows ciphertext.
+--   select item_id, secret_id, updated_at from plaid_tokens;
+--   select id, name, left(secret, 24) || '...' as ciphertext from vault.secrets
+--    where name like 'plaid_%';
+--   -- and the only way back, which must return an access-sandbox-... string:
+--   select plaid_read_token((select item_id from plaid_tokens limit 1));
+--
+-- STEP 4. Grants, the other half of 3a — a grant without a policy
+-- still cannot read a row, but there is no reason for one to exist:
+--
+--   select grantee, table_name, privilege_type
+--     from information_schema.role_table_grants
+--    where table_name in ('plaid_tokens', 'plaid_removals',
+--                         'plaid_api_log', 'plaid_link_sessions')
+--      and grantee in ('anon', 'authenticated');
+--   -- expect ZERO rows.
+--
+-- STEP 5. Add yourself to the allowlist, or nothing is reachable:
+--
+--   insert into plaid_beta (user_id, note)
+--   select id, 'owner, sandbox' from auth.users where email = '<your address>';
+--
+-- STEP 6. Deploy the four functions. Note the --no-verify-jwt on the
+-- SECOND one only: Plaid's webhook does not carry a Supabase token,
+-- and the other three must refuse anyone who is not signed in.
+--
+--   cd <repo root>
+--   npx supabase functions deploy plaid-link-token  --project-ref kjcvtpmorftjyejjskwm
+--   npx supabase functions deploy plaid-exchange    --project-ref kjcvtpmorftjyejjskwm --no-verify-jwt
+--   npx supabase functions deploy plaid-balance     --project-ref kjcvtpmorftjyejjskwm
+--   npx supabase functions deploy plaid-disconnect  --project-ref kjcvtpmorftjyejjskwm
+--
+-- STEP 7. Prove the secrets arrived, without printing them. A missing
+-- one answers 500 and NAMES ITSELF, which is the whole reason
+-- readConfig reports missing names rather than failing quietly:
+--
+--   curl -s -X POST -H "Authorization: Bearer $ANON_OR_USER_JWT" \
+--     https://kjcvtpmorftjyejjskwm.supabase.co/functions/v1/plaid-balance
+--   -- "not signed in" with an anon key = deployed and locked.
+--   -- "not configured: PLAID_SECRET" = deployed, secret missing.
+--
+-- STEP 8. Schedule the removal drain (see DRAINING THE REMOVAL QUEUE,
+-- further down). Not optional: without it, a deleted account leaves a
+-- live Item at Plaid.
+-- ===========================================================================
+--
 -- THE PRODUCT RULE THIS SCHEMA EXISTS TO ENFORCE: checking only,
 -- BALANCE ONLY, and the Transactions product is never requested. There
 -- is nowhere in here to put a transaction, and that is deliberate —

@@ -188,6 +188,17 @@ export function categoryLabelOf(
         hasSeenOnboarding: false, // one-time welcome wizard; see storage.js's migration
         hasSeenTour: false,       // the guided tour, once per ACCOUNT; see markTourSeen
         askedAboutIncome: false,  // setup has put the income question; see applySetup
+        // Connected checking, OFF BY DEFAULT and per account rather than
+        // per device — the whole point is that it is a decision someone
+        // made, and a decision does not belong on one browser. While it
+        // is false, no Plaid code is loaded anywhere and there is no
+        // entry point to find. See src/shared/connect.ts.
+        connectedFeatures: false,
+        // "Want this automatic?" on the Log balance sheet, dismissed for
+        // good. Per account for the same reason, and separate from the
+        // toggle because turning the feature down is not the same as
+        // never wanting to be asked.
+        hideConnectHint: false,
       },
       // primaryAccount() is the single source of truth for the anchor
       // balance/date. (Phase 1 briefly mirrored it back into settings as a

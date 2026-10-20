@@ -11,6 +11,8 @@
 // Same pattern as the category manager: its own modal, "← Back to Settings"
 // top-left, "Done" top-right. Back returns to Settings; Done closes the lot.
 import { fmtDate } from "../shared/dates.ts";
+import { supabase } from "../supabase.js";
+import ConnectedAccount from "./ConnectedAccount.jsx";
 const PROVIDER_LABEL = { google: "Google", email: "Email", apple: "Apple", github: "GitHub" };
 
 // Which identity provider actually signed you in. Supabase keeps the list on
@@ -22,7 +24,7 @@ function providerNames(providers) {
   return list.length ? list.join(" and ") : "—";
 }
 
-export default function AccountScreen({ email, providers, createdAt, onSignOut, onBack, onClose }) {
+export default function AccountScreen({ email, providers, createdAt, settings, setSettings, onSignOut, onBack, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
       <div
@@ -53,7 +55,14 @@ export default function AccountScreen({ email, providers, createdAt, onSignOut, 
           />
         </dl>
 
-        <div className="mt-4 flex items-center justify-between gap-3">
+        {/* CONNECTED FEATURES SITS UNDER THE ACCOUNT FACTS, which is
+            the owner's placement and the phone's: the bank is a fact
+            about this account, next to how you signed in and when you
+            joined. It draws nothing at all unless this account is on
+            Plaid's allowlist — see ConnectedAccount.jsx. */}
+        <ConnectedAccount supabase={supabase} settings={settings} onSetSettings={setSettings} />
+
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-gray-100 dark:border-gray-800 pt-4">
           <p className="text-xs text-gray-500">
             Signing out leaves your data where it is. Nothing is deleted.
           </p>

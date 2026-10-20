@@ -11,6 +11,7 @@ import type { Session } from "@supabase/supabase-js";
 import { fmtDate } from "../../src/shared/dates.ts";
 import { withoutDismissalBy } from "../lib/dismissal";
 import { buildLine, updateLine } from "../lib/version";
+import Connected from "./Connected";
 
 // Everything the web header holds, behind ONE affordance.
 //
@@ -149,6 +150,13 @@ export default function Settings({
             <Text style={styles.rowSub}>Your data stays on the server, tied to this account.</Text>
           </Pressable>
         </View>
+
+        {/* CONNECTED FEATURES SITS UNDER ACCOUNT, not under App, and
+            that is the owner's placement: the bank is a fact about
+            this account, next to how you signed in and when you
+            joined. It draws nothing at all unless this account is on
+            Plaid's allowlist — see Connected.tsx. */}
+        <Connected />
 
         <Text style={styles.sectionLabel}>App</Text>
         <View style={styles.card}>
