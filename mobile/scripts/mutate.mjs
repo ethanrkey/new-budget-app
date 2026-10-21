@@ -1853,6 +1853,30 @@ export async function main(argv = process.argv) {
     }
   }
 
+  // ---- SHARDING, for the release run ----
+  //
+  // `--shard 2/6` keeps every sixth mutation starting at the second.
+  // STRIDED AND NOT BLOCKED, so each shard gets a spread of the list
+  // rather than one contiguous region: the catalog is grouped by
+  // feature, so a block would put every slow renderer mutation in
+  // one shard and finish five of them in an hour while the sixth
+  // ran all afternoon.
+  //
+  // Each shard is a SEPARATE WORKTREE, because a mutation writes to
+  // a file — six processes mutating one checkout would restore each
+  // other's work and report nonsense. mutate_all.mjs sets that up.
+  const shardArg = argv.indexOf("--shard");
+  let shard = null;
+  if (shardArg !== -1) {
+    const m = /^(\d+)\/(\d+)$/.exec(argv[shardArg + 1] ?? "");
+    if (!m) { console.log("--shard needs i/n, e.g. --shard 2/6"); return 1; }
+    const [i, n] = [Number(m[1]), Number(m[2])];
+    if (i < 1 || i > n) { console.log(`--shard ${i}/${n} is out of range`); return 1; }
+    shard = { i, n };
+    selected = selected.filter((_, idx) => idx % n === i - 1);
+    console.log(`shard ${i} of ${n}: ${selected.length} mutations`);
+  }
+
   armGuards();
 
   const killedBy = new Map();
@@ -1861,7 +1885,14 @@ export async function main(argv = process.argv) {
   // THE CAP. A run that outlives the reason for it gets stopped and
   // says where it got to; a partial number that arrives is worth more
   // than a complete one nobody waited for.
-  const CAP_MS = 30 * 60 * 1000;
+  //
+  // `--cap <minutes>` RAISES IT, and exists for one caller: the
+  // sharded release run in mutate_all.mjs, where the whole point is
+  // to finish. Thirty minutes stays the default because the thing it
+  // protects — a per-batch run nobody is waiting on — is the common
+  // case, and a release run is deliberate enough to say so.
+  const capArg = argv.indexOf("--cap");
+  const CAP_MS = (capArg !== -1 ? Number(argv[capArg + 1]) || 30 : 30) * 60 * 1000;
   const startedAt = Date.now();
   let cappedAfter = null;
 
@@ -1940,6 +1971,16 @@ export async function main(argv = process.argv) {
   // capped run would list almost the whole suite as unverified, and a
   // report that cries wolf is a report nobody reads.
   const partial = selected.length !== MUTATIONS.length || cappedAfter != null;
+
+  // ONE LINE A MERGER CAN READ. mutate_all.mjs runs six of these and
+  // has to add them up; parsing the prose below would be a second
+  // implementation of the report.
+  if (shard) {
+    console.log(`SHARD-RESULT ${JSON.stringify({
+      shard: `${shard.i}/${shard.n}`, ran: selected.length - (cappedAfter ? 1 : 0),
+      survived, capped: cappedAfter, killedBy: [...killedBy],
+    })}`);
+  }
 
   console.log("\nkilled, with how many mutations each test caught:");
   for (const [t, n] of [...killedBy].sort((a, b) => a[0].localeCompare(b[0]))) {
