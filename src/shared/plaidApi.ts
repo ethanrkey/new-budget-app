@@ -121,9 +121,24 @@ export async function finishLink(sb: FunctionCaller, publicToken: string): Promi
   return d.connected ? { ok: true } : { ok: false, code: d.code ?? "unknown" };
 }
 
+/**
+ * The device's IANA timezone, for dating the snapshot.
+ *
+ * SENT ON EVERY PULL, including pull-on-open, because the server has
+ * no other way to know what day it is where the user is — a balance
+ * pulled at 8:46 PM Eastern belongs to that evening and not to the
+ * UTC tomorrow that has already begun. A ZONE and not a date: the
+ * snapshot date is the forecast's anchor, and a client that sent a
+ * date could send one far enough out to move the whole forecast.
+ */
+export function deviceTimeZone(): string | null {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; }
+  catch { return null; }
+}
+
 /** Ask the server whether a pull is due, and let it decide. */
 export async function pullBalance(sb: FunctionCaller, trigger: "open" | "refresh"): Promise<PullResult | null> {
-  const { data, error } = await sb.functions.invoke("plaid-balance", { body: { trigger } });
+  const { data, error } = await sb.functions.invoke("plaid-balance", { body: { trigger, timeZone: deviceTimeZone() } });
   if (error || !data) return null;
   const d = data as Record<string, unknown>;
   return {

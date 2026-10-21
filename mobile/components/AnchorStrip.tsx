@@ -3,7 +3,7 @@ import { SymbolView } from "expo-symbols";
 import { T, money } from "../lib/theme";
 import { useBudget } from "./StateProvider";
 import { primaryAccount, todayISO } from "../../src/engine/model.ts";
-import { fmtDate } from "../../src/shared/dates.ts";
+import { fmtClock, fmtDate, fmtInstant } from "../../src/shared/dates.ts";
 import { pillIsAction, pillStateOf, pillSuffixOf, type Connection } from "../../src/shared/connect.ts";
 
 // The verified checking balance, on every tab.
@@ -107,13 +107,13 @@ export default function AnchorStrip({ onPress, connection }: {
     account.balanceAsOf,
     todayISO(),
   );
-  const syncedAt = connection?.lastSyncedAt ? new Date(connection.lastSyncedAt) : null;
+  // LOCAL, both halves. These used to slice the UTC date off the
+  // instant and pair it with a local clock, which showed tomorrow's
+  // date beside tonight's time. See fmtInstant.
   const suffix = pillSuffixOf(pill, {
     asOf: fmtDate(account.balanceAsOf),
-    syncedTime: syncedAt ? syncedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "",
-    syncedWhen: syncedAt
-      ? `${fmtDate(connection!.lastSyncedAt!.slice(0, 10))} ${syncedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-      : "never",
+    syncedTime: fmtClock(connection?.lastSyncedAt),
+    syncedWhen: connection?.lastSyncedAt ? fmtInstant(connection.lastSyncedAt) : "never",
   });
 
   return (

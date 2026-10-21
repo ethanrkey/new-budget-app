@@ -204,5 +204,39 @@ export const needsReconnect = (code: string): boolean => NEEDS_RECONNECT.has(cod
 // deno-lint-ignore no-explicit-any
 export type SupabaseLike = { from: (table: string) => any };
 
-/** Today in the user's own terms. */
-export const isoDate = (d: Date): string => d.toISOString().slice(0, 10);
+/**
+ * Today's date WHERE THE USER IS, not where the server is.
+ *
+ * This was `new Date().toISOString().slice(0, 10)` until 2026-10-20,
+ * which is the UTC date — so a balance pulled at 8:46 PM Eastern on
+ * the 20th was filed as the 21st, a day that had not started yet for
+ * the person it belonged to. A snapshot date is not cosmetic here:
+ * it is the forecast's anchor and the key of the row
+ * (`<accountId>:<YYYY-MM-DD>`), so a date that is off by one puts
+ * the reading on the wrong day in the Ledger and the Calendar, and
+ * makes it lose a collision with a manual log it should have won.
+ *
+ * A TIMEZONE, NOT A DATE, is what the client sends. A client that
+ * sent a date could send any date, and the anchor is the one value
+ * in this app where a bad one is load-bearing — "2099-01-01" would
+ * move the whole forecast. An IANA zone name cannot do that: the
+ * worst it yields is today ± 1, which is the true range anyway.
+ * `Intl` validates the name itself by throwing on a bad one.
+ *
+ * `en-CA` because its short date format IS `YYYY-MM-DD`. That is a
+ * trick rather than a coincidence, so it is written down.
+ */
+export function localDateIn(timeZone: string | null | undefined, now: Date = new Date()): string {
+  if (timeZone) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(now);
+    } catch {
+      // An unknown zone falls through to UTC rather than failing the
+      // pull. A balance filed on the wrong day is a bug; no balance
+      // at all is a worse one.
+    }
+  }
+  return now.toISOString().slice(0, 10);
+}

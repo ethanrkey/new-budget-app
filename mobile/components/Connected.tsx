@@ -6,13 +6,13 @@ import * as feel from "../lib/haptics";
 import { supabase } from "../lib/supabase";
 import { useBudget } from "./StateProvider";
 import NativeSheet from "./NativeSheet";
-import { fmtDate } from "../../src/shared/dates.ts";
+import { fmtInstant } from "../../src/shared/dates.ts";
 import { CONNECT_CONSENT, DISCONNECT_NOTE, PLAID_PORTAL_URL } from "../../src/content/connect.ts";
 import { canSeeToggle } from "../../src/shared/connect.ts";
 import {
-  disconnect as apiDisconnect, isAllowlisted, pullBalance, readConnection, startLink,
-  type Connected as ConnectionRow,
+  disconnect as apiDisconnect, pullBalance, readConnection, startLink,
 } from "../../src/shared/plaidApi.ts";
+import { allowlistedNow, setConnection, useConnection } from "../lib/connection";
 
 // Connected checking, on the phone. The Settings half: the toggle,
 // the bank, and the way out.
@@ -43,34 +43,30 @@ export default function Connected() {
   const { state, commit, refresh: resyncState } = useBudget();
   const on = !!state?.settings.connectedFeatures;
 
-  const [allowlisted, setAllowlisted] = useState<boolean | null>(null);
-  const [connection, setConnection] = useState<ConnectionRow | null>(null);
+  // ONE CONNECTION, SHARED WITH THE PILL. This screen used to keep
+  // its own copy, which meant connecting here updated Settings and
+  // left the Checking strip on four tabs still saying "as of" — the
+  // pill had no way to learn that a bank now existed until the app
+  // was restarted. The store in lib/connection.ts is the one answer
+  // and everything that changes it writes there.
+  const { connection, allowlisted } = useConnection();
   const [consenting, setConsenting] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  // ASKED ONCE, ON MOUNT, AND ONLY HERE. A user who is not on the
-  // list must never be able to tell "not allowlisted" from "no such
-  // feature", and an empty read gives that for free.
-  useEffect(() => {
-    let dead = false;
-    void isAllowlisted(supabase as never).then((ok) => { if (!dead) setAllowlisted(ok); });
-    return () => { dead = true; };
-  }, []);
+  const [busy, setBusy] = useState<null | "connecting" | "saving" | "disconnecting">(null);
 
   const refreshConnection = useCallback(async () => {
     const row = await readConnection(supabase as never);
-    setConnection(row);
+    setConnection(row && { institutionName: row.institutionName, status: row.status, lastSyncedAt: row.lastSyncedAt, mask: row.mask });
     return row;
   }, []);
 
   useEffect(() => {
-    if (!on || !allowlisted) { setConnection(null); return; }
+    if (!on || !allowlisted) return;
     void refreshConnection();
   }, [on, allowlisted, refreshConnection]);
 
   // Nothing at all for anyone not on the list. Not a disabled row,
   // not an explanation — absent.
-  if (!canSeeToggle(!!allowlisted)) return null;
+  if (!canSeeToggle(allowlistedNow() || allowlisted)) return null;
 
   async function setToggle(next: boolean) {
     if (next) {
@@ -102,9 +98,9 @@ export default function Connected() {
   }
 
   async function doDisconnect(alsoToggleOff: boolean) {
-    setBusy(true);
+    setBusy("disconnecting");
     const ok = await apiDisconnect(supabase as never);
-    setBusy(false);
+    setBusy(null);
     if (!ok) {
       feel.failure();
       Alert.alert("Couldn't disconnect", "Nothing changed. Check your connection and try again.");
@@ -119,10 +115,10 @@ export default function Connected() {
 
   async function openLink() {
     setConsenting(false);
-    setBusy(true);
+    setBusy("connecting");
     const started = await startLink(supabase as never, true);
     if ("error" in started || !started.hostedUrl) {
-      setBusy(false);
+      setBusy(null);
       feel.failure();
       Alert.alert("Couldn't start", `We couldn't reach the connection service (${"error" in started ? started.error : "no link"}). Try again in a moment.`);
       return;
@@ -140,19 +136,20 @@ export default function Connected() {
     // Trigger "open", not "refresh": a brand new Item has never
     // synced, so the staleness check passes on its own and this does
     // not spend one of the four daily refreshes on the connection.
+    setBusy("saving");
     let row = await refreshConnection();
     if (row) {
       await pullBalance(supabase as never, "open");
       row = await refreshConnection();
       await resyncState();
     }
-    setBusy(false);
+    setBusy(null);
     if (row) feel.success();
   }
 
-  const lastSync = connection?.lastSyncedAt
-    ? `${fmtDate(connection.lastSyncedAt.slice(0, 10))}, ${new Date(connection.lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-    : "never";
+  // LOCAL DATE AND LOCAL TIME, from the instant. It used to slice
+  // the UTC date off the string and pair it with a local clock.
+  const lastSync = connection?.lastSyncedAt ? fmtInstant(connection.lastSyncedAt) : "never";
 
   return (
     <>
@@ -172,7 +169,7 @@ export default function Connected() {
           <Switch
             value={on}
             onValueChange={(v) => { void setToggle(v); }}
-            disabled={busy}
+            disabled={!!busy}
             trackColor={{ true: T.brass, false: T.border }}
             accessibilityLabel="Connected features"
           />
@@ -182,7 +179,7 @@ export default function Connected() {
           <Pressable
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
             onPress={() => { feel.light(); setConsenting(true); }}
-            disabled={busy}
+            disabled={!!busy}
             accessibilityRole="button" accessibilityLabel="Connect your bank"
           >
             <Text style={styles.actionText}>Connect your bank (Beta)</Text>
@@ -222,7 +219,7 @@ export default function Connected() {
                   { text: "Disconnect", style: "destructive", onPress: () => { void doDisconnect(false); } },
                 ]);
               }}
-              disabled={busy}
+              disabled={!!busy}
               accessibilityRole="button" accessibilityLabel="Disconnect your bank"
             >
               <Text style={[styles.actionText, styles.danger]}>Disconnect</Text>
@@ -243,7 +240,20 @@ export default function Connected() {
           </>
         )}
 
-        {busy && <ActivityIndicator style={{ marginTop: 10 }} color={T.dim} />}
+        {/* A NAMED WAIT, not a blank gap. Connecting takes five to
+            seven seconds — a Link token, an exchange, three more
+            Plaid calls and the first pull — and an empty card for
+            that long reads as a failure. */}
+        {busy && (
+          <View style={styles.waiting}>
+            <ActivityIndicator color={T.dim} />
+            <Text style={styles.waitingText}>
+              {busy === "connecting" ? "Opening your bank…"
+                : busy === "saving" ? "Saving the connection…"
+                : "Disconnecting…"}
+            </Text>
+          </View>
+        )}
       </View>
 
       <ConsentSheet
@@ -321,6 +331,8 @@ const styles = StyleSheet.create({
   notice: { backgroundColor: T.bg, borderRadius: 10, borderWidth: 1, borderColor: T.border, padding: 10, marginVertical: 8 },
   noticeTitle: { color: T.text, fontSize: 14, fontWeight: "600" },
   pressed: { opacity: 0.7 },
+  waiting: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14 },
+  waitingText: { color: T.dim, fontSize: 14 },
   sheet: { padding: 20, gap: 10 },
   sheetTitle: { color: T.text, fontSize: 19, fontWeight: "700", marginBottom: 4 },
   bullet: { flexDirection: "row", gap: 8 },

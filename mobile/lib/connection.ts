@@ -54,7 +54,8 @@ export function load(settings: { connectedFeatures: boolean }): Promise<void> {
       }
       const row = await readConnection(supabase as never);
       current = row && {
-        institutionName: row.institutionName, status: row.status, lastSyncedAt: row.lastSyncedAt,
+        institutionName: row.institutionName, status: row.status,
+        lastSyncedAt: row.lastSyncedAt, mask: row.mask,
       };
       if (shouldPullOnOpen(settings, current)) {
         const result = await pullBalance(supabase as never, "open");

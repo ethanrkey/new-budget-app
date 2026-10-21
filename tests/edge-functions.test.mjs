@@ -23,7 +23,7 @@
 // having its behavior described by a test that cannot run it.
 import { readFileSync } from "node:fs";
 import { ALLOWED_ORIGINS, corsHeaders, preflight } from "../supabase/functions/_shared/cors.ts";
-import { PLAID_ENDPOINTS, PRODUCTS } from "../supabase/functions/_shared/plaid.ts";
+import { PLAID_ENDPOINTS, PRODUCTS, localDateIn } from "../supabase/functions/_shared/plaid.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -165,6 +165,57 @@ console.log("\n== the Plaid endpoint paths ==");
   eq("one product, and it is identity", [...PRODUCTS], ["identity"]);
   not("the Transactions product is never requested", PRODUCTS.includes("transactions"));
   not("...nor Auth", PRODUCTS.includes("auth"));
+}
+
+console.log("\n== what day it is where the USER is ==");
+
+// THE BUG THIS PINS, from the first real sandbox connection: a pull
+// at 8:46 PM Eastern on the 20th was filed as the 21st, because the
+// server stamped it with `new Date().toISOString().slice(0, 10)` —
+// the UTC date, and UTC had already rolled over.
+//
+// A snapshot date is not cosmetic. It is the forecast's anchor and
+// the primary key of the row (`<accountId>:<YYYY-MM-DD>`), so one
+// day out puts the reading on the wrong day in the Ledger and the
+// Calendar, and makes it lose a collision with a manual log it
+// should have won.
+{
+  const evening = new Date("2026-10-21T00:46:00Z"); // 8:46 PM Eastern, the 20th
+  eq("8:46 PM Eastern on the 20th is the 20th", localDateIn("America/New_York", evening), "2026-10-20");
+  eq("...and UTC's own answer, which is the bug, is the 21st", localDateIn(null, evening), "2026-10-21");
+  eq("...and in London it really is the 21st", localDateIn("Europe/London", evening), "2026-10-21");
+
+  // The other side of the date line, which the Eastern case alone
+  // would not catch: a morning in Auckland is still yesterday in UTC.
+  const morning = new Date("2026-10-20T20:00:00Z"); // 9am the 21st in Auckland
+  eq("9am in Auckland is already tomorrow", localDateIn("Pacific/Auckland", morning), "2026-10-21");
+  eq("...while UTC is still on the 20th", localDateIn(null, morning), "2026-10-20");
+
+  // Midday anywhere is the same day everywhere nearby — a sanity
+  // check that this is not just adding a day.
+  eq("midday UTC is the same day in New York",
+    localDateIn("America/New_York", new Date("2026-10-20T16:00:00Z")), "2026-10-20");
+}
+
+// A BAD ZONE FALLS BACK rather than failing the pull. A balance
+// filed on the wrong day is a bug; no balance at all is a worse one.
+{
+  const t = new Date("2026-10-21T00:46:00Z");
+  eq("an unknown zone falls back to UTC", localDateIn("Not/AZone", t), "2026-10-21");
+  eq("an empty string does too", localDateIn("", t), "2026-10-21");
+  eq("and so does nothing at all", localDateIn(undefined, t), "2026-10-21");
+}
+
+// IT TAKES A ZONE, NOT A DATE, and that is a security property
+// rather than a style choice: the snapshot date is the anchor, so a
+// client that could name the date could move the whole forecast.
+// The worst an IANA name can produce is today plus or minus one.
+{
+  const now = new Date("2026-10-20T16:00:00Z");
+  const zones = ["Pacific/Auckland", "Pacific/Kiritimati", "Pacific/Niue", "America/New_York", "UTC"];
+  const days = zones.map((z) => localDateIn(z, now));
+  is("every zone on earth lands within a day of UTC",
+    days.every((d) => ["2026-10-19", "2026-10-20", "2026-10-21"].includes(d)));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

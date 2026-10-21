@@ -14,7 +14,9 @@
 // THE SENTENCES ARE WRITTEN OUT, not read back from the content file.
 // A test that imports the string it is checking passes whatever you
 // change it to, which is the opposite of the job.
+import { execFileSync } from "node:child_process";
 import { normalize } from "../src/engine/stateShape.ts";
+import { fmtInstant } from "../src/shared/dates.ts";
 import { splitState, assembleState } from "../src/engine/entities.ts";
 import {
   CONNECT_CONSENT, CONNECT_HINT, CONNECT_HINT_DISMISS, DISCONNECT_NOTE,
@@ -235,6 +237,41 @@ for (const st of ["manual", "synced", "loggedToday", "stale"]) {
   is("the web's line is the balance plus the phone's half",
     states.every((st) => pillTextOf(st, { amount: "$9.00", ...parts }) === `$9.00 · ${pillSuffixOf(st, parts)}`));
 }
+
+console.log("\n== 'last synced' is local, both halves ==");
+
+// THE BUG THIS PINS: both clients built the string as
+// `fmtDate(iso.slice(0, 10))` plus a local clock — the UTC DATE
+// beside the LOCAL TIME. A sync at 8:46 PM Eastern displayed as
+// "10/21/2026, 8:46 PM": tomorrow's date next to tonight's time.
+// Half-converted is worse than not converted, because it looks
+// converted.
+//
+// RUN IN A CHILD PROCESS WITH THE ZONE PINNED. `fmtInstant` reads
+// the ambient zone, which is its whole job, so the only honest way
+// to assert a literal is to fix the zone — and fixing it for the
+// whole suite would quietly change what every other date test is
+// measuring. One child, one variable, no reach.
+{
+  const probe = `
+    const { fmtInstant, fmtClock } = await import("${new URL("../src/shared/dates.ts", import.meta.url).href}");
+    console.log(JSON.stringify([fmtInstant("2026-10-21T00:46:00Z"), fmtClock("2026-10-21T00:46:00Z")]));
+  `;
+  const out = execFileSync(process.execPath, ["--input-type=module", "-e", probe], {
+    encoding: "utf8", env: { ...process.env, TZ: "America/New_York" },
+  });
+  const [shown, clock] = JSON.parse(out);
+  eq("an 8:46 PM Eastern sync shows the 20th, not UTC's 21st", shown, "10/20/2026, 8:46 PM");
+  eq("...and the clock alone agrees with it", clock, "8:46 PM");
+  // The date half and the time half must come from the SAME
+  // conversion. This is the assertion the old code would have
+  // failed: it took the date from the UTC string and the time from
+  // the local clock.
+  is("the date half and the time half cannot disagree", shown.endsWith(clock));
+}
+
+eq("nothing to show is an em dash, not Invalid Date", fmtInstant(null), "—");
+eq("...and so is a string that is not an instant", fmtInstant("not a date"), "—");
 
 console.log("\n== the gate, which is two questions and not one ==");
 

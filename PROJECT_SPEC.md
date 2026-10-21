@@ -2738,6 +2738,55 @@ proof queries 3a, 3b and 4 all pass, he is in `plaid_beta`, and
 functions are deployed to `kjcvtpmorftjyejjskwm`, with
 `--no-verify-jwt` on `plaid-exchange` alone.
 
+**THREE BUGS FROM THE FIRST SUCCESSFUL CONNECTION, 2026-10-20.**
+Connect worked end to end on web — First Platypus ••0000, $100.00
+pulled, visible on the phone too — and three things were wrong.
+
+**1. THE SNAPSHOT WAS DATED IN THE SERVER'S DAY.** Connected at 8:46
+PM Eastern on the 20th; the snapshot said the 21st. The pull stamped
+`new Date().toISOString().slice(0, 10)`, which is the UTC date, and
+UTC had already rolled over. **Not cosmetic:** the snapshot date is
+the forecast's anchor AND the primary key of the row
+(`<accountId>:<YYYY-MM-DD>`), so one day out puts the reading on the
+wrong day in the Ledger and the Calendar, and makes it lose a
+collision with a manual log it should have won.
+
+The client now sends its IANA zone with **every** pull, including
+pull-on-open, and `plaid_items.time_zone` remembers the last one a
+real device reported so the roadmap's server-initiated pulls have an
+answer. **A ZONE AND NOT A DATE**, which is a security property
+rather than a style choice: the snapshot date is the anchor, so a
+client that could name the date could move the whole forecast. The
+worst an IANA name can yield is today ± 1, which is the true range
+anyway, and `Intl` validates the name by throwing on a bad one. An
+unknown zone falls back to UTC — a balance on the wrong day is a bug,
+no balance at all is a worse one.
+
+**2. THE DISPLAY WAS HALF-CONVERTED, which is worse than not
+converted because it looks converted.** Both clients built "last
+synced" as `fmtDate(iso.slice(0, 10))` plus a local clock — the UTC
+DATE beside the LOCAL TIME. 8:46 PM Eastern rendered as "10/21/2026,
+8:46 PM": tomorrow's date next to tonight's time. `fmtInstant` in
+`src/shared/dates.ts` is now the one way to render an instant, and it
+is named for the thing the rest of that file is not: everything else
+there takes a date-only string with no zone, which must never go
+through a Date constructor.
+
+**3. THE PILL AND SETTINGS HELD TWO ANSWERS.** Settings kept its own
+copy of the connection, so connecting updated that block while the
+Checking strip on every tab went on saying "as of" until the app was
+restarted. The phone had the same bug from the same cause and it was
+not reported — `Connected.tsx` had private state beside the shared
+store in `lib/connection.ts`. Both now read the one store; on the web
+Settings tells App to re-read. **One fact, one place** — the same
+rule the two clients already follow for copy.
+
+Also: connecting takes five to seven seconds (an exchange, three more
+Plaid calls, then the first pull) and showed a blank gap. Both
+clients now name the wait — "Opening your bank…", "Saving the
+connection…" — and the web draws a skeleton the size of the block
+that is coming, so the page does not jump when it lands.
+
 **AND THEN IT FAILED ON A TYPO, the same evening.** With CORS fixed,
 Link ran all the way through — First Platypus Bank, only the checking
 account offered, and **Plaid's own screen said "contact details and

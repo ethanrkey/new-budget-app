@@ -16,6 +16,8 @@ export interface Connection {
   status: string;
   /** ISO instant, or null if it has never successfully pulled. */
   lastSyncedAt: string | null;
+  /** The last four digits, for Settings. Never the account number. */
+  mask?: string | null;
 }
 
 /**

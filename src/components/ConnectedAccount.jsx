@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CONNECT_CONSENT, DISCONNECT_NOTE, PLAID_PORTAL_URL } from "../content/connect.ts";
 import { canSeeToggle } from "../shared/connect.ts";
 import { disconnect as apiDisconnect, isAllowlisted, pullBalance, readConnection, startLink, finishLink } from "../shared/plaidApi.ts";
-import { fmtDate } from "../shared/dates.ts";
+import { fmtInstant } from "../shared/dates.ts";
 
 // Connected checking, on the web. The Settings → Account half: the
 // toggle, the bank, and the way out. The phone's twin is
@@ -37,12 +37,12 @@ function loadLinkScript() {
   });
 }
 
-export default function ConnectedAccount({ supabase, settings, onSetSettings, onPulled }) {
+export default function ConnectedAccount({ supabase, settings, onSetSettings, onChanged }) {
   const on = !!settings.connectedFeatures;
   const [allowlisted, setAllowlisted] = useState(null);
   const [connection, setConnection] = useState(null);
   const [consenting, setConsenting] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(null);
   const [said, setSaid] = useState(null);
 
   useEffect(() => {
@@ -78,12 +78,13 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
   }
 
   async function doDisconnect() {
-    setBusy(true);
+    setBusy("disconnecting");
     const ok = await apiDisconnect(supabase);
-    setBusy(false);
+    setBusy(null);
     if (!ok) { setSaid("Couldn't disconnect. Nothing changed — try again in a moment."); return; }
     setConnection(null);
     setSaid(null);
+    onChanged?.();
   }
 
   async function openLink() {
@@ -100,9 +101,14 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     const handler = Plaid.create({
       token: started.linkToken,
       onSuccess: async (publicToken) => {
+        // FROM HERE IT IS FIVE TO SEVEN SECONDS — an exchange, three
+        // more Plaid calls and the first balance pull — and Link has
+        // already closed, so without a named wait the user is looking
+        // at an unchanged Settings page wondering if it worked.
+        setBusy("saving");
         const done = await finishLink(supabase, publicToken);
         if (!done.ok) {
-          setBusy(false);
+          setBusy(null);
           // THE CODE IS SHOWN, not swallowed. This is allowlist-only
           // and the people who see it are people the owner knows; a
           // bare "try again" cost one round trip through the browser
@@ -122,19 +128,20 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
         // refreshes on the connection itself.
         await pullBalance(supabase, "open");
         await refresh();
-        setBusy(false);
-        onPulled?.();
+        setBusy(null);
+        onChanged?.();
       },
       // A user who closes Link has declined. That is an answer, not
       // an error, and it gets no message.
-      onExit: () => { setBusy(false); },
+      onExit: () => { setBusy(null); },
     });
     handler.open();
   }
 
-  const lastSync = connection?.lastSyncedAt
-    ? `${fmtDate(connection.lastSyncedAt.slice(0, 10))}, ${new Date(connection.lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-    : "never";
+  // LOCAL DATE AND LOCAL TIME. This used to slice the UTC date off
+  // the instant and pair it with a local clock, so an 8:46 PM Eastern
+  // sync read "10/21/2026, 8:46 PM" — tomorrow beside tonight.
+  const lastSync = connection?.lastSyncedAt ? fmtInstant(connection.lastSyncedAt) : "never";
 
   return (
     <section className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-4">
@@ -153,7 +160,7 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
           <input
             type="checkbox"
             checked={on}
-            disabled={busy}
+            disabled={!!busy}
             onChange={(e) => toggle(e.target.checked)}
             className="h-4 w-4"
             aria-label="Connected features"
@@ -165,7 +172,7 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
       {on && !connection && (
         <button
           onClick={() => setConsenting(true)}
-          disabled={busy}
+          disabled={!!busy}
           className="mt-3 text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition disabled:opacity-50"
         >
           Connect your bank (Beta)
@@ -211,11 +218,33 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
           </p>
           <button
             onClick={() => { if (window.confirm(`Disconnect your bank?\n\n${DISCONNECT_NOTE}`)) doDisconnect(); }}
-            disabled={busy}
+            disabled={!!busy}
             className="shrink-0 text-sm px-3 py-1.5 rounded-lg border border-red-300 text-red-700 dark:border-red-900 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 transition disabled:opacity-50"
           >
             Disconnect
           </button>
+        </div>
+      )}
+
+      {/* A NAMED WAIT WITH A SHAPE, not a blank gap. The block below
+          it takes five to seven seconds to appear after Link closes,
+          and nothing on screen changing for that long reads as a
+          failure. The skeleton is the size of the block that is
+          coming, so the page does not jump when it arrives. */}
+      {busy && (
+        <div className="mt-3" aria-live="polite">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-300 border-t-transparent animate-spin dark:border-gray-600 dark:border-t-transparent" />
+            {busy === "connecting" ? "Opening your bank…"
+              : busy === "saving" ? "Saving the connection…"
+              : "Disconnecting…"}
+          </div>
+          {busy === "saving" && (
+            <div className="mt-3 space-y-2 border-y border-gray-100 dark:border-gray-800 py-2.5">
+              <div className="h-4 w-48 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+              <div className="h-4 w-56 rounded bg-gray-100 dark:bg-gray-800 animate-pulse" />
+            </div>
+          )}
         </div>
       )}
 

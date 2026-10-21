@@ -117,3 +117,34 @@ export function fmtLongDay(iso: string | null | undefined): string {
 function isISO(v: string | null | undefined): v is string {
   return typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v);
 }
+
+/**
+ * An INSTANT (an ISO timestamp with a zone), in the reader's own
+ * local date and time: "10/20/2026, 8:46 PM".
+ *
+ * WHY THIS EXISTS RATHER THAN `fmtDate(iso.slice(0, 10))`, which is
+ * what both clients did until 2026-10-20 and which is wrong in a way
+ * that hides: slicing takes the UTC date off the string while
+ * `toLocaleTimeString` renders the local time, so a sync at 8:46 PM
+ * Eastern displayed as "10/21/2026, 8:46 PM" — tomorrow's date beside
+ * tonight's clock. Half-converted is worse than not converted,
+ * because it looks converted.
+ *
+ * Everything else in this file takes a DATE-ONLY string, which has no
+ * zone and must never be put through a Date constructor. This one is
+ * the opposite and is named for it.
+ */
+export function fmtInstant(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.toLocaleDateString("en-US")}, ${fmtClock(iso)}`;
+}
+
+/** Just the clock part of an instant, local: "8:46 PM". */
+export function fmtClock(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}

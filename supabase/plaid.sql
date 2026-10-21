@@ -238,6 +238,19 @@ alter table plaid_accounts add column if not exists last_available  numeric;
 alter table plaid_accounts add column if not exists last_current    numeric;
 alter table plaid_accounts add column if not exists last_balance_at timestamptz;
 
+-- THE USER'S TIMEZONE, remembered on the Item.
+--
+-- A pulled balance is dated in the user's own day, not the server's
+-- — a pull at 8:46 PM Eastern belongs to that evening, not to the
+-- UTC tomorrow that has already started. The client sends its IANA
+-- zone with every pull and it is kept here for the pulls that have
+-- no client to ask: the plan-aware morning pulls in the roadmap, and
+-- anything else that ever runs from cron.
+--
+-- A ZONE NAME, NOT A DATE, because a client that sent a date could
+-- send any date and the snapshot date is the forecast's anchor.
+alter table plaid_items add column if not exists time_zone text;
+
 -- ---------------------------------------------------------------------------
 -- 2b. THE LINK SESSION, which is how a Hosted Link connection gets home.
 --

@@ -414,6 +414,7 @@ export default function App() {
   // every device — and this only decides whether to make the call.
   const [connection, setConnection] = useState(null);
   const [plaidBeta, setPlaidBeta] = useState(false);
+  const [connTick, setConnTick] = useState(0);
   const connectedFeatures = !!state?.settings?.connectedFeatures;
   useEffect(() => {
     let dead = false;
@@ -437,8 +438,12 @@ export default function App() {
       if (result.synced && result.applied === "written") void reloadFromServer();
     })();
     return () => { dead = true; };
+    // `connTick` is bumped by Settings after a connect or a
+    // disconnect. THE PILL AND SETTINGS MUST NOT HOLD TWO ANSWERS:
+    // they did, and connecting updated Settings while the strip on
+    // every tab went on saying "as of" until the page was reloaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedFeatures]);
+  }, [connectedFeatures, connTick]);
 
   // Persist on every change, once loaded. Same reasoning as above: keyed on
   // the user id, not the whole session object. Guarded on `state` being set,
@@ -821,7 +826,7 @@ export default function App() {
           createdAt={session?.user?.created_at}
           settings={state.settings}
           setSettings={setSettings}
-          onPulled={() => { void reloadFromServer(); }}
+          onChanged={() => { setConnTick((t) => t + 1); void reloadFromServer(); }}
           onSignOut={() => signOut()}
           onBack={() => { setAccountOpen(false); setSettingsOpen(true); }}
           onClose={() => setAccountOpen(false)}

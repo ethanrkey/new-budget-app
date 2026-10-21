@@ -14,7 +14,7 @@
 //   npx supabase functions deploy plaid-balance --project-ref <ref>
 import {
   BALANCE_STALE_AFTER_HOURS, MAX_MANUAL_REFRESHES_PER_DAY, REFRESH_DEBOUNCE_SECONDS,
-  PLAID_ENDPOINTS, callPlaid, isoDate, needsReconnect, readConfig,
+  PLAID_ENDPOINTS, callPlaid, localDateIn, needsReconnect, readConfig,
 } from "../_shared/plaid.ts";
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
 import { preflight } from "../_shared/cors.ts";
@@ -48,19 +48,29 @@ Deno.serve(async (req) => {
   const admin = adminClient();
   if (!await isAllowlisted(admin, userId)) return json(403, { error: "not available" });
 
-  let payload: { trigger?: string } = {};
+  let payload: { trigger?: string; timeZone?: string } = {};
   try { payload = await req.json(); } catch { /* defaults to open */ }
   const trigger = payload.trigger === "refresh" ? "refresh" : "open";
+  // The client's IANA zone, so the snapshot is dated in the user's
+  // own day rather than the server's. See localDateIn.
+  const timeZone = typeof payload.timeZone === "string" ? payload.timeZone : null;
 
   const { data: item } = await admin
     .from("plaid_items")
-    .select("id, status, last_synced_at, plaid_item_id")
+    .select("id, status, last_synced_at, plaid_item_id, time_zone")
     .eq("user_id", userId)
     .maybeSingle();
   // Not connected is not an error. Manual entry is the product; this
   // endpoint being asked by someone with no bank is an ordinary thing
   // for a client to do on open.
   if (!item) return json(200, { connected: false });
+
+  // REMEMBERED, not just used. The pulls in the roadmap that no
+  // client initiates have nobody to ask, so the last zone a real
+  // device reported is the best answer available to them.
+  if (timeZone && timeZone !== item.time_zone) {
+    await admin.from("plaid_items").update({ time_zone: timeZone }).eq("id", item.id);
+  }
 
   if (item.status === "login_required") {
     return json(200, { connected: true, status: "login_required", synced: false, last_synced_at: item.last_synced_at });
@@ -157,7 +167,9 @@ Deno.serve(async (req) => {
   const { data: wrote } = await admin.rpc("plaid_write_balance", {
     p_user_id: userId,
     p_account_id: (checking.data as { id?: string })?.id ?? checking.entity_id,
-    p_date: isoDate(new Date()),
+    // The user's day, falling back to the zone we last stored and
+    // then to UTC. Never the server's day when we know better.
+    p_date: localDateIn(timeZone ?? item.time_zone),
     p_amount: available,
     p_external_id: account.plaid_account_id,
   });
