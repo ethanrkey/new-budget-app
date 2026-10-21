@@ -13,14 +13,45 @@
 //
 // Needs Google Chrome installed (CHROME=/path overrides) and nothing else.
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { readFileSync, existsSync } from "node:fs";
 import puppeteer from "puppeteer-core";
 import { splitState, ENTITY_SCHEMA_VERSION } from "../src/engine/entities.ts";
 import { fixtureState } from "./fixture.mjs";
 
 const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const PORT = Number(process.env.PORT || 5181);
-export const ORIGIN = `http://localhost:${PORT}`;
+/**
+ * A FREE PORT PER INVOCATION, asked of the operating system.
+ *
+ * This was a fixed 5181 with `--strictPort`, which is two bugs at
+ * once and both of them showed up on 2026-10-21 in the sharded
+ * mutation run. Four shards drive the browser at the same time, so
+ * three of them bind a port the first one holds; and even one shard
+ * alone runs the drive dozens of times in a row, where a vite that
+ * has not finished letting go of the port makes the NEXT run attach
+ * to the previous server. That run saw four `open` pulls instead of
+ * one and then could not find the Balance button — three FAIL lines
+ * out of pure flake, which the mutation runner reads as three kills
+ * and so hides a survivor.
+ *
+ * Port 0 is the kernel answering "one that is free", and the listen
+ * is closed before vite is told about it. Two processes can still
+ * race for the same answer; `--strictPort` means the loser dies
+ * loudly rather than quietly sharing, which is the right direction.
+ */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.on("error", reject);
+    // `listen` IS ASYNC: the port is not on `address()` until the
+    // listening event. Reading it straight after the call hands back
+    // null every time.
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address() ?? {};
+      srv.close(() => (port ? resolve(port) : reject(new Error("could not get a free port"))));
+    });
+  });
+}
 
 // Read from .env.local only to know which origin to intercept. Nothing is
 // ever sent to it, and no key is read.
@@ -111,7 +142,18 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
     version: 1, schema_version: ENTITY_SCHEMA_VERSION, updated_at: now,
   }));
 
-  const vite = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], { stdio: "ignore" });
+  // DETACHED, so it can be killed as a GROUP. `vite.kill()` signals
+  // npx, which does not pass it on — so every drive used to leak a
+  // dev server still holding its port, and a hundred mutations leaked
+  // a hundred of them. That is the other half of the flake above.
+  const PORT = await freePort();
+  const ORIGIN = `http://localhost:${PORT}`;
+  const vite = spawn("npx", ["vite", "--port", String(PORT), "--strictPort"], { stdio: "ignore", detached: true });
+  const stopVite = () => { try { process.kill(-vite.pid, "SIGKILL"); } catch { /* already gone */ } };
+  // AND ON THE WAY OUT, because a drive that throws never reaches
+  // close() — which is exactly when a leak is least likely to be
+  // noticed and most likely to break the next run.
+  process.once("exit", stopVite);
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: "shell" });
   await waitForServer(ORIGIN);
   const page = await browser.newPage();
@@ -203,7 +245,7 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
     },
     async close() {
       await browser.close();
-      vite.kill();
+      stopVite();
     },
   };
 }

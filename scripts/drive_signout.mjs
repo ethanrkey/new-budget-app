@@ -15,7 +15,7 @@
 // a query parameter on /auth/v1/logout and the argument that produces
 // it is the thing that was missing. A test of the argument would have
 // been written against the same misunderstanding.
-import { openFixtureApp, ORIGIN } from "./fixtureApp.mjs";
+import { openFixtureApp } from "./fixtureApp.mjs";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -26,7 +26,6 @@ function eq(label, got, want) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${label}${ok ? "" : `\n        got  ${show(got)}\n        want ${show(want)}`}`);
 }
 const is = (label, c) => eq(label, !!c, true);
-void ORIGIN;
 
 const app = await openFixtureApp({ width: 1100, height: 1000 });
 const seen = [];
