@@ -3719,6 +3719,13 @@ only thing that actually needed isolating was Plaid's environment.
 Recorded so the next person does not mistake this for a decision
 against staging; it is a decision about sequence.
 
+**Live as of 2026-10-21.** `plaid.sql` run, `plaid_beta.env` set by
+hand for the two accounts, `PLAID_SECRET_SANDBOX` added, and all four
+functions deployed in the order the SQL header gives. The backfill
+put `production` on every existing row, so the owner's TD Item keeps
+pulling against the same credentials it was minted with — the change
+is invisible to it, which is the point.
+
 ### Switching to production keys — the order matters (2026-10-21)
 
 The owner is moving to production for his own checking only
