@@ -38,7 +38,7 @@ import SignIn from "./components/SignIn.jsx";
 import SyncNotice from "./components/SyncNotice.jsx";
 import CategoryManager from "./components/CategoryManager.jsx";
 import { supabase } from "./supabase.js";
-import { isAllowlisted as plaidAllowlisted, pullBalance, readConnection } from "./shared/plaidApi.ts";
+import { duringPlaidWrite, isAllowlisted as plaidAllowlisted, plaidWriteInFlight, pullBalance, readConnection } from "./shared/plaidApi.ts";
 import { shouldPullOnOpen, shouldOfferHint, refreshOutcome } from "./shared/connect.ts";
 
 export default function App() {
@@ -402,7 +402,12 @@ export default function App() {
    * the four "declined" reasons are non-events, not errors, and the
    * menu says so rather than going quiet or turning red.
    */
-  const pullNow = useCallback(async (trigger) => {
+  // DURINGPLAIDWRITE WRAPS THE RELOAD TOO, not just the call. The
+  // call claims itself (see plaidWriteInFlight); what plaidApi cannot
+  // see is the moment after it returns, while this tab is still
+  // catching up with a row it moved. The focus check below reads the
+  // same counter.
+  const pullNow = useCallback((trigger) => duringPlaidWrite(async () => {
     const result = await pullBalance(supabase, trigger);
     if (!result) return "Couldn't reach your bank just now";
     if (!result.synced) return refreshOutcome(result.reason) ?? "Nothing to update";
@@ -415,7 +420,7 @@ export default function App() {
       ? "Your bank matched — today's balance is still the one you logged"
       : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }), []);
 
   // Re-read the server's copy with nothing to discard. Used after a
   // balance was pulled server-side: the write happened in an edge
@@ -438,6 +443,7 @@ export default function App() {
   const [plaidBeta, setPlaidBeta] = useState(false);
   const [connTick, setConnTick] = useState(0);
   const justConnected = useRef(false);
+  const setSettingsRef = useRef(() => {});
   const connectedFeatures = !!state?.settings?.connectedFeatures;
   useEffect(() => {
     let dead = false;
@@ -447,10 +453,26 @@ export default function App() {
       setPlaidBeta(ok);
       if (!ok) return;
       // THE HINT'S AUDIENCE HAS THE FEATURE OFF, so the allowlist is
-      // read either way and only the connection read is gated.
-      if (!connectedFeatures) { setConnection(null); return; }
+      // read either way — and since 2026-10-21 so is the CONNECTION.
+      //
+      // The toggle used to gate this read, which meant a tab that
+      // wrongly believed the feature was off would never see the row
+      // that proved it wrong. On a Trial plan a HIDDEN LIVE ITEM is
+      // the expensive kind: the user cannot reach Disconnect, so the
+      // only way back is a second connection, and Plaid's ten Items
+      // are gone forever rather than freed by removal.
+      //
+      // It is one select on OUR OWN table under RLS. No Plaid script
+      // is added to the page, nothing is fetched from Plaid, and for
+      // everyone who never connected it returns the same nothing.
       const row = await readConnection(supabase);
-      if (dead || !row) return;
+      if (dead) return;
+      if (!row) { setConnection(null); return; }
+      if (!connectedFeatures) {
+        // A live bank is never left behind a switch that says off.
+        setSettingsRef.current({ connectedFeatures: true });
+        return;
+      }
       setConnection(row);
       // DO NOT PULL IF SETTINGS JUST DID. One connect billed two
       // pulls on 2026-10-20: the connect flow pulled as soon as the
@@ -460,12 +482,14 @@ export default function App() {
       // the right fix is to not ask twice.
       if (justConnected.current) { justConnected.current = false; return; }
       if (!shouldPullOnOpen({ connectedFeatures }, row)) return;
-      const result = await pullBalance(supabase, "open");
-      if (dead || !result) return;
-      setConnection((c) => c && { ...c, status: result.status ?? c.status, lastSyncedAt: result.lastSyncedAt ?? c.lastSyncedAt });
-      // A pull that actually wrote changed a snapshot on the server,
-      // and nothing in this tab would have noticed.
-      if (result.synced && result.applied === "written") void reloadFromServer();
+      await duringPlaidWrite(async () => {
+        const result = await pullBalance(supabase, "open");
+        if (dead || !result) return;
+        setConnection((c) => c && { ...c, status: result.status ?? c.status, lastSyncedAt: result.lastSyncedAt ?? c.lastSyncedAt });
+        // A pull that actually wrote changed a snapshot on the server,
+        // and nothing in this tab would have noticed.
+        if (result.synced && result.applied === "written") await reloadFromServer();
+      });
     })();
     return () => { dead = true; };
     // `connTick` is bumped by Settings after a connect or a
@@ -506,16 +530,29 @@ export default function App() {
   // and adopt it if so. This is what stops a backgrounded phone from sitting
   // on a stale copy until it's fully reopened. Skipped while one of our own
   // writes is still debounced — reloading then would discard that edit.
+  //
+  // AND SKIPPED WHILE ONE OF OUR SERVER-SIDE WRITES IS OUTSTANDING.
+  // `hasPendingSave()` only knows about writes this tab is sending; a
+  // balance pull and "Use bank balance" move the row from an edge
+  // function, so for the moment between asking and re-reading the
+  // version has changed for a reason the user is watching happen.
+  // This announced the user's own tap as "your data had changed on
+  // another device." The banner exists to explain a swap you did not
+  // cause; attached to one you did, it teaches you to ignore it.
   useEffect(() => {
     const userId = session?.user?.id;
     if (!userId) return;
     let checking = false;
     async function check() {
       if (document.visibilityState !== "visible") return;
-      if (!getVersion() || hasPendingSave() || checking) return;
+      if (!getVersion() || hasPendingSave() || plaidWriteInFlight() || checking) return;
       checking = true;
       try {
         const serverVersion = await fetchVersion(userId);
+        // ASKED AGAIN AFTER THE AWAIT. A pull can start while this one
+        // is in flight, and then the version it found moved for a
+        // reason the user is watching happen.
+        if (plaidWriteInFlight()) return;
         if (isStale(getVersion(), serverVersion)) {
           await adoptServerState(userId, stateRef.current, "refreshed");
         }
@@ -570,6 +607,9 @@ export default function App() {
 
   const setSettings = (patch) =>
     setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
+  // The connection effect above runs before this is declared and must
+  // not re-run when it is redefined, which is every render.
+  setSettingsRef.current = setSettings;
 
   // computed views (recompute whenever state changes); harmless empty shape while loading
   const ledger = useMemo(
@@ -641,6 +681,7 @@ export default function App() {
         newestSnapshot={(state.accountSnapshots?.[account.id] ?? []).at(-1)}
         onUpdateClick={() => setUpdateBalanceOpen(true)}
         onPull={pullNow}
+        onReconnect={() => { setSettingsOpen(false); setAccountOpen(true); }}
       />
 
       {/* Global add — sits just above the tab navigation */}
@@ -860,7 +901,7 @@ export default function App() {
           onChanged={(didPull) => {
             justConnected.current = !!didPull;
             setConnTick((t) => t + 1);
-            void reloadFromServer();
+            void duringPlaidWrite(reloadFromServer);
           }}
           onSignOut={() => signOut()}
           onBack={() => { setAccountOpen(false); setSettingsOpen(true); }}

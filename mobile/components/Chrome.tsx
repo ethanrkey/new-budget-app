@@ -21,7 +21,7 @@ import Setup from "./Setup";
 import { shouldRunSetup } from "../lib/setup";
 import { dismissedBy, withDismissalBy } from "../lib/dismissal";
 import { applySetup, markSetupSeen, markTourSeen, type SetupAnswers } from "../../src/engine/setup.ts";
-import { load as loadConnection, useConnection } from "../lib/connection";
+import { connectionNow, load as loadConnection, useConnection } from "../lib/connection";
 import ConnectedSheet from "./ConnectedSheet";
 
 // WHERE THE WEB'S FIVE HEADER ITEMS LIVE ON A PHONE.
@@ -131,7 +131,21 @@ export function Chrome({ session, children }: { session: Session; children: Reac
     : "manual" as const;
   const [connectedSheet, setConnectedSheet] = useState(false);
   const connectedFeatures = !!state?.settings.connectedFeatures;
-  useEffect(() => { void loadConnection({ connectedFeatures }); }, [connectedFeatures]);
+  useEffect(() => {
+    void (async () => {
+      await loadConnection({ connectedFeatures });
+      // A LIVE BANK IS NEVER LEFT HIDDEN. `load` now reads the row
+      // for an allowlisted account whether or not the toggle is on,
+      // precisely so this question can be asked — and a hidden Item
+      // is the expensive kind, because the user cannot reach
+      // Disconnect and Plaid's ten Items never come back.
+      if (!connectedFeatures && connectionNow()) {
+        void commit((s) => ({ ...s, settings: { ...s.settings, connectedFeatures: true } }),
+          "Connected features on", "none");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectedFeatures]);
 
   return (
     <ChromeCtx.Provider value={value}>
@@ -161,6 +175,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
         pill={pillNow}
         onClose={() => setConnectedSheet(false)}
         onLogManually={() => { setConnectedSheet(false); setLogging(true); }}
+        onReconnect={() => { setConnectedSheet(false); setScreen("settings"); }}
       />
 
       {/* The one affordance. Floating over the content rather than in a

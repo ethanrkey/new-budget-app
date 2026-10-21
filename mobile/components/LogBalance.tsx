@@ -89,7 +89,7 @@ export default function LogBalance({
           {confirming ? (
             <>
               <Text style={styles.title}>{HIDDEN.title}</Text>
-              <Text style={styles.dim}>{HIDDEN.lede(confirming.length, date)}</Text>
+              <Text style={styles.dim}>{HIDDEN.lede(confirming.length, fmtDate(date))}</Text>
               <ScrollView style={styles.hiddenList} contentContainerStyle={{ paddingVertical: 4 }}>
                 {confirming.map((r) => (
                   <View key={r.id} style={styles.hiddenRow}>

@@ -224,8 +224,14 @@ export type ScopeAction =
  * exist. The nearest real action is resetting a date's own amount back to
  * the rule's, and that is offered — but only on a date that has one.
  *
- * A ONE-OFF HAS NO SCOPE. It is already a single occurrence, so it skips
- * the sheet entirely and opens straight into the editor.
+ * A ONE-OFF HAS NO SCOPE TO CHOOSE. It is already a single occurrence,
+ * so it gets the same two actions with nothing to disambiguate —
+ * `edit-rule` and `delete-rule` mean "edit it" and "delete it". THE
+ * SHEET STILL OPENS, and this comment used to say it did not, which
+ * is how the sheet came to describe a one-time charge as a rule:
+ * "Edit every BMV", "Removes the rule and every date it generates".
+ * The actions were right and the words were not. ScopeSheet takes
+ * `recurring` for that reason and for no other.
  */
 export function scopeActions(
   state: BudgetState,

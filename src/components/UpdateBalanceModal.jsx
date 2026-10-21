@@ -64,7 +64,7 @@ export default function UpdateBalanceModal({ account, onConfirm, onClose, title,
         {confirming ? (
           <>
             <h2 className="text-lg font-semibold mb-1">{HIDDEN.title}</h2>
-            <p className="text-xs text-gray-500 mb-3">{HIDDEN.lede(confirming.length, date)}</p>
+            <p className="text-xs text-gray-500 mb-3">{HIDDEN.lede(confirming.length, fmtDate(date))}</p>
             <ul className="max-h-52 overflow-y-auto border-y border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
               {confirming.map((r) => (
                 <li key={r.id} className="flex items-baseline gap-3 py-1.5 text-sm">

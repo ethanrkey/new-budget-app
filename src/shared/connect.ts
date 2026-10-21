@@ -136,6 +136,20 @@ export const canUseBankBalance = (state: PillState): boolean => state === "logge
 export const pillIsAction = (state: PillState): boolean => state === "reconnect";
 
 /**
+ * Is a repair on offer, and does it have to be update mode?
+ *
+ * ALWAYS UPDATE MODE. There is no "reconnect from scratch" path and
+ * there must not be one: Plaid's Trial is ten Items EVER,
+ * `/item/remove` does not give one back, and two Items for the same
+ * account count twice — so disconnect-then-connect to fix a login
+ * silently spends a second slot out of ten. This predicate exists so
+ * that both clients ask the same question and neither invents a
+ * second answer.
+ */
+export const canReconnect = (connection: Connection | null): boolean =>
+  !!connection && connection.status === "login_required";
+
+/**
  * Should the app ask the server for a balance on open?
  *
  * THE REAL DECISION IS THE SERVER'S — it owns the 12-hour clock,
@@ -175,6 +189,34 @@ export function canOfferConnect(
 
 /** The toggle itself is drawn for allowlisted accounts and nobody else. */
 export const canSeeToggle = (allowlisted: boolean): boolean => allowlisted;
+
+/**
+ * Does the toggle need putting back?
+ *
+ * A LIVE BANK WITH THE FEATURE OFF IS NOT A STATE THIS APP HAS, so
+ * wherever the two disagree the connection is the one telling the
+ * truth: it exists at Plaid, it has an access token, and it is being
+ * pulled. The switch is a record of a decision and can be stale; the
+ * Item cannot.
+ *
+ * FOUND ON IOS, 2026-10-21. Hosted Link hands the user to a browser
+ * and the app re-reads everything when they come back — including
+ * the account's settings, from the server. The phone returned with a
+ * connected bank and a switch that said off, and because the switch
+ * said off nothing would read the connection again to notice. That
+ * is the shape to avoid: a disagreement that hides the evidence of
+ * itself.
+ *
+ * It is deliberately NOT "turn the feature on because a row exists".
+ * It is only consulted at a moment when the caller has just read a
+ * live connection with the feature believed on — see openLink.
+ */
+export function shouldRestoreToggle(
+  settings: { connectedFeatures: boolean },
+  connection: Connection | null,
+): boolean {
+  return !!connection && !settings.connectedFeatures;
+}
 
 /**
  * Should the Log balance sheet show "Want this automatic?"

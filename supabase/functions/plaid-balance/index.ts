@@ -93,6 +93,7 @@ Deno.serve(async (req) => {
   // request to undo somebody's own typing would be absurd.
   const trigger = payload.trigger === "refresh" ? "refresh"
     : payload.trigger === "adopt" ? "adopt"
+    : payload.trigger === "reconnect" ? "reconnect"
     : "open";
   // The client's IANA zone, so the snapshot is dated in the user's
   // own day rather than the server's. See localDateIn.
@@ -115,7 +116,13 @@ Deno.serve(async (req) => {
     await admin.from("plaid_items").update({ time_zone: timeZone }).eq("id", item.id);
   }
 
-  if (item.status === "login_required") {
+  // A PULL IS WHAT PROVES A RECONNECT WORKED. `reconnect` is the one
+  // trigger allowed past this gate: the user has just come back from
+  // Link in update mode, and the only honest test of whether that
+  // took is asking the bank. If it did not, the call below fails with
+  // ITEM_LOGIN_REQUIRED again and the status is written straight
+  // back — so nothing here can clear the flag by assertion.
+  if (item.status === "login_required" && trigger !== "reconnect") {
     return json(200, { connected: true, status: "login_required", synced: false, last_synced_at: item.last_synced_at });
   }
 
@@ -163,13 +170,19 @@ Deno.serve(async (req) => {
   // called Plaid. Reading and then writing cannot be made safe by
   // being careful. It is also what makes "one pull serves every
   // device" true when two phones open in the same second.
-  const minSeconds = trigger === "refresh" ? REFRESH_DEBOUNCE_SECONDS : BALANCE_STALE_AFTER_HOURS * 3600;
+  // A reconnect is debounced like a refresh and capped like neither:
+  // somebody repairing a broken connection must not be told to come
+  // back tomorrow because they spent today's four refreshes watching
+  // it fail.
+  const minSeconds = trigger === "refresh" || trigger === "reconnect"
+    ? REFRESH_DEBOUNCE_SECONDS
+    : BALANCE_STALE_AFTER_HOURS * 3600;
   const { data: claim } = await admin.rpc("plaid_claim_pull", { p_item_id: item.id, p_min_seconds: minSeconds });
   const got = Array.isArray(claim) ? claim[0] : claim;
   if (!got?.claimed) {
     return json(200, {
       connected: true, status: item.status, synced: false,
-      reason: trigger === "refresh" ? "just_now" : "fresh",
+      reason: trigger === "refresh" || trigger === "reconnect" ? "just_now" : "fresh",
       last_synced_at: item.last_synced_at,
     });
   }

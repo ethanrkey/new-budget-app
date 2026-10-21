@@ -78,6 +78,14 @@ Deno.serve(async (req) => {
     if (!userId) return json(401, { error: "not signed in" });
     if (!await isAllowlisted(admin, userId)) return json(403, { error: "not available" });
     publicToken = payload.public_token;
+    // THE WEB PATH CLOSES ITS SESSION TOO. Only the webhook did, and
+    // the open session is now what reserves the Trial slot while Link
+    // is up (see plaid-link-token) — so a web connection that never
+    // marked itself finished would lock the user out of Connect for
+    // the ten-minute window straight after succeeding.
+    await admin.from("plaid_link_sessions")
+      .update({ used_at: new Date().toISOString() })
+      .eq("user_id", userId).is("used_at", null);
   } else if (payload.webhook_code === "SESSION_FINISHED") {
     // ---- the Hosted Link path: Plaid tells us a session ended ----
     trigger = "webhook";
@@ -197,6 +205,21 @@ Deno.serve(async (req) => {
     }));
     if (rows.length) await admin.from("plaid_accounts").insert(rows);
   }
+
+  // THE SLOT LEDGER, which nothing ever deletes from.
+  //
+  // Plaid's Trial is TEN PRODUCTION ITEMS EVER and `/item/remove`
+  // does not refund one, so `plaid_items` — emptied by every
+  // disconnect — cannot answer "how many have we spent". This can.
+  // Written after the row and the token, so it counts Items this app
+  // actually kept, and failing to write it does not fail the
+  // connection: a miscount is worth less than a working bank.
+  const { error: ledgerError } = await admin.from("plaid_item_creations").insert({
+    plaid_item_id: item_id,
+    institution_name: institutionName,
+    env: conf.config.env,
+  });
+  if (ledgerError) console.error("[plaid-exchange] slot ledger write failed:", ledgerError.message);
 
   // THE ITEM AND ITS TOKEN ARE STORED. An orphan is no longer
   // possible, so the net comes down — and it comes down HERE, after

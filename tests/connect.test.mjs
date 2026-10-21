@@ -15,19 +15,23 @@
 // A test that imports the string it is checking passes whatever you
 // change it to, which is the opposite of the job.
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { normalize } from "../src/engine/stateShape.ts";
 import { updateAccountBalance, updateAccountSnapshot } from "../src/engine/mutate.ts";
 import { primaryAccount } from "../src/engine/model.ts";
-import { fmtInstant } from "../src/shared/dates.ts";
+import { fmtDate, fmtInstant } from "../src/shared/dates.ts";
+import { HIDDEN_ROWS_COPY } from "../src/content/logBalance.ts";
 import { splitState, assembleState } from "../src/engine/entities.ts";
 import {
-  CONNECT_CONSENT, CONNECT_HINT, CONNECT_HINT_DISMISS, DISCONNECT_NOTE,
-  PILL, PILL_SHEET, PLAID_PORTAL_URL,
+  CONNECT_CONSENT, CONNECT_HINT, CONNECT_HINT_DISMISS, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
+  PILL, PILL_SHEET, PLAID_PORTAL_URL, TOGGLE_OFF_CONFIRM,
 } from "../src/content/connect.ts";
 import {
   pillStateOf, pillTextOf, pillSuffixOf, pillLongOf, pillIsAction, shouldPullOnOpen,
-  canOfferConnect, canSeeToggle, canUseBankBalance, shouldOfferHint, refreshOutcome,
+  canOfferConnect, canReconnect, canSeeToggle, canUseBankBalance, shouldOfferHint,
+  shouldRestoreToggle, refreshOutcome,
 } from "../src/shared/connect.ts";
+import { duringPlaidWrite, plaidWriteInFlight, pullBalance } from "../src/shared/plaidApi.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -100,9 +104,11 @@ console.log("\n== the Plaid Portal note is in both places ==");
 is("the consent screen names the Portal", CONNECT_CONSENT.bullets.some((b) => b.includes("my.plaid.com")));
 is("and so does the note beside Disconnect", DISCONNECT_NOTE.includes("my.plaid.com"));
 eq("the Portal URL", PLAID_PORTAL_URL, "https://my.plaid.com");
-eq("disconnecting says all three things: access, history, Plaid's copy",
+eq("disconnecting says all four things: access, history, the cost of coming back, Plaid's copy",
   DISCONNECT_NOTE,
-  "Disconnecting removes Key Budget's access right away. Balances already pulled stay in your history. To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.");
+  "Disconnecting removes Key Budget's access right away. Balances already pulled stay in your history. "
+  + "Connecting again later starts a new connection, not this one. "
+  + "To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.");
 
 console.log("\n== the hint on the Log balance sheet ==");
 eq("it offers, and points at Settings",
@@ -445,6 +451,219 @@ eq("the bank returned nothing", refreshOutcome("no_balance"), "Your bank didn't 
 eq("a reason we do not have a sentence for says nothing at all",
   refreshOutcome("something_new"), null);
 eq("...and so does no reason", refreshOutcome(undefined), null);
+
+console.log("\n== ten Items EVER, and removal does not give one back ==");
+// Plaid's Trial terms, read by the owner on support.plaid.com
+// 2026-10-21: no time limit, ten PRODUCTION Items ever, /item/remove
+// does NOT free a slot, and two Items for the same bank account
+// count as two. Everything in this block exists because of that one
+// sentence.
+
+// A broken login is repaired IN PLACE. Disconnect-then-connect would
+// work and would cost a second slot out of ten.
+is("a bank asking to be signed into again offers a repair",
+  canReconnect(conn({ status: "login_required" })));
+not("...and a healthy one does not", canReconnect(conn()));
+not("...and nor does no connection at all", canReconnect(null));
+
+// The repair must be UPDATE MODE on both clients, and neither may
+// invent a second way of doing it.
+{
+  const linkToken = readFileSync(new URL("../supabase/functions/plaid-link-token/index.ts", import.meta.url), "utf8");
+  is("the server has an update-mode branch", linkToken.includes("if (body.update)"));
+  // Plaid REJECTS a token carrying both, so this is not tidiness.
+  const updateBranch = linkToken.slice(linkToken.indexOf("if (body.update)"), linkToken.indexOf("ALREADY_CONNECTED"));
+  is("update mode sends the access token", updateBranch.includes("access_token: accessToken"));
+  not("...and does NOT send products, which Plaid refuses", updateBranch.includes("products: PRODUCTS"));
+  is("a second Item is refused BEFORE Link opens, not after",
+    linkToken.indexOf("ALREADY_CONNECTED") < linkToken.indexOf("linkTokenCreate, {\n    user:"));
+  is("an unfinished session reserves the slot", linkToken.includes("ALREADY_STARTING"));
+
+  for (const [who, path] of [
+    ["the phone", "../mobile/components/Connected.tsx"],
+    ["the web", "../src/components/ConnectedAccount.jsx"],
+  ]) {
+    const text = readFileSync(new URL(path, import.meta.url), "utf8");
+    is(`${who} opens Link in update mode to repair`, /startLink\([^)]*update\)/.test(text));
+    is(`${who} offers the repair only when the bank asks`, text.includes("canReconnect(connection)"));
+  }
+}
+
+// A reconnect is proved by a PULL, never by Link saying so.
+{
+  const balance = readFileSync(new URL("../supabase/functions/plaid-balance/index.ts", import.meta.url), "utf8");
+  is("only 'reconnect' gets past a login_required item",
+    balance.includes('item.status === "login_required" && trigger !== "reconnect"'));
+}
+
+// The slot ledger: a count that survives the disconnect that does
+// not give the slot back.
+{
+  const sql = readFileSync(new URL("../supabase/plaid.sql", import.meta.url), "utf8");
+  is("there is a table nothing deletes from", sql.includes("create table if not exists plaid_item_creations"));
+  is("...which records the environment, since sandbox Items are free",
+    /plaid_item_creations \([\s\S]*?env\s+text not null/.test(sql));
+  // Bounded to the table's own parentheses: a loose match finds a
+  // user_id three tables further down and passes for the wrong
+  // reason.
+  const creations = sql.slice(sql.indexOf("create table if not exists plaid_item_creations"));
+  not("...and holds no user id, having nothing to purge",
+    creations.slice(0, creations.indexOf(");")).includes("user_id"));
+  is("the owner has a query for how many of the ten are gone",
+    sql.includes("select env, count(*) as items_created"));
+  const exchange = readFileSync(new URL("../supabase/functions/plaid-exchange/index.ts", import.meta.url), "utf8");
+  is("every created Item is written to it", exchange.includes('from("plaid_item_creations").insert'));
+}
+
+console.log("\n== leaving is told what it costs ==");
+// "You can always turn it back on" is not quite true on a Trial
+// plan: you can, and it spends another of the ten. Someone deciding
+// whether to switch it off is entitled to know before, not after.
+for (const [what, text] of [
+  ["disconnecting", DISCONNECT_NOTE],
+  ["turning the feature off", TOGGLE_OFF_CONFIRM.body("First Platypus Bank")],
+]) {
+  is(`${what} says reconnecting later is a new connection`,
+    text.includes("Connecting again later starts a new connection, not this one."));
+  is(`${what} still says the history is kept`, text.includes("stay in your history"));
+}
+eq("the toggle-off confirm names the bank",
+  TOGGLE_OFF_CONFIRM.body("First Platypus Bank").includes("disconnects First Platypus Bank right away"), true);
+
+console.log("\n== the hidden-rows warning uses the app's date format ==");
+// It was handing in the raw ISO, so the one sentence in that flow
+// that names a date read "dated before 2026-10-21" beside rows that
+// all said 10/21/2026.
+eq("the sentence takes a formatted date and prints it",
+  HIDDEN_ROWS_COPY.lede(3, fmtDate("2026-10-21")),
+  "3 rows dated before 10/21/2026 will drop off the Ledger:");
+for (const [who, path] of [
+  ["the phone", "../mobile/components/LogBalance.tsx"],
+  ["the web", "../src/components/UpdateBalanceModal.jsx"],
+]) {
+  const text = readFileSync(new URL(path, import.meta.url), "utf8");
+  is(`${who} formats it before handing it over`,
+    text.includes("HIDDEN.lede(confirming.length, fmtDate(date))"));
+}
+
+console.log("\n== a live bank with the feature off is not a state this app has ==");
+// Found on iOS 2026-10-21. Hosted Link hands the user to a browser,
+// and coming back re-reads this device's state from the server —
+// including settings that can be older than the toggle that started
+// the flow. The phone returned with the bank saved and pulled and
+// the switch showing off, and because the switch said off nothing
+// read the connection again to notice. A disagreement that hides
+// the evidence of itself.
+is("a connection with the toggle off puts the toggle back",
+  shouldRestoreToggle({ connectedFeatures: false }, conn()));
+not("...and leaves it alone when it agrees",
+  shouldRestoreToggle({ connectedFeatures: true }, conn()));
+// THE OTHER DIRECTION IS NOT THE SAME QUESTION. No connection and
+// the toggle on is an ordinary state: it is every user who has
+// opted in and not yet connected anything.
+not("no connection, toggle off — nothing to restore",
+  shouldRestoreToggle({ connectedFeatures: false }, null));
+not("no connection, toggle on — the normal opted-in state",
+  shouldRestoreToggle({ connectedFeatures: true }, null));
+
+// Both clients must consult it, because both end their connect flow
+// by replacing local state with the server's copy.
+for (const [file, path] of [
+  ["the phone", "../mobile/components/Connected.tsx"],
+  ["the web", "../src/components/ConnectedAccount.jsx"],
+]) {
+  const text = readFileSync(new URL(path, import.meta.url), "utf8");
+  is(`${file} restores the toggle after a connect`, text.includes("shouldRestoreToggle("));
+}
+
+console.log("\n== the toggle's sub-line is written once ==");
+// It was written out in both clients, so the owner's one-line edit
+// to it on 2026-10-21 was two edits — either of which could have
+// been missed, leaving the two screens saying different things
+// about what connecting does.
+eq("the owner's line, verbatim", CONNECT_TOGGLE_SUB,
+  "When on, Key Budget can read your checking balance — and nothing else. "
+  + "You can always log balances by hand instead.");
+not('"Off by default" is gone, on the owner\'s instruction',
+  CONNECT_TOGGLE_SUB.includes("Off by default"));
+for (const [file, path] of [
+  ["the phone", "../mobile/components/Connected.tsx"],
+  ["the web", "../src/components/ConnectedAccount.jsx"],
+]) {
+  const text = readFileSync(new URL(path, import.meta.url), "utf8");
+  is(`${file} draws it from the content file`, text.includes("CONNECT_TOGGLE_SUB"));
+  not(`${file} does not keep its own copy`, text.includes("read your checking balance"));
+}
+
+console.log("\n== a write of OURS is not 'another device' ==");
+// The web keeps a copy of the server's version and, on focus, asks
+// whether the row moved while it was away. A pull moves the row from
+// an edge function, so for the moment between asking and re-reading
+// it has moved for a reason the user is watching happen — and the
+// page told them "your data had changed on another device" about
+// their own tap. The counter is what the check consults.
+
+{
+  const seen = [];
+  const caller = {
+    functions: {
+      invoke: async () => {
+        // MID-CALL is the only interesting moment: before and after
+        // are easy and were never wrong.
+        seen.push(plaidWriteInFlight());
+        return { data: { connected: true, synced: true, applied: "written" }, error: null };
+      },
+    },
+  };
+  not("nothing claimed at rest", plaidWriteInFlight());
+  await pullBalance(caller, "adopt");
+  eq("claimed for the length of the call", seen, [true]);
+  not("released when it returns", plaidWriteInFlight());
+
+  // A COUNT AND NOT A FLAG. The client holds a claim across its own
+  // reload, and the call it makes inside that claim takes a second
+  // one; a boolean would have the inner release clear the outer.
+  let inner = null;
+  await duringPlaidWrite(async () => {
+    await pullBalance(caller, "open");
+    inner = plaidWriteInFlight();
+  });
+  is("an inner call finishing does not release the outer claim", inner);
+  not("...and the outer one does", plaidWriteInFlight());
+
+  // A THROWN CALL MUST NOT LEAVE THE CLAIM STANDING, or the page
+  // would never announce a real change from another device again.
+  try {
+    await duringPlaidWrite(async () => { throw new Error("network"); });
+  } catch { /* expected */ }
+  not("released when the call throws", plaidWriteInFlight());
+}
+
+// And that the check actually asks. The counter is only worth
+// anything if the one place that shows the banner consults it.
+{
+  const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const check = app.slice(app.indexOf("async function check()"), app.indexOf('"refreshed"'));
+  is("the focus check guards on it", check.includes("plaidWriteInFlight()"));
+  is("...and again after the version fetch, since a pull can start mid-check",
+    check.split("plaidWriteInFlight()").length - 1 >= 2);
+}
+
+console.log("\n== no page still says the app never connects to a bank ==");
+// Connecting shipped; the sentences that promised it never would are
+// now false, and a privacy page that is false is the worst kind. The
+// claim was in two places and only one of them was the obvious one.
+{
+  for (const page of ["Landing.jsx", "Privacy.jsx"]) {
+    const text = readFileSync(new URL(`../src/components/${page}`, import.meta.url), "utf8");
+    for (const claim of ["never connects to your bank", "No bank connection, ever", "never asks for one"]) {
+      not(`${page} does not say "${claim}"`, text.includes(claim));
+    }
+  }
+  const landing = readFileSync(new URL("../src/components/Landing.jsx", import.meta.url), "utf8");
+  is("the landing line is the owner's replacement, verbatim",
+    landing.includes("Free. No bank connection required."));
+}
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -123,6 +123,7 @@ function Host({ rowId, onCommit }: { rowId: string; onCommit?: (kind: string) =>
           <ScopeSheet
             name={target.name}
             actions={scopeActions(state, scopeFor!, target.recurring)}
+            recurring={target.recurring}
             onPick={pick}
             onClose={() => setScopeFor(null)}
           />
@@ -226,7 +227,42 @@ describe("what the scope sheet offers", () => {
   test("a one-off has no occurrence scope", async () => {
     await render(<Host rowId="o-dent@2026-10-14" />);
     expect(screen.queryByLabelText("Edit just 10/14/2026")).toBeNull();
-    expect(screen.getByLabelText("Edit every Dentist")).toBeTruthy();
+    expect(screen.getByLabelText("Edit Dentist")).toBeTruthy();
+  });
+
+  // Reported from the phone 2026-10-21. A one-off gets the same two
+  // ACTIONS as a rule — correctly, since the whole item is the one
+  // occurrence — and was therefore drawn with the same WORDS: a
+  // one-time charge offered to "Edit every BMV" and warned that
+  // deleting it would remove "every date it generates". There is one
+  // date. The actions are right; only the sentences were wrong.
+  test("a one-off is not described as a rule", async () => {
+    await render(<Host rowId="o-dent@2026-10-14" />);
+    expect(screen.queryByLabelText("Edit every Dentist")).toBeNull();
+    expect(screen.queryByText("Changes the rule, and so every date it generates")).toBeNull();
+    expect(screen.queryByText("Removes the rule and every date it generates")).toBeNull();
+    expect(screen.getByLabelText("Delete Dentist")).toBeTruthy();
+    expect(screen.getByText("Removes this transaction")).toBeTruthy();
+  });
+
+  // The repeating wording is the one that was right, and it has to
+  // stay right — a fix that made every row read like a one-off would
+  // pass the test above and lose the distinction entirely.
+  test("...and a rule still is", async () => {
+    await render(<Host rowId="r-rent@2026-12-01" />);
+    expect(screen.getByLabelText("Edit every Rent")).toBeTruthy();
+    expect(screen.getByText("Changes the rule, and so every date it generates")).toBeTruthy();
+    expect(screen.getByText("Removes the rule and every date it generates")).toBeTruthy();
+  });
+
+  test("the one-off delete confirm does not promise to remove dates", async () => {
+    const spy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    await render(<Host rowId="o-dent@2026-10-14" />);
+    await userEvent.press(screen.getByLabelText("Delete Dentist"));
+    const [title, body] = spy.mock.calls[0] as [string, string];
+    expect(title).toBe("Delete Dentist?");
+    expect(body).toBe("This removes it from your ledger.");
+    spy.mockRestore();
   });
 
   test("delete goes through a native destructive confirm, not straight through", async () => {

@@ -57,7 +57,7 @@ export default function Landing() {
             Try Key Budget
           </a>
           <p className="mt-3 text-sm text-gray-500">
-            Free. No bank connection, ever — it never asks for one.
+            Free. No bank connection required.
           </p>
         </section>
 

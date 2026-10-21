@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { CONNECT_CONSENT, DISCONNECT_NOTE, PLAID_PORTAL_URL } from "../content/connect.ts";
-import { canSeeToggle } from "../shared/connect.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, PLAID_PORTAL_URL,
+  RECONNECT, TOGGLE_OFF_CONFIRM,
+} from "../content/connect.ts";
+import { canReconnect, canSeeToggle, shouldRestoreToggle } from "../shared/connect.ts";
 import { disconnect as apiDisconnect, isAllowlisted, pullBalance, readConnection, startLink, finishLink } from "../shared/plaidApi.ts";
 import { fmtInstant } from "../shared/dates.ts";
 
@@ -62,14 +65,36 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     refresh();
   }, [on, allowlisted, refresh]);
 
+  // THE SAME GUARD THE PHONE CARRIES, for the same reason and with
+  // the same shape. Finishing a connection ends with App re-reading
+  // the whole document from the server, and the toggle that started
+  // the flow is saved on a debounce — so for a moment the server's
+  // answer to "are connected features on?" can be older than the
+  // bank it just connected. A live bank with the feature off is not
+  // a state this app has; see shouldRestoreToggle.
+  //
+  // THE ROW ITSELF is held, not `connection`: the effect above
+  // clears that the instant the settings say off, which is exactly
+  // the case this is here to notice.
+  const connectedRow = useRef(null);
+  useEffect(() => {
+    const row = connectedRow.current;
+    if (!row) return;
+    if (shouldRestoreToggle(settings, row)) {
+      connectedRow.current = null;
+      onSetSettings({ connectedFeatures: true });
+      return;
+    }
+    if (settings.connectedFeatures) connectedRow.current = null;
+  }, [settings, onSetSettings]);
+
   // Absent for anyone not on the list — not disabled, not explained.
   if (!canSeeToggle(!!allowlisted)) return null;
 
   async function toggle(next) {
     if (!next && connection) {
       const ok = window.confirm(
-        `Turn off connected features?\n\nThis disconnects ${connection.institutionName ?? "your bank"} right away. ` +
-        "Balances already pulled stay in your history, the same as ones you typed."
+        `${TOGGLE_OFF_CONFIRM.title}\n\n${TOGGLE_OFF_CONFIRM.body(connection.institutionName ?? "your bank")}`
       );
       if (!ok) return;
       await doDisconnect();
@@ -87,16 +112,55 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     onChanged?.(false);
   }
 
-  async function openLink() {
+  /**
+   * Open Link. `update` reopens the SAME Item rather than making one.
+   *
+   * NEVER DISCONNECT-THEN-CONNECT TO FIX A LOGIN. Plaid's Trial is
+   * ten Items EVER, `/item/remove` does not give one back, and two
+   * Items for the same account count as two — so the repair path has
+   * to be update mode or it quietly costs a slot out of ten. See
+   * canReconnect, and plaid-link-token's update branch.
+   */
+  async function openLink(update = false) {
     setConsenting(false);
-    setBusy(true);
+    // NAMED, not `true`. It was `true`, and the fall-through in the
+    // spinner below meant opening Link said "Disconnecting…".
+    setBusy(update ? "reconnecting" : "connecting");
     setSaid(null);
     let Plaid;
     try { Plaid = await loadLinkScript(); }
-    catch { setBusy(false); setSaid("Couldn't load the connection window. Try again in a moment."); return; }
+    catch { setBusy(null); setSaid("Couldn't load the connection window. Try again in a moment."); return; }
 
-    const started = await startLink(supabase, false);
-    if ("error" in started) { setBusy(false); setSaid("Couldn't start. Try again in a moment."); return; }
+    const started = await startLink(supabase, false, update);
+    if ("error" in started) {
+      setBusy(null);
+      setSaid(update ? RECONNECT.failed : "Couldn't start. Try again in a moment.");
+      return;
+    }
+
+    if (update) {
+      const handler = Plaid.create({
+        token: started.linkToken,
+        // NOTHING IS EXCHANGED. Update mode hands back a public
+        // token that maps to the access token we already hold, so
+        // exchanging it would buy nothing and invite a duplicate.
+        // The proof that the repair took is a PULL THAT WORKS —
+        // which is also the only thing that clears the status, since
+        // `reconnect` is the one trigger allowed past a
+        // login_required item. See plaid-balance.
+        onSuccess: async () => {
+          setBusy("saving");
+          const result = await pullBalance(supabase, "reconnect");
+          await refresh();
+          setBusy(null);
+          setSaid(result?.synced ? RECONNECT.fixed : RECONNECT.stillBroken);
+          onChanged?.(true);
+        },
+        onExit: () => { setBusy(null); },
+      });
+      handler.open();
+      return;
+    }
 
     const handler = Plaid.create({
       token: started.linkToken,
@@ -127,7 +191,7 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
         // on its own and this does not spend one of the four daily
         // refreshes on the connection itself.
         await pullBalance(supabase, "open");
-        await refresh();
+        connectedRow.current = await refresh();
         setBusy(null);
         // `true`: this flow already pulled, so App must not pull again.
         onChanged?.(true);
@@ -148,14 +212,11 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     <section className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold">Connect your bank</h3>
-          {/* What it does AND what it does not, in the same breath.
-              A line that only said "keep your balance up to date"
-              would be selling. */}
-          <p className="text-xs text-gray-500 mt-0.5 max-w-sm">
-            Off by default. When on, Key Budget can read your checking balance — and nothing else.
-            You can always log balances by hand instead.
-          </p>
+          <h3 className="text-sm font-semibold">{CONNECT_TOGGLE}</h3>
+          {/* BOTH WORDS FROM src/content/connect.ts. This sentence
+              was written out here AND in the phone's Connected.tsx,
+              so the owner's one-line edit to it was two edits. */}
+          <p className="text-xs text-gray-500 mt-0.5 max-w-sm">{CONNECT_TOGGLE_SUB}</p>
         </div>
         <label className="shrink-0 inline-flex items-center gap-2 text-xs text-gray-500">
           <input
@@ -197,11 +258,21 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
         </dl>
       )}
 
-      {on && connection?.status === "login_required" && (
-        <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
-          Your bank needs you to sign in again. Balances have stopped updating until you reconnect;
-          everything you have already logged is unaffected.
-        </p>
+      {on && canReconnect(connection) && (
+        <div className="mt-2">
+          <p className="text-xs text-amber-700 dark:text-amber-500 max-w-sm">{RECONNECT.why}</p>
+          {/* THE ONLY REPAIR PATH, and it is update mode. A notice
+              that says "until you reconnect" beside no way to do it
+              leaves Disconnect as the obvious move — which costs a
+              second Trial slot for the same bank account. */}
+          <button
+            onClick={() => openLink(true)}
+            disabled={!!busy}
+            className="mt-2 text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition disabled:opacity-50"
+          >
+            {RECONNECT.action}
+          </button>
+        </div>
       )}
 
       {on && connection && (
@@ -237,6 +308,7 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-300 border-t-transparent animate-spin dark:border-gray-600 dark:border-t-transparent" />
             {busy === "connecting" ? "Opening your bank…"
+              : busy === "reconnecting" ? RECONNECT.busy
               : busy === "saving" ? "Saving the connection…"
               : "Disconnecting…"}
           </div>
@@ -249,10 +321,16 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
         </div>
       )}
 
-      {said && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{said}</p>}
+      {/* RED IS FOR THE ONES THAT WENT WRONG. A successful reconnect
+          reports through the same line and is not a failure. */}
+      {said && (
+        <p className={`mt-2 text-xs ${said === RECONNECT.fixed ? "text-gray-500" : "text-red-600 dark:text-red-400"}`}>
+          {said}
+        </p>
+      )}
 
       {consenting && (
-        <ConsentDialog onCancel={() => setConsenting(false)} onContinue={openLink} />
+        <ConsentDialog onCancel={() => setConsenting(false)} onContinue={() => openLink(false)} />
       )}
     </section>
   );
@@ -298,9 +376,14 @@ function ConsentDialog({ onCancel, onContinue }) {
           >
             {CONNECT_CONSENT.cancel}
           </button>
+          {/* THE APP'S OWN GOLD, the two steps of the icon's hue that
+              the wordmark and the landing CTA already use. amber-500
+              was neither of them and read as orange beside them — the
+              only button in the web app wearing a color the app does
+              not have. */}
           <button
             onClick={onContinue}
-            className="flex-1 text-sm px-3 py-2 rounded-lg bg-amber-500 text-gray-900 font-semibold hover:bg-amber-400 transition"
+            className="flex-1 text-sm px-3 py-2 rounded-lg bg-[#8e670b] text-white dark:bg-[#eebb4d] dark:text-gray-900 font-semibold hover:opacity-90 transition"
           >
             {CONNECT_CONSENT.confirm}
           </button>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { fmtDate } from "../shared/dates.ts";
-import { canUseBankBalance, pillIsAction, pillLongOf, pillStateOf } from "../shared/connect.ts";
+import {
+  canReconnect, canUseBankBalance, pillIsAction, pillLongOf, pillStateOf,
+} from "../shared/connect.ts";
 import { PILL_SHEET } from "../content/connect.ts";
 import { fmtInstant } from "../shared/dates.ts";
 import { todayISO } from "../engine/model.ts";
@@ -14,7 +16,7 @@ const money = (n) =>
 // display only; the single button opens UpdateBalanceModal, where nothing
 // changes until Confirm. Stays visible on every tab because this balance is
 // the anchor every Ledger/Budget number is built from.
-export default function AccountStrip({ account, onUpdateClick, connection, newestSnapshot, onPull }) {
+export default function AccountStrip({ account, onUpdateClick, connection, newestSnapshot, onPull, onReconnect }) {
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState(null);
@@ -99,10 +101,25 @@ export default function AccountStrip({ account, onUpdateClick, connection, newes
                   same button is a trap on a page this dense. */}
               <div className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
               <div role="menu" className="absolute right-0 mt-1 z-50 w-56 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-1 text-sm">
-                <button role="menuitem" disabled={busy} onClick={doRefresh}
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">
-                  {busy ? "Refreshing…" : PILL_SHEET.refresh}
-                </button>
+                {/* RECONNECT INSTEAD OF REFRESH when the bank is
+                    asking to be signed into again: a refresh in that
+                    state cannot work, and the top item of the menu
+                    should not be a button whose only outcome is a
+                    failure. It opens Settings rather than Link —
+                    update mode is the only repair path, and a second
+                    place that opens Link is a second place for
+                    "which mode?" to be answered wrongly. */}
+                {canReconnect(connection) ? (
+                  <button role="menuitem" onClick={() => { setMenu(false); onReconnect?.(); }}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+                    {PILL_SHEET.reconnect}
+                  </button>
+                ) : (
+                  <button role="menuitem" disabled={busy} onClick={doRefresh}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">
+                    {busy ? "Refreshing…" : PILL_SHEET.refresh}
+                  </button>
+                )}
                 <button role="menuitem" onClick={() => { setMenu(false); onUpdateClick(); }}
                   className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
                   {PILL_SHEET.manual}

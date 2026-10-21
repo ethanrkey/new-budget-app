@@ -48,15 +48,34 @@ export function load(settings: { connectedFeatures: boolean }): Promise<void> {
   inFlight = (async () => {
     try {
       allowlisted = await isAllowlisted(supabase as never);
-      if (!allowlisted || !settings.connectedFeatures) {
+      if (!allowlisted) {
         current = null;
         return;
       }
+      // READ EVEN WITH THE TOGGLE OFF, for an allowlisted account.
+      //
+      // The toggle used to gate this read, which meant a device that
+      // wrongly believed the feature was off would never see the row
+      // that proved it wrong — and a HIDDEN LIVE ITEM is the
+      // expensive kind on a Trial plan: the user cannot reach
+      // Disconnect, so the only way back is a second connection, and
+      // Plaid's ten Items are gone forever rather than per-live-item.
+      //
+      // IT IS NOT "LOADING PLAID" WITH THE FEATURE OFF. This is one
+      // select on OUR OWN table under RLS, for an account already on
+      // the allowlist; it fetches nothing from Plaid, runs no Plaid
+      // code, and for everybody who never connected it returns the
+      // same nothing it always did. The caller puts the toggle back
+      // when a row turns up — see shouldRestoreToggle.
       const row = await readConnection(supabase as never);
       current = row && {
         institutionName: row.institutionName, status: row.status,
         lastSyncedAt: row.lastSyncedAt, mask: row.mask,
       };
+      // NO PULL while the feature is off. Finding the row is about
+      // not hiding it; spending a billed call on an account that has
+      // switched the feature off is a different thing entirely.
+      if (!settings.connectedFeatures) return;
       if (shouldPullOnOpen(settings, current)) {
         const result = await pullBalance(supabase as never, "open");
         // A pull that actually wrote changes the snapshot the state

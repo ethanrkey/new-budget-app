@@ -60,10 +60,10 @@
 --             where p.schemaname = 'public' and p.tablename = c.relname) as policies
 --     from pg_class c join pg_namespace n on n.oid = c.relnamespace
 --    where n.nspname = 'public'
---      and c.relname in ('plaid_tokens', 'plaid_removals',
---                        'plaid_api_log', 'plaid_link_sessions')
+--      and c.relname in ('plaid_tokens', 'plaid_removals', 'plaid_api_log',
+--                        'plaid_link_sessions', 'plaid_item_creations')
 --    order by c.relname;
---   -- expect four rows, rls_enabled = true, policies = 0, every one.
+--   -- expect five rows, rls_enabled = true, policies = 0, every one.
 --
 --   -- 3b. The three client-readable tables: exactly one SELECT policy
 --   --     each, and no INSERT, UPDATE or DELETE policy anywhere.
@@ -87,8 +87,8 @@
 --
 --   select grantee, table_name, privilege_type
 --     from information_schema.role_table_grants
---    where table_name in ('plaid_tokens', 'plaid_removals',
---                         'plaid_api_log', 'plaid_link_sessions')
+--    where table_name in ('plaid_tokens', 'plaid_removals', 'plaid_api_log',
+--                         'plaid_link_sessions', 'plaid_item_creations')
 --      and grantee in ('anon', 'authenticated');
 --   -- expect ZERO rows.
 --
@@ -119,6 +119,28 @@
 -- STEP 8. Schedule the removal drain (see DRAINING THE REMOVAL QUEUE,
 -- further down). Not optional: without it, a deleted account leaves a
 -- live Item at Plaid.
+--
+-- ---------------------------------------------------------------------------
+-- HOW MANY OF THE TEN TRIAL SLOTS ARE GONE. Run it whenever you want
+-- the number; it is a count of a table nothing deletes from, so it is
+-- the real figure and not the live-connection count.
+--
+--   select env, count(*) as items_created, max(created_at) as latest
+--     from plaid_item_creations
+--    group by env
+--    order by env;
+--   -- Only the `production` row spends slots. Ten is the cap, FOREVER:
+--   -- /item/remove does not give one back.
+--
+--   -- Which ones, newest first — a repeated institution_name is a
+--   -- duplicate and cost a second slot:
+--   select created_at, institution_name, plaid_item_id
+--     from plaid_item_creations where env = 'production'
+--    order by created_at desc;
+--
+--   -- Live right now, for comparison. The gap between this and the
+--   -- count above is slots spent on connections that no longer exist.
+--   select count(*) from plaid_items;
 -- ===========================================================================
 --
 -- THE PRODUCT RULE THIS SCHEMA EXISTS TO ENFORCE: checking only,
@@ -532,6 +554,43 @@ revoke all on table plaid_api_log from anon, authenticated;
 create index if not exists plaid_api_log_by_user on plaid_api_log (user_id, called_at desc);
 
 -- ---------------------------------------------------------------------------
+-- 5a. THE SLOT LEDGER. Append-only, and the one number the Trial plan
+-- makes expensive to guess.
+--
+-- PLAID'S TRIAL IS TEN PRODUCTION ITEMS EVER (support.plaid.com, read
+-- by the owner 2026-10-21). There is no time limit and there is no
+-- refund: `/item/remove` does NOT give a slot back, and two Items for
+-- the same bank account count as two. So "how many have we spent" is
+-- not answerable from `plaid_items` — that table holds the LIVE ones,
+-- and it is emptied by every disconnect.
+--
+-- Hence a second table that nothing ever deletes from. One row per
+-- Item successfully created at Plaid.
+--
+-- NO USER ID IN IT. The question is "how many of the ten are gone",
+-- which needs a count, an environment and a date — not a person. A
+-- ledger that outlives accounts on purpose is exactly the kind of
+-- table that should not carry one, and leaving it out means there is
+-- nothing for account deletion to have to remember to purge.
+create table if not exists plaid_item_creations (
+  id               bigserial primary key,
+  -- Plaid's own id for the Item. Not personal, and it is what makes a
+  -- duplicate visible as a duplicate.
+  plaid_item_id    text,
+  institution_name text,
+  -- 'sandbox' | 'production'. SANDBOX ITEMS DO NOT COST A SLOT, and
+  -- the whole point of the count is to not confuse the two.
+  env              text not null,
+  created_at       timestamptz not null default now()
+);
+
+alter table plaid_item_creations enable row level security;
+revoke all on table plaid_item_creations from anon, authenticated;
+
+create index if not exists plaid_item_creations_by_env
+  on plaid_item_creations (env, created_at desc);
+
+-- ---------------------------------------------------------------------------
 -- 6. THE BETA ALLOWLIST.
 --
 -- Trial is ten connections, so the toggle is not offered to everyone.
@@ -769,7 +828,7 @@ revoke all on function plaid_release_pull(uuid, timestamptz)  from public, anon,
 --     from pg_class c join pg_namespace n on n.oid = c.relnamespace
 --    where n.nspname = 'public'
 --      and c.relname in ('plaid_tokens', 'plaid_removals', 'plaid_api_log',
---                        'plaid_link_sessions');
+--                        'plaid_link_sessions', 'plaid_item_creations');
 --
 -- And the three that are client-readable, which must have exactly one
 -- SELECT policy each and no INSERT, UPDATE or DELETE policy at all:

@@ -311,6 +311,7 @@ export default function LedgerScreen() {
           <ScopeSheet
             name={target.name}
             actions={scopeActions(state!, scopeFor!, target.recurring)}
+            recurring={target.recurring}
             onPick={(a) => { void onScopePick(a); }}
             onClose={() => setScopeFor(null)}
           />

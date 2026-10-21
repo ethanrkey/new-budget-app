@@ -2517,6 +2517,54 @@ form is a system page sheet (`presentationStyle="pageSheet"`), so
 there is no scrim, no card inside a card, and no percentage to
 resolve.
 
+### "Your data had changed on another device" — about our own tap (2026-10-21)
+
+The web keeps the server's version string and, on focus, asks whether
+the row moved while it was away; if it did, it adopts the server's
+copy and says so. `hasPendingSave()` is what keeps it from firing on
+our own edits — but that function only knows about writes **this tab
+is sending**. A balance pull, a connect and "Use bank balance" change
+the row from an **edge function**, so between asking and re-reading
+there is a write of ours outstanding that the tab has no record of.
+The banner duly announced the user's own tap as another device.
+
+A banner exists to explain a swap you did not cause. Attached to one
+you did, it teaches you to ignore it — which costs you the next real
+one.
+
+The counter lives in `src/shared/plaidApi.ts`, with the calls, so a
+caller cannot forget: `pullBalance`, `finishLink` and `disconnect`
+each claim it for the length of the request, and a client extends the
+claim over its own reload, which that module cannot see. **One
+counter, two holders** — not two predicates that have to agree. It is
+a count and not a flag, because two overlapping pulls would otherwise
+have the first one's finish release the second one's claim, and it is
+released in a `finally`, because a claim left standing by a thrown
+call would silence the banner for the rest of the session.
+
+### A one-off described as a rule (2026-10-21)
+
+The phone's scope sheet offered "Edit every BMV — Changes the rule,
+and so every date it generates" on a one-time charge, and warned that
+deleting it would remove "every date it generates". There is one
+date.
+
+The ACTIONS were right: a one-off gets `edit-rule` and `delete-rule`
+because the whole item is the one occurrence. Only the WORDS were
+wrong — `labelFor` had one sentence per action and no idea whether
+the row repeated. It now takes `recurring`, which decides the
+sentences and nothing else.
+
+What let it ship was a comment. `scopeActions` said "A ONE-OFF HAS NO
+SCOPE. It is already a single occurrence, so it **skips the sheet
+entirely** and opens straight into the editor" — which was false, and
+false in exactly the way that stops anyone checking the sheet's copy
+for a one-off. The comment is corrected in place and says what it got
+wrong, because the next reader is the person who would otherwise
+trust it again. The web was already right: its scope control needs
+`initial?.cadence` to appear at all, and its delete confirm reads
+"Delete this item?" for a one-off.
+
 ## 9. Maintenance rules (standing — apply to every commit)
 
 1. **This spec matches the code.** A change that makes it wrong updates it in
@@ -2734,7 +2782,8 @@ resolve.
 
 ### Connected checking via Plaid — BALANCE ONLY. Decided 2026-10-20.
 ### Server side AND UI BUILT 2026-10-20. SQL run and functions DEPLOYED
-### 2026-10-20; sandbox end-to-end outstanding.
+### 2026-10-20. SANDBOX END-TO-END PASSED 2026-10-21, web and iOS.
+### Production keys stay unused until the pre-production list below is done.
 
 Opt-in, per account, off by default. Plaid team "Key Budget" exists;
 sandbox first, Trial plan being applied for (10 connections).
@@ -3270,6 +3319,37 @@ owner submits):
 - The App Store description and any screenshot copy that says the app
   never connects to a bank has to stop saying it.
 
+**TWO OF THOSE SENTENCES WERE LIVE, and are gone (2026-10-21).** The
+landing page said "Free. No bank connection, ever — it never asks for
+one" and the privacy page said "It never connects to your bank, so
+there are no logins, account numbers, or card details at risk." Both
+were true when written and became false the day Connect shipped to
+the allowlist. The landing line is now the owner's "Free. No bank
+connection required." — the promise that survives, because the
+manual path is still complete and still the default. The privacy
+paragraph now says connecting is optional and off unless you turn it
+on, that all it reads is the checking balance and never transactions,
+and that the bank login goes to Plaid and the bank rather than here.
+
+`tests/connect.test.mjs` greps both pages for the three retired
+phrases, because a false privacy claim is the worst kind of stale
+copy and the obvious page was not the only one carrying it. **The
+full "Connected accounts (optional)" section above is still owed** —
+this was the correction, not the rewrite.
+
+**The consent screen's Continue button was orange** (`bg-amber-500`),
+the only button in the web app wearing a color the app does not have.
+It is now the app's own gold, the two steps of the icon's hue that
+the wordmark and the landing CTA already use: `#8e670b` on light,
+`#eebb4d` on dark.
+
+**"Off by default" came out of the toggle's sub-line (2026-10-21),**
+on the owner's instruction: it was a fact about the switch the reader
+is looking at, which can see for itself. The line is now
+`CONNECT_TOGGLE_SUB` in `src/content/connect.ts`, because it had been
+written out in both clients and the owner's one-line edit was
+therefore two edits, either of which could have been missed.
+
 **THE PILL, EXACTLY AS DICTATED 2026-10-20.** Text only, no icon.
 Five states, and what they have in common is that the balance is in
 the same place and reads the same way in all of them — the
@@ -3343,6 +3423,135 @@ it is not blocking sandbox.
 **THE SANDBOX END-TO-END, which is the acceptance test:** toggle on →
 consent → connect → pull on open writes a snapshot → disconnect
 removes the item → toggle off cleans up every token.
+
+**IT PASSED ON WEB, 2026-10-21.** Owner's run, in order: manual $250
+→ bar reads `logged 10/21/2026, 12:47 AM` → `last_synced_at` forced
+back 13 hours → pull at 04:48:59 → **the manual figure survived**
+(snapshot 250, source manual) → Use bank balance → $100, synced, and
+**no Plaid call** → Refresh now → a real pull at 04:52:04 →
+Disconnect → `plaid_items`, `plaid_tokens` and every `plaid_%` Vault
+secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
+and Update balance are back, with both pulled balances kept as
+ordinary history. One pull per open; the double pull is gone.
+
+### Plaid's Trial is TEN ITEMS EVER (2026-10-21)
+
+From support.plaid.com, read by the owner: **no time limit, ten
+production Items ever.** `/item/remove` does **not** give a slot
+back, and two Items for the same bank account count as two. That one
+sentence reshaped five things:
+
+**1. A broken login is repaired IN PLACE, never re-linked.** Link's
+update mode reopens the same Item on the token already held;
+`plaid-link-token` takes `update: true`. `products` is **omitted** in
+that branch, which is not tidiness — Plaid rejects a token carrying
+both `access_token` and `products`.
+
+This was **not a confirmation**. There was no reconnect path at all:
+the pill said "Reconnect" in gold, Settings said "until you
+reconnect", and nothing anywhere opened Link again — while
+`plaid-link-token` refused to mint while an Item existed. The only
+route a user could find was Disconnect → Connect, **which is exactly
+the second slot.** A gold call to action with no action behind it
+does not read as missing; it reads as a thing you have not found
+yet, and the thing they would have found instead cost a slot.
+
+**Nothing is exchanged after update mode.** The public token it
+returns maps to the access token already held, so exchanging it buys
+nothing and invites a duplicate. **A successful pull is the proof**,
+and `reconnect` is the one trigger allowed past a `login_required`
+item in `plaid-balance` — so the flag cannot be cleared by
+assertion, only by a bank that answered.
+
+**2. A second Item is refused before Link opens**, not after: refusing
+afterwards means refusing when the Item, and the slot, already
+exist. Two more locks behind it — the `plaid_items_one_per_user`
+index, and a **ten-minute reservation** on an unfinished
+`plaid_link_sessions` row, because two tabs can both mint while
+`plaid_items` is still empty and both can finish. The index refuses
+the second row and the safety net removes the second Item, and the
+slot is gone anyway. Ten minutes rather than the link token's four
+hours: abandoning Link must not lock the feature for an afternoon.
+
+**3. Leaving says what coming back costs.** `DISCONNECT_NOTE` and the
+new shared `TOGGLE_OFF_CONFIRM` both carry "Connecting again later
+starts a new connection, not this one." "You can always turn it back
+on" was not quite true, and the person deciding is entitled to know
+before rather than after.
+
+**4. `plaid_item_creations`** — append-only, one row per Item created,
+never deleted from. `plaid_items` holds the LIVE ones and is emptied
+by every disconnect, so it cannot answer "how many of the ten are
+gone". **No user id in it**: the question needs a count, an
+environment and a date, not a person — which also leaves account
+deletion nothing to remember to purge. The count query is in
+`supabase/plaid.sql`'s step list; only the `production` rows spend
+slots.
+
+**5. The hidden-Item residual is closed, and this is why it mattered.**
+Both clients now read `plaid_items` on open for an allowlisted
+account **whether or not the toggle is on**, and put the toggle back
+when a row turns up. It is one select on our own table under RLS —
+no Plaid script, no Plaid call, and the same nothing for everyone who
+never connected. **No pull while the feature is off**: finding the
+row is about not hiding it; spending a billed call on an account that
+switched the feature off is a different thing. A hidden Item means
+the user cannot reach Disconnect, so their only way back is a second
+connection — on this plan, a hidden Item is a spent slot.
+
+**IT PASSED ON IOS THE SAME DAY**, on OTA `01a15c21` with Hosted
+Link: consent screen, Plaid inside the in-app browser, Refresh now →
+synced, Log manually → `logged today`, and the web picked the
+connection up on reload. Settings layout and copy approved as they
+stand. One defect, below.
+
+### A connected bank behind a switch that said off (2026-10-21)
+
+**What happened.** On iOS, after Share data and closing the in-app
+browser, Settings showed the Connect toggle OFF. Leaving Settings and
+coming back: still off. Turning it on showed First Platypus ••0000,
+just synced — so the Item, the token and the first pull had all been
+saved server-side. Only this device's idea of the switch was wrong.
+
+**Why it hides itself.** The toggle is the gate for reading the
+connection, on both clients. So a device that wrongly believes the
+feature is off will not read the row that would prove it wrong: the
+Connect section is drawn empty, `lib/connection.ts` clears its store,
+and the Checking pill goes back to `as of`. A disagreement that
+suppresses its own evidence does not decay — it has to be caught at
+the one moment both halves are in hand.
+
+**What writes the false.** Nothing in the hosted flow writes
+`connectedFeatures: false`. The last thing `openLink` does is
+re-sync this device's state from the server, and the server's copy of
+*settings* can be older than the toggle that started the flow — the
+web saves on a debounce and had the same latent hole, and a second
+signed-in client with an older document can serve one too. **This was
+not pinned to a single writer**; what was fixed is the shape, so it
+does not matter which of them it was.
+
+**The rule, in `src/shared/connect.ts`:** `shouldRestoreToggle`. A
+live bank with the feature off is not a state this app has, and where
+the two disagree **the connection is the one telling the truth** — it
+exists at Plaid, it has a token, and it is being pulled. The switch
+records a decision and can be stale; the Item cannot.
+
+Both clients hold **the row they actually read**, not the shared
+store's copy of it, and check after the re-sync has landed — the
+store clears itself the instant settings say off, which is precisely
+the case being tested. The phone also re-reads the connection and the
+state on `AppState` → `active`, because a user who switches away from
+the in-app browser rather than closing it never reaches `openLink`'s
+await.
+
+**The residual — the app being killed between Share data and coming
+back — is CLOSED** (same day, once the Trial terms made it
+expensive). The server would hold `connectedFeatures: false` beside
+a live Item and nothing on a cold start would read the connection to
+notice, because the toggle gated that read. Both clients now make
+that read regardless of the toggle for an allowlisted account; see
+"Plaid's Trial is TEN ITEMS EVER" above for why a hidden Item is a
+spent slot rather than a cosmetic bug.
 
 
 **Gated decision — the storage model: DECIDED 2026-10-02.** Moving from one

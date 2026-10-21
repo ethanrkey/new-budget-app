@@ -28,24 +28,43 @@ import { fmtDate } from "../../src/shared/dates.ts";
 // already up rather than dismissing one modal and presenting another.
 // See BottomSheet for the bug that taught us.
 
-function labelFor(a: ScopeAction, name: string): { text: string; sub?: string; destructive?: boolean } {
+// A JUST-ONCE ITEM IS NOT A RULE, and must not be described as one.
+// `edit-rule` and `delete-rule` are the actions a one-off gets —
+// correctly, since the whole item IS the one occurrence — but they
+// were drawn with the words written for a repeating item, so tapping
+// a one-time BMV charge offered to "Edit every BMV" and warned that
+// deleting it would remove "every date it generates". There is one
+// date. Reported 2026-10-21.
+//
+// NO SUB-LINE ON THE ONE-OFF EDIT. The sub-lines exist to separate
+// two readings of the same tap; with a single reading on offer,
+// "Edit BMV" says everything the row has to say and a second line
+// would be saying it twice.
+function labelFor(a: ScopeAction, name: string, recurring: boolean): { text: string; sub?: string; destructive?: boolean } {
   switch (a.kind) {
     case "edit-occurrence":
       return { text: `Edit just ${fmtDate(a.date)}`, sub: "Every other date keeps the rule's amount" };
     case "edit-rule":
-      return { text: `Edit every ${name}`, sub: "Changes the rule, and so every date it generates" };
+      return recurring
+        ? { text: `Edit every ${name}`, sub: "Changes the rule, and so every date it generates" }
+        : { text: `Edit ${name}` };
     case "reset-occurrence":
       return { text: `Reset ${fmtDate(a.date)} to the rule`, sub: "Drops this date's own amount" };
     case "delete-rule":
-      return { text: `Delete ${name}`, sub: "Removes the rule and every date it generates", destructive: true };
+      return recurring
+        ? { text: `Delete ${name}`, sub: "Removes the rule and every date it generates", destructive: true }
+        : { text: `Delete ${name}`, sub: "Removes this transaction", destructive: true };
   }
 }
 
 export default function ScopeSheet({
-  name, actions, onPick, onClose,
+  name, actions, recurring, onPick, onClose,
 }: {
   name: string;
   actions: ScopeAction[];
+  /** Whether the tapped row came from a rule. It decides the WORDS
+   *  and nothing else — the actions a one-off gets are the same two. */
+  recurring: boolean;
   onPick: (a: ScopeAction) => void;
   onClose: () => void;
 }) {
@@ -58,7 +77,9 @@ export default function ScopeSheet({
     feel.warning();
     Alert.alert(
       `Delete ${name}?`,
-      "This removes the rule and every date it generates, including any dates you gave their own amount.",
+      recurring
+        ? "This removes the rule and every date it generates, including any dates you gave their own amount."
+        : "This removes it from your ledger.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Delete", style: "destructive", onPress: () => onPick(a) },
@@ -70,7 +91,7 @@ export default function ScopeSheet({
     <View style={styles.card}>
       <Text style={styles.heading}>{name}</Text>
       {actions.map((a, i) => {
-        const { text, sub, destructive } = labelFor(a, name);
+        const { text, sub, destructive } = labelFor(a, name, recurring);
         return (
           <Pressable
             key={`${a.kind}-${i}`}

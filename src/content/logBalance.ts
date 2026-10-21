@@ -85,7 +85,15 @@ export const DATE_LABEL = {
 
 export const HIDDEN_ROWS_COPY = {
   title: "This will hide rows already in your ledger",
-  /** "3 rows dated before Oct 14 will drop off:" */
+  /**
+   * "3 rows dated before 10/14/2026 will drop off:"
+   *
+   * `asOf` IS ALREADY FORMATTED. Both clients were handing in the
+   * raw ISO string, so the one sentence in this flow that names a
+   * date said "dated before 2026-10-21" while every other date on
+   * the same screen said 10/21/2026. A date is formatted once, at
+   * the edge, by fmtDate — not by whichever caller remembers.
+   */
   lede: (count: number, asOf: string) =>
     `${count} ${count === 1 ? "row" : "rows"} dated before ${asOf} will drop off the Ledger:`,
   why: "That is usually right: a balance you just read from your bank already includes anything that has gone out, so keeping these would count them twice.",

@@ -89,7 +89,56 @@ export const CONNECT_CONSENT: ConsentScreen = {
  * and this is read by someone who has decided to leave.
  */
 export const DISCONNECT_NOTE =
-  "Disconnecting removes Key Budget's access right away. Balances already pulled stay in your history. To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.";
+  "Disconnecting removes Key Budget's access right away. Balances already pulled stay in your history. "
+  + "Connecting again later starts a new connection, not this one. "
+  + "To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.";
+
+/**
+ * Reconnecting a bank that needs signing in again.
+ *
+ * IT IS NOT A NEW CONNECTION AND MUST NOT BECOME ONE. Plaid's Trial
+ * is ten Items ever, `/item/remove` does not give one back, and two
+ * Items for the same account count as two — so repairing a broken
+ * login by disconnecting and connecting again quietly spends a
+ * second slot out of ten. Link's update mode reopens the SAME Item
+ * on the token we already hold; `plaid-link-token` takes
+ * `update: true` for exactly this.
+ *
+ * The user is told the balance is stale rather than wrong: every
+ * figure already in their history was true when it was pulled.
+ */
+export const RECONNECT = {
+  action: "Reconnect your bank",
+  /** On the Settings notice, and in the sheet behind the pill. */
+  why: "Your bank needs you to sign in again. Balances have stopped updating until you do. Everything you have already logged is unaffected.",
+  busy: "Opening your bank…",
+  failed: "Couldn't reopen your bank. Nothing changed — try again in a moment.",
+  /** After update mode, when the pull still comes back refused. */
+  stillBroken: "Your bank still needs you to sign in. Nothing changed.",
+  fixed: "Reconnected — your balance is up to date.",
+} as const;
+
+/**
+ * Turning the whole feature off, which disconnects as a side effect.
+ *
+ * ONE COPY, because it was two: the web built this sentence inline
+ * and the phone built a slightly different one, so "reconnecting
+ * later starts a new connection" would have had to be added twice.
+ *
+ * IT NAMES THE COST, on the owner's instruction 2026-10-21. Plaid's
+ * Trial is ten Items ever and removal does not give one back, so
+ * "you can always turn it back on" is not quite true — you can, and
+ * it spends another of the ten. Someone deciding whether to switch
+ * it off is entitled to know that before they do, not after.
+ */
+export const TOGGLE_OFF_CONFIRM = {
+  title: "Turn off connected features?",
+  body: (bank: string) =>
+    `This disconnects ${bank} right away. Balances already pulled stay in your history, `
+    + "the same as ones you typed. Connecting again later starts a new connection, not this one.",
+  keep: "Keep it on",
+  turnOff: "Turn off",
+} as const;
 
 export const PLAID_PORTAL_URL = "https://my.plaid.com";
 
@@ -104,6 +153,27 @@ export const PLAID_PORTAL_URL = "https://my.plaid.com";
  *
  * It loads no Plaid code. It is a sentence and a link to Settings.
  */
+/**
+ * The Settings toggle, and the sub-line under it.
+ *
+ * WHAT IT DOES AND WHAT IT DOES NOT, in the same breath. A sub-line
+ * that only said "keep your balance up to date" would be selling.
+ *
+ * IT LIVES HERE because it was written out twice — once in
+ * ConnectedAccount.jsx and once in Connected.tsx — and the owner's
+ * one-line edit to it on 2026-10-21 was therefore two edits, either
+ * of which could have been missed. Copy is not a thing either client
+ * owns.
+ *
+ * "Off by default" came out at the owner's instruction the same day:
+ * it was a fact about the switch the reader is looking at, which can
+ * see for itself whether it is on.
+ */
+export const CONNECT_TOGGLE = "Connect your bank";
+export const CONNECT_TOGGLE_SUB =
+  "When on, Key Budget can read your checking balance — and nothing else. "
+  + "You can always log balances by hand instead.";
+
 export const CONNECT_HINT = "Want this automatic? Turn on connected features in Settings.";
 export const CONNECT_HINT_DISMISS = "Don't show again";
 
@@ -192,6 +262,8 @@ export const PILL_SHEET = {
    * Only offered when there IS a manual override to drop.
    */
   useBank: "Use bank balance",
+  /** Only when the connection is asking to be signed into again. */
+  reconnect: RECONNECT.action,
   /** e.g. "Last synced 8:14 AM". */
   lastSynced: (when: string) => `Last synced ${when}`,
 } as const;

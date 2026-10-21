@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator, Alert, AppState, Linking, Pressable, StyleSheet, Switch, Text, View,
+} from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import { T } from "../lib/theme";
 import * as feel from "../lib/haptics";
@@ -7,8 +9,12 @@ import { supabase } from "../lib/supabase";
 import { useBudget } from "./StateProvider";
 import NativeSheet from "./NativeSheet";
 import { fmtInstant } from "../../src/shared/dates.ts";
-import { CONNECT_CONSENT, DISCONNECT_NOTE, PLAID_PORTAL_URL } from "../../src/content/connect.ts";
-import { canSeeToggle } from "../../src/shared/connect.ts";
+import {
+  CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, PLAID_PORTAL_URL,
+  RECONNECT, TOGGLE_OFF_CONFIRM,
+} from "../../src/content/connect.ts";
+import type { Connection } from "../../src/shared/connect.ts";
+import { canReconnect, canSeeToggle, shouldRestoreToggle } from "../../src/shared/connect.ts";
 import {
   disconnect as apiDisconnect, pullBalance, readConnection, startLink,
 } from "../../src/shared/plaidApi.ts";
@@ -51,7 +57,7 @@ export default function Connected() {
   // and everything that changes it writes there.
   const { connection, allowlisted } = useConnection();
   const [consenting, setConsenting] = useState(false);
-  const [busy, setBusy] = useState<null | "connecting" | "saving" | "disconnecting">(null);
+  const [busy, setBusy] = useState<null | "connecting" | "reconnecting" | "saving" | "disconnecting">(null);
 
   const refreshConnection = useCallback(async () => {
     const row = await readConnection(supabase as never);
@@ -63,6 +69,47 @@ export default function Connected() {
     if (!on || !allowlisted) return;
     void refreshConnection();
   }, [on, allowlisted, refreshConnection]);
+
+  // SET BY openLink WHEN HOSTED LINK CAME BACK WITH A LIVE BANK.
+  //
+  // It cannot be checked inside openLink itself. The last thing that
+  // function does is re-sync this device's state from the server,
+  // and the `commit` it is holding was bound to the state of the
+  // render it started in — so a write made there would be made
+  // against the copy the re-sync just replaced. Here it runs on the
+  // render AFTER the re-sync, with a `commit` that is looking at the
+  // same state the user is.
+  // THE ROW ITSELF, not the shared store's copy of it. If the
+  // re-synced settings say off, everything that reads the store is
+  // already being told there is no connection — including the store,
+  // which clears itself when the feature is off. Holding the row we
+  // actually read keeps the evidence out of reach of the state it is
+  // evidence against.
+  const cameBackConnected = useRef<Connection | null>(null);
+  useEffect(() => {
+    const row = cameBackConnected.current;
+    if (!row || !state) return;
+    if (shouldRestoreToggle(state.settings, row)) {
+      cameBackConnected.current = null;
+      void commit((s) => ({ ...s, settings: { ...s.settings, connectedFeatures: true } }),
+        "Connected features on", "none");
+      return;
+    }
+    if (state.settings.connectedFeatures) cameBackConnected.current = null;
+  }, [state, commit]);
+
+  // COMING BACK TO THE APP IS THE OTHER WAY TO RETURN FROM LINK.
+  // Hosted Link runs in an in-app browser, and a user who switches
+  // away instead of closing it gets here rather than through
+  // openLink's await. Same two questions, same order.
+  useEffect(() => {
+    if (!allowlisted) return;
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next !== "active" || !on) return;
+      void (async () => { await refreshConnection(); await resyncState(); })();
+    });
+    return () => { sub.remove(); };
+  }, [allowlisted, on, refreshConnection, resyncState]);
 
   // Nothing at all for anyone not on the list. Not a disabled row,
   // not an explanation — absent.
@@ -85,12 +132,12 @@ export default function Connected() {
     }
     feel.warning();
     Alert.alert(
-      "Turn off connected features?",
-      `This disconnects ${connection.institutionName ?? "your bank"} right away. Balances already pulled stay in your history, the same as ones you typed.`,
+      TOGGLE_OFF_CONFIRM.title,
+      TOGGLE_OFF_CONFIRM.body(connection.institutionName ?? "your bank"),
       [
-        { text: "Keep it on", style: "cancel" },
+        { text: TOGGLE_OFF_CONFIRM.keep, style: "cancel" },
         {
-          text: "Turn off", style: "destructive",
+          text: TOGGLE_OFF_CONFIRM.turnOff, style: "destructive",
           onPress: () => { void doDisconnect(true); },
         },
       ],
@@ -113,14 +160,41 @@ export default function Connected() {
     }
   }
 
-  async function openLink() {
+  /**
+   * Open Hosted Link. `update` reopens the SAME Item.
+   *
+   * NEVER DISCONNECT-THEN-CONNECT TO FIX A LOGIN. Plaid's Trial is
+   * ten Items EVER, `/item/remove` does not give one back, and two
+   * Items for the same account count as two — so the repair path has
+   * to be update mode or it quietly costs a slot out of ten.
+   */
+  async function openLink(update = false) {
     setConsenting(false);
-    setBusy("connecting");
-    const started = await startLink(supabase as never, true);
+    setBusy(update ? "reconnecting" : "connecting");
+    const started = await startLink(supabase as never, true, update);
     if ("error" in started || !started.hostedUrl) {
       setBusy(null);
       feel.failure();
+      if (update) { Alert.alert("Couldn't reconnect", RECONNECT.failed); return; }
       Alert.alert("Couldn't start", `We couldn't reach the connection service (${"error" in started ? started.error : "no link"}). Try again in a moment.`);
+      return;
+    }
+
+    if (update) {
+      await WebBrowser.openAuthSessionAsync(started.hostedUrl);
+      // NOTHING IS EXCHANGED and no webhook matters here: update mode
+      // produces no new Item, and the browser closing tells us
+      // nothing either way. A PULL THAT WORKS is the only proof the
+      // repair took — and the only thing that clears the status,
+      // since `reconnect` is the one trigger allowed past a
+      // login_required item. See plaid-balance.
+      setBusy("saving");
+      const result = await pullBalance(supabase as never, "reconnect");
+      await refreshConnection();
+      await resyncState();
+      setBusy(null);
+      if (result?.synced) { feel.success(); Alert.alert("Reconnected", RECONNECT.fixed); }
+      else { feel.failure(); Alert.alert("Still disconnected", RECONNECT.stillBroken); }
       return;
     }
     // The browser closing tells us nothing — Hosted Link reports its
@@ -141,6 +215,14 @@ export default function Connected() {
     if (row) {
       await pullBalance(supabase as never, "open");
       row = await refreshConnection();
+      // A LIVE BANK IS THE FEATURE BEING ON. The re-sync below takes
+      // this device's settings from the server, and on 2026-10-21 an
+      // iOS connection came back from Hosted Link with the bank
+      // saved, pulled, and the switch showing off — after which
+      // nothing read the connection again, because the switch said
+      // there was nothing to read. The effect above puts it back
+      // once the re-synced state has landed; see shouldRestoreToggle.
+      cameBackConnected.current = row;
       await resyncState();
     }
     setBusy(null);
@@ -157,14 +239,12 @@ export default function Connected() {
       <View style={styles.card}>
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.rowText}>Connect your bank</Text>
-            {/* WHAT IT DOES AND WHAT IT DOES NOT, in the same breath.
-                A sub-line that only said "keep your balance up to
-                date" would be selling. */}
-            <Text style={styles.rowSub}>
-              Off by default. When on, Key Budget can read your checking balance — and nothing
-              else. You can always log balances by hand instead.
-            </Text>
+            <Text style={styles.rowText}>{CONNECT_TOGGLE}</Text>
+            {/* BOTH WORDS FROM src/content/connect.ts. This sentence
+                was written out here AND in the web's
+                ConnectedAccount.jsx, so the owner's one-line edit to
+                it was two edits. */}
+            <Text style={styles.rowSub}>{CONNECT_TOGGLE_SUB}</Text>
           </View>
           <Switch
             value={on}
@@ -201,13 +281,23 @@ export default function Connected() {
               <Text style={styles.factTerm}>Last synced</Text>
               <Text style={styles.factValue}>{lastSync}</Text>
             </View>
-            {connection.status === "login_required" && (
+            {canReconnect(connection) && (
               <View style={styles.notice}>
                 <Text style={styles.noticeTitle}>Your bank needs you to sign in again</Text>
-                <Text style={styles.rowSub}>
-                  Balances have stopped updating until you reconnect. Everything you have already
-                  logged is unaffected.
-                </Text>
+                <Text style={styles.rowSub}>{RECONNECT.why}</Text>
+                {/* THE ONLY REPAIR PATH, and it is update mode. A
+                    notice saying "until you sign in again" beside no
+                    way to do it leaves Disconnect as the obvious
+                    move — which costs a second Trial slot for the
+                    same bank account. */}
+                <Pressable
+                  style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+                  onPress={() => { feel.light(); void openLink(true); }}
+                  disabled={!!busy}
+                  accessibilityRole="button" accessibilityLabel={RECONNECT.action}
+                >
+                  <Text style={styles.actionText}>{RECONNECT.action}</Text>
+                </Pressable>
               </View>
             )}
             <Pressable
@@ -249,6 +339,7 @@ export default function Connected() {
             <ActivityIndicator color={T.dim} />
             <Text style={styles.waitingText}>
               {busy === "connecting" ? "Opening your bank…"
+                : busy === "reconnecting" ? RECONNECT.busy
                 : busy === "saving" ? "Saving the connection…"
                 : "Disconnecting…"}
             </Text>
@@ -259,7 +350,7 @@ export default function Connected() {
       <ConsentSheet
         open={consenting}
         onCancel={() => { feel.selection(); setConsenting(false); }}
-        onContinue={() => { void openLink(); }}
+        onContinue={() => { void openLink(false); }}
       />
     </>
   );

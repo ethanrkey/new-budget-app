@@ -35,9 +35,10 @@ export default function Privacy() {
 
         <div className="space-y-5 text-[15px] leading-relaxed text-gray-700 dark:text-gray-300">
           <p>
-            Key Budget runs entirely on data you enter yourself. It never connects to your bank, so
-            there are no logins, account numbers, or card details at risk — because the app never has
-            them.
+            Key Budget runs on data you enter yourself. Connecting a bank is optional, off unless
+            you turn it on, and all it ever reads is your checking balance — never your transactions.
+            Your bank login goes to Plaid and your bank; Key Budget never sees it, and never has your
+            account or card numbers either way.
           </p>
           <p>
             Your data is encrypted on the way to the server and on the server&apos;s disks. Nobody can
