@@ -686,6 +686,23 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 14, 2026-10-21, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group
+  `f5db9806-01a2-47d7-b320-affadd53f5e9`, iOS update `01a15d04`,
+  commit `e00cd10`. Published through `mobile/scripts/ota.mjs`.
+
+  **Reconnect in place.** Hosted Link in update mode from the
+  Settings notice and from the balance sheet, because Plaid's Trial
+  is ten Items ever and Disconnect-then-Connect spends a second one.
+  A live bank is never left behind a switch that says off — the row
+  is read on open whether the toggle is on or not. The balance
+  sheet's "last synced" stops pairing a UTC date with a local clock
+  (the third copy of that bug, missed on 2026-10-20). A one-off is
+  no longer described as a rule in the Ledger's scope sheet. The
+  toggle's sub-line comes from `src/content/connect.ts` and has lost
+  "Off by default".
+
 - **OTA UPDATE 13, 2026-10-20, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked;
   unchanged, as it must be: connected checking adds no native input,
