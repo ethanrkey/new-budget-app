@@ -1612,6 +1612,45 @@ const MUTATIONS = [
   ["account deletion drops the environment off the Item", "../supabase/plaid.sql",
    "    select tok.secret_id, it.plaid_item_id, coalesce(it.env, 'production')",
    "    select tok.secret_id, it.plaid_item_id, null"],
+
+  // ---- THE SEVEN THE FIRST COMPLETE RUN COULD NOT REACH ----
+  //
+  // 2026-10-21: the full run finished for the first time and answered
+  // its second question — which tests nothing can kill. These are the
+  // seven it named. A test no mutation can break is a test nobody has
+  // checked, and four of these are assertions of ABSENCE, which is
+  // the kind that rots quietest: the thing they forbid can come back
+  // and the test goes on passing because it was never the thing being
+  // measured.
+  ["skipping the tour buzzes, which is a confirmation nobody asked for",
+   "components/Tour.tsx",
+   "  const leave = () => {\n    router.replace(ROUTE.ledger! as never);",
+   "  const leave = () => {\n    feel.light();\n    router.replace(ROUTE.ledger! as never);"],
+  ["the day panel foots with the old Net line again",
+   "components/CalendarView.tsx",
+   "          <Text style={styles.detailHead}>{fmtLongDay(detail.date)}</Text>",
+   "          <Text style={styles.detailHead}>{fmtLongDay(detail.date)}</Text>\n"
+   + "          <Text style={styles.detailCat}>{`Net ${money(0)} \u00b7 in ${money(0)} \u00b7 out ${money(0)}`}</Text>"],
+  ["the guide's income step goes back to asking about a paycheck",
+   "lib/firstRun.ts",
+   '    title: "Any upcoming income?",\n    body: "Enter any income you know is coming up, recurring or not.",',
+   '    title: "Add your paycheck",\n    body: "Enter your paycheck so the forecast has something to count forward from.",'],
+  ["an unknown runtime prints as nothing rather than saying so",
+   "lib/version.ts",
+   '  const runtime = (Updates.runtimeVersion ?? "").slice(0, 8) || "—";',
+   '  const runtime = (Updates.runtimeVersion ?? "").slice(0, 8);'],
+  ["a list of ids is filtered by the wrong type, so every real one is dropped",
+   "lib/prefs.ts",
+   '  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];',
+   '  Array.isArray(v) ? v.filter((x): x is string => typeof x === "object") : [];'],
+  ["an unreadable prefs file takes the render down with it",
+   "lib/prefs.ts",
+   "  } catch {\n    return DEFAULT_PREFS;",
+   "  } catch (e) {\n    throw e;\n    return DEFAULT_PREFS;"],
+  ["About starts the tour, which is the two-things-one-row bug again",
+   "components/Settings.tsx",
+   '          <Row label="About" sub="What every screen does, and why it works the way it does." onPress={onOpenAbout} />',
+   '          <Row label="About" sub="What every screen does, and why it works the way it does." onPress={() => { onOpenAbout(); onStartTour(); }} />'],
 ];
 
 // ---------------------------------------------------------------
