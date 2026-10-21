@@ -1522,6 +1522,26 @@ const MUTATIONS = [
   ["the webhook is not checked at all",
    "../supabase/functions/plaid-exchange/index.ts",
    "    if (!verified.ok) {", "    if (false) {"],
+
+  // ---- a webhook is a backup, not the only way home (2026-10-21) ----
+  ["the phone goes back to waiting to be told", "../mobile/components/Connected.tsx",
+   "    await recoverLink(supabase as never);\n    let row = await refreshConnection();",
+   "    let row = await refreshConnection();"],
+  ["foregrounding stops looking for a stranded connection",
+   "../mobile/components/Connected.tsx",
+   "        if (!connectionNow()) await recoverLink(supabase as never);", "        // mutated"],
+  ["a cold start leaves an unfinished session unfinished",
+   "../mobile/components/Chrome.tsx",
+   "      if (connectedFeatures && allowlistedNow() && !connectionNow()) {", "      if (false) {"],
+  ["the web stops recovering a tab closed mid-exchange",
+   "../src/components/ConnectedAccount.jsx",
+   "      const found = await recoverLink(supabase);", "      const found = { ok: false };"],
+  ["a finished session is never marked finished, so Connect stays shut",
+   "../supabase/functions/plaid-exchange/index.ts",
+   '  await admin.from("plaid_link_sessions")\n    .update({ used_at: new Date().toISOString() })\n    .eq("user_id", userId).is("used_at", null);',
+   "  // mutated"],
+  ["an arriving webhook leaves no trace", "../supabase/functions/plaid-exchange/index.ts",
+   '      await noteInbound(admin, "SESSION_FINISHED", verified.reason);', "      // mutated"],
 ];
 
 // ---------------------------------------------------------------
@@ -1564,27 +1584,52 @@ let current = null;
  * prints no "FAIL" line at all and is only detectable by its exit
  * code. Every command here is already `2>&1`, so stderr is in `out`.
  */
-function capture(cmd) {
+function capture(cmd, cwd) {
   return new Promise((done) => {
-    current = exec(cmd, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    current = exec(cmd, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, cwd }, (err, stdout) => {
       current = null;
       done({ out: stdout || err?.stdout || "", ok: !err });
     });
   });
 }
 
-/** Names of the node-harness checks that FAIL right now, if any. */
+// THE REPO ROOT, from this file rather than from the cwd. The node
+// suites are written to be run from there — `npm test` runs them
+// from there — and running them from mobile/ is running a different
+// thing. See runNodeHarness.
+const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "../../..");
+
+/**
+ * Names of the node-harness checks that FAIL right now, if any.
+ *
+ * RUN FROM THE REPO ROOT, which they were not. They were run as
+ * `node ../tests/x.mjs` from mobile/, so any suite that opens a path
+ * relative to the repo root threw ENOENT — and on 2026-10-21
+ * `tests/mobile-fields.test.mjs` did exactly that, on EVERY mutation.
+ *
+ * A CRASH IS NOT A KILL, which is the half that did the damage. A
+ * suite that exits non-zero without naming a failed check used to be
+ * counted as "the mutation was caught", so a broken harness handed a
+ * free kill to every mutation in the run — and because the loop
+ * below returns at the first failing suite, the suites after it never
+ * ran at all. `tests/mobile-fields.test.mjs` is 16th of 18: the two
+ * suites covering every Plaid change, `connect` and `edge-functions`,
+ * had never once been run by this script. Three audits reported
+ * "every mutation caught" on that basis.
+ *
+ * So a crash now STOPS THE RUN and says so. A broken harness is not
+ * evidence of anything, and the one thing it must never do is look
+ * like evidence.
+ */
 async function runNodeHarness() {
   for (const suite of NODE_SUITES) {
-    const { out, ok } = await capture(`node ../${suite} 2>&1`);
+    const { out, ok } = await capture(`node ${suite} 2>&1`, REPO_ROOT);
     if (ok) continue;
     const failed = [...out.matchAll(/^FAIL  (.+)$/gm)].map((m) => `${suite}: ${m[1].trim()}`);
-    // A harness that exits non-zero without naming a check still counts
-    // as a kill — silence here would read as "nothing noticed".
-    if (failed.length) return failed;
-    return [`${suite}: exited non-zero`];
+    if (failed.length) return { failed };
+    return { broken: suite, out };
   }
-  return [];
+  return { failed: [] };
 }
 
 // THE DIRTY LIST: every file this process has written, mapped to what
@@ -1761,7 +1806,7 @@ export async function main(argv = process.argv) {
     if (Date.now() - startedAt > CAP_MS) { cappedAfter = label; break; }
     const orig = readFileSync(file, "utf8");
     let out = "";
-    let node = [];
+    let harness = { failed: [] };
     // THE RESTORE IS IN A `finally`, not after the run. A jest
     // invocation that threw something the old `execSync` call did not
     // wrap, or a harness that blew up, used to skip the restore and
@@ -1775,9 +1820,16 @@ export async function main(argv = process.argv) {
       // logic would otherwise be reported as surviving while a test in
       // tests/signin.test.mjs was failing loudly one directory up.
       // "Can anything kill these tests" has to mean anything.
-      node = await runNodeHarness();
+      harness = await runNodeHarness();
     } finally {
       restoreAll(`"${label}"`, false);
+    }
+    if (harness.broken) {
+      console.log(`\n${harness.broken} DID NOT RUN — it exited non-zero without naming a failed check.`);
+      console.log("That is a broken harness, not a caught mutation, and counting it as one");
+      console.log(`would hand a free kill to every mutation left. Stopping at "${label}".\n`);
+      console.log(harness.out.split("\n").slice(-12).join("\n"));
+      return 1;
     }
     // AND THEN CHECK, because a restore that silently did not happen
     // is the failure this whole section exists to prevent.
@@ -1786,8 +1838,16 @@ export async function main(argv = process.argv) {
       return 1;
     }
 
-    const dead = [...out.matchAll(/✕ (.+?) \(/g)].map((m) => m[1]);
-    dead.push(...node);
+    // LINE-ANCHORED, which it was not. jest prints a failure as
+    // `  ✕ name (12 ms)` — but one of this project's own tests is
+    // CALLED "the ✕ removes a bill row, and the rest close up", so
+    // an unanchored `✕ (.+?) \(` matched the ✕ inside a PASSING
+    // test's name and reported a kill on every single run since that
+    // test was written. The name it invented never matched the
+    // baseline's, either, so the same test was simultaneously
+    // credited with every kill and listed as unverified.
+    const dead = [...out.matchAll(/^\s*✕ (.+?)(?: \(\d+ ms\))?$/gm)].map((m) => m[1].trim());
+    dead.push(...harness.failed);
     for (const d of dead) killedBy.set(d, (killedBy.get(d) ?? 0) + 1);
     if (dead.length === 0) { survived.push(label); console.log(`SURVIVED  ${label}`); }
     else console.log(`killed ${String(dead.length).padStart(2)}  ${label}`);

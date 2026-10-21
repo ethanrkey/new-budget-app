@@ -60,6 +60,34 @@ import { type PlaidJwk, verifyPlaidWebhook } from "../_shared/webhookVerify.ts";
  */
 const keyCache = new Map<string, PlaidJwk>();
 
+/**
+ * Write down that a webhook ARRIVED, and what we decided about it.
+ *
+ * `console.error` was the only record, and on 2026-10-21 that turned
+ * out to be no record at all: a real TD Bank connection never
+ * reached us, and the question "did the webhook arrive and get
+ * refused, or did it never arrive?" could not be answered — this
+ * CLI has no `functions logs`, and reading the dashboard is not
+ * something a test can do. The difference between those two answers
+ * is the difference between a bug in our verifier and a bug in the
+ * delivery, so it has to land somewhere a query can reach.
+ *
+ * It goes in `plaid_api_log` rather than a new table, so nobody has
+ * to re-run the schema to get the evidence. INBOUND rows are marked
+ * as such: trigger `webhook-in`, endpoint `(inbound) <code>`, and
+ * `ok` is whether we accepted it. Still no bodies and no balances —
+ * the rule for that table is unchanged.
+ */
+// deno-lint-ignore no-explicit-any
+async function noteInbound(admin: any, code: string, verdict: string) {
+  try {
+    await admin.from("plaid_api_log").insert({
+      user_id: null, trigger: "webhook-in", endpoint: `(inbound) ${code}`,
+      ok: verdict === "verified", error_code: verdict === "verified" ? null : verdict,
+    });
+  } catch { /* a log that fails must never fail the thing it logs */ }
+}
+
 interface Exchanged { access_token: string; item_id: string }
 interface LinkSession { link_sessions?: Array<{ results?: { item_add_results?: Array<{ public_token?: string }> } }> }
 interface ItemGot { item?: { institution_id?: string } }
@@ -102,14 +130,16 @@ Deno.serve(async (req) => {
     if (!userId) return json(401, { error: "not signed in" });
     if (!await isAllowlisted(admin, userId)) return json(403, { error: "not available" });
     publicToken = payload.public_token;
-    // THE WEB PATH CLOSES ITS SESSION TOO. Only the webhook did, and
-    // the open session is now what reserves the Trial slot while Link
-    // is up (see plaid-link-token) — so a web connection that never
-    // marked itself finished would lock the user out of Connect for
-    // the ten-minute window straight after succeeding.
-    await admin.from("plaid_link_sessions")
-      .update({ used_at: new Date().toISOString() })
-      .eq("user_id", userId).is("used_at", null);
+    // THE WEB PATH CLOSES ITS SESSION AT THE END, not here.
+    //
+    // It closed it here first, so that the ten-minute Trial-slot
+    // reservation in plaid-link-token would not hold Connect shut
+    // straight after a success. But a session marked used is a
+    // session `recover` can no longer find — so a tab closed in the
+    // middle of the exchange would have stranded the Item with no
+    // way back, which is the exact failure this whole batch exists
+    // to remove. The reservation keys on `created_at`, so leaving
+    // the row open costs at most those ten minutes.
   } else if (payload.webhook_code === "SESSION_FINISHED") {
     // ---- the Hosted Link path: Plaid tells us a session ended ----
     trigger = "webhook";
@@ -141,8 +171,10 @@ Deno.serve(async (req) => {
       // if this ever fires on a real one, iOS Connect is broken and
       // the log should say so loudly rather than look like silence.
       console.error("[plaid-exchange] webhook refused:", verified.reason);
+      await noteInbound(admin, "SESSION_FINISHED", verified.reason);
       return json(401, { error: "unverified", reason: verified.reason });
     }
+    await noteInbound(admin, "SESSION_FINISHED", "verified");
     const linkToken = String(payload.link_token ?? "");
     if (!linkToken) return json(200, { ignored: "no link_token" });
 
@@ -173,9 +205,73 @@ Deno.serve(async (req) => {
       return json(200, { ignored: "session finished with no item" });
     }
     await admin.from("plaid_link_sessions").update({ used_at: new Date().toISOString() }).eq("link_token", linkToken);
+  } else if (payload.recover === true) {
+    // ---- FINISH A SESSION THE WEBHOOK NEVER FINISHED ----
+    //
+    // HOSTED LINK HAD EXACTLY ONE COMPLETION PATH and that was a
+    // mistake. The webhook is a message from a third party over the
+    // public internet; it can be late, lost, or refused by a bug in
+    // our own verifier — and when it is, the user is left with a
+    // LIVE ITEM AT PLAID and no record of it here. On a plan with
+    // ten Items for life that is not an inconvenience, it is a spent
+    // slot, and the only way out the user can find is a second Link.
+    //
+    // So the client asks directly instead of waiting to be told. It
+    // is the same question the webhook triggers — "what happened in
+    // my session?" — asked OF Plaid rather than received from it,
+    // which was always the trustworthy half of the webhook design.
+    //
+    // Found the hard way, 2026-10-21: a real TD Bank connection in
+    // production completed at Plaid and never arrived here.
+    trigger = "recover";
+
+    // THE CALLER'S OWN JWT AND NOTHING ELSE. An operator door keyed
+    // on the service-role key was written during the 2026-10-21
+    // rescue and is gone: the key in .env.local did not match what
+    // the function sees in its own environment, and the next idea —
+    // keying the rescue on the link token — was refused by the
+    // permission classifier as weakening security, correctly. It
+    // would have been an unauthenticated way to exchange a bank
+    // token. The user's own session is the right credential and it
+    // is one request.
+    userId = await callerId(req);
+    if (!userId) return json(401, { error: "not signed in" });
+    if (!await isAllowlisted(admin, userId)) return json(403, { error: "not available" });
+
+    const { data: open } = await admin
+      .from("plaid_link_sessions")
+      .select("link_token")
+      .eq("user_id", userId)
+      .is("used_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    // Nothing unfinished is the ordinary answer, not an error: it is
+    // what the client sees every time the webhook DID arrive first.
+    if (!open) return json(200, { ok: false, code: "NO_OPEN_SESSION" });
+
+    const got = await callPlaid<LinkSession>(conf.config, PLAID_ENDPOINTS.linkTokenGet,
+      { link_token: open.link_token }, { admin, userId, trigger });
+    if ("error" in got) return json(200, { ok: false, code: got.error.code });
+
+    publicToken = got.data.link_sessions?.[0]?.results?.item_add_results?.[0]?.public_token ?? "";
+    await admin.from("plaid_link_sessions").update({ used_at: new Date().toISOString() })
+      .eq("link_token", open.link_token);
+    // A session that finished with no Item — the user backed out.
+    // Closed above either way, so the Trial-slot reservation in
+    // plaid-link-token stops holding Connect shut.
+    if (!publicToken) return json(200, { ok: false, code: "NO_ITEM_IN_SESSION" });
   } else {
     // Every other webhook Plaid sends. Acknowledged and dropped: an
     // unhandled webhook that 400s gets retried for days.
+    //
+    // RECORDED FIRST, though, because "nothing from Plaid ever
+    // arrives here" and "the one we wanted was refused" look
+    // identical from the database otherwise.
+    if (typeof payload.webhook_code === "string") {
+      await noteInbound(admin, payload.webhook_code, "unhandled");
+    }
     //
     // DELIBERATELY NOT VERIFIED. Verification costs a Plaid call on
     // a cold isolate, and this branch reads nothing, writes nothing
@@ -286,6 +382,13 @@ Deno.serve(async (req) => {
   // the accounts read, because a connection with no account row is
   // still a connection we can remove on request.
   await standDown();
+
+  // AND NOW the session is spent — after the Item, the token and the
+  // accounts are all stored, so nothing that fails before this point
+  // can put a connection out of `recover`'s reach.
+  await admin.from("plaid_link_sessions")
+    .update({ used_at: new Date().toISOString() })
+    .eq("user_id", userId).is("used_at", null);
 
   return json(200, { ok: true, connected: true, institution_name: institutionName });
 });

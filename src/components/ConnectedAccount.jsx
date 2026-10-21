@@ -4,7 +4,10 @@ import {
   RECONNECT, TOGGLE_OFF_CONFIRM,
 } from "../content/connect.ts";
 import { canReconnect, canSeeToggle, shouldRestoreToggle } from "../shared/connect.ts";
-import { disconnect as apiDisconnect, isAllowlisted, pullBalance, readConnection, startLink, finishLink } from "../shared/plaidApi.ts";
+import {
+  disconnect as apiDisconnect, isAllowlisted, pullBalance, readConnection, recoverLink,
+  startLink, finishLink,
+} from "../shared/plaidApi.ts";
 import { fmtInstant } from "../shared/dates.ts";
 
 // Connected checking, on the web. The Settings → Account half: the
@@ -62,8 +65,20 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
 
   useEffect(() => {
     if (!on || !allowlisted) { setConnection(null); return; }
-    refresh();
-  }, [on, allowlisted, refresh]);
+    (async () => {
+      const row = await refresh();
+      // A SESSION NOBODY FINISHED. Rarer on web than on iOS — the
+      // page holds the public_token itself, so there is no webhook
+      // in the ordinary path — but a tab closed in the middle of
+      // the exchange strands the Item exactly the same way, and a
+      // stranded Item on this plan is a slot out of ten with no
+      // Disconnect button to reach. Same call the phone makes; it
+      // costs nothing when there is nothing unfinished.
+      if (row) return;
+      const found = await recoverLink(supabase);
+      if (found.ok) await refresh();
+    })();
+  }, [on, allowlisted, refresh, supabase]);
 
   // THE SAME GUARD THE PHONE CARRIES, for the same reason and with
   // the same shape. Finishing a connection ends with App re-reading

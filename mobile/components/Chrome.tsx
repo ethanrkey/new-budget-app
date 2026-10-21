@@ -21,7 +21,9 @@ import Setup from "./Setup";
 import { shouldRunSetup } from "../lib/setup";
 import { dismissedBy, withDismissalBy } from "../lib/dismissal";
 import { applySetup, markSetupSeen, markTourSeen, type SetupAnswers } from "../../src/engine/setup.ts";
-import { connectionNow, load as loadConnection, useConnection } from "../lib/connection";
+import { allowlistedNow, connectionNow, load as loadConnection, useConnection } from "../lib/connection";
+import { recoverLink } from "../../src/shared/plaidApi.ts";
+import { supabase } from "../lib/supabase";
 import ConnectedSheet from "./ConnectedSheet";
 
 // WHERE THE WEB'S FIVE HEADER ITEMS LIVE ON A PHONE.
@@ -56,7 +58,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   // The checking log, hosted HERE rather than on a tab, because the
   // control that opens it is on every tab — see AnchorStrip.
   const [logging, setLogging] = useState(false);
-  const { state, userId, commit, online, saving, prefs, setPref } = useBudget();
+  const { state, userId, commit, online, saving, prefs, setPref, refresh } = useBudget();
   const insets = useSafeAreaInsets();
   const value = useMemo(() => ({
     open: () => setScreen("settings"),
@@ -134,6 +136,15 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   useEffect(() => {
     void (async () => {
       await loadConnection({ connectedFeatures });
+      // AND ON A COLD START, A SESSION NOBODY FINISHED. The app can
+      // be killed between Hosted Link and coming back, in which
+      // case neither openLink's await nor the foreground listener
+      // in Connected.tsx ever runs. One function call, and no Plaid
+      // call unless there is really something unfinished.
+      if (connectedFeatures && allowlistedNow() && !connectionNow()) {
+        const found = await recoverLink(supabase as never);
+        if (found.ok) { await loadConnection({ connectedFeatures }); await refresh(); }
+      }
       // A LIVE BANK IS NEVER LEFT HIDDEN. `load` now reads the row
       // for an allowlisted account whether or not the toggle is on,
       // precisely so this question can be asked — and a hidden Item

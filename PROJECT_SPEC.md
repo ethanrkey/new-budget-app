@@ -3454,6 +3454,78 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### A real bank, lost between Plaid and us (2026-10-21, production)
+
+**What happened.** First production connection: TD Bank over OAuth
+from iOS, Hosted Link, completed 11:55 UTC. Plaid emailed the owner
+that Key Budget was connected; TD emailed that data sharing had
+started. The app showed "Connect your bank (Beta)". `plaid_items`
+and `plaid_item_creations` were empty. **The Item was live at Plaid
+and one of ten Trial slots was spent on a connection we had no
+record of** — and the only route the user could see from there was
+connecting again, which would have spent a second.
+
+**Recovered without a second Link.** The link token was minted
+11:53:12 and good for four hours, the session was unused, and a
+`public_token` lives about thirty minutes from Link success — so
+there was a window, and it was the clock that set the plan. The
+`recover` path below went in, and the owner triggered it from the
+signed-in web app at 12:18. Result: TD Bank, `••2403`,
+available 956.79, status ok, one `production` row in
+`plaid_item_creations`, one token, no pending removals. **One slot
+of ten spent, which is the correct number.**
+
+**The design error, which is not the verifier.** Hosted Link had
+exactly ONE completion path and it was a message from a third party
+over the public internet. Late, lost, or refused by a bug in our own
+signature check — any of those strands the user, and the thing that
+makes it expensive is that the toggle hides the evidence and the
+plan does not refund the slot. The trustworthy half of the webhook
+design was always *us asking Plaid*; the webhook was only ever the
+nudge. So the client now asks:
+
+- the moment the in-app browser closes, before re-reading anything;
+- on foreground, when the feature is on and there is no bank;
+- on a cold start, which neither of those covers — the app can be
+  killed between Hosted Link and coming back;
+- and on web, for a tab closed in the middle of the exchange.
+
+`NO_OPEN_SESSION` is the ordinary answer and not an error: it is
+what comes back every time the webhook arrived first.
+
+**A session is spent only once the Item is stored.** The web path
+marked `used_at` on the way IN, so the ten-minute Trial-slot
+reservation would not hold Connect shut after a success — but a used
+session is one `recover` cannot find, so a tab closed mid-exchange
+would have been unrecoverable. It is marked at the end now; the
+reservation keys on `created_at`, so an open row costs ten minutes
+at most.
+
+**Why the webhook did not land is still open.** This CLI has no
+`functions logs` and there is no management token on this machine,
+so the dashboard is the only place the answer lived, and it is not
+somewhere a test can look. What the data says: there is no
+`/webhook_verification_key/get` row in `plaid_api_log`, and a
+well-formed signed webhook would have fetched the key before
+anything else. So EITHER it never arrived, OR it was refused before
+the key fetch — missing header, malformed JWT, bad alg, no kid.
+
+Rather than guess, the evidence now lands where a query can reach
+it: `noteInbound` writes every arriving webhook into `plaid_api_log`
+as `trigger = 'webhook-in'`, `endpoint = '(inbound) <code>'`, with
+the verdict in `error_code`. Refused, unhandled and verified all
+leave a row, so "nothing ever arrives here" stops being
+indistinguishable from "the one we wanted was refused". Verified
+against the deployed function: an unsigned POST now leaves
+`(inbound) SESSION_FINISHED  refused no_verification_header`.
+
+**The operator door is gone.** During the rescue two were tried: one
+keyed on the service-role key, which did not match what the function
+sees in its own environment, and one keyed on the link token, which
+the permission classifier refused as weakening security — correctly,
+it was an unauthenticated way to exchange a bank token. The user's
+own session is the credential, and a test pins that no door survived.
+
 ### The webhook is signature-checked (2026-10-21) — off the list
 
 `Plaid-Verification` is an ES256 JWT. `_shared/webhookVerify.ts` does

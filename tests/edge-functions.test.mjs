@@ -330,6 +330,87 @@ console.log("\n== is the webhook actually from Plaid ==");
     exchange.indexOf("verifyPlaidWebhook(") < exchange.indexOf("PLAID_ENDPOINTS.linkTokenGet"));
   is("a refused webhook is a 401, not a quiet 200",
     exchange.includes('return json(401, { error: "unverified"'));
+  // AND THE GUARD IS REACHED, not merely present. The check above
+  // passes just as happily when the branch has been turned off —
+  // `if (false)` leaves every string in this file exactly where it
+  // was, and the mutation runner found that on 2026-10-21 by
+  // turning it off and watching the whole gate stay green.
+  //
+  // THIS IS A TEXT CHECK STANDING IN FOR A RUN, and it is worth
+  // saying so rather than letting it read as more than it is: the
+  // handler is Deno, there is no Deno on this machine, and the
+  // nearest honest thing is to pin the expression that decides.
+  is("...and the guard that reaches it is the verifier's own verdict",
+    exchange.includes("if (!verified.ok) {"));
+
+  // The comparison's property is that it does NOT stop at the first
+  // difference, which no behavioral test can see — `a === b` returns
+  // the same answers, just sooner for an attacker who is measuring.
+  // So this reads the function, which is where the property lives.
+  {
+    const src = readFileSync(new URL("../supabase/functions/_shared/webhookVerify.ts", import.meta.url), "utf8");
+    const fn = src.slice(src.indexOf("export function constantTimeEquals"));
+    const body = fn.slice(0, fn.indexOf("\n}"));
+    not("the hash comparison does not short-circuit", /return a === b/.test(body));
+    is("...it folds every character before deciding", body.includes("diff |="));
+  }
+}
+
+console.log("\n== a webhook is a backup, not the only way home ==");
+// 2026-10-21, production, a real bank: TD Bank completed at Plaid
+// and SESSION_FINISHED never reached us. The Item was live, the
+// Trial slot was spent, and Settings showed "Connect your bank" —
+// so the only route the user could see would have cost a second
+// slot out of ten. Hosted Link having exactly one completion path,
+// and that path being a message from a third party over the public
+// internet, was the design error. These pin the way out.
+{
+  const exchange = readFileSync(new URL("../supabase/functions/plaid-exchange/index.ts", import.meta.url), "utf8");
+  is("the server can finish a session on request", exchange.includes("payload.recover === true"));
+  is("...authenticated as the caller, by their own token",
+    exchange.slice(exchange.indexOf("payload.recover === true")).includes("userId = await callerId(req)"));
+  // The rescue door written during the incident is gone. It keyed on
+  // a key comparison first and then on the link token, and the
+  // second one was refused as weakening security — rightly, it was
+  // an unauthenticated way to exchange a bank token.
+  // Scoped to the recover branch: `payload.link_token` is also
+  // Plaid's own field in SESSION_FINISHED, where it is the whole
+  // point, so a file-wide grep would fail for the wrong reason.
+  const recoverBranch = exchange.slice(
+    exchange.indexOf("payload.recover === true"),
+    exchange.indexOf("// Every other webhook Plaid sends"));
+  not("...and no operator door survives it", recoverBranch.includes("payload.user_id"));
+  not("...nor one keyed on the link token itself", recoverBranch.includes("payload.link_token"));
+
+  // A session marked used is a session recover cannot find, so the
+  // web path must not spend it until the Item is actually stored.
+  const webPath = exchange.indexOf("the web path: an authenticated client");
+  const stored = exchange.indexOf("await standDown();");
+  const spends = exchange.indexOf('.update({ used_at: new Date().toISOString() })\n    .eq("user_id", userId)');
+  is("the web path spends its session only after the Item is stored", spends > stored && spends > webPath);
+
+  // And the evidence that was missing on the day.
+  is("an arriving webhook is written down, verdict and all", exchange.includes("async function noteInbound("));
+  is("...including the ones we refuse",
+    exchange.includes('await noteInbound(admin, "SESSION_FINISHED", verified.reason);'));
+  is("...and the ones we do not handle, so 'never arrived' is provable",
+    exchange.includes('await noteInbound(admin, payload.webhook_code, "unhandled");'));
+}
+
+// Both clients ask rather than wait, and in all three places a
+// session can be left unfinished: coming back from the browser,
+// foregrounding the app, and a cold start.
+{
+  const connected = readFileSync(new URL("../mobile/components/Connected.tsx", import.meta.url), "utf8");
+  const chrome = readFileSync(new URL("../mobile/components/Chrome.tsx", import.meta.url), "utf8");
+  const web = readFileSync(new URL("../src/components/ConnectedAccount.jsx", import.meta.url), "utf8");
+  is("the phone asks the moment the browser closes",
+    connected.slice(connected.indexOf("openAuthSessionAsync(started.hostedUrl)")).includes("recoverLink("));
+  is("...and again on foreground when it has no bank",
+    connected.includes("if (!connectionNow()) await recoverLink("));
+  is("...and on a cold start, which neither of those covers",
+    chrome.includes("!connectionNow()") && chrome.includes("recoverLink("));
+  is("the web asks too, for a tab closed mid-exchange", web.includes("recoverLink(supabase)"));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

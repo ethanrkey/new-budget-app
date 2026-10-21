@@ -150,6 +150,38 @@ export async function finishLink(sb: FunctionCaller, publicToken: string): Promi
 }
 
 /**
+ * Finish a Link session the webhook never finished.
+ *
+ * HOSTED LINK HAS NO FRONTEND CALLBACK, so iOS used to learn that a
+ * connection existed only when Plaid's SESSION_FINISHED webhook
+ * arrived. That is a message from a third party over the public
+ * internet: it can be late, lost, or refused by a bug in our own
+ * verifier — and when it is, the user has a LIVE ITEM AT PLAID and
+ * no record of it, which on a plan with ten Items for life is a
+ * spent slot and a Disconnect button they cannot reach.
+ *
+ * It happened. A real TD Bank connection on 2026-10-21 completed at
+ * Plaid and never arrived. So the client asks instead of waiting:
+ * the server looks up the caller's own unfinished session and puts
+ * the same question to Plaid that the webhook would have triggered.
+ * Asking Plaid was always the trustworthy half of that design; the
+ * webhook is now the backup rather than the only path.
+ *
+ * `NO_OPEN_SESSION` is the ordinary answer, not an error — it is
+ * what comes back every time the webhook did arrive first.
+ */
+export async function recoverLink(sb: FunctionCaller): Promise<
+  { ok: true } | { ok: false; code: string }
+> {
+  return duringPlaidWrite(async () => {
+    const { data, error } = await sb.functions.invoke("plaid-exchange", { body: { recover: true } });
+    if (error || !data) return { ok: false as const, code: "unreachable" };
+    const d = data as { ok?: boolean; code?: string; connected?: boolean };
+    return d.connected ? { ok: true as const } : { ok: false as const, code: d.code ?? "unknown" };
+  });
+}
+
+/**
  * The device's IANA timezone, for dating the snapshot.
  *
  * SENT ON EVERY PULL, including pull-on-open, because the server has

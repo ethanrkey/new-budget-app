@@ -568,12 +568,19 @@ not("no connection, toggle on — the normal opted-in state",
 
 // Both clients must consult it, because both end their connect flow
 // by replacing local state with the server's copy.
-for (const [file, path] of [
-  ["the phone", "../mobile/components/Connected.tsx"],
-  ["the web", "../src/components/ConnectedAccount.jsx"],
+for (const [file, path, handover] of [
+  ["the phone", "../mobile/components/Connected.tsx", "cameBackConnected.current = row;"],
+  ["the web", "../src/components/ConnectedAccount.jsx", "connectedRow.current = await refresh();"],
 ]) {
   const text = readFileSync(new URL(path, import.meta.url), "utf8");
   is(`${file} restores the toggle after a connect`, text.includes("shouldRestoreToggle("));
+  // AND IS GIVEN THE ROW TO RESTORE IT FROM. Checking only that the
+  // predicate is mentioned passes just as happily when the connect
+  // flow stops handing the row over — the effect then runs on an
+  // empty ref and does nothing, which is the original bug exactly.
+  // The mutation runner found this on 2026-10-21, after a fix to the
+  // runner itself stopped it crediting kills to a crashing suite.
+  is(`...and ${file} hands it the row it actually read`, text.includes(handover));
 }
 
 console.log("\n== the toggle's sub-line is written once ==");

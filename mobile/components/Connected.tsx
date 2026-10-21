@@ -16,9 +16,9 @@ import {
 import type { Connection } from "../../src/shared/connect.ts";
 import { canReconnect, canSeeToggle, shouldRestoreToggle } from "../../src/shared/connect.ts";
 import {
-  disconnect as apiDisconnect, pullBalance, readConnection, startLink,
+  disconnect as apiDisconnect, pullBalance, readConnection, recoverLink, startLink,
 } from "../../src/shared/plaidApi.ts";
-import { allowlistedNow, setConnection, useConnection } from "../lib/connection";
+import { allowlistedNow, connectionNow, setConnection, useConnection } from "../lib/connection";
 
 // Connected checking, on the phone. The Settings half: the toggle,
 // the bank, and the way out.
@@ -106,7 +106,18 @@ export default function Connected() {
     if (!allowlisted) return;
     const sub = AppState.addEventListener("change", (next) => {
       if (next !== "active" || !on) return;
-      void (async () => { await refreshConnection(); await resyncState(); })();
+      void (async () => {
+        // NO BANK YET? ASK WHETHER ONE IS WAITING. A user who
+        // switched away from the in-app browser instead of closing
+        // it never reaches openLink's await, and a webhook that was
+        // late, lost or refused never arrives at all — either way
+        // the Item is live at Plaid and this is the moment to find
+        // it. It costs one function call and no Plaid call unless
+        // there really is an unfinished session.
+        if (!connectionNow()) await recoverLink(supabase as never);
+        await refreshConnection();
+        await resyncState();
+      })();
     });
     return () => { sub.remove(); };
   }, [allowlisted, on, refreshConnection, resyncState]);
@@ -198,19 +209,31 @@ export default function Connected() {
       return;
     }
     // The browser closing tells us nothing — Hosted Link reports its
-    // result to the server, not to us. So we re-read, and a session
-    // the user abandoned simply leaves nothing to find.
+    // result to the server, not to us.
     await WebBrowser.openAuthSessionAsync(started.hostedUrl);
-    // The browser closing tells us nothing, so the first question is
-    // whether a connection now exists. If it does, PULL STRAIGHT
-    // AWAY — connecting and then seeing nothing happen is the worst
-    // first impression of a feature whose whole promise is that the
-    // number keeps itself current.
+
+    // SO WE ASK PLAID OURSELVES RATHER THAN WAIT TO BE TOLD.
     //
-    // Trigger "open", not "refresh": a brand new Item has never
-    // synced, so the staleness check passes on its own and this does
-    // not spend one of the four daily refreshes on the connection.
+    // This used to re-read our own tables and hope the webhook had
+    // beaten the user back to the app. On 2026-10-21 a real TD Bank
+    // connection completed at Plaid and the webhook never arrived:
+    // the Item was live, the slot was spent, Settings showed
+    // "Connect your bank" and the only route the user could see was
+    // connecting again — which would have cost a second slot out of
+    // ten. `recover` asks /link/token/get for this user's own
+    // unfinished session, which is the same question the webhook
+    // triggers and the half of that design that was ever
+    // trustworthy. NO_OPEN_SESSION just means the webhook won the
+    // race, which is the happy path and not an error.
+    //
+    // Then PULL STRAIGHT AWAY if a bank turned up — connecting and
+    // seeing nothing happen is the worst first impression of a
+    // feature whose whole promise is that the number keeps itself
+    // current. Trigger "open", not "refresh": a brand new Item has
+    // never synced, so the staleness check passes on its own and
+    // this does not spend one of the four daily refreshes.
     setBusy("saving");
+    await recoverLink(supabase as never);
     let row = await refreshConnection();
     if (row) {
       await pullBalance(supabase as never, "open");
