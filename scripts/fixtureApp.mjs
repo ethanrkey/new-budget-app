@@ -62,8 +62,28 @@ function fakeJwt(sub, exp) {
   return `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ sub, exp, role: "authenticated", aud: "authenticated" })}.x`;
 }
 
-/** @param {{width?: number, height?: number, scale?: number, state?: object}} opts */
-export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, state } = {}) {
+/**
+ * @param {{width?: number, height?: number, scale?: number, state?: object,
+ *          plaid?: {institution?: string, mask?: string, available?: number,
+ *                   lastSyncedAt?: string}}} opts
+ *
+ * `plaid` SERVES A CONNECTED ACCOUNT. Without it nothing about
+ * connected checking is reachable in a drive, and the one class of
+ * bug this feature keeps producing — the server wrote it and the
+ * page did not notice — is invisible to every other kind of test.
+ * It has happened three times: the pill holding a second copy of
+ * the connection, the "another device" banner, and a
+ * `reloadFromServer` captured before sign-in that made "Use bank
+ * balance" a no-op for as long as it existed. All three were found
+ * by a person using the app.
+ *
+ * The balance function here is NOT a stub of the client's call: it
+ * is a stand-in for the SERVER, and it writes to the same `rows`
+ * the page loads from, exactly as the edge function writes to
+ * budget_entities. So a page that fails to re-read fails this
+ * drive, which is the whole point.
+ */
+export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, state, plaid } = {}) {
   const SUPABASE = supabaseUrl();
   const ref = new URL(SUPABASE).hostname.split(".")[0];
   const userId = "00000000-0000-4000-8000-000000000001";
@@ -82,6 +102,10 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
   };
 
   const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+  let syncedAt = plaid?.lastSyncedAt ?? now;
+  /** Every trigger the page asked for, in order, for the drive to read. */
+  const calls = [];
   const rows = splitState(state ?? fixtureState()).map((e) => ({
     kind: e.kind, entity_id: e.id, data: e.data,
     version: 1, schema_version: ENTITY_SCHEMA_VERSION, updated_at: now,
@@ -104,12 +128,50 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
       "access-control-allow-credentials": "true",
     };
     if (req.method() === "OPTIONS") return req.respond({ status: 204, headers: cors });
+    const send = (b) => req.respond({
+      status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify(b),
+    });
+
+    if (plaid) {
+      if (url.includes("/plaid_beta")) return send([{ user_id: userId }]);
+      if (url.includes("/plaid_items")) return send([{
+        institution_name: plaid.institution ?? "First Platypus Bank",
+        status: "ok", last_synced_at: syncedAt,
+      }]);
+      if (url.includes("/plaid_accounts")) return send([{ mask: plaid.mask ?? "0000" }]);
+      if (url.includes("/functions/v1/plaid-balance")) {
+        const trigger = JSON.parse(req.postData() || "{}").trigger ?? "open";
+        calls.push(trigger);
+        // IT WRITES INTO THE ROWS THE PAGE RELOADS FROM, exactly as
+        // the edge function writes to budget_entities — so a page
+        // that fails to re-read shows the old number and fails here.
+        //
+        // AND IT KEEPS THE COLLISION RULE. A stand-in that always
+        // wrote would overwrite the user's own figure on the
+        // pull-on-open, and the drive would be set up in a state the
+        // real server never produces. `adopt` forces; the other two
+        // decline a date the user typed, which is the rule
+        // plaid_write_balance enforces in SQL.
+        const dated = rows.find((r) => r.kind === "accountSnapshot" && r.entity_id.endsWith(today));
+        const theirs = (dated?.data?.source ?? "manual") === "manual";
+        syncedAt = new Date().toISOString();
+        if (dated && theirs && trigger !== "adopt") {
+          return send({ connected: true, status: "ok", synced: true, applied: "kept_manual", last_synced_at: syncedAt });
+        }
+        if (dated) {
+          dated.data = { ...dated.data, amount: plaid.available ?? 956.79, source: "plaid", externalId: "fix" };
+          dated.version += 1;
+        }
+        return send({ connected: true, status: "ok", synced: true, applied: "written", last_synced_at: syncedAt });
+      }
+    }
+
     // loadState asks for the entity columns; fetchVersion asks only for
     // updated_at. Everything else (account_deletions, auth) is empty.
     const body = url.includes("budget_entities")
       ? (url.includes("kind%2Centity_id") || url.includes("kind,entity_id") ? rows : [{ updated_at: now }])
       : [];
-    req.respond({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify(body) });
+    send(body);
   });
 
   await page.evaluateOnNewDocument(
@@ -122,6 +184,8 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
 
   return {
     page,
+    /** The plaid-balance triggers the page sent, in order. */
+    calls,
     async load(tab) {
       await page.goto(`${ORIGIN}/app`, { waitUntil: "networkidle0" });
       await page.waitForSelector("main", { timeout: 20_000 });

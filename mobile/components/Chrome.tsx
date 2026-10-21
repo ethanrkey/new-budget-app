@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
@@ -59,6 +59,18 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   // control that opens it is on every tab — see AnchorStrip.
   const [logging, setLogging] = useState(false);
   const { state, userId, commit, online, saving, prefs, setPref, refresh } = useBudget();
+  // THE LATEST `commit`, for the connection effect below.
+  //
+  // That effect is keyed on `connectedFeatures` alone and says so
+  // with a suppression — which is right, it must not re-run on every
+  // state change — but `commit` is rebuilt on every state change, so
+  // the effect would be holding one from an older document. The same
+  // shape cost a day on the web, where a useCallback with `[]`
+  // captured a `reloadFromServer` from before anyone had signed in
+  // and "Use bank balance" silently stopped re-reading. A ref is the
+  // honest way to say "the current one, whenever this runs".
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
   const insets = useSafeAreaInsets();
   const value = useMemo(() => ({
     open: () => setScreen("settings"),
@@ -151,7 +163,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
       // is the expensive kind, because the user cannot reach
       // Disconnect and Plaid's ten Items never come back.
       if (!connectedFeatures && connectionNow()) {
-        void commit((s) => ({ ...s, settings: { ...s.settings, connectedFeatures: true } }),
+        void commitRef.current((s) => ({ ...s, settings: { ...s.settings, connectedFeatures: true } }),
           "Connected features on", "none");
       }
     })();

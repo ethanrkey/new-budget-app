@@ -366,6 +366,27 @@ console.log("\n== a webhook is a backup, not the only way home ==");
 // internet, was the design error. These pin the way out.
 {
   const exchange = readFileSync(new URL("../supabase/functions/plaid-exchange/index.ts", import.meta.url), "utf8");
+  // THE WEBHOOK THAT ACTUALLY FIRES. Matching SESSION_FINISHED
+  // alone lost a real production Item: three webhook invocations
+  // landed in the ninety seconds after the user finished and not
+  // one of them was SESSION_FINISHED, so all three took the
+  // 200-and-ignore branch. Plaid fires ITEM_ADD_RESULT for each
+  // Item as it is added in a Hosted Link session; SESSION_FINISHED
+  // waits for the whole session to end, which in an in-app browser
+  // the user simply closes may be much later or never.
+  is("the per-Item webhook is handled, not just the session one",
+    exchange.includes('payload.webhook_code === "ITEM_ADD_RESULT"'));
+  is("...and the session one still is", exchange.includes('payload.webhook_code === "SESSION_FINISHED"'));
+  // Its body carries a public_token. Still not read from there: the
+  // answer comes from /link/token/get, so a forgery can only make
+  // us ask Plaid a question.
+  // Scoped to the webhook branch — `payload.public_token` is the
+  // WEB path's whole input, where reading it is correct.
+  const hook = exchange.slice(
+    exchange.indexOf('payload.webhook_code === "SESSION_FINISHED"'),
+    exchange.indexOf("// ---- FINISH A SESSION THE WEBHOOK NEVER FINISHED ----"));
+  not("the public token is never taken from a webhook body", hook.includes("payload.public_token"));
+  is("...it is asked for, through link/token/get", hook.includes("PLAID_ENDPOINTS.linkTokenGet"));
   is("the server can finish a session on request", exchange.includes("payload.recover === true"));
   is("...authenticated as the caller, by their own token",
     exchange.slice(exchange.indexOf("payload.recover === true")).includes("userId = await callerId(req)"));
@@ -391,10 +412,11 @@ console.log("\n== a webhook is a backup, not the only way home ==");
 
   // And the evidence that was missing on the day.
   is("an arriving webhook is written down, verdict and all", exchange.includes("async function noteInbound("));
-  is("...including the ones we refuse",
-    exchange.includes('await noteInbound(admin, "SESSION_FINISHED", verified.reason);'));
+  is("...including the ones we refuse", exchange.includes("verified.reason, String(payload.webhook_type"));
   is("...and the ones we do not handle, so 'never arrived' is provable",
-    exchange.includes('await noteInbound(admin, payload.webhook_code, "unhandled");'));
+    exchange.includes('noteInbound(admin, payload.webhook_code, "unhandled"'));
+  is("...with the type beside the code, which was the missing half of the question",
+    exchange.includes("(inbound) ${type ? `${type}/` : \"\"}${code}"));
 }
 
 // Both clients ask rather than wait, and in all three places a

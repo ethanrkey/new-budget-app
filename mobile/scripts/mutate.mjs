@@ -127,7 +127,13 @@ import { SUITES } from "../../scripts/suites.mjs";
 // for what went wrong when there were two.
 const NODE_SUITES = SUITES;
 
-/** [what is broken, file, find, replace-with] */
+/**
+ * [what is broken, file, find, replace-with, drive?]
+ *
+ * `drive` NAMES A BROWSER DRIVE for the handful of mutations the
+ * harnesses cannot reach — see the loop below for why it is opt-in
+ * and why it only runs when nothing cheaper caught the mutation.
+ */
 const MUTATIONS = [
   ["scope sheet drops the occurrence option", "lib/edit.ts",
    'if (date) out.push({ kind: "edit-occurrence", date });', '// mutated'],
@@ -1541,7 +1547,27 @@ const MUTATIONS = [
    '  await admin.from("plaid_link_sessions")\n    .update({ used_at: new Date().toISOString() })\n    .eq("user_id", userId).is("used_at", null);',
    "  // mutated"],
   ["an arriving webhook leaves no trace", "../supabase/functions/plaid-exchange/index.ts",
-   '      await noteInbound(admin, "SESSION_FINISHED", verified.reason);', "      // mutated"],
+   '      await noteInbound(admin, String(payload.webhook_code), verified.reason, String(payload.webhook_type ?? ""));', "      // mutated"],
+
+  // ---- the webhook we were not listening for (2026-10-21) ----
+  ["only the sweep-up webhook is handled, so a Hosted Link Item is lost",
+   "../supabase/functions/plaid-exchange/index.ts",
+   '  } else if (payload.webhook_code === "SESSION_FINISHED" || payload.webhook_code === "ITEM_ADD_RESULT") {',
+   '  } else if (payload.webhook_code === "SESSION_FINISHED") {'],
+  ["the inbound record drops the webhook type again",
+   "../supabase/functions/plaid-exchange/index.ts",
+   '      endpoint: `(inbound) ${type ? `${type}/` : ""}${code}`,',
+   "      endpoint: `(inbound) ${code}`,"],
+  // ---- our own write, re-read immediately (2026-10-21) ----
+  ["the reload goes stale again, captured before anyone signed in",
+   "../src/App.jsx",
+   "    const userId = userIdRef.current;",
+   "    const userId = null;", "drive_connected"],
+  ["the bar is told to reload and does not", "../src/App.jsx",
+   "    await reloadFromServer();\n    // `kept_manual` means", "    // `kept_manual` means", "drive_connected"],
+  ["a recovered session leaves the page showing the old number",
+   "../src/components/ConnectedAccount.jsx",
+   "      await refresh();\n      // AND THE PAGE RE-READS ITS OWN NUMBERS.", "      // AND THE PAGE RE-READS ITS OWN NUMBERS."],
 ];
 
 // ---------------------------------------------------------------
@@ -1802,7 +1828,7 @@ export async function main(argv = process.argv) {
   const startedAt = Date.now();
   let cappedAfter = null;
 
-  for (const [label, file, find, repl] of selected) {
+  for (const [label, file, find, repl, drive] of selected) {
     if (Date.now() - startedAt > CAP_MS) { cappedAfter = label; break; }
     const orig = readFileSync(file, "utf8");
     let out = "";
@@ -1821,6 +1847,23 @@ export async function main(argv = process.argv) {
       // tests/signin.test.mjs was failing loudly one directory up.
       // "Can anything kill these tests" has to mean anything.
       harness = await runNodeHarness();
+      // AND A BROWSER DRIVE, for the mutations nothing else can
+      // reach. React closure identity, a real document load and a
+      // button are not testable from a harness — "Use bank balance
+      // never re-read anything" shipped to production precisely
+      // because of that. A drive costs forty seconds, so it is
+      // named per mutation rather than run for all 400 of them, and
+      // only when the cheap suites found nothing: a mutation
+      // already caught does not need a second opinion.
+      if (drive && !harness.broken && harness.failed.length === 0) {
+        const jestFound = /^\s*✕ /m.test(out);
+        if (!jestFound) {
+          const { out: d, ok } = await capture(`node scripts/${drive}.mjs 2>&1`, REPO_ROOT);
+          const bad = [...d.matchAll(/^FAIL  (.+)$/gm)].map((m) => `${drive}: ${m[1].trim()}`);
+          if (bad.length) harness = { failed: bad };
+          else if (!ok) harness = { broken: `scripts/${drive}.mjs`, out: d };
+        }
+      }
     } finally {
       restoreAll(`"${label}"`, false);
     }

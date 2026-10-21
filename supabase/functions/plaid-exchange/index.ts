@@ -79,10 +79,15 @@ const keyCache = new Map<string, PlaidJwk>();
  * the rule for that table is unchanged.
  */
 // deno-lint-ignore no-explicit-any
-async function noteInbound(admin: any, code: string, verdict: string) {
+async function noteInbound(admin: any, code: string, verdict: string, type = "") {
   try {
     await admin.from("plaid_api_log").insert({
-      user_id: null, trigger: "webhook-in", endpoint: `(inbound) ${code}`,
+      user_id: null, trigger: "webhook-in",
+      // THE TYPE AS WELL AS THE CODE. "Which webhook was that?" was
+      // the question nobody could answer on 2026-10-21, and
+      // webhook_type is half the answer: LINK/ITEM_ADD_RESULT and
+      // ITEM/ERROR are different things that a bare code hides.
+      endpoint: `(inbound) ${type ? `${type}/` : ""}${code}`,
       ok: verdict === "verified", error_code: verdict === "verified" ? null : verdict,
     });
   } catch { /* a log that fails must never fail the thing it logs */ }
@@ -140,8 +145,36 @@ Deno.serve(async (req) => {
     // way back, which is the exact failure this whole batch exists
     // to remove. The reservation keys on `created_at`, so leaving
     // the row open costs at most those ten minutes.
-  } else if (payload.webhook_code === "SESSION_FINISHED") {
-    // ---- the Hosted Link path: Plaid tells us a session ended ----
+  } else if (payload.webhook_code === "SESSION_FINISHED" || payload.webhook_code === "ITEM_ADD_RESULT") {
+    // ---- the Hosted Link path: Plaid tells us an Item appeared ----
+    //
+    // BOTH CODES, and ITEM_ADD_RESULT is the one that matters.
+    //
+    // This matched SESSION_FINISHED alone, on the reasoning that a
+    // finished session is when there is something to collect. On
+    // 2026-10-21 a real TD Bank connection produced THREE webhook
+    // invocations in the ninety seconds after the user finished —
+    // and none of them was SESSION_FINISHED, so all three fell
+    // through to the 200-and-ignore at the bottom of this function
+    // and the Item was lost. The dashboard logs showed the boots;
+    // nothing else showed anything, which is why `noteInbound`
+    // exists now.
+    //
+    // Plaid's docs are plain about it: ITEM_ADD_RESULT fires for
+    // EACH Item added in a Hosted Link session, so the caller can
+    // act as each one arrives, while SESSION_FINISHED waits for the
+    // user to finish or exit the whole session — which, in an
+    // in-app browser the user simply closes, may be much later or
+    // not at all. The per-Item webhook is the primary one for this
+    // flow and the session one is the sweep-up.
+    //
+    // ITEM_ADD_RESULT carries a `public_token` in the body. IT IS
+    // STILL NOT READ FROM THERE. The body is a trigger and the
+    // answer comes from /link/token/get, which is what keeps a
+    // forgery able only to make us ask Plaid a question. The
+    // signature check makes the body trustworthy now; one extra
+    // call is a small price for not having to rely on that being
+    // true forever.
     trigger = "webhook";
 
     // IS IT FROM PLAID. Before the table lookup, before the
@@ -171,10 +204,10 @@ Deno.serve(async (req) => {
       // if this ever fires on a real one, iOS Connect is broken and
       // the log should say so loudly rather than look like silence.
       console.error("[plaid-exchange] webhook refused:", verified.reason);
-      await noteInbound(admin, "SESSION_FINISHED", verified.reason);
+      await noteInbound(admin, String(payload.webhook_code), verified.reason, String(payload.webhook_type ?? ""));
       return json(401, { error: "unverified", reason: verified.reason });
     }
-    await noteInbound(admin, "SESSION_FINISHED", "verified");
+    await noteInbound(admin, String(payload.webhook_code), "verified", String(payload.webhook_type ?? ""));
     const linkToken = String(payload.link_token ?? "");
     if (!linkToken) return json(200, { ignored: "no link_token" });
 
@@ -270,7 +303,7 @@ Deno.serve(async (req) => {
     // arrives here" and "the one we wanted was refused" look
     // identical from the database otherwise.
     if (typeof payload.webhook_code === "string") {
-      await noteInbound(admin, payload.webhook_code, "unhandled");
+      await noteInbound(admin, payload.webhook_code, "unhandled", String(payload.webhook_type ?? ""));
     }
     //
     // DELIBERATELY NOT VERIFIED. Verification costs a Plaid call on

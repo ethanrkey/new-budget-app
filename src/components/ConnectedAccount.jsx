@@ -76,9 +76,16 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
       // costs nothing when there is nothing unfinished.
       if (row) return;
       const found = await recoverLink(supabase);
-      if (found.ok) await refresh();
+      if (!found.ok) return;
+      await refresh();
+      // AND THE PAGE RE-READS ITS OWN NUMBERS. A recovered session
+      // pulls a balance server-side, so the bar is showing a figure
+      // from before the connection existed until something reloads
+      // the document. `true` because that pull already happened —
+      // App must not fire a second one.
+      onChanged?.(true);
     })();
-  }, [on, allowlisted, refresh, supabase]);
+  }, [on, allowlisted, refresh, supabase, onChanged]);
 
   // THE SAME GUARD THE PHONE CARRIES, for the same reason and with
   // the same shape. Finishing a connection ends with App re-reading

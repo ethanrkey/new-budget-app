@@ -395,6 +395,39 @@ export default function App() {
     setSyncNotice({ kind, stashed });
   }, []);
 
+
+  // Re-read the server's copy with nothing to discard. Used after a
+  // balance was pulled server-side: the write happened in an edge
+  // function, so nothing in this tab would otherwise notice.
+  //
+  // THE USER ID COMES THROUGH A REF so this callback depends on
+  // NOTHING and can never be stale.
+  //
+  // It used to depend on `session?.user?.id`, which made a new
+  // function every time the session arrived — and `pullNow` below
+  // is a useCallback with `[]`, so it captured the FIRST one, from
+  // the render before anybody had signed in. That copy returns at
+  // its own first line forever. "Use bank balance" therefore never
+  // re-read anything, from the day it was written: the server wrote
+  // 956.79, the bar went on saying the 956 the user had typed, and
+  // only a page refresh showed the change.
+  //
+  // What hid it was the focus check. Tabbing away and back found
+  // the moved version and adopted it — so the number did update,
+  // accompanied by "your data had changed on another device" about
+  // the user's own tap. Fixing that banner removed the only thing
+  // that was actually reloading. One bug was wearing the other as a
+  // disguise.
+  const userIdRef = useRef(null);
+  userIdRef.current = session?.user?.id ?? null;
+  const reloadFromServer = useCallback(async () => {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    const { state: fresh } = await loadState(userId);
+    skipNextSave.current = true;
+    setState(fresh);
+  }, []);
+
   /**
    * Refresh now / Use bank balance, from the Checking bar.
    *
@@ -407,6 +440,12 @@ export default function App() {
   // see is the moment after it returns, while this tab is still
   // catching up with a row it moved. The focus check below reads the
   // same counter.
+  //
+  // AND IT LISTS ITS DEPENDENCY, with no suppression. The
+  // suppression is what let this ship: `[]` with an
+  // eslint-disable on it is a promise that nothing inside can go
+  // stale, and `reloadFromServer` did. The rule was right and it
+  // had been switched off.
   const pullNow = useCallback((trigger) => duringPlaidWrite(async () => {
     const result = await pullBalance(supabase, trigger);
     if (!result) return "Couldn't reach your bank just now";
@@ -419,18 +458,7 @@ export default function App() {
     return result.applied === "kept_manual"
       ? "Your bank matched — today's balance is still the one you logged"
       : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), []);
-
-  // Re-read the server's copy with nothing to discard. Used after a
-  // balance was pulled server-side: the write happened in an edge
-  // function, so nothing in this tab would otherwise notice.
-  const reloadFromServer = useCallback(async () => {
-    if (!session?.user?.id) return;
-    const { state: fresh } = await loadState(session.user.id);
-    skipNextSave.current = true;
-    setState(fresh);
-  }, [session?.user?.id]);
+  }), [reloadFromServer]);
 
   // THE BANK CONNECTION, read once and handed to the strip.
   //

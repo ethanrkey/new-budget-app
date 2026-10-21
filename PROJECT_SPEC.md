@@ -3454,6 +3454,90 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### The webhook we were not listening for (2026-10-21)
+
+**Answered from the dashboard logs** the owner read: three
+`plaid-exchange` invocations booted at 11:54:26, 11:54:29 and
+11:54:32 UTC, in the ninety seconds after he finished at TD. No
+`webhook refused` line, no ERROR, and no
+`/webhook_verification_key/get` in `plaid_api_log`.
+
+**So the signature check was never involved.** Three webhooks
+arrived, none was refused, none was processed — they all took the
+`200 and ignore` branch at the bottom of the function, because the
+handler matched `SESSION_FINISHED` and none of them was one.
+
+Plaid's docs are plain about which webhook this flow produces:
+**`LINK/ITEM_ADD_RESULT` fires for EACH Item as it is added** in a
+Hosted Link or Multi-Item session, carrying `link_token`,
+`link_session_id` and `public_token`, specifically so the caller can
+act as each arrives. `SESSION_FINISHED` waits for the user to finish
+or exit the whole session — which, in an in-app browser the user
+simply closes, can be much later or never. The per-Item webhook is
+the primary one here and the session one is the sweep-up. We had
+only the sweep-up.
+
+Both are handled now. **`ITEM_ADD_RESULT` carries a `public_token`
+and it is still not read from the body**: the body stays a trigger
+and the answer comes from `/link/token/get`, which is what keeps a
+forgery able only to make us ask Plaid a question. The signature
+check makes the body trustworthy today; one extra call is a small
+price for not depending on that staying true.
+
+`noteInbound` now records `webhook_type` beside the code —
+`(inbound) LINK/ITEM_ADD_RESULT` — because "which webhook was that?"
+was precisely the question nobody could answer on the day.
+
+**The order of discovery is worth keeping.** The verifier was the
+prime suspect, it had shipped hours earlier, and it was innocent.
+What found the real cause was the owner reading the boot timestamps:
+three invocations and no error lines is a fact that no amount of
+reasoning about JWT verification would have produced.
+
+### "Use bank balance" never re-read anything (2026-10-21)
+
+Production, real account: the bar stayed `$956.00 · logged 1:31 AM`
+after Use bank balance, and showed `$956.79 · synced 8:19 AM` only
+after a manual refresh. The server write had worked.
+
+**`pullNow` is a `useCallback` with `[]` and an eslint-disable on
+it, and it captured `reloadFromServer` from the first render — the
+render before anybody had signed in.** That copy closed over
+`session?.user?.id === undefined` and returns at its own first line.
+So the reload inside `pullNow` had never run, from the day it was
+written.
+
+**What hid it for a day was the other bug.** Tabbing to the Supabase
+dashboard and back fired the focus check, which found the moved
+version and adopted it — so the number did update, accompanied by
+"your data had changed on another device" about the user's own tap.
+Fixing that banner removed the only thing that was actually
+reloading. One bug was wearing the other as a disguise, and the
+disguise is why the fix looked like the cause.
+
+`reloadFromServer` now reads the user id from a ref and depends on
+nothing, so it cannot go stale in anything that captured it; and
+**`pullNow` lists it and the suppression is gone.** That suppression
+was the actual defect: `[]` with an eslint-disable over it is a
+promise that nothing inside can go stale. The rule was right and it
+had been switched off. The same shape — a suppressed effect holding
+an unstable `commit` — is hardened on the phone with a ref.
+
+**A browser drive now covers it**, because nothing else can:
+`scripts/drive_connected.mjs` loads the real bundle with a connected
+account, clicks Balance ▾ → Use bank balance, and asserts the bar
+changes **without a page reload**. `fixtureApp.mjs` grew a `plaid`
+option that serves the connection and stands in for the balance
+function, writing into the same rows the page loads from — and
+keeping the collision rule, so the pull-on-open declines a date the
+user typed exactly as `plaid_write_balance` does. Reverting the fix
+fails four of its ten checks.
+
+This is the third time the same class has shipped — the pill holding
+a second copy of the connection, the "another device" banner, and
+this — and all three were found by a person using the app. That is
+what the drive is for.
+
 ### A real bank, lost between Plaid and us (2026-10-21, production)
 
 **What happened.** First production connection: TD Bank over OAuth
