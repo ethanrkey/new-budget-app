@@ -16,6 +16,8 @@
 // change it to, which is the opposite of the job.
 import { execFileSync } from "node:child_process";
 import { normalize } from "../src/engine/stateShape.ts";
+import { updateAccountBalance, updateAccountSnapshot } from "../src/engine/mutate.ts";
+import { primaryAccount } from "../src/engine/model.ts";
 import { fmtInstant } from "../src/shared/dates.ts";
 import { splitState, assembleState } from "../src/engine/entities.ts";
 import {
@@ -23,8 +25,8 @@ import {
   PILL, PILL_SHEET, PLAID_PORTAL_URL,
 } from "../src/content/connect.ts";
 import {
-  pillStateOf, pillTextOf, pillSuffixOf, pillIsAction, shouldPullOnOpen, canOfferConnect,
-  canSeeToggle, shouldOfferHint, refreshOutcome,
+  pillStateOf, pillTextOf, pillSuffixOf, pillLongOf, pillIsAction, shouldPullOnOpen,
+  canOfferConnect, canSeeToggle, canUseBankBalance, shouldOfferHint, refreshOutcome,
 } from "../src/shared/connect.ts";
 
 let failures = 0, checks = 0;
@@ -238,6 +240,95 @@ for (const st of ["manual", "synced", "loggedToday", "stale"]) {
     states.every((st) => pillTextOf(st, { amount: "$9.00", ...parts }) === `$9.00 · ${pillSuffixOf(st, parts)}`));
 }
 
+console.log("\n== THE COLLISION, as the owner actually ran it ==");
+
+// THE SEQUENCE THAT FAILED IN SANDBOX ON 2026-10-20, step for step:
+// a pull writes today's balance, the user types a different one the
+// same evening, a stale pull runs, and the user's number survives.
+// It did not. $250 typed at 9:20 PM was $100 again by 9:25.
+//
+// The cause was one word. `upsertSnapshotByDate` updated the row
+// with `{ ...s, amount }`, which kept the `source: "plaid"` the pull
+// had put there — so the row the user had just written claimed to
+// have come from the bank. Two things followed:
+//
+//   - the bar said "synced", attributing their figure to Plaid;
+//   - plaid_write_balance declines only where the row is NOT plaid,
+//     so the guard never fired. The rule was reading a field the
+//     manual path never set.
+//
+// `plaidWrite` below is the SQL guard expressed in JS. It is not the
+// real one — that is one statement in supabase/plaid.sql and cannot
+// run here — so it is written to the same condition deliberately and
+// the comment is the link between them.
+const plaidWrite = (snap, amount) => {
+  // coalesce(data->>'source', 'manual') = 'plaid'
+  const existing = snap ? (snap.source ?? "manual") : null;
+  if (snap && existing !== "plaid") return { applied: "kept_manual", snap };
+  return { applied: "written", snap: { ...(snap ?? {}), amount, source: "plaid" } };
+};
+
+{
+  const DAY = "2026-10-20";
+  let st = normalize({
+    accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 0, balanceAsOf: "2026-10-01", order: 0 }],
+  });
+
+  // 1. The pull at 8:46 PM writes $100 for today.
+  st = {
+    ...st,
+    accountSnapshots: { checking: [{ id: `checking:${DAY}`, date: DAY, amount: 100, source: "plaid", externalId: "pa-1" }] },
+    accounts: st.accounts.map((a) => ({ ...a, balance: 100, balanceAsOf: DAY })),
+  };
+  eq("the pull's reading is the anchor", [primaryAccount(st).balance, primaryAccount(st).balanceAsOf], [100, DAY]);
+
+  // 2. The user types $250 at 9:20 PM, same local day.
+  st = updateAccountBalance(st, "checking", 250, DAY);
+  const typed = st.accountSnapshots.checking.find((x) => x.date === DAY);
+  eq("one row for the day, not two", st.accountSnapshots.checking.length, 1);
+  eq("...holding what was typed", typed.amount, 250);
+  // THE LINE THE WHOLE BUG TURNED ON.
+  eq("...and it says a PERSON wrote it", typed.source, "manual");
+  not("...with the bank's account id dropped", !!typed.externalId);
+  is("...and the moment it was typed, for the web's bar", typeof typed.loggedAt === "string");
+  eq("the anchor is the typed number", primaryAccount(st).balance, 250);
+
+  // 3. The forced stale pull runs and must decline.
+  const after = plaidWrite(typed, 100);
+  eq("the pull is declined, because the row is the user's", after.applied, "kept_manual");
+  eq("...and $250 is still there", after.snap.amount, 250);
+
+  // 4. Tomorrow's pull takes over with nothing to undo, which is the
+  //    whole reason manual-wins costs at most a day.
+  const tomorrow = plaidWrite(null, 310);
+  eq("the next day's pull writes freely", [tomorrow.applied, tomorrow.snap.amount], ["written", 310]);
+}
+
+// EDITING A PULLED READING MAKES IT YOURS TOO. Same bug wearing a
+// different hat: correcting the bank's number only to have the next
+// pull put it back.
+{
+  const DAY = "2026-10-20";
+  let st = normalize({
+    accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 100, balanceAsOf: DAY, order: 0 }],
+    accountSnapshots: { checking: [{ id: "s1", date: DAY, amount: 100, source: "plaid", externalId: "pa-1" }] },
+  });
+  st = updateAccountSnapshot(st, "checking", "s1", { amount: 275 });
+  const edited = st.accountSnapshots.checking[0];
+  eq("an edited reading is a manual one", [edited.amount, edited.source], [275, "manual"]);
+  eq("...and the next pull leaves it alone", plaidWrite(edited, 100).applied, "kept_manual");
+
+  // But a NON-amount edit is not a claim of authorship. Renaming or
+  // re-dating does not make the figure yours.
+  let st2 = normalize({
+    accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 100, balanceAsOf: DAY, order: 0 }],
+    accountSnapshots: { checking: [{ id: "s1", date: DAY, amount: 100, source: "plaid" }] },
+  });
+  st2 = updateAccountSnapshot(st2, "checking", "s1", { date: "2026-10-19" });
+  eq("moving a pulled reading does not reauthor it",
+    st2.accountSnapshots.checking[0].source, "plaid");
+}
+
 console.log("\n== 'last synced' is local, both halves ==");
 
 // THE BUG THIS PINS: both clients built the string as
@@ -272,6 +363,44 @@ console.log("\n== 'last synced' is local, both halves ==");
 
 eq("nothing to show is an em dash, not Invalid Date", fmtInstant(null), "—");
 eq("...and so is a string that is not an instant", fmtInstant("not a date"), "—");
+
+console.log("\n== the web's long form, and the phone's short one ==");
+
+// The owner's call 2026-10-20 after seeing both: a browser has room
+// for the whole stamp and a phone does not, and "synced 8:14 AM" on
+// a tab left open since yesterday is ambiguous in a way it never is
+// on a phone you just picked up.
+{
+  const parts = { amount: "$1,204.19", asOf: "10/17", syncedStamp: "10/20/2026, 8:46 PM", loggedStamp: "10/20/2026, 9:20 PM" };
+  eq("every state, in the web's words",
+    ["manual", "synced", "loggedToday", "stale", "reconnect"].map((st) => pillLongOf(st, parts)),
+    ["$1,204.19 · as of 10/17",
+     "$1,204.19 · synced 10/20/2026, 8:46 PM",
+     "$1,204.19 · logged 10/20/2026, 9:20 PM",
+     "$1,204.19 · synced 10/20/2026, 8:46 PM",
+     "$1,204.19 · Reconnect"]);
+  // A MANUAL OVERRIDE SHOWS WHEN IT WAS TYPED, which is a different
+  // instant from the last sync — the two must not be confused, and
+  // the long form is the only place both are visible at once.
+  not("the override's stamp is not the sync's",
+    pillLongOf("loggedToday", parts) === pillLongOf("synced", parts));
+  // Both forms answer the same question; only the rendering differs.
+  const short = ["manual", "synced", "loggedToday", "stale", "reconnect"]
+    .map((st) => pillSuffixOf(st, { asOf: "10/17", syncedTime: "8:46 PM", syncedWhen: "x" }));
+  is("the verb is the same word in both forms",
+    short.every((sfx, i) => {
+      const long = pillLongOf(["manual", "synced", "loggedToday", "stale", "reconnect"][i], parts);
+      return long.includes(sfx.split(" ")[0]);
+    }));
+}
+
+console.log("\n== 'Use bank balance' is offered only when it would do something ==");
+// Beside a number the bank already gave you it is a button that
+// claims to change something and does not.
+is("offered when today's figure is the user's own", canUseBankBalance("loggedToday"));
+for (const st of ["manual", "synced", "stale", "reconnect"]) {
+  not(`...and not when it is ${st}`, canUseBankBalance(st));
+}
 
 console.log("\n== the gate, which is two questions and not one ==");
 

@@ -640,12 +640,21 @@ grant execute on function purge_due_accounts() to authenticated;
 --
 -- Returns 'written' or 'kept_manual' so the caller can say "logged
 -- today" on the pill instead of pretending it synced.
+-- Dropped explicitly: adding a parameter makes a NEW function rather
+-- than replacing this one, and two overloads would leave which one
+-- runs up to argument inference.
+drop function if exists plaid_write_balance(uuid, text, text, numeric, text);
 create or replace function plaid_write_balance(
   p_user_id     uuid,
   p_account_id  text,
   p_date        text,
   p_amount      numeric,
-  p_external_id text
+  p_external_id text,
+  -- "Use bank balance": the user has ASKED for the bank's number to
+  -- replace the one they typed, so the guard below steps aside. It is
+  -- the same rule, not an exception to it — manual wins because the
+  -- user's intent wins, and this is the user saying otherwise.
+  p_force       boolean default false
 ) returns text as $$
 declare
   wrote boolean;
@@ -668,7 +677,7 @@ begin
         version    = budget_entities.version + 1,
         updated_at = now()
   where budget_entities.deleted_at is null
-    and coalesce(budget_entities.data->>'source', 'manual') = 'plaid'
+    and (p_force or coalesce(budget_entities.data->>'source', 'manual') = 'plaid')
   returning true into wrote;
 
   return case when wrote then 'written' else 'kept_manual' end;
@@ -677,7 +686,51 @@ $$ language plpgsql security definer set search_path = public;
 
 -- Only the service role calls it. It takes a user id as an argument,
 -- which is exactly the shape a client must never be able to invoke.
-revoke all on function plaid_write_balance(uuid, text, text, numeric, text) from public, anon, authenticated;
+revoke all on function plaid_write_balance(uuid, text, text, numeric, text, boolean) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 9. CLAIMING A PULL, so two callers cannot both make one.
+--
+-- ONE CONNECT PRODUCED TWO BILLED PULLS on 2026-10-20: the connect
+-- flow pulled as soon as the Item existed, and the app's own
+-- pull-on-open fired three seconds later when the page noticed a
+-- connection had appeared. Both read `last_synced_at`, both saw it
+-- empty, and both called Plaid.
+--
+-- The client half of that is fixed by not asking twice. This is the
+-- half that cannot be got wrong: the staleness test and the write
+-- that satisfies it are ONE statement, so the second caller's UPDATE
+-- matches no row and it is told the balance is fresh. That also
+-- makes the promise in §10 true rather than approximately true —
+-- "one pull serves every device" has to survive two phones opening
+-- the app in the same second.
+--
+-- Returns the PREVIOUS last_synced_at when the claim succeeds, so a
+-- failed pull can put it back: claiming writes `now()` up front, and
+-- a pull that then fails must not leave the Item looking synced.
+create or replace function plaid_claim_pull(p_item_id uuid, p_min_seconds integer)
+returns table (claimed boolean, previous timestamptz) as $$
+begin
+  return query
+  with before as (select last_synced_at from plaid_items where id = p_item_id)
+  update plaid_items i
+     set last_synced_at = now(), updated_at = now()
+    from before
+   where i.id = p_item_id
+     and (i.last_synced_at is null
+          or i.last_synced_at < now() - make_interval(secs => p_min_seconds))
+  returning true, before.last_synced_at;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+-- Put the clock back after a pull that did not happen.
+create or replace function plaid_release_pull(p_item_id uuid, p_previous timestamptz)
+returns void as $$
+  update plaid_items set last_synced_at = p_previous where id = p_item_id;
+$$ language sql security definer set search_path = public;
+
+revoke all on function plaid_claim_pull(uuid, integer)        from public, anon, authenticated;
+revoke all on function plaid_release_pull(uuid, timestamptz)  from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- DRAINING THE REMOVAL QUEUE. The half that was missing on the Apple

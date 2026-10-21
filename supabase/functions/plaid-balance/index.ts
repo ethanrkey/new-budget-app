@@ -26,6 +26,42 @@ interface BalanceResult {
   }>;
 }
 
+/**
+ * Write a balance as an ordinary snapshot, through the one statement
+ * that owns the collision rule.
+ *
+ * Shared by the pull and by "Use bank balance", so the two cannot
+ * disagree about where a balance goes or how it is keyed. The only
+ * difference between them is `force` — which is the user saying
+ * "yes, really, use the bank's number", and is therefore the same
+ * rule rather than an exception to it: manual wins because the
+ * user's intent wins.
+ */
+// deno-lint-ignore no-explicit-any
+async function writeBalance(admin: any, userId: string, account: { plaid_account_id: string },
+  amount: number, timeZone: string | null, force: boolean) {
+  // Which checking account of OURS this balance belongs to. The
+  // snapshot is keyed by it, because the Ledger reads snapshots and
+  // has never heard of Plaid.
+  const { data: ours } = await admin
+    .from("budget_entities").select("entity_id, data")
+    .eq("user_id", userId).eq("kind", "account").is("deleted_at", null);
+  const checking = (ours ?? []).find((r: { data?: { kind?: string } }) => r.data?.kind === "checking") ?? (ours ?? [])[0];
+  if (!checking) return { ok: false as const, reason: "no_local_account" };
+
+  const { data: applied } = await admin.rpc("plaid_write_balance", {
+    p_user_id: userId,
+    p_account_id: checking.data?.id ?? checking.entity_id,
+    // The user's day, falling back to the zone we last stored and
+    // then to UTC. Never the server's day when we know better.
+    p_date: localDateIn(timeZone),
+    p_amount: amount,
+    p_external_id: account.plaid_account_id,
+    p_force: force,
+  });
+  return { ok: true as const, applied: applied as string };
+}
+
 Deno.serve(async (req) => {
   // BEFORE THE METHOD CHECK, not after: a preflight is an OPTIONS
   // request, so a handler that answers 405 first kills the real POST
@@ -50,7 +86,14 @@ Deno.serve(async (req) => {
 
   let payload: { trigger?: string; timeZone?: string } = {};
   try { payload = await req.json(); } catch { /* defaults to open */ }
-  const trigger = payload.trigger === "refresh" ? "refresh" : "open";
+  // THREE TRIGGERS NOW. `adopt` is "Use bank balance": the user is
+  // dropping their own figure for today in favor of the last one the
+  // bank gave us. IT MAKES NO PLAID CALL and costs nothing — the
+  // number is already on `plaid_accounts`, and charging a billed
+  // request to undo somebody's own typing would be absurd.
+  const trigger = payload.trigger === "refresh" ? "refresh"
+    : payload.trigger === "adopt" ? "adopt"
+    : "open";
   // The client's IANA zone, so the snapshot is dated in the user's
   // own day rather than the server's. See localDateIn.
   const timeZone = typeof payload.timeZone === "string" ? payload.timeZone : null;
@@ -77,18 +120,23 @@ Deno.serve(async (req) => {
   }
 
   const now = Date.now();
-  const lastSynced = item.last_synced_at ? Date.parse(item.last_synced_at) : 0;
 
-  if (trigger === "open" && now - lastSynced < BALANCE_STALE_AFTER_HOURS * 3600_000) {
-    return json(200, { connected: true, status: item.status, synced: false, reason: "fresh", last_synced_at: item.last_synced_at });
+  const { data: account } = await admin
+    .from("plaid_accounts").select("id, plaid_account_id, last_available")
+    .eq("item_id", item.id).eq("is_checking", true).maybeSingle();
+
+  // ---- "Use bank balance": no Plaid call, no cost, no cap ----
+  if (trigger === "adopt") {
+    if (!account || account.last_available == null) {
+      return json(200, { connected: true, synced: false, reason: "no_balance", last_synced_at: item.last_synced_at });
+    }
+    const adopted = await writeBalance(admin, userId, account, Number(account.last_available),
+      timeZone ?? item.time_zone, true);
+    if (!adopted.ok) return json(200, { connected: true, synced: false, reason: adopted.reason, last_synced_at: item.last_synced_at });
+    return json(200, { connected: true, status: item.status, synced: true, applied: adopted.applied, last_synced_at: item.last_synced_at });
   }
 
   if (trigger === "refresh") {
-    // The debounce first, because it is the cheaper check and a
-    // double-tap is the common case.
-    if (now - lastSynced < REFRESH_DEBOUNCE_SECONDS * 1000) {
-      return json(200, { connected: true, status: item.status, synced: false, reason: "just_now", last_synced_at: item.last_synced_at });
-    }
     // THE CAP COUNTS CALLS THAT WERE MADE, out of the same log that
     // answers "pulls per user per month". A cap counted anywhere else
     // would be a second opinion about the same number.
@@ -105,13 +153,40 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ---- CLAIM THE PULL, which IS the staleness check ----
+  //
+  // ONE STATEMENT, so two callers cannot both pass it. One connect
+  // billed two pulls on 2026-10-20 because the connect flow pulled
+  // as soon as the Item existed and the app's own pull-on-open fired
+  // three seconds later when the page noticed a connection had
+  // appeared: both read `last_synced_at`, both saw it empty, both
+  // called Plaid. Reading and then writing cannot be made safe by
+  // being careful. It is also what makes "one pull serves every
+  // device" true when two phones open in the same second.
+  const minSeconds = trigger === "refresh" ? REFRESH_DEBOUNCE_SECONDS : BALANCE_STALE_AFTER_HOURS * 3600;
+  const { data: claim } = await admin.rpc("plaid_claim_pull", { p_item_id: item.id, p_min_seconds: minSeconds });
+  const got = Array.isArray(claim) ? claim[0] : claim;
+  if (!got?.claimed) {
+    return json(200, {
+      connected: true, status: item.status, synced: false,
+      reason: trigger === "refresh" ? "just_now" : "fresh",
+      last_synced_at: item.last_synced_at,
+    });
+  }
+  // Claiming wrote `now()` up front, so every path out of here that
+  // is not a successful pull has to put the clock back — or a failed
+  // pull leaves the Item looking synced.
+  const previousSync: string | null = got.previous ?? null;
+  const release = () => admin.rpc("plaid_release_pull", { p_item_id: item.id, p_previous: previousSync });
+
   // The one path from ciphertext to plaintext, and it is a function
   // call rather than a select: the token is encrypted at rest and
   // `plaid_tokens` holds only a Vault secret id.
   const { data: accessToken } = await admin.rpc("plaid_read_token", { p_item_id: item.id });
   if (!accessToken) {
     console.error("[plaid-balance] item with no readable token:", item.id);
-    return json(500, { error: "connection is incomplete" });
+    await release();
+    return json(200, { ok: false, code: "NO_TOKEN" });
   }
 
   const result = await callPlaid<BalanceResult>(conf.config, PLAID_ENDPOINTS.accountsBalanceGet,
@@ -122,6 +197,9 @@ Deno.serve(async (req) => {
     // A FROZEN NUMBER THAT LOOKS LIVE IS WORSE THAN NO NUMBER. The
     // status is written so the pill can say Reconnect instead of
     // going on showing a date that will never move again.
+    // The clock goes back FIRST, so the status write below is not
+    // undone by it and a failed pull never looks synced.
+    await release();
     await admin.from("plaid_items")
       .update({ status: reconnect ? "login_required" : "error", last_error_code: result.error.code, updated_at: new Date().toISOString() })
       .eq("id", item.id);
@@ -132,12 +210,9 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { data: account } = await admin
-    .from("plaid_accounts").select("id, plaid_account_id")
-    .eq("item_id", item.id).eq("is_checking", true).maybeSingle();
   const fromPlaid = (result.data.accounts ?? []).find((a) => a.account_id === account?.plaid_account_id)
     ?? result.data.accounts?.[0];
-  if (!account || !fromPlaid) return json(200, { connected: true, synced: false, reason: "no_account" });
+  if (!account || !fromPlaid) { await release(); return json(200, { connected: true, synced: false, reason: "no_account" }); }
 
   // AVAILABLE IS THE NUMBER, with current as the fallback only when
   // the institution does not report one. Available nets pending holds,
@@ -146,33 +221,15 @@ Deno.serve(async (req) => {
   // "which one is mine" to answer.
   const available = fromPlaid.balances?.available ?? fromPlaid.balances?.current ?? null;
   const current = fromPlaid.balances?.current ?? null;
-  if (available === null) return json(200, { connected: true, synced: false, reason: "no_balance" });
+  if (available === null) { await release(); return json(200, { connected: true, synced: false, reason: "no_balance" }); }
 
   await admin.from("plaid_accounts")
     .update({ last_available: available, last_current: current, last_balance_at: new Date().toISOString() })
     .eq("id", account.id);
 
-  // Which checking account of OURS this balance belongs to. The
-  // snapshot is keyed by it, because the Ledger reads snapshots and
-  // has never heard of Plaid.
-  const { data: ours } = await admin
-    .from("budget_entities").select("entity_id, data")
-    .eq("user_id", userId).eq("kind", "account").is("deleted_at", null);
-  const checking = (ours ?? []).find((r) => (r.data as { kind?: string })?.kind === "checking") ?? (ours ?? [])[0];
-  if (!checking) return json(200, { connected: true, synced: false, reason: "no_local_account" });
-
-  // The collision rule is in SQL, not here: one statement, so a manual
-  // log written in the same second cannot be lost between a read and a
-  // write. See plaid_write_balance in supabase/plaid.sql.
-  const { data: wrote } = await admin.rpc("plaid_write_balance", {
-    p_user_id: userId,
-    p_account_id: (checking.data as { id?: string })?.id ?? checking.entity_id,
-    // The user's day, falling back to the zone we last stored and
-    // then to UTC. Never the server's day when we know better.
-    p_date: localDateIn(timeZone ?? item.time_zone),
-    p_amount: available,
-    p_external_id: account.plaid_account_id,
-  });
+  const written = await writeBalance(admin, userId, account, available, timeZone ?? item.time_zone, false);
+  if (!written.ok) { await release(); return json(200, { connected: true, synced: false, reason: written.reason }); }
+  const wrote = written.applied;
 
   const syncedAt = new Date().toISOString();
   await admin.from("plaid_items")

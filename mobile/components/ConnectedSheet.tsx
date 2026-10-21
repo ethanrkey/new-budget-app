@@ -7,7 +7,7 @@ import NativeSheet from "./NativeSheet";
 import { useBudget } from "./StateProvider";
 import { fmtDate } from "../../src/shared/dates.ts";
 import { PILL_SHEET } from "../../src/content/connect.ts";
-import { refreshOutcome, type Connection } from "../../src/shared/connect.ts";
+import { canUseBankBalance, refreshOutcome, type Connection, type PillState } from "../../src/shared/connect.ts";
 import { pullBalance } from "../../src/shared/plaidApi.ts";
 import { setConnection } from "../lib/connection";
 
@@ -25,9 +25,12 @@ import { setConnection } from "../lib/connection";
 // already fresh, four times today already, the bank returned
 // nothing — and a silent button reads as broken while a red one
 // reads as a failure that did not happen. See `refreshOutcome`.
-export default function ConnectedSheet({ open, connection, onClose, onLogManually }: {
+export default function ConnectedSheet({ open, connection, pill, onClose, onLogManually }: {
   open: boolean;
   connection: Connection | null;
+  /** Which of the five states the bar is in — decides whether
+   *  "Use bank balance" would do anything. */
+  pill: PillState;
   onClose: () => void;
   onLogManually: () => void;
 }) {
@@ -70,6 +73,19 @@ export default function ConnectedSheet({ open, connection, onClose, onLogManuall
     setSaid(refreshOutcome(result.reason) ?? "Nothing to update");
   }
 
+  // NO PLAID CALL AND NO COST. The number is already stored from the
+  // last pull; this only decides which of two rows wins today.
+  async function adopt() {
+    setBusy(true);
+    setSaid(null);
+    const result = await pullBalance(supabase as never, "adopt");
+    setBusy(false);
+    if (!result?.synced) { feel.failure(); setSaid("Couldn't switch to the bank's balance"); return; }
+    feel.success();
+    await resyncState();
+    onClose();
+  }
+
   return (
     <NativeSheet visible={open} onClose={onClose} swipeToClose={!busy}>
       <View style={styles.sheet}>
@@ -89,6 +105,19 @@ export default function ConnectedSheet({ open, connection, onClose, onLogManuall
         >
           <Text style={styles.rowText}>{PILL_SHEET.manual}</Text>
         </Pressable>
+        {/* ONLY WHEN THERE IS SOMETHING TO DROP. Offering this beside
+            a number the bank already gave you is a button that claims
+            to change something and does not. */}
+        {canUseBankBalance(pill) && (
+          <Pressable
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            onPress={() => { void adopt(); }}
+            disabled={busy}
+            accessibilityRole="button" accessibilityLabel={PILL_SHEET.useBank}
+          >
+            <Text style={styles.rowText}>{PILL_SHEET.useBank}</Text>
+          </Pressable>
+        )}
         {said && <Text style={styles.said}>{said}</Text>}
         <Text style={styles.last}>{PILL_SHEET.lastSynced(when)}</Text>
       </View>

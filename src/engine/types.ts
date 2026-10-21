@@ -168,6 +168,19 @@ export interface BalanceSnapshot {
   source?: "manual" | "plaid";
   /** The provider's own id for the account, so a re-pull can tell. */
   externalId?: string;
+  /**
+   * WHEN the reading was logged, as an instant, for a manual entry.
+   *
+   * `date` is the day the balance is a statement ABOUT and is the
+   * key of the row. This is the moment somebody typed it, which is a
+   * different fact and is only needed for one thing: the web's
+   * Checking bar says "logged 10/20/2026, 9:20 PM", and a date alone
+   * cannot tell you the time.
+   *
+   * Absent on everything written before 2026-10-20 and on pulled
+   * readings, which carry the Item's `last_synced_at` instead.
+   */
+  loggedAt?: string;
 }
 
 /** Where a contribution came from. An importer writes its own source. */

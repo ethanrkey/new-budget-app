@@ -2738,6 +2738,79 @@ proof queries 3a, 3b and 4 all pass, he is in `plaid_beta`, and
 functions are deployed to `kjcvtpmorftjyejjskwm`, with
 `--no-verify-jwt` on `plaid-exchange` alone.
 
+**THE COLLISION RULE HAD NEVER FIRED ONCE, found 2026-10-20 by
+running the test.** $250 typed at 9:20 PM was $100 again by 9:25.
+
+**ONE WORD CAUSED IT.** `upsertSnapshotByDate` updated an existing
+row with `{ ...s, amount }`, which kept whatever `source` was already
+there. Logging over a pulled reading therefore left the row stamped
+`plaid` — a row the user had just written, claiming to have come from
+their bank. Two things followed from that one word:
+
+- the Checking bar said "synced 8:46 PM" beside a number the user had
+  typed, attributing their figure to Plaid;
+- `plaid_write_balance` declines only where the existing row is NOT
+  plaid, so **the guard never matched and the rule never fired.**
+
+**IT WAS READING A FIELD THE MANUAL PATH NEVER SET.** The rule, the
+SQL, the tests and the design were all right about what should
+happen; the one thing nobody had checked was whether a manual log
+actually said it was manual. A rule whose precondition is never
+satisfied is indistinguishable from no rule at all, and it passes
+every test that does not run the real sequence.
+
+The fix is three words in `mutate.ts` plus the same treatment for
+editing a reading — correcting the bank's number, only to have the
+next pull put it back, is the same defect wearing a different hat. A
+NON-amount edit (re-dating, say) does not reauthor it.
+`tests/connect.test.mjs` now runs the owner's sequence step for step
+and was checked against the real bug before being believed.
+
+**"USE BANK BALANCE" IS THE COUNTERPART, and the reason manual-wins
+can be strict.** Without it, changing your mind about a number you
+typed means waiting for tomorrow's pull, which makes the safe default
+the frustrating one. It is on both clients' balance sheets, offered
+ONLY when there is an override to drop, and **it makes no Plaid
+call** — the figure is already on `plaid_accounts.last_available`,
+and charging a billed request to undo somebody's own typing would be
+absurd. It is the same rule rather than an exception to it: manual
+wins because the user's intent wins, and this is the user saying
+otherwise.
+
+**ONE CONNECT, TWO BILLED PULLS.** The connect flow pulled as soon as
+the Item existed and the app's own pull-on-open fired three seconds
+later when it noticed a connection had appeared. Both read
+`last_synced_at`, both saw it empty, both called Plaid. Fixed on both
+sides: the client does not ask twice, and `plaid_claim_pull` makes
+the staleness test and the write that satisfies it ONE statement, so
+a second caller matches no row and is told the balance is fresh.
+Reading and then writing cannot be made safe by being careful. That
+is also what makes "one pull serves every device" true when two
+phones open in the same second rather than approximately true.
+
+A claim writes `now()` up front, so every path out that is not a
+successful pull calls `plaid_release_pull` — otherwise a failed pull
+leaves the Item looking synced, which is the exact lie the
+`login_required` status exists to prevent.
+
+**THE WEB SAYS THE WHOLE STAMP, THE PHONE SAYS THE SHORT FORM**
+(owner's call after seeing both): `synced 10/20/2026, 8:46 PM` and
+`logged 10/20/2026, 9:20 PM` on the web, `synced 8:46 PM` and `logged
+today` on the phone. A browser has the room, and a short time on a
+tab left open since yesterday is ambiguous in a way it never is on a
+phone you just picked up. Same five states, same `pillStateOf`; only
+the rendering differs. **The Dashboard card is untouched** and still
+reads "as of".
+
+Showing the moment of a manual override needed one new field,
+`BalanceSnapshot.loggedAt`: `date` is the day the reading is a
+statement ABOUT and is the row's key, which cannot tell you what time
+somebody typed it.
+
+**THE WEB BAR NOW OPENS THE SAME THREE DOORS AS THE PHONE** when
+connected — Refresh now, Log manually, Use bank balance, and the last
+sync — so the web finally has a Refresh at all.
+
 **THREE BUGS FROM THE FIRST SUCCESSFUL CONNECTION, 2026-10-20.**
 Connect worked end to end on web — First Platypus ••0000, $100.00
 pulled, visible on the phone too — and three things were wrong.

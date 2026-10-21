@@ -137,7 +137,7 @@ export function deviceTimeZone(): string | null {
 }
 
 /** Ask the server whether a pull is due, and let it decide. */
-export async function pullBalance(sb: FunctionCaller, trigger: "open" | "refresh"): Promise<PullResult | null> {
+export async function pullBalance(sb: FunctionCaller, trigger: "open" | "refresh" | "adopt"): Promise<PullResult | null> {
   const { data, error } = await sb.functions.invoke("plaid-balance", { body: { trigger, timeZone: deviceTimeZone() } });
   if (error || !data) return null;
   const d = data as Record<string, unknown>;

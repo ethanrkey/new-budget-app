@@ -371,10 +371,27 @@ export function deleteMonthlyActual(state: BudgetState, itemId: string, monthKey
 //
 // Contributions are deliberately NOT deduped this way: two deposits on one
 // day are two real events, and collapsing them would lose money.
+// A PERSON TYPED THIS, and the row has to say so. The update used to
+// be `{ ...s, amount }`, which quietly kept whatever `source` was
+// already on the row — so logging a balance over a pulled one left
+// it stamped `plaid`, and two things followed from that one word:
+//
+//   - the Checking bar said "synced 8:46 PM" beside a number the
+//     user had just typed, attributing their figure to their bank;
+//   - the next pull overwrote it, because `plaid_write_balance`
+//     declines only where the existing row is NOT plaid. The whole
+//     "manual wins" rule was reading a field the manual path never
+//     set, so it never fired once.
+//
+// Found on 2026-10-20 by the owner running the collision test: $250
+// typed at 9:20 PM, gone by 9:25. `externalId` is cleared for the
+// same reason — it belonged to the reading this one replaced.
 function upsertSnapshotByDate(list: BalanceSnapshot[], date: ISODate, amount: number): BalanceSnapshot[] {
+  const loggedAt = new Date().toISOString();
   const at = list.findIndex((s) => s.date === date);
-  if (at === -1) return [...list, { id: uid(), date, amount }];
-  return list.map((s, i) => (i === at ? { ...s, amount } : s));
+  if (at === -1) return [...list, { id: uid(), date, amount, source: "manual", loggedAt }];
+  return list.map((s, i) =>
+    (i === at ? { ...s, amount, source: "manual" as const, externalId: undefined, loggedAt } : s));
 }
 
 /**
@@ -428,8 +445,15 @@ export function updateAccountBalance(state: BudgetState, accountId: string, amou
 // snapshot corrects the record, it doesn't retroactively move the anchor.
 export function updateAccountSnapshot(state: BudgetState, accountId: string, snapshotId: string, patch: Partial<BalanceSnapshot>): BudgetState {
   const list = state.accountSnapshots?.[accountId] || [];
+  // EDITING A PULLED READING MAKES IT YOURS. Same reasoning as the
+  // upsert above, and the same bug if it is left out: correcting a
+  // number the bank gave you, only to have the next pull put the
+  // bank's number back, is the defect wearing a different hat.
+  const claim = patch.amount === undefined
+    ? patch
+    : { ...patch, source: "manual" as const, externalId: undefined, loggedAt: new Date().toISOString() };
   return withAccountSnapshots(state, accountId,
-    list.map((s) => (s.id === snapshotId ? { ...s, ...patch } : s)));
+    list.map((s) => (s.id === snapshotId ? { ...s, ...claim } : s)));
 }
 
 export function deleteAccountSnapshot(state: BudgetState, accountId: string, snapshotId: string): BudgetState {

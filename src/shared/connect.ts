@@ -7,7 +7,7 @@
 // SDK. It is reachable from a cold start with connected features off,
 // and that is deliberate — the gate has to be answerable before any
 // of the machinery behind it exists.
-import { PILL, PILL_SUFFIX } from "../content/connect.ts";
+import { PILL, PILL_SUFFIX, PILL_SUFFIX_LONG } from "../content/connect.ts";
 
 /** What the server says about a user's connection. Mirrors `plaid_items`. */
 export interface Connection {
@@ -105,6 +105,32 @@ export function pillSuffixOf(
     case "manual": return PILL_SUFFIX.manual(parts.asOf);
   }
 }
+
+/**
+ * The web's form: one line, full stamp. Same state, same words for
+ * the verb, more of the timestamp.
+ */
+export function pillLongOf(
+  state: PillState,
+  parts: { amount: string; asOf: string; syncedStamp: string; loggedStamp: string },
+): string {
+  switch (state) {
+    case "reconnect": return `${parts.amount} · ${PILL_SUFFIX_LONG.reconnect()}`;
+    case "loggedToday": return `${parts.amount} · ${PILL_SUFFIX_LONG.loggedToday(parts.loggedStamp)}`;
+    case "stale": return `${parts.amount} · ${PILL_SUFFIX_LONG.stale(parts.syncedStamp)}`;
+    case "synced": return `${parts.amount} · ${PILL_SUFFIX_LONG.synced(parts.syncedStamp)}`;
+    case "manual": return `${parts.amount} · ${PILL_SUFFIX_LONG.manual(parts.asOf)}`;
+  }
+}
+
+/**
+ * Is there a manual override to drop?
+ *
+ * "Use bank balance" is only offered when it would DO something.
+ * Offering it beside a number the bank already gave you is a button
+ * that claims to change something and does not.
+ */
+export const canUseBankBalance = (state: PillState): boolean => state === "loggedToday";
 
 /** Only the reconnect state asks for something, so only it is gold. */
 export const pillIsAction = (state: PillState): boolean => state === "reconnect";

@@ -14,7 +14,8 @@ import BottomSheet from "./BottomSheet";
 import Tour from "./Tour";
 import LogBalance, { currently } from "./LogBalance";
 import { updateAccountBalance } from "../../src/engine/mutate.ts";
-import { primaryAccount, ledgerHorizonOf } from "../../src/engine/model.ts";
+import { primaryAccount, ledgerHorizonOf, todayISO } from "../../src/engine/model.ts";
+import { pillStateOf } from "../../src/shared/connect.ts";
 import { rowsHiddenByAnchor } from "../../src/engine/compute.ts";
 import Setup from "./Setup";
 import { shouldRunSetup } from "../lib/setup";
@@ -117,6 +118,17 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   // `load` returns immediately when the account is not allowlisted or
   // has not opted in, so an ordinary manual user makes no request.
   const { connection } = useConnection();
+  // The SAME question the strip asks, asked once here so the sheet
+  // and the bar cannot disagree about whether there is an override
+  // to drop.
+  const pillNow = state
+    ? (() => {
+        const acct = primaryAccount(state);
+        const newest = (state.accountSnapshots[acct.id] ?? []).at(-1);
+        return pillStateOf(connection, newest?.date === acct.balanceAsOf ? newest?.source : undefined,
+          acct.balanceAsOf, todayISO());
+      })()
+    : "manual" as const;
   const [connectedSheet, setConnectedSheet] = useState(false);
   const connectedFeatures = !!state?.settings.connectedFeatures;
   useEffect(() => { void loadConnection({ connectedFeatures }); }, [connectedFeatures]);
@@ -146,6 +158,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
       <ConnectedSheet
         open={connectedSheet}
         connection={connection}
+        pill={pillNow}
         onClose={() => setConnectedSheet(false)}
         onLogManually={() => { setConnectedSheet(false); setLogging(true); }}
       />

@@ -84,7 +84,7 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     if (!ok) { setSaid("Couldn't disconnect. Nothing changed — try again in a moment."); return; }
     setConnection(null);
     setSaid(null);
-    onChanged?.();
+    onChanged?.(false);
   }
 
   async function openLink() {
@@ -129,7 +129,8 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
         await pullBalance(supabase, "open");
         await refresh();
         setBusy(null);
-        onChanged?.();
+        // `true`: this flow already pulled, so App must not pull again.
+        onChanged?.(true);
       },
       // A user who closes Link has declined. That is an answer, not
       // an error, and it gets no message.

@@ -144,6 +144,29 @@ export const PILL_SUFFIX = {
   reconnect: () => "Reconnect",
 } as const;
 
+/**
+ * THE LONG FORM, which is the web's.
+ *
+ * The owner's call, 2026-10-20, after seeing both: a browser has the
+ * room for a full stamp and a phone does not, and "synced 8:14 AM"
+ * on a page you left open since yesterday is ambiguous in a way it
+ * never is on a phone you just picked up. So the web says
+ * "synced 10/20/2026, 8:46 PM" and the phone keeps the short form.
+ *
+ * SAME FIVE STATES, SAME DECISION — only the rendering differs, and
+ * both come from `pillStateOf`. The Dashboard card is untouched and
+ * still reads "as of": it is a different sentence about a different
+ * thing.
+ */
+export const PILL_SUFFIX_LONG = {
+  manual: (date: string) => `as of ${date}`,
+  synced: (stamp: string) => `synced ${stamp}`,
+  /** A manual override, with the moment it was typed. */
+  loggedToday: (stamp: string) => `logged ${stamp}`,
+  stale: (stamp: string) => `synced ${stamp}`,
+  reconnect: () => "Reconnect",
+} as const;
+
 export const PILL = {
   manual: (amount: string, date: string) => `${amount} · ${PILL_SUFFIX.manual(date)}`,
   synced: (amount: string, time: string) => `${amount} · ${PILL_SUFFIX.synced(time)}`,
@@ -156,6 +179,19 @@ export const PILL = {
 export const PILL_SHEET = {
   refresh: "Refresh now",
   manual: "Log manually",
+  /**
+   * Drop today's typed figure and take the bank's.
+   *
+   * THE COUNTERPART TO "MANUAL WINS", and the reason that rule can
+   * be strict. Without this, changing your mind about a number you
+   * typed means waiting for tomorrow's pull — so the safe default
+   * becomes the frustrating one. It makes NO Plaid call: the number
+   * is already stored from the last pull, and charging a billed
+   * request to undo your own typing would be absurd.
+   *
+   * Only offered when there IS a manual override to drop.
+   */
+  useBank: "Use bank balance",
   /** e.g. "Last synced 8:14 AM". */
   lastSynced: (when: string) => `Last synced ${when}`,
 } as const;

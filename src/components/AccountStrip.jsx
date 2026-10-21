@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { fmtDate } from "../shared/dates.ts";
-import { pillIsAction, pillStateOf, pillSuffixOf } from "../shared/connect.ts";
+import { canUseBankBalance, pillIsAction, pillLongOf, pillStateOf } from "../shared/connect.ts";
+import { PILL_SHEET } from "../content/connect.ts";
+import { fmtInstant } from "../shared/dates.ts";
 import { todayISO } from "../engine/model.ts";
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -11,7 +14,25 @@ const money = (n) =>
 // display only; the single button opens UpdateBalanceModal, where nothing
 // changes until Confirm. Stays visible on every tab because this balance is
 // the anchor every Ledger/Budget number is built from.
-export default function AccountStrip({ account, onUpdateClick, connection, newestSnapshot }) {
+export default function AccountStrip({ account, onUpdateClick, connection, newestSnapshot, onPull }) {
+  const [menu, setMenu] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState(null);
+
+  async function run(trigger) {
+    setBusy(true);
+    setSaid(null);
+    const message = await onPull?.(trigger);
+    setBusy(false);
+    // A refresh that did nothing says so IN THE MENU and never as an
+    // error: the server declines for four ordinary reasons and a
+    // silent button reads as broken. See refreshOutcome.
+    if (message) { setSaid(message); return; }
+    setMenu(false);
+  }
+  const doRefresh = () => run("refresh");
+  const doAdopt = () => run("adopt");
+
   // WHICH OF THE FIVE STATES, decided in src/shared/connect.ts so
   // that the phone cannot answer it differently. The source read is
   // the one on the SNAPSHOT CURRENTLY ON SCREEN, not the last pull:
@@ -23,13 +44,21 @@ export default function AccountStrip({ account, onUpdateClick, connection, newes
     account.balanceAsOf,
     todayISO(),
   );
-  const syncedAt = connection?.lastSyncedAt ? new Date(connection.lastSyncedAt) : null;
-  const clock = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  const suffix = pillSuffixOf(pill, {
+  // THE WEB SAYS THE WHOLE STAMP, the phone says the short form —
+  // the owner's call after seeing both. A browser has the room, and
+  // "synced 8:14 AM" on a tab left open since yesterday is ambiguous
+  // in a way it never is on a phone you just picked up. Same five
+  // states and the same decision underneath; only the rendering
+  // differs. The Dashboard card is untouched and still says "as of".
+  const line = pillLongOf(pill, {
+    amount: money(account.balance),
     asOf: fmtDate(account.balanceAsOf),
-    syncedTime: syncedAt ? clock(syncedAt) : "",
-    syncedWhen: syncedAt ? `${fmtDate(connection.lastSyncedAt.slice(0, 10))} ${clock(syncedAt)}` : "never",
+    syncedStamp: fmtInstant(connection?.lastSyncedAt),
+    // When the override was typed. Older snapshots have no
+    // `loggedAt`, so they fall back to the day they are about.
+    loggedStamp: newestSnapshot?.loggedAt ? fmtInstant(newestSnapshot.loggedAt) : fmtDate(account.balanceAsOf),
   });
+  const suffix = line.slice(line.indexOf(" · ") + 3);
 
   return (
     <div className="px-3 sm:px-6 py-2.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
@@ -48,12 +77,57 @@ export default function AccountStrip({ account, onUpdateClick, connection, newes
       <span className={pillIsAction(pill) ? "font-semibold text-amber-600 dark:text-amber-500" : "text-gray-500"}>
         {suffix}
       </span>
-      <button
-        onClick={onUpdateClick}
-        className="ml-auto text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-      >
-        Update balance
-      </button>
+      {/* CONNECTED OPENS A CHOICE, NOT A FORM — the same three doors
+          the phone offers, for the same reason: somebody with a bank
+          may want either, and the manual one must not become the
+          small print the day they connect. Unconnected, the button
+          is what it always was. */}
+      {connection ? (
+        <div className="ml-auto relative">
+          <button
+            onClick={() => setMenu((m) => !m)}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+            aria-haspopup="menu"
+            aria-expanded={menu}
+          >
+            Balance ▾
+          </button>
+          {menu && (
+            <>
+              {/* Click-away, behind the menu and in front of
+                  everything else. A menu you can only close with the
+                  same button is a trap on a page this dense. */}
+              <div className="fixed inset-0 z-40" onClick={() => setMenu(false)} />
+              <div role="menu" className="absolute right-0 mt-1 z-50 w-56 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-1 text-sm">
+                <button role="menuitem" disabled={busy} onClick={doRefresh}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">
+                  {busy ? "Refreshing…" : PILL_SHEET.refresh}
+                </button>
+                <button role="menuitem" onClick={() => { setMenu(false); onUpdateClick(); }}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+                  {PILL_SHEET.manual}
+                </button>
+                {canUseBankBalance(pill) && (
+                  <button role="menuitem" disabled={busy} onClick={doAdopt}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50">
+                    {PILL_SHEET.useBank}
+                  </button>
+                )}
+                <p className="px-3 py-2 text-xs text-gray-500 border-t border-gray-100 dark:border-gray-800 mt-1">
+                  {said ?? PILL_SHEET.lastSynced(fmtInstant(connection.lastSyncedAt))}
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <button
+          onClick={onUpdateClick}
+          className="ml-auto text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+        >
+          Update balance
+        </button>
+      )}
     </div>
   );
 }

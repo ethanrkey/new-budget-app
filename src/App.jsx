@@ -39,7 +39,7 @@ import SyncNotice from "./components/SyncNotice.jsx";
 import CategoryManager from "./components/CategoryManager.jsx";
 import { supabase } from "./supabase.js";
 import { isAllowlisted as plaidAllowlisted, pullBalance, readConnection } from "./shared/plaidApi.ts";
-import { shouldPullOnOpen, shouldOfferHint } from "./shared/connect.ts";
+import { shouldPullOnOpen, shouldOfferHint, refreshOutcome } from "./shared/connect.ts";
 
 export default function App() {
   // undefined = still checking for a session, null = signed out, object = signed in
@@ -395,6 +395,28 @@ export default function App() {
     setSyncNotice({ kind, stashed });
   }, []);
 
+  /**
+   * Refresh now / Use bank balance, from the Checking bar.
+   *
+   * Returns a sentence when nothing happened and null when it did —
+   * the four "declined" reasons are non-events, not errors, and the
+   * menu says so rather than going quiet or turning red.
+   */
+  const pullNow = useCallback(async (trigger) => {
+    const result = await pullBalance(supabase, trigger);
+    if (!result) return "Couldn't reach your bank just now";
+    if (!result.synced) return refreshOutcome(result.reason) ?? "Nothing to update";
+    setConnection((c) => c && { ...c, status: result.status ?? c.status, lastSyncedAt: result.lastSyncedAt ?? c.lastSyncedAt });
+    await reloadFromServer();
+    // `kept_manual` means the write was declined because today's
+    // balance is one the user typed. The rule working, reported as a
+    // fact rather than a failure.
+    return result.applied === "kept_manual"
+      ? "Your bank matched — today's balance is still the one you logged"
+      : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Re-read the server's copy with nothing to discard. Used after a
   // balance was pulled server-side: the write happened in an edge
   // function, so nothing in this tab would otherwise notice.
@@ -415,6 +437,7 @@ export default function App() {
   const [connection, setConnection] = useState(null);
   const [plaidBeta, setPlaidBeta] = useState(false);
   const [connTick, setConnTick] = useState(0);
+  const justConnected = useRef(false);
   const connectedFeatures = !!state?.settings?.connectedFeatures;
   useEffect(() => {
     let dead = false;
@@ -429,6 +452,13 @@ export default function App() {
       const row = await readConnection(supabase);
       if (dead || !row) return;
       setConnection(row);
+      // DO NOT PULL IF SETTINGS JUST DID. One connect billed two
+      // pulls on 2026-10-20: the connect flow pulled as soon as the
+      // Item existed and this effect fired three seconds later when
+      // it noticed a connection had appeared. The server now also
+      // refuses the second one atomically (plaid_claim_pull), but
+      // the right fix is to not ask twice.
+      if (justConnected.current) { justConnected.current = false; return; }
       if (!shouldPullOnOpen({ connectedFeatures }, row)) return;
       const result = await pullBalance(supabase, "open");
       if (dead || !result) return;
@@ -610,6 +640,7 @@ export default function App() {
         connection={connection}
         newestSnapshot={(state.accountSnapshots?.[account.id] ?? []).at(-1)}
         onUpdateClick={() => setUpdateBalanceOpen(true)}
+        onPull={pullNow}
       />
 
       {/* Global add — sits just above the tab navigation */}
@@ -826,7 +857,11 @@ export default function App() {
           createdAt={session?.user?.created_at}
           settings={state.settings}
           setSettings={setSettings}
-          onChanged={() => { setConnTick((t) => t + 1); void reloadFromServer(); }}
+          onChanged={(didPull) => {
+            justConnected.current = !!didPull;
+            setConnTick((t) => t + 1);
+            void reloadFromServer();
+          }}
           onSignOut={() => signOut()}
           onBack={() => { setAccountOpen(false); setSettingsOpen(true); }}
           onClose={() => setAccountOpen(false)}
