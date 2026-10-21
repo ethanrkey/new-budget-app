@@ -108,30 +108,58 @@ export interface PlaidConfig {
   baseUrl: string;
 }
 
+/** The only two environments, and the only two this file will build. */
+export const PLAID_ENVS = ["sandbox", "production"] as const;
+export type PlaidEnv = (typeof PLAID_ENVS)[number];
+export const isPlaidEnv = (v: unknown): v is PlaidEnv =>
+  typeof v === "string" && (PLAID_ENVS as readonly string[]).includes(v);
+
 /**
- * Read the three secrets, naming any that are missing.
+ * The environment a NEW connection is made in, when nothing has said
+ * otherwise. Per-user defaults live on `plaid_beta.env`; this is the
+ * fallback for a row that has none.
+ */
+export const defaultEnv = (): string => Deno.env.get("PLAID_ENV") ?? "";
+
+/**
+ * Read the secrets for ONE environment, naming any that are missing.
+ *
+ * PER ITEM, NOT PER PROJECT, since 2026-10-21. `PLAID_ENV` used to
+ * be the whole answer, which made sandbox testing and a live
+ * connection mutually exclusive on one Supabase project: flipping
+ * the secret pointed a real access token at the wrong host and every
+ * pull failed. An access token belongs to the environment it was
+ * minted in, so the environment belongs on the Item — `plaid_items.env`
+ * — and this picks the credentials to match.
+ *
+ * TWO SECRETS, ONE CLIENT ID. Plaid's client id is the same in both
+ * environments; only the secret differs. `PLAID_SECRET` stays the
+ * production one so nothing that already works has to be re-entered,
+ * and `PLAID_SECRET_SANDBOX` is the new name.
+ *
+ * ONLY THE ONE ASKED FOR IS REQUIRED. A project with no sandbox
+ * secret serves production perfectly; it fails, by name, the first
+ * time something asks for sandbox.
  *
  * THE NAMES OF SECRETS ARE NOT SECRET; their values are, and no value
  * is ever logged, returned, or put in an error message. Same shape as
  * `_shared/apple.ts` so the two read alike.
  */
-export function readConfig(): { config: PlaidConfig } | { missing: string[] } {
+export function readConfig(forEnv?: string): { config: PlaidConfig } | { missing: string[] } {
   const clientId = Deno.env.get("PLAID_CLIENT_ID") ?? "";
-  const secret = Deno.env.get("PLAID_SECRET") ?? "";
-  const env = Deno.env.get("PLAID_ENV") ?? "";
-  const missing = [
-    ...(clientId ? [] : ["PLAID_CLIENT_ID"]),
-    ...(secret ? [] : ["PLAID_SECRET"]),
-    ...(env ? [] : ["PLAID_ENV"]),
-  ];
-  if (missing.length) return { missing };
+  const env = forEnv ?? defaultEnv();
+  if (!env) return { missing: [...(clientId ? [] : ["PLAID_CLIENT_ID"]), "PLAID_ENV"] };
   // An unrecognized environment is a missing one rather than a guess:
   // defaulting to production because somebody typed "Sandbox" would
   // point sandbox credentials at real people's banks.
-  const baseUrl = env === "sandbox" ? "https://sandbox.plaid.com"
-    : env === "production" ? "https://production.plaid.com"
-    : "";
-  if (!baseUrl) return { missing: [`PLAID_ENV (got "${env}", expected sandbox or production)`] };
+  if (!isPlaidEnv(env)) {
+    return { missing: [`PLAID_ENV (got "${env}", expected sandbox or production)`] };
+  }
+  const name = env === "sandbox" ? "PLAID_SECRET_SANDBOX" : "PLAID_SECRET";
+  const secret = Deno.env.get(name) ?? "";
+  const missing = [...(clientId ? [] : ["PLAID_CLIENT_ID"]), ...(secret ? [] : [name])];
+  if (missing.length) return { missing };
+  const baseUrl = env === "sandbox" ? "https://sandbox.plaid.com" : "https://production.plaid.com";
   return { config: { clientId, secret, env, baseUrl } };
 }
 

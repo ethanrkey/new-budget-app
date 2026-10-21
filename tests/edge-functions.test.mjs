@@ -356,6 +356,70 @@ console.log("\n== is the webhook actually from Plaid ==");
   }
 }
 
+console.log("\n== one project, two Plaid environments ==");
+// PLAID_ENV was a single secret for the whole project, so sandbox
+// testing and a live connection were mutually exclusive: flipping it
+// pointed a real access token at the wrong host and every pull
+// failed. An access token belongs to the environment it was minted
+// in, so the environment belongs on the Item.
+{
+  // readConfig cannot be called here — it reads Deno.env — but its
+  // SHAPE is checkable, and the shape is the decision.
+  const shared = readFileSync(new URL("../supabase/functions/_shared/plaid.ts", import.meta.url), "utf8");
+  is("the secret name follows the environment",
+    shared.includes('env === "sandbox" ? "PLAID_SECRET_SANDBOX" : "PLAID_SECRET"'));
+  is("...and production keeps the name that already works",
+    shared.includes('"PLAID_SECRET"') && !shared.includes("PLAID_SECRET_PRODUCTION"));
+  // ONLY THE ONE ASKED FOR. A project with no sandbox secret serves
+  // production perfectly and fails, by name, the first time
+  // something asks for sandbox.
+  is("only the secret for the environment asked for is required",
+    shared.includes("...(secret ? [] : [name])"));
+  is("an unrecognized environment is refused, never guessed",
+    shared.includes('expected sandbox or production'));
+  is("PLAID_ENV is demoted to the default for a NEW connection",
+    shared.includes("export const defaultEnv"));
+
+  // Every call about an existing connection uses that Item's env.
+  for (const [who, path, needle] of [
+    ["the balance pull", "../supabase/functions/plaid-balance/index.ts", "readConfig(item.env ?? undefined)"],
+    ["disconnect", "../supabase/functions/plaid-disconnect/index.ts", "readConfig(item.env ?? undefined)"],
+    ["the removal drain", "../supabase/functions/plaid-disconnect/index.ts", "readConfig(row.env ?? undefined)"],
+    ["the exchange", "../supabase/functions/plaid-exchange/index.ts", "const conf = readConfig(env);"],
+    ["minting a Link token", "../supabase/functions/plaid-link-token/index.ts", "readConfig(env)"],
+  ]) {
+    is(`${who} uses the stored environment`, readFileSync(new URL(path, import.meta.url), "utf8").includes(needle));
+  }
+
+  const link = readFileSync(new URL("../supabase/functions/plaid-link-token/index.ts", import.meta.url), "utf8");
+  is("a new connection takes the person's own default, then the project's",
+    link.includes("existing?.env ?? beta?.env ?? defaultEnv()"));
+  is("...and the session remembers which one it was minted in",
+    link.includes("user_id: userId, env }"));
+
+  const exchange = readFileSync(new URL("../supabase/functions/plaid-exchange/index.ts", import.meta.url), "utf8");
+  is("the Item is stored with its environment", /institution_name: institutionName,\n\s+\/\/[^\n]*\n\s+env,/.test(exchange));
+  is("a queued removal carries one too, since the drain outlives the Item",
+    exchange.includes("p_env: env"));
+  // Plaid's webhook signing keys are per environment, so a cache
+  // keyed on kid alone would hand a sandbox key to a production
+  // webhook the moment both are in use.
+  is("the verification key cache is keyed by environment as well as kid",
+    exchange.includes("keyCache.get(`${env}:${keyId}`)"));
+
+  const sql = readFileSync(new URL("../supabase/plaid.sql", import.meta.url), "utf8");
+  for (const t of ["plaid_items", "plaid_link_sessions", "plaid_removals", "plaid_beta"]) {
+    is(`${t} has an env column`,
+      new RegExp(`alter table ${t}\\s+add column if not exists env text`).test(sql));
+  }
+  is("the existing rows were backfilled, not left null",
+    sql.includes("update plaid_items         set env = 'production' where env is null;"));
+  is("the removal queue takes it as an argument",
+    sql.includes("p_access_token text, p_plaid_item_id text, p_env text default 'production'"));
+  is("and account deletion carries it off the Item before the Item goes",
+    sql.includes("coalesce(it.env, 'production')"));
+}
+
 console.log("\n== a webhook is a backup, not the only way home ==");
 // 2026-10-21, production, a real bank: TD Bank completed at Plaid
 // and SESSION_FINISHED never reached us. The Item was live, the

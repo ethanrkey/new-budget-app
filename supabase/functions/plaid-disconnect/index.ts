@@ -51,12 +51,6 @@ Deno.serve(async (req) => {
   const json = responder(req);
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
-  const conf = readConfig();
-  if ("missing" in conf) {
-    console.error("[plaid-disconnect] missing secrets:", conf.missing.join(", "));
-    return json(500, { error: `not configured: ${conf.missing.join(", ")}` });
-  }
-
   let payload: { drain?: boolean } = {};
   try { payload = await req.json(); } catch { /* an empty body is a user disconnect */ }
   const admin = adminClient();
@@ -67,7 +61,7 @@ Deno.serve(async (req) => {
     const settled = new Date(Date.now() - SETTLE_MS).toISOString();
     const { data: pending } = await admin
       .from("plaid_removals")
-      .select("id, attempts")
+      .select("id, attempts, env")
       .is("removed_at", null)
       .lt("queued_at", settled)
       .or(`last_attempt_at.is.null,last_attempt_at.lt.${cutoff}`)
@@ -82,6 +76,18 @@ Deno.serve(async (req) => {
         // call /item/remove with, and nothing to retry for ever.
         await admin.from("plaid_removals")
           .update({ removed_at: new Date().toISOString(), last_error: "no secret" })
+          .eq("id", row.id);
+        continue;
+      }
+      // EACH ROW CARRIES ITS OWN ENVIRONMENT. The drain runs an hour
+      // or a month later with no Item row left to ask, and a sandbox
+      // token sent to production.plaid.com fails every retry for
+      // ever — nothing in this queue gives up.
+      const conf = readConfig(row.env ?? undefined);
+      if ("missing" in conf) {
+        failed.push(`not configured: ${conf.missing.join(", ")}`);
+        await admin.from("plaid_removals")
+          .update({ attempts: row.attempts + 1, last_attempt_at: new Date().toISOString(), last_error: "not configured" })
           .eq("id", row.id);
         continue;
       }
@@ -110,11 +116,19 @@ Deno.serve(async (req) => {
   if (!userId) return json(401, { error: "not signed in" });
 
   const { data: item } = await admin
-    .from("plaid_items").select("id, plaid_item_id").eq("user_id", userId).maybeSingle();
+    .from("plaid_items").select("id, plaid_item_id, env").eq("user_id", userId).maybeSingle();
   // Already disconnected is a success. Disconnect is the button
   // someone presses when they want it gone; "there was nothing to
   // remove" is that wish granted.
   if (!item) return json(200, { disconnected: true });
+
+  // THE ITEM'S OWN ENVIRONMENT. Read after the item, so an account
+  // with nothing connected never needs a secret at all.
+  const conf = readConfig(item.env ?? undefined);
+  if ("missing" in conf) {
+    console.error("[plaid-disconnect] missing secrets:", conf.missing.join(", "));
+    return json(500, { error: `not configured: ${conf.missing.join(", ")}` });
+  }
 
   const { data: accessToken } = await admin.rpc("plaid_read_token", { p_item_id: item.id });
 
@@ -127,7 +141,10 @@ Deno.serve(async (req) => {
       // place because Plaid was briefly unreachable would mean a
       // Disconnect button that sometimes does nothing and says it
       // worked.
-      await admin.rpc("plaid_queue_removal", { p_access_token: accessToken, p_plaid_item_id: item.plaid_item_id });
+      await admin.rpc("plaid_queue_removal", {
+        p_access_token: accessToken, p_plaid_item_id: item.plaid_item_id,
+        p_env: item.env ?? conf.config.env,
+      });
     } else {
       // Removed at Plaid, so the credential has no further use. The
       // Vault secret goes NOW rather than being orphaned by the

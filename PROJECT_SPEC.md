@@ -3669,6 +3669,56 @@ verified**: that branch reads nothing, writes nothing and calls
 nothing, and paying for a Plaid call to authenticate a request
 before throwing it away is the wrong way round.
 
+### The Plaid environment is per Item, not per project (2026-10-21)
+
+`PLAID_ENV` was one secret for the whole Supabase project, which made
+sandbox testing and a live connection **mutually exclusive**: flipping
+it pointed the owner's real TD access token at the wrong host and
+every pull would fail. An access token belongs to the environment it
+was minted in. That is a property of the Item, so it lives on the
+Item.
+
+- **`PLAID_SECRET_SANDBOX`** is the new secret. The client id is the
+  same in both environments and `PLAID_SECRET` stays the production
+  one, so nothing that already works is re-entered.
+- **`readConfig(env)`** picks the pair, and **requires only the
+  environment asked for** — a project with no sandbox secret serves
+  production perfectly and fails, by name, the first time something
+  asks for sandbox.
+- **`PLAID_ENV` is demoted** to the default environment for a NEW
+  connection when nothing else decides.
+
+Three columns, each with its own reason. `plaid_items.env` for every
+call about an existing connection. `plaid_link_sessions.env`, pinned
+at mint, so a session that outlives a change of default still
+finishes where it started. `plaid_removals.env`, because the drain
+runs an hour or a month later with no Item row left to ask — and a
+sandbox token sent to production fails every retry for ever, since
+nothing in that queue gives up. `purge_due_accounts` carries it off
+the Item before the Item goes.
+
+**Who gets which, for a new connection:** `plaid_beta.env` — the
+allowlist is already the list of who may connect at all, and "in
+which environment" is the same kind of fact, decided by hand, for
+the same ten people. Null means the project default, so an
+untouched row behaves exactly as before. The owner's real account is
+`production`; the test account is `sandbox`.
+
+**The key cache is keyed by environment as well as `kid`.** Plaid's
+webhook signing keys are per environment, so a cache on `kid` alone
+would hand a sandbox key to a production webhook the moment both
+were in use. The webhook branch also reads its session row BEFORE
+verifying, for the environment only — a database read, not a Plaid
+call, so verification still happens before anything that costs one.
+
+**Not a staging project, yet.** A second Supabase project earns its
+keep when the thing under test is the schema or the functions — a
+destructive `plaid.sql` run, a migration nobody is sure of. It
+doubles the secrets, the deploy targets and the allowlist, and the
+only thing that actually needed isolating was Plaid's environment.
+Recorded so the next person does not mistake this for a decision
+against staging; it is a decision about sequence.
+
 ### Switching to production keys — the order matters (2026-10-21)
 
 The owner is moving to production for his own checking only
@@ -3683,6 +3733,11 @@ The owner is moving to production for his own checking only
    because nothing in `plaid_removals` ever gives up. Clearing one
    by hand is `delete from plaid_removals where id = …`; not doing
    it in the first place is cheaper.
+
+   **This step is obsolete as of the section above** — the queue
+   carries its own environment now, so a sandbox removal keeps
+   working after the project default changes. Kept because it is
+   the reasoning that produced the per-Item design.
 2. `supabase secrets set PLAID_CLIENT_ID=… PLAID_SECRET=… PLAID_ENV=production`.
    **The client id is the same across environments; the secret is
    not.** Nothing needs redeploying — `readConfig()` reads the env

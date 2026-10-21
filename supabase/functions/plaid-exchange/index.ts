@@ -40,7 +40,7 @@
 // Deploy with JWT verification OFF — Plaid does not carry a Supabase
 // token:
 //   npx supabase functions deploy plaid-exchange --no-verify-jwt --project-ref <ref>
-import { PLAID_ENDPOINTS, callPlaid, readConfig } from "../_shared/plaid.ts";
+import { PLAID_ENDPOINTS, callPlaid, defaultEnv, readConfig } from "../_shared/plaid.ts";
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
 import { preflight } from "../_shared/cors.ts";
 import { type PlaidJwk, verifyPlaidWebhook } from "../_shared/webhookVerify.ts";
@@ -109,12 +109,6 @@ Deno.serve(async (req) => {
   const json = responder(req);
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
-  const conf = readConfig();
-  if ("missing" in conf) {
-    console.error("[plaid-exchange] missing secrets:", conf.missing.join(", "));
-    return json(500, { error: `not configured: ${conf.missing.join(", ")}` });
-  }
-
   // THE RAW TEXT, READ ONCE. The signature is over these exact
   // bytes, so a JSON.parse followed by a re-stringify would be a
   // different string the moment Plaid puts a space where we would
@@ -128,6 +122,12 @@ Deno.serve(async (req) => {
   let userId: string | null = null;
   let publicToken = "";
   let trigger = "connect";
+  // THE ENVIRONMENT THIS SESSION WAS MINTED IN, filled in by
+  // whichever branch below finds the session. An access token works
+  // against exactly one host, and the Item is about to be created
+  // with one — so the credentials have to match the session, not the
+  // project. See supabase/plaid.sql §5b.
+  let env = defaultEnv();
 
   if (typeof payload.public_token === "string" && payload.public_token) {
     // ---- the web path: an authenticated client hands us the token ----
@@ -135,6 +135,15 @@ Deno.serve(async (req) => {
     if (!userId) return json(401, { error: "not signed in" });
     if (!await isAllowlisted(admin, userId)) return json(403, { error: "not available" });
     publicToken = payload.public_token;
+    // The session this token came from knows which environment it
+    // was minted in; the allowlist row is the fallback.
+    const { data: open } = await admin
+      .from("plaid_link_sessions").select("env")
+      .eq("user_id", userId).is("used_at", null)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const { data: beta } = await admin
+      .from("plaid_beta").select("env").eq("user_id", userId).maybeSingle();
+    env = open?.env ?? beta?.env ?? env;
     // THE WEB PATH CLOSES ITS SESSION AT THE END, not here.
     //
     // It closed it here first, so that the ten-minute Trial-slot
@@ -177,23 +186,52 @@ Deno.serve(async (req) => {
     // true forever.
     trigger = "webhook";
 
-    // IS IT FROM PLAID. Before the table lookup, before the
-    // link/token/get, before anything that costs a call — which is
-    // the whole reason the check is worth having, given a forgery
-    // could never plant data in the first place.
+    // THE SESSION FIRST, FOR ITS ENVIRONMENT ONLY — a database read,
+    // not a Plaid call, and the verification below still happens
+    // before anything that costs one. It has to come first because
+    // Plaid's webhook signing keys are per environment, so choosing
+    // the wrong credentials would fail an honest webhook. The one
+    // thing it gives away is whether a link_token exists, to someone
+    // who already guessed 52 random characters.
+    const linkToken = String(payload.link_token ?? "");
+    if (!linkToken) return json(200, { ignored: "no link_token" });
+    const { data: session } = await admin
+      .from("plaid_link_sessions")
+      .select("user_id, env")
+      .eq("link_token", linkToken)
+      .is("used_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+    // A link_token we did not mint, or one already spent. 200, because
+    // a webhook that gets a 4xx is retried, and there is nothing here
+    // worth retrying.
+    if (!session) return json(200, { ignored: "unknown session" });
+    userId = session.user_id;
+    env = session.env ?? env;
+
+    const vconf = readConfig(env);
+    if ("missing" in vconf) {
+      console.error("[plaid-exchange] missing secrets:", vconf.missing.join(", "));
+      return json(500, { error: `not configured: ${vconf.missing.join(", ")}` });
+    }
+
+    // IS IT FROM PLAID. Before the link/token/get, before anything
+    // that costs a call — which is the whole reason the check is
+    // worth having, given a forgery could never plant data in the
+    // first place.
     const verified = await verifyPlaidWebhook({
       header: req.headers.get("Plaid-Verification"),
       body: raw,
       fetchKey: async (keyId) => {
-        const cached = keyCache.get(keyId);
+        const cached = keyCache.get(`${env}:${keyId}`);
         if (cached) return cached;
         const got = await callPlaid<{ key?: PlaidJwk }>(
-          conf.config, PLAID_ENDPOINTS.webhookVerificationKeyGet,
+          vconf.config, PLAID_ENDPOINTS.webhookVerificationKeyGet,
           { key_id: keyId }, { admin, userId: null, trigger: "verify" },
         );
         if ("error" in got || !got.data.key) return null;
         // Live keys only — see the cache's note.
-        if (got.data.key.expired_at == null) keyCache.set(keyId, got.data.key);
+        if (got.data.key.expired_at == null) keyCache.set(`${env}:${keyId}`, got.data.key);
         return got.data.key;
       },
     });
@@ -208,25 +246,10 @@ Deno.serve(async (req) => {
       return json(401, { error: "unverified", reason: verified.reason });
     }
     await noteInbound(admin, String(payload.webhook_code), "verified", String(payload.webhook_type ?? ""));
-    const linkToken = String(payload.link_token ?? "");
-    if (!linkToken) return json(200, { ignored: "no link_token" });
-
-    const { data: session } = await admin
-      .from("plaid_link_sessions")
-      .select("user_id")
-      .eq("link_token", linkToken)
-      .is("used_at", null)
-      .gt("expires_at", new Date().toISOString())
-      .maybeSingle();
-    // A link_token we did not mint, or one already spent. 200, because
-    // a webhook that gets a 4xx is retried, and there is nothing here
-    // worth retrying.
-    if (!session) return json(200, { ignored: "unknown session" });
-    userId = session.user_id;
 
     // THE ANSWER COMES FROM PLAID, NOT FROM THE REQUEST. This is the
     // line the paragraph at the top of the file is about.
-    const got = await callPlaid<LinkSession>(conf.config, PLAID_ENDPOINTS.linkTokenGet,
+    const got = await callPlaid<LinkSession>(vconf.config, PLAID_ENDPOINTS.linkTokenGet,
       { link_token: linkToken }, { admin, userId, trigger });
     if ("error" in got) return json(200, { ignored: "link/token/get failed", code: got.error.code });
 
@@ -273,7 +296,7 @@ Deno.serve(async (req) => {
 
     const { data: open } = await admin
       .from("plaid_link_sessions")
-      .select("link_token")
+      .select("link_token, env")
       .eq("user_id", userId)
       .is("used_at", null)
       .gt("expires_at", new Date().toISOString())
@@ -283,8 +306,14 @@ Deno.serve(async (req) => {
     // Nothing unfinished is the ordinary answer, not an error: it is
     // what the client sees every time the webhook DID arrive first.
     if (!open) return json(200, { ok: false, code: "NO_OPEN_SESSION" });
+    env = open.env ?? env;
 
-    const got = await callPlaid<LinkSession>(conf.config, PLAID_ENDPOINTS.linkTokenGet,
+    const rconf = readConfig(env);
+    if ("missing" in rconf) {
+      console.error("[plaid-exchange] missing secrets:", rconf.missing.join(", "));
+      return json(500, { error: `not configured: ${rconf.missing.join(", ")}` });
+    }
+    const got = await callPlaid<LinkSession>(rconf.config, PLAID_ENDPOINTS.linkTokenGet,
       { link_token: open.link_token }, { admin, userId, trigger });
     if ("error" in got) return json(200, { ok: false, code: got.error.code });
 
@@ -314,7 +343,18 @@ Deno.serve(async (req) => {
     return json(200, { ignored: String(payload.webhook_code ?? "no public_token") });
   }
 
-  // ---- from here the two paths are the same ----
+  // ---- from here the paths are the same ----
+  //
+  // AND THE CREDENTIALS COME FROM THE SESSION'S ENVIRONMENT, which
+  // each branch above has now established. Reading PLAID_ENV here
+  // would mint an Item against one host and store it as belonging
+  // to another.
+  const conf = readConfig(env);
+  if ("missing" in conf) {
+    console.error("[plaid-exchange] missing secrets:", conf.missing.join(", "));
+    return json(500, { error: `not configured: ${conf.missing.join(", ")}` });
+  }
+
   const exchanged = await callPlaid<Exchanged>(conf.config, PLAID_ENDPOINTS.itemPublicTokenExchange,
     { public_token: publicToken }, { admin, userId, trigger });
   // A HANDLED FAILURE IS A 200, not a 502. supabase-js turns any
@@ -334,7 +374,7 @@ Deno.serve(async (req) => {
   // drain removes this Item within the hour. Canceled on success.
   // See plaid_queue_removal in supabase/plaid.sql.
   const { data: safetyNet } = await admin.rpc("plaid_queue_removal", {
-    p_access_token: access_token, p_plaid_item_id: item_id,
+    p_access_token: access_token, p_plaid_item_id: item_id, p_env: env,
   });
   const standDown = async () => {
     if (safetyNet != null) await admin.rpc("plaid_cancel_removal", { p_id: safetyNet });
@@ -355,6 +395,8 @@ Deno.serve(async (req) => {
   const { data: row, error: insertError } = await admin.from("plaid_items").insert({
     user_id: userId, plaid_item_id: item_id,
     institution_id: institutionId, institution_name: institutionName,
+    // STORED WITH THE ITEM, because its token works nowhere else.
+    env,
   }).select("id").single();
 
   if (insertError || !row) {

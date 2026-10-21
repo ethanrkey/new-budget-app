@@ -15,7 +15,9 @@
 // Deploy:
 //   npx supabase functions deploy plaid-link-token --project-ref <ref>
 // JWT verification stays ON: this mints a credential tied to a user.
-import { PRODUCTS, ACCOUNT_FILTERS, PLAID_ENDPOINTS, callPlaid, readConfig } from "../_shared/plaid.ts";
+import {
+  PRODUCTS, ACCOUNT_FILTERS, PLAID_ENDPOINTS, callPlaid, defaultEnv, readConfig,
+} from "../_shared/plaid.ts";
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
 import { preflight } from "../_shared/cors.ts";
 
@@ -31,12 +33,6 @@ Deno.serve(async (req) => {
   const json = responder(req);
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
-  const conf = readConfig();
-  if ("missing" in conf) {
-    console.error("[plaid-link-token] missing secrets:", conf.missing.join(", "));
-    return json(500, { error: `not configured: ${conf.missing.join(", ")}` });
-  }
-
   const userId = await callerId(req);
   if (!userId) return json(401, { error: "not signed in" });
 
@@ -47,7 +43,23 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { /* an empty body means web */ }
 
   const { data: existing } = await admin
-    .from("plaid_items").select("id, status").eq("user_id", userId).maybeSingle();
+    .from("plaid_items").select("id, status, env").eq("user_id", userId).maybeSingle();
+
+  // WHICH ENVIRONMENT. An existing Item's own, because an access
+  // token only works against the host it was minted for; otherwise
+  // this person's default from the allowlist, and failing that the
+  // project's. A per-user default is how one project serves a real
+  // connection and a sandbox test account at the same time — see
+  // readConfig and supabase/plaid.sql §5b.
+  const { data: beta } = await admin
+    .from("plaid_beta").select("env").eq("user_id", userId).maybeSingle();
+  const env = existing?.env ?? beta?.env ?? defaultEnv();
+
+  const conf = readConfig(env);
+  if ("missing" in conf) {
+    console.error("[plaid-link-token] missing secrets:", conf.missing.join(", "));
+    return json(500, { error: `not configured: ${conf.missing.join(", ")}` });
+  }
 
   // ---- UPDATE MODE: THE SAME ITEM, NOT A NEW ONE ----
   //
@@ -142,7 +154,10 @@ Deno.serve(async (req) => {
   // RECORDED BEFORE IT IS RETURNED, because the webhook will arrive
   // knowing only the link_token and this row is the only thing that
   // can say whose it is.
-  await admin.from("plaid_link_sessions").insert({ link_token: created.data.link_token, user_id: userId });
+  // PINNED AT MINT. A session that outlives a change of default
+  // still finishes in the environment it started in.
+  await admin.from("plaid_link_sessions")
+    .insert({ link_token: created.data.link_token, user_id: userId, env });
 
   return json(200, {
     ok: true,

@@ -72,12 +72,6 @@ Deno.serve(async (req) => {
   const json = responder(req);
   if (req.method !== "POST") return json(405, { error: "POST only" });
 
-  const conf = readConfig();
-  if ("missing" in conf) {
-    console.error("[plaid-balance] missing secrets:", conf.missing.join(", "));
-    return json(500, { error: `not configured: ${conf.missing.join(", ")}` });
-  }
-
   const userId = await callerId(req);
   if (!userId) return json(401, { error: "not signed in" });
 
@@ -101,13 +95,24 @@ Deno.serve(async (req) => {
 
   const { data: item } = await admin
     .from("plaid_items")
-    .select("id, status, last_synced_at, plaid_item_id, time_zone")
+    .select("id, status, last_synced_at, plaid_item_id, time_zone, env")
     .eq("user_id", userId)
     .maybeSingle();
   // Not connected is not an error. Manual entry is the product; this
   // endpoint being asked by someone with no bank is an ordinary thing
   // for a client to do on open.
   if (!item) return json(200, { connected: false });
+
+  // THE ITEM'S OWN ENVIRONMENT, never the project's. Its access
+  // token was minted against one host and works against no other;
+  // reading PLAID_ENV here is what made a sandbox test and a live
+  // bank mutually exclusive. Read AFTER the item, so an account with
+  // no connection never needs a secret at all.
+  const conf = readConfig(item.env ?? undefined);
+  if ("missing" in conf) {
+    console.error("[plaid-balance] missing secrets:", conf.missing.join(", "));
+    return json(500, { error: `not configured: ${conf.missing.join(", ")}` });
+  }
 
   // REMEMBERED, not just used. The pulls in the roadmap that no
   // client initiates have nobody to ask, so the last zone a real

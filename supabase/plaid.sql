@@ -465,7 +465,10 @@ create unique index if not exists plaid_removals_one_pending
 -- Dropped first because CREATE OR REPLACE cannot change a function's
 -- return type, and this one returned void until 2026-10-20.
 drop function if exists plaid_queue_removal(text, text);
-create or replace function plaid_queue_removal(p_access_token text, p_plaid_item_id text)
+drop function if exists plaid_queue_removal(text, text, text);
+create or replace function plaid_queue_removal(
+  p_access_token text, p_plaid_item_id text, p_env text default 'production'
+)
 returns bigint as $$
 declare
   sid uuid;
@@ -475,7 +478,12 @@ begin
     p_access_token,
     'plaid_removal_' || gen_random_uuid()::text,
     'Plaid access token awaiting /item/remove.');
-  insert into plaid_removals (secret_id, plaid_item_id) values (sid, p_plaid_item_id)
+  -- THE ENVIRONMENT TRAVELS WITH THE TOKEN. The drain runs an hour
+  -- later, long after plaid_items is gone, and a sandbox token sent
+  -- to production.plaid.com fails every retry forever — nothing in
+  -- this queue gives up.
+  insert into plaid_removals (secret_id, plaid_item_id, env)
+    values (sid, p_plaid_item_id, p_env)
     returning id into rid;
   return rid;
 end;
@@ -517,7 +525,7 @@ $$ language plpgsql security definer set search_path = public, vault;
 revoke all on function plaid_store_token(uuid, text)        from public, anon, authenticated;
 revoke all on function plaid_read_token(uuid)               from public, anon, authenticated;
 revoke all on function plaid_forget_token(uuid)             from public, anon, authenticated;
-revoke all on function plaid_queue_removal(text, text)      from public, anon, authenticated;
+revoke all on function plaid_queue_removal(text, text, text) from public, anon, authenticated;
 revoke all on function plaid_cancel_removal(bigint)        from public, anon, authenticated;
 revoke all on function plaid_read_removal_token(bigint)     from public, anon, authenticated;
 revoke all on function plaid_finish_removal(bigint)         from public, anon, authenticated;
@@ -591,6 +599,51 @@ create index if not exists plaid_item_creations_by_env
   on plaid_item_creations (env, created_at desc);
 
 -- ---------------------------------------------------------------------------
+-- 5b. THE ENVIRONMENT, PER ITEM — not per project (2026-10-21).
+--
+-- `PLAID_ENV` was a single secret for the whole project, which made
+-- sandbox testing and a live connection mutually exclusive: flipping
+-- it pointed a real access token at the wrong host and every pull
+-- failed. An access token BELONGS TO the environment it was minted
+-- in. It is a property of the Item, so it lives on the Item, and
+-- `readConfig(env)` picks the matching secret.
+--
+-- Three places need it, each for its own reason:
+--   plaid_items          -- every call about an existing connection
+--   plaid_link_sessions  -- pinned at mint, so a session that outlives
+--                           a change of default still finishes in the
+--                           environment it started in
+--   plaid_removals       -- the drain runs long after the Item's row
+--                           is gone and must still pick credentials
+--
+-- BACKFILLED TO 'production', which is correct and not a guess: the
+-- only Item that existed when this ran was the owner's real TD Bank
+-- connection, and every sandbox Item had already been removed.
+alter table plaid_items         add column if not exists env text;
+alter table plaid_link_sessions add column if not exists env text;
+alter table plaid_removals      add column if not exists env text;
+
+update plaid_items         set env = 'production' where env is null;
+update plaid_link_sessions set env = 'production' where env is null;
+update plaid_removals      set env = 'production' where env is null;
+
+-- WHICH ENVIRONMENT A PERSON'S NEXT CONNECTION IS MADE IN.
+--
+-- On the allowlist, because the allowlist is already the list of who
+-- may connect at all — "and in which environment" is the same kind
+-- of fact, decided by hand, for the same ten people. A null means
+-- the project default (PLAID_ENV), so existing rows keep behaving
+-- exactly as they did.
+alter table plaid_beta add column if not exists env text;
+
+-- The test account connects against sandbox; everyone else against
+-- production. Set by hand, one row at a time:
+--   update plaid_beta set env = 'sandbox'
+--    where user_id = (select id from auth.users where email = '<test address>');
+--   update plaid_beta set env = 'production'
+--    where user_id = (select id from auth.users where email = '<real address>');
+
+-- ---------------------------------------------------------------------------
 -- 6. THE BETA ALLOWLIST.
 --
 -- Trial is ten connections, so the toggle is not offered to everyone.
@@ -647,8 +700,10 @@ begin
     -- foreign key to auth.users, so the ciphertext survives the
     -- cascade that takes plaid_tokens away — which is the only
     -- reason the drain can still call /item/remove afterwards.
-    insert into plaid_removals (secret_id, plaid_item_id)
-    select tok.secret_id, it.plaid_item_id
+    -- AND ITS ENVIRONMENT, carried off the Item before the Item
+    -- goes: the drain runs an hour later with no row left to ask.
+    insert into plaid_removals (secret_id, plaid_item_id, env)
+    select tok.secret_id, it.plaid_item_id, coalesce(it.env, 'production')
       from plaid_tokens tok
       join plaid_items it on it.id = tok.item_id
       join due on it.user_id = due.user_id
