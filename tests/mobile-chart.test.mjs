@@ -9,6 +9,7 @@
 // centered text, and the BOX was clamped rather than the text, so at
 // the right edge the text ended up half a box-width short of its
 // point — a constant gap that only vanished near the middle.
+import { readFileSync } from "node:fs";
 import { readoutLeft } from "../mobile/lib/readout.ts";
 
 let failures = 0, checks = 0;
@@ -20,6 +21,7 @@ function eq(label, got, want) {
   else console.log(`PASS  ${label}`);
 }
 const is = (label, v) => eq(label, !!v, true);
+const not = (label, v) => eq(label, !!v, false);
 
 console.log("== the sparkline readout's position ==");
 
@@ -106,6 +108,32 @@ const first = PAD, last = W - PAD;
   // side — a seven-figure balance on a narrow phone.
   eq("a readout wider than the plot is pinned left", readoutLeft(last, 400, W, PAD), PAD);
   eq("...and exactly as wide as the plot, too", readoutLeft(last, W - 2 * PAD, W, PAD), PAD);
+}
+
+// ---- AND THE SPARKLINE ACTUALLY ASKS IT ------------------------------
+//
+// Everything above tests the function. None of it tests that the chart
+// calls it, and the chart is where the bug was: the readout lived in a
+// fixed 150pt box with centered text, and the BOX was clamped. The
+// mutation audit put that arithmetic back on 2026-10-21 —
+// `Math.max(0, Math.min(width - 150, sx - 75))` — and every check in
+// this file still passed, because every one of them calls readoutLeft
+// directly.
+//
+// ASSERTED AGAINST THE SOURCE rather than through a render, and that
+// is a real limit worth naming: the position depends on a measured
+// text width, and in the jest renderer nothing has a layout, so
+// `readoutW` is 0 and the readout sits in the same place whatever the
+// clamp does. A device pass is what found this the first time.
+{
+  const chart = readFileSync(new URL("../mobile/lib/charts.tsx", import.meta.url), "utf8");
+  is("the sparkline positions its readout with readoutLeft",
+    chart.includes("readoutLeft(sx, readoutW, width, PAD)"));
+  // THE OLD SHAPE, BY ITS NUMBERS. A fixed box width or a half-box
+  // offset anywhere in this file means the clamp has grown a second
+  // home, which is how the first one survived a rewrite.
+  not("...and no fixed-width box is clamped anywhere in it",
+    /width - 150|sx - 75|- 150,|150pt box clamp/.test(chart));
 }
 
 console.log(failures ? `\n${failures} FAILED (${checks} checks)` : `\nALL PASS (${checks} checks)`);

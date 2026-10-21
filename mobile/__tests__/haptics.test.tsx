@@ -1,5 +1,6 @@
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import { Alert } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { haptics, authCalls } from "./setup";
 import HistoryList from "../components/HistoryList";
 import SignIn from "../components/SignIn";
@@ -32,7 +33,11 @@ const { Chrome } = require("../components/Chrome");
 const { Text } = require("react-native");
 const session = { user: { id: "u1", email: "a@b.com", app_metadata: { providers: ["email"] }, created_at: "2026-10-01" } };
 
-beforeEach(() => {
+beforeEach(async () => {
+  // AND THE DEVICE PREFS, because setup writes `setupDismissedBy`
+  // when it finishes — so the second test in this file to open the
+  // wizard would not be met by it at all.
+  await AsyncStorage.clear();
   haptics.calls.length = 0;
   mockSaved.length = 0;
   authCalls.verify.length = 0;
@@ -118,4 +123,28 @@ test("setup is felt step by step, and the write itself is silent", async () => {
     "success",         // Finish
     "impact:medium",   // Go to my budget
   ]);
+});
+
+test("going back is the quietest tick in the vocabulary, not the one Continue uses", async () => {
+  // BACK IS THE ONE MOVE IN THIS FLOW THAT UNDOES. Continue is
+  // `impact:light` and Back is `selection`, which is a different
+  // thing under the finger — a flow where both feel the same stops
+  // telling you which one you hit, and the one you most want to be
+  // sure of is the one that threw a step away.
+  //
+  // Nothing held this. The mutation audit on 2026-10-21 changed Back
+  // to `feel.light()` and all 215 renderer tests passed, because the
+  // sequence above never presses it.
+  await render(
+    <StateProvider userId="u1">
+      <Chrome session={session}><Text>THE APP</Text></Chrome>
+    </StateProvider>
+  );
+  await screen.findByText("What's the balance of your primary checking account?");
+  await userEvent.type(await screen.findByLabelText("Current balance"), "4000");
+  haptics.calls.length = 0;
+  await userEvent.press(screen.getByLabelText("Continue"));
+  await userEvent.press(await screen.findByLabelText("Back"));
+
+  expect(haptics.calls).toEqual(["impact:light", "selection"]);
 });

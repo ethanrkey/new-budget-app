@@ -497,6 +497,15 @@ console.log("\n== a webhook is a backup, not the only way home ==");
   is("...and on a cold start, which neither of those covers",
     chrome.includes("!connectionNow()") && chrome.includes("recoverLink("));
   is("the web asks too, for a tab closed mid-exchange", web.includes("recoverLink(supabase)"));
+  // AND THEN RE-READS, which asking does not imply. Recovery stores
+  // the Item and pulls a balance server-side, so a page that only
+  // asks is a page still showing the figures from before the
+  // connection existed — "Use bank balance did nothing until I
+  // refreshed", one screen over. SCOPED TO THE RECOVER BLOCK: this
+  // file calls `refresh()` five times, and a whole-file match passes
+  // happily while this branch is the one that drops it.
+  const recovered = web.slice(web.indexOf("const found = await recoverLink"), web.indexOf("onChanged?.(true)"));
+  is("...and the web re-reads the connection once recovery succeeds", recovered.includes("await refresh();"));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

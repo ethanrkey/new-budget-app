@@ -22,7 +22,7 @@
 // uncommitted work would simply not be in the thing being tested,
 // and the run would describe a codebase that does not exist.
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -110,6 +110,21 @@ const killedBy = new Map();
 for (const r of results) for (const [t, n] of r.killedBy) killedBy.set(t, (killedBy.get(t) ?? 0) + n);
 
 console.log(`\n${ran} mutations ran across ${shards} shards in ${mins} minutes.`);
+
+// THE MERGED RESULT, ON DISK. An hour of compute used to live only
+// in a terminal: when the last step of the 2026-10-21 run turned out
+// to be reading the wrong stream, the kill counts behind it were
+// already gone and the only way back to them was to run the whole
+// thing again. Written before anything is printed, so a crash in the
+// reporting below cannot take the data with it.
+const RESULT = resolve(REPO, ".mutation-run.json");
+writeFileSync(RESULT, JSON.stringify({
+  head, shards, mins, ran,
+  survived, capped: capped.map((r) => ({ shard: r.shard, before: r.capped })),
+  broken: results.filter((r) => r.broken).map((r) => r.shard),
+  killedBy: [...killedBy],
+}, null, 1));
+console.log(`merged result written to ${RESULT}`);
 for (const r of results.filter((x) => x.broken)) console.log(`\nSHARD ${r.shard} PRODUCED NO RESULT:\n${r.broken}`);
 if (capped.length) {
   console.log(`\n${capped.length} SHARD(S) HIT THE CAP — the run is NOT complete:`);
@@ -125,13 +140,24 @@ survived.forEach((l) => console.log(`  ${l}`));
 // each shard sees a sixth of the kills and would accuse most of the
 // suite of being decoration.
 if (complete()) {
-  const { out } = await (async () => {
-    const { execFileSync: run } = await import("node:child_process");
-    return { out: run("npx", ["jest", "--verbose"], { cwd: resolve(REPO, "mobile"), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 }) };
-  })().catch((e) => ({ out: String(e.stdout ?? "") }));
-  const all = [...out.matchAll(/[✓✕] (.+?)(?: \(\d+ ms\))?$/gm)].map((m) => m[1].trim());
+  // `2>&1`, AND THAT IS THE WHOLE POINT. jest prints its per-test
+  // lines to STDERR, and this read only stdout — so the list of
+  // tests came back empty, nothing was missing from an empty list,
+  // and the run's last word was "All 0 renderer tests die to at
+  // least one mutation". A check with no input must never be able
+  // to print a pass, so the count is asserted below as well.
+  const out = execFileSync("sh", ["-c", "npx jest --verbose 2>&1"],
+    { cwd: resolve(REPO, "mobile"), encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  // LINE-ANCHORED, for the reason mutate.mjs is: one of this
+  // project's own tests is CALLED "the ✕ removes a bill row, and the
+  // rest close up", so an unanchored match invents a test name out
+  // of the middle of a passing one.
+  const all = [...out.matchAll(/^\s*[✓✕] (.+?)(?: \(\d+ ms\))?$/gm)].map((m) => m[1].trim());
   const never = all.filter((t) => !killedBy.has(t));
-  console.log(never.length
+  if (all.length === 0) {
+    console.log("\nCOULD NOT READ THE TEST LIST — jest printed no per-test lines.");
+    console.log('"Which tests can nothing kill" is unanswered, not answered yes.');
+  } else console.log(never.length
     ? `\nNO MUTATION KILLED THESE — each is unverified until one is written:\n  ${never.join("\n  ")}`
     : `\nAll ${all.length} renderer tests die to at least one mutation.`);
 } else {

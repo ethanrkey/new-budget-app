@@ -299,6 +299,22 @@ const plaidWrite = (snap, amount) => {
   is("...and the moment it was typed, for the web's bar", typeof typed.loggedAt === "string");
   eq("the anchor is the typed number", primaryAccount(st).balance, 250);
 
+  // AND THE SAME ON A DAY WITH NOTHING IN IT YET, which is the
+  // branch the tests above never reached. `upsertSnapshotByDate` has
+  // two arms — replace today's row, or append a new one — and only
+  // the replacing arm was covered, so dropping `source: "manual"`
+  // from the append went unnoticed by all 1,916 checks. A first log
+  // of the day is the COMMON case, and an unsourced row reads as
+  // `coalesce(data->>'source','manual')` server-side but as nothing
+  // at all to the bar, which then has no reason not to say synced.
+  const FRESH = "2026-10-22";
+  const st2 = updateAccountBalance(st, "checking", 480, FRESH);
+  const first = st2.accountSnapshots.checking.find((x) => x.date === FRESH);
+  eq("a first log of the day is appended, not merged", st2.accountSnapshots.checking.length, 2);
+  eq("...and it too says a PERSON wrote it", first.source, "manual");
+  is("...and carries the moment it was typed", typeof first.loggedAt === "string");
+  eq("...so the next pull declines it as well", plaidWrite(first, 100).applied, "kept_manual");
+
   // 3. The forced stale pull runs and must decline.
   const after = plaidWrite(typed, 100);
   eq("the pull is declined, because the row is the user's", after.applied, "kept_manual");

@@ -68,3 +68,4 @@ demo-account.json
 # The mutation runner's crash journal — what a killed run has to put back.
 # Never committed: it holds a copy of a source file mid-mutation.
 mobile/.mutate-restore.json
+.mutation-run.json

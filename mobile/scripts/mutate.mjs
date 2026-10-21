@@ -755,8 +755,15 @@ const MUTATIONS = [
   ["the readout is positioned by its left edge, not its center",
    "../mobile/lib/readout.ts", "  return Math.max(min, Math.min(max, pointX - textW / 2));",
    "  return Math.max(min, Math.min(max, pointX));"],
+  // THE CLAMPS IN THE OTHER ORDER, which is the bug the function is
+  // shaped to avoid. This entry used to delete an `if (max <= min)`
+  // guard above the return and always survived — correctly, because
+  // `Math.max(min, ...)` made that guard unreachable. The line that
+  // actually holds the readout on screen is this one.
   ["a readout wider than the plot inverts the clamp and goes off the other side",
-   "../mobile/lib/readout.ts", "  if (max <= min) return min;", "  // mutated"],
+   "../mobile/lib/readout.ts",
+   "  return Math.max(min, Math.min(max, pointX - textW / 2));",
+   "  return Math.min(max, Math.max(min, pointX - textW / 2));"],
   ["the readout goes back to a fixed box the text floats inside",
    "lib/charts.tsx", "  const left = readoutLeft(sx, readoutW, width, PAD);",
    "  const left = Math.max(0, Math.min(width - 150, sx - 75));"],

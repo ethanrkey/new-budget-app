@@ -121,6 +121,22 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
   eq("two rows on one day leave one end-of-day balance", c.balance, 1200);
   eq("...and both are in its detail", c.rows.length, 2);
   is("...and the day is marked busy", c.busy);
+
+  // AND SO IS A DAY WITH ONE ROW ON IT, which is the ordinary case
+  // and the one nothing checked: every busy assertion in this file
+  // used a day holding two, so `rows.length > 0` could become
+  // `> 1` and only the rare day would still be marked. A single
+  // bill is exactly when someone wants the dot.
+  const solo = computeLedger(upsertItem(busy, {
+    id: "c", name: "Phone", amount: 40, category: "bill",
+    cadence: null, date: "2026-10-22",
+  }), HORIZON);
+  const one = buildCalendarMonth({
+    key: "2026-10", rows: solo.rows, startBalance: 1000,
+    anchor: ANCHOR, today: TODAY, horizon: HORIZON,
+  }).cells.find((x) => x && x.day === 22);
+  eq("...and the 22nd holds exactly one", one.rows.length, 1);
+  is("a day holding a single row is busy too", one.busy);
 }
 
 // ---- the three dates are three dates -------------------------------
@@ -225,6 +241,36 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
   eq("a ledger that starts later still includes today's month", future[0], "2026-10");
   eq("...and runs to the last row without a gap", future.length, 6);
   eq("...ending where the rows do", future[future.length - 1], "2027-03");
+
+  // THE MIRROR OF THAT CASE, and the one it does not cover: an
+  // anchor BEFORE today. `future` has its anchor in 2027, so the
+  // list starts at today's month whether the function takes the
+  // earlier of the two or just takes today — the test passed either
+  // way. A forecast that began two months ago has to be reachable.
+  const began = calendarMonths(
+    [{ date: "2026-08-20", balance: 1, id: "x", name: "n", amount: 1, direction: "out", category: "bill" }],
+    "2026-08-01", TODAY,
+  );
+  eq("a ledger that began before today starts there, not at today", began[0], "2026-08");
+
+  // WITH NOTHING IN THOSE MONTHS, which is what makes the anchor the
+  // only thing that can say so. The case above has a row in August,
+  // so the loop over rows reaches back there on its own and the
+  // first line's `min` could be dropped without the test noticing.
+  // An account anchored in August whose first row is in October is
+  // the shape that needs the anchor read.
+  const quiet = calendarMonths(
+    [{ date: "2026-10-20", balance: 1, id: "x", name: "n", amount: 1, direction: "out", category: "bill" }],
+    "2026-08-01", TODAY,
+  );
+  eq("...even with no rows or readings in them", quiet[0], "2026-08");
+
+  // AND THE OTHER END. `last` starts at today's month and is only
+  // ever pushed forward by a row or a reading, so a ledger lying
+  // entirely in the past still has to run up to now — otherwise
+  // "opening the calendar selects today" lands outside the list.
+  eq("...and still runs to today's month", began[began.length - 1], TODAY.slice(0, 7));
+  eq("...contiguously", began, ["2026-08", "2026-09", "2026-10"]);
 
   eq("paging crosses a year end", addMonthKey("2026-12", 1), "2027-01");
   eq("...and a year start", addMonthKey("2027-01", -1), "2026-12");

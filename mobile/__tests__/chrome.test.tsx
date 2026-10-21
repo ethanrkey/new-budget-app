@@ -149,6 +149,29 @@ test("...and the tour comes up once, after the FIRST setup", async () => {
   expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
 });
 
+test("...but someone who SKIPPED setup still gets the tour when they finish it", async () => {
+  // THE TWO FLAGS ARE NOT THE SAME FLAG, and this is the only state
+  // that can tell them apart. Skip writes `hasSeenOnboarding` and
+  // nothing else, so an account that skipped has seen the app but
+  // never the tour. Reading `hasSeenOnboarding` here instead of
+  // `hasSeenTour` — which is what the mutation audit tried on
+  // 2026-10-21, and nothing noticed — means this person finishes
+  // setup and is never walked round the app at all.
+  //
+  // Everywhere else the two move together, which is exactly why the
+  // wrong one survives: the first setup has neither, a re-run from
+  // Settings has both.
+  mockLoaded.state = { ...seen, settings: { ...seen.settings, hasSeenTour: false } };
+  await mount();
+  await userEvent.press(await screen.findByLabelText("Settings, about and export"));
+  await userEvent.press(await screen.findByLabelText("Set up your budget"));
+
+  await finishSetup();
+
+  expect(await screen.findByText(TOUR_STOPS[0]!.title)).toBeOnTheScreen();
+  mockLoaded.state = blank;
+});
+
 test("A NEW ACCOUNT ON A USED PHONE still gets setup, and then the tour", async () => {
   // THE BUG, reported from the owner's phone on 2026-10-17: two
   // brand-new accounts (+kbtest23, +kbtest84) landed straight on the

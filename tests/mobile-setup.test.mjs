@@ -22,7 +22,10 @@ import {
 import {
   dismissedBy, withDismissalBy, withoutDismissalBy, DISMISSAL_CAP,
 } from "../mobile/lib/dismissal.ts";
+import { readFileSync } from "node:fs";
 import { SETUP_COPY } from "../src/content/setup.ts";
+import { SPENDING_COPY } from "../src/content/spending.ts";
+import { LOG_BALANCE_TITLE } from "../src/content/logBalance.ts";
 import { TOUR_STOPS } from "../src/content/tour.ts";
 
 let failures = 0, checks = 0;
@@ -275,6 +278,13 @@ eq("the bills step says what a monthly cost is, and gives the example last",
   + "Set the day each one is due, and check 'This bill varies' for bills that change month to month (e.g. electric).");
 eq("the contributions step asks what you want, not what you do",
   SETUP_COPY.contributions.title, "Want to put in money regularly?");
+// NAMES THE THREE THINGS. "What else do you track?" is a question you
+// can only answer if you already know what the step is for — the three
+// words below the fold were doing the title's work. Pinned because the
+// one-line edit that fixed it had nothing holding it in place.
+eq("the accounts step names what it is asking for",
+  SETUP_COPY.accounts.title,
+  "What investments, savings accounts, and debts do you want to track?");
 
 console.log("\n== the tour's words ==");
 const stopFor = (tab) => TOUR_STOPS.find((t) => t.tab === tab);
@@ -290,6 +300,36 @@ eq("the Budget card", stopFor("budget").body,
 eq("the Spending card", stopFor("spending").body,
   "For bills that move \u2014 groceries, electric \u2014 log what you actually spent and this is "
   + "where you can compare what you had planned on spending vs what actually was spent.");
+// THE DASHBOARD CARD, which nothing held. "on one screen" went out on
+// the owner's edit and could have come back on any rewrite of this
+// file; so could the sentence that says the numbers are logged rather
+// than projected, which is the one claim on the card that is about
+// trust rather than about layout.
+eq("the Dashboard card", stopFor("dashboard").body,
+  "Everything you have and everything you owe: checking, savings, investments and debt. "
+  + "Nothing here is projected \u2014 it's what's true today, built only from balances you've logged. "
+  + "Log them again whenever and over time the Dashboard screen will show you how these balances "
+  + "have been trending.");
+
+console.log("\n== the spending caption, which both clients read ==");
+// One claim about what the panel IS. It used to be three, two of them
+// about what it is not, and it was written out twice — so the owner's
+// replacement had to land in two files and nothing checked either.
+eq("the caption says what the panel shows, not what it leaves out",
+  SPENDING_COPY.caption("Oct 1", "Oct 31"),
+  "Projected spending based on the transactions you've entered from Oct 1 \u2013 Oct 31.");
+not("...and makes no claim about what is excluded",
+  /not what you've logged|Income is excluded/.test(SPENDING_COPY.caption("a", "b")));
+
+console.log("\n== the balance sheet names its account ==");
+// "Log a balance" says what the sheet does and not what it is about,
+// over a form that could belong to any of five cards. Both clients
+// read this one function so that the question is asked once.
+eq("the title carries the account's name", LOG_BALANCE_TITLE("Vanguard"),
+  "Log the current balance of Vanguard");
+is("...and the phone's sheet uses it rather than a literal",
+  readFileSync(new URL("../mobile/app/(tabs)/dashboard.tsx", import.meta.url), "utf8")
+    .includes("title={LOG_BALANCE_TITLE("));
 
 // A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a
 // bad edit truncated tests/signin.test.mjs to its header on 2026-10-14

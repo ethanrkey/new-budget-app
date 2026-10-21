@@ -1,4 +1,5 @@
 import { act, render, screen, userEvent } from "@testing-library/react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Alert } from "react-native";
 import { pickerProps } from "./setup";
 import { normalize } from "../../src/engine/stateShape.ts";
@@ -255,6 +256,45 @@ describe("closing the transaction form", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0]!.title).toBe("Discard changes?");
     restore();
+  });
+});
+
+describe("whose guide it is", () => {
+  // DISMISSAL IS PER ACCOUNT, ON THIS DEVICE. It was a bare boolean
+  // until 2026-10-17, and the bug a tester hit was two new accounts
+  // on one phone: the first put the guide away and the second was
+  // never offered it. The fix keyed it by user id; nothing mounted
+  // held the fix in place, and the mutation audit on 2026-10-21 put
+  // `prefs.firstRunDismissedBy.length > 0` back with all 215
+  // renderer tests still passing.
+  // PUT BACK AFTERWARDS. AsyncStorage is one store for the whole
+  // file, so a dismissal written here hides the guide from the test
+  // after it — which is the same device-wide confusion this block is
+  // about, one layer down.
+  afterEach(async () => { await AsyncStorage.clear(); });
+
+  const freshAccount = () => {
+    const store = require("../lib/store");
+    store.loadState.mockResolvedValueOnce(normalize({
+      ...mockState,
+      settings: { ...mockState.settings, hasSeenTour: false, askedAboutIncome: false },
+    }));
+  };
+
+  test("someone else's dismissal on this phone does not hide it", async () => {
+    await AsyncStorage.setItem("budget-app-prefs-v1",
+      JSON.stringify({ firstRunDismissedBy: ["a-different-account"] }));
+    freshAccount();
+    await openLedger();
+    expect(screen.getByText("Start here")).toBeOnTheScreen();
+  });
+
+  test("...and this account's own dismissal does", async () => {
+    await AsyncStorage.setItem("budget-app-prefs-v1",
+      JSON.stringify({ firstRunDismissedBy: ["a-different-account", "u1"] }));
+    freshAccount();
+    await openLedger();
+    expect(screen.queryByText("Start here")).toBeNull();
   });
 });
 

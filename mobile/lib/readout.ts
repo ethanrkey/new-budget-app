@@ -36,11 +36,20 @@
 export function readoutLeft(pointX: number, textW: number, width: number, pad: number): number {
   const min = pad;
   const max = width - pad - textW;
-  // A readout wider than the plot cannot be clamped into it. Pin it to
-  // the left rather than letting min/max invert, which would otherwise
-  // return `max` and push it off the other side — the failure would be
-  // a readout half off the screen on a narrow phone with a seven-figure
-  // balance, which is the case nobody tries.
-  if (max <= min) return min;
+  // THE ORDER OF THE TWO CLAMPS IS THE WHOLE SAFETY. A readout wider
+  // than the plot makes `max` smaller than `min`, and the two
+  // orderings disagree exactly there: `max(min, min(max, x))` pins it
+  // to the left edge, while `min(max, max(min, x))` returns `max` and
+  // pushes it off the other side — a readout half off the screen on a
+  // narrow phone with a seven-figure balance, which is the case
+  // nobody tries.
+  //
+  // This used to be spelled out as an `if (max <= min) return min;`
+  // above the return. The mutation audit found that line surviving
+  // every one of 1,900 checks, and the reason was not a missing test:
+  // `max(min, ...)` already floors the answer at `min`, so the branch
+  // could never change an answer. A guard that cannot fire is a claim
+  // the code does not keep, and it hid which line was really doing
+  // the work.
   return Math.max(min, Math.min(max, pointX - textW / 2));
 }

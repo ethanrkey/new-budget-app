@@ -178,6 +178,14 @@ test("with no Keychain it still works, rather than taking the app down", async (
   load();
   await store.setItem(KEY, "plain");
   expect(await store.getItem(KEY)).toBe("plain");
+  // AND AGAIN, which is the read that catches it. One read passes
+  // even with the no-Keychain branch deleted from `getItem`: the
+  // call falls through to the legacy-migration path at the bottom,
+  // which returns the value — and then deletes the AsyncStorage copy
+  // it just migrated back into AsyncStorage. The session is there
+  // the first time and gone the second, so every launch on a
+  // platform without a Keychain signs the user out.
+  expect(await store.getItem(KEY)).toBe("plain");
   expect(mockKeychain.size).toBe(0);
   await store.removeItem(KEY);
   expect(await store.getItem(KEY)).toBeNull();
