@@ -51,6 +51,15 @@ for (let i = 1; i <= shards; i++) {
   // the real tree runs, which is also the point.
   symlinkSync(resolve(REPO, "node_modules"), resolve(dir, "node_modules"));
   symlinkSync(resolve(REPO, "mobile/node_modules"), resolve(dir, "mobile/node_modules"));
+  // AND .env.local, WHICH IS GITIGNORED AND SO NOT IN A WORKTREE.
+  // The browser drives read one line out of it — the Supabase origin
+  // to intercept — and without it scripts/fixtureApp.mjs throws
+  // before Chrome opens. On 2026-10-21 that killed two of four
+  // shards inside the first hour, each reported as a broken harness,
+  // which it was. SYMLINKED rather than copied: one copy of a file
+  // holding a service role key is the only acceptable number.
+  const env = resolve(REPO, ".env.local");
+  if (existsSync(env)) symlinkSync(env, resolve(dir, ".env.local"));
   dirs.push(dir);
 }
 
@@ -72,11 +81,28 @@ const results = await Promise.all(dirs.map((dir, idx) => new Promise((done) => {
   p.on("close", (code) => {
     const m = /^SHARD-RESULT (.+)$/m.exec(out);
     console.log(`  [shard ${label}] finished, exit ${code}`);
-    done(m ? JSON.parse(m[1]) : { shard: label, ran: 0, survived: [], capped: null, killedBy: [], broken: out.slice(-800) });
+    if (m) return done(JSON.parse(m[1]));
+    // NO RESULT LINE MEANS THE SHARD STOPPED EARLY — and what it
+    // managed before that is still true. The first version threw it
+    // away, so a run that printed ten survivors live ended by
+    // reporting four: the six from the three shards that died were
+    // simply dropped. Salvaged from the shard's own output here, and
+    // the shard is STILL marked broken, because a partial shard must
+    // not make the run look complete.
+    const lines = [...out.matchAll(/^(SURVIVED|killed) +\d*\s*(.+)$/gm)];
+    done({
+      shard: label,
+      ran: lines.length,
+      survived: lines.filter((x) => x[1] === "SURVIVED").map((x) => x[2].trim()),
+      capped: null, killedBy: [], broken: out.slice(-800),
+    });
   });
 })));
 
 const mins = Math.round((Date.now() - started) / 60000);
+// Hoisted, because the survivor count is worded differently when the
+// run did not finish: four out of a partial run is not four.
+const complete = () => !capped.length && !results.some((r) => r.broken);
 const ran = results.reduce((n, r) => n + r.ran, 0);
 const survived = results.flatMap((r) => r.survived);
 const capped = results.filter((r) => r.capped);
@@ -89,15 +115,16 @@ if (capped.length) {
   console.log(`\n${capped.length} SHARD(S) HIT THE CAP — the run is NOT complete:`);
   for (const r of capped) console.log(`  shard ${r.shard} stopped before: ${r.capped}`);
 }
-console.log(survived.length ? `\n${survived.length} MUTATION(S) SURVIVED:` : "\nEvery mutation that ran was caught.");
+console.log(survived.length
+  ? `\n${survived.length} MUTATION(S) SURVIVED${complete() ? "" : " — of the ones that ran"}:`
+  : "\nEvery mutation that ran was caught.");
 survived.forEach((l) => console.log(`  ${l}`));
 
 // THE SECOND QUESTION, and only a complete run may answer it: which
 // tests nothing can kill. Answered here rather than per shard —
 // each shard sees a sixth of the kills and would accuse most of the
 // suite of being decoration.
-const complete = !capped.length && !results.some((r) => r.broken);
-if (complete) {
+if (complete()) {
   const { out } = await (async () => {
     const { execFileSync: run } = await import("node:child_process");
     return { out: run("npx", ["jest", "--verbose"], { cwd: resolve(REPO, "mobile"), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 }) };
@@ -113,4 +140,4 @@ if (complete) {
 
 for (const dir of dirs) { try { git("worktree", "remove", "--force", dir); } catch { /* leave it for a look */ } }
 rmSync(SHEDS, { recursive: true, force: true });
-process.exit(survived.length === 0 && complete ? 0 : 1);
+process.exit(survived.length === 0 && complete() ? 0 : 1);

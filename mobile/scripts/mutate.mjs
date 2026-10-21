@@ -1680,9 +1680,14 @@ const REPO_ROOT = resolve(fileURLToPath(import.meta.url), "../../..");
  * had never once been run by this script. Three audits reported
  * "every mutation caught" on that basis.
  *
- * So a crash now STOPS THE RUN and says so. A broken harness is not
- * evidence of anything, and the one thing it must never do is look
- * like evidence.
+ * So a crash is never silently counted. It is HANDED BACK UNDECIDED,
+ * as `crashed`, and decideCrash below settles it — because the first
+ * version of this rule stopped the run on every crash, and that threw
+ * away the common case. On 2026-10-21 three of four shards died that
+ * way within the hour: two on a drive that could not find .env.local
+ * (genuinely broken) and one on `setup.test.mjs` throwing a TypeError
+ * because THE MUTATION had made the rule it reads undefined. The
+ * second is a suite noticing, which is the whole point of the run.
  */
 async function runNodeHarness() {
   for (const suite of NODE_SUITES) {
@@ -1690,9 +1695,30 @@ async function runNodeHarness() {
     if (ok) continue;
     const failed = [...out.matchAll(/^FAIL  (.+)$/gm)].map((m) => `${suite}: ${m[1].trim()}`);
     if (failed.length) return { failed };
-    return { broken: suite, out };
+    return { failed: [], crashed: { cmd: `node ${suite}`, name: suite, out } };
   }
   return { failed: [] };
+}
+
+/**
+ * Was that crash the mutation's doing, or is the harness broken?
+ *
+ * THE DISCRIMINATOR IS A SECOND RUN WITH THE MUTATION PUT BACK, which
+ * is the only thing that can tell them apart — the output of a crash
+ * looks identical either way. Clean pass means the suite only dies
+ * when the code is wrong, which is a kill, and it is named for the
+ * throw rather than for a check, because no check was reached.
+ * Still dead means the harness is broken and nothing it says is
+ * evidence, so the run stops.
+ *
+ * CALLED AFTER THE RESTORE, never inside the try: re-running with the
+ * mutation still applied would just reproduce the crash.
+ */
+async function decideCrash(crashed) {
+  const { ok } = await capture(`${crashed.cmd} 2>&1`, REPO_ROOT);
+  if (!ok) return { failed: [], broken: crashed.name, out: crashed.out };
+  const threw = /^\s*(?:[A-Za-z]*Error|Assertion\w*):.*$/m.exec(crashed.out);
+  return { failed: [`${crashed.name}: crashed — ${threw ? threw[0].trim() : "no check reached"}`] };
 }
 
 // THE DIRTY LIST: every file this process has written, mapped to what
@@ -1853,6 +1879,19 @@ export async function main(argv = process.argv) {
     }
   }
 
+  // ONE MUTATION BY NAME, for proving a single thing. `--only <text>`
+  // keeps the entries whose label contains it — written the day the
+  // crash rule changed, because "does this one mutation now score as
+  // a kill" took a full shard to answer and should take two minutes.
+  const onlyArg = argv.indexOf("--only");
+  if (onlyArg !== -1) {
+    const needle = (argv[onlyArg + 1] ?? "").toLowerCase();
+    if (!needle) { console.log("--only needs some text from a mutation's label"); return 1; }
+    selected = selected.filter(([label]) => label.toLowerCase().includes(needle));
+    if (selected.length === 0) { console.log(`No mutation's label contains "${needle}".`); return 1; }
+    console.log(`--only "${needle}": ${selected.length} mutation(s)\n`);
+  }
+
   // ---- SHARDING, for the release run ----
   //
   // `--shard 2/6` keeps every sixth mutation starting at the second.
@@ -1923,18 +1962,21 @@ export async function main(argv = process.argv) {
       // named per mutation rather than run for all 400 of them, and
       // only when the cheap suites found nothing: a mutation
       // already caught does not need a second opinion.
-      if (drive && !harness.broken && harness.failed.length === 0) {
+      if (drive && !harness.crashed && harness.failed.length === 0) {
         const jestFound = /^\s*✕ /m.test(out);
         if (!jestFound) {
           const { out: d, ok } = await capture(`node scripts/${drive}.mjs 2>&1`, REPO_ROOT);
           const bad = [...d.matchAll(/^FAIL  (.+)$/gm)].map((m) => `${drive}: ${m[1].trim()}`);
           if (bad.length) harness = { failed: bad };
-          else if (!ok) harness = { broken: `scripts/${drive}.mjs`, out: d };
+          else if (!ok) harness = { failed: [], crashed: { cmd: `node scripts/${drive}.mjs`, name: `scripts/${drive}.mjs`, out: d } };
         }
       }
     } finally {
       restoreAll(`"${label}"`, false);
     }
+    // WITH THE FILE PUT BACK, and only now, a crash can be told from
+    // a broken harness. See decideCrash.
+    if (harness.crashed) harness = await decideCrash(harness.crashed);
     if (harness.broken) {
       console.log(`\n${harness.broken} DID NOT RUN — it exited non-zero without naming a failed check.`);
       console.log("That is a broken harness, not a caught mutation, and counting it as one");
