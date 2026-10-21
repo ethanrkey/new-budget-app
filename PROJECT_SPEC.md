@@ -2738,6 +2738,62 @@ proof queries 3a, 3b and 4 all pass, he is in `plaid_beta`, and
 functions are deployed to `kjcvtpmorftjyejjskwm`, with
 `--no-verify-jwt` on `plaid-exchange` alone.
 
+**AND THEN IT FAILED ON A TYPO, the same evening.** With CORS fixed,
+Link ran all the way through — First Platypus Bank, only the checking
+account offered, and **Plaid's own screen said "contact details and
+account and balance info" with no routing numbers, so `identity` did
+exactly what it was chosen for.** Then
+`/item/public_token_exchange` came back `NOT_FOUND`.
+
+**`NOT_FOUND` FROM PLAID MEANS THE URL DOES NOT EXIST, not the token.**
+The endpoint is `/item/public_token/exchange` — a slash, not an
+underscore. The error reads as "that token is gone" and sent the
+first guesses at token expiry, hosted-vs-web mismatch and the
+environment, none of which were wrong with anything.
+
+**THE CHECK THAT SETTLES IT NEEDS NO CREDENTIALS**, and is now the
+rule before adding an endpoint: Plaid answers an unauthenticated POST
+with `MISSING_FIELDS` when the path exists and `NOT_FOUND` when it
+does not.
+
+    curl -s -X POST -H 'Content-Type: application/json' -d '{}' \
+      https://sandbox.plaid.com/item/public_token/exchange
+
+All seven paths were run through that loop on 2026-10-20; six were
+right and one was not. `tests/edge-functions.test.mjs` now pins all
+seven as literals, the same way the dictated copy is pinned, because
+they are external facts no local test can derive.
+
+**A HANDLED FAILURE IS A 200 NOW, not a 502.** supabase-js turns any
+non-2xx into a thrown `FunctionsHttpError` whose body the caller has
+to go digging for — so the page said "502" while the one useful word,
+`NOT_FOUND`, sat in the function log. Every function answers
+`{ ok: false, code }` with a 200 when the request was understood and
+did not work, and both clients now show the code. The people who can
+see this feature at all are on an allowlist the owner wrote, so a
+bare code on screen costs nothing and saves a round trip through two
+log viewers.
+
+**NO ORPHANED ITEM, EVER — THE NET GOES UP BEFORE IT IS NEEDED.**
+The window: the exchange succeeds, so Plaid now believes this app has
+standing access to somebody's bank, and then the Item row fails to
+store, or the function is killed between the two. The access token
+existed only in that function's memory. Plaid has a live Item, we
+have no record of it, and nothing will ever remove it — nobody can
+clean up what nobody knows about.
+
+Per-branch cleanup does not close it, which is what the first version
+did: every `if (error)` can queue a removal and **a process that dies
+has no branch to be in.** So `plaid-exchange` queues the removal one
+line after the exchange returns, before anything else is attempted,
+and CANCELS it once the Item and token are stored. If the happy path
+does not reach its last line for any reason, the drain removes the
+Item within the hour.
+
+The drain leaves rows alone for ten minutes (`SETTLE_MS`) so it
+cannot remove a connection the user made a second ago and watch it
+vanish in front of them.
+
 **CORS — THE WEB'S FIRST CONNECT FAILED ON IT, 2026-10-20.** Every
 edge function in this project had been written for the phone, which
 is not a browser and sends no Origin, so no preflight had ever had to

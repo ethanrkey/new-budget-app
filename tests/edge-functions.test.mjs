@@ -1,6 +1,13 @@
-// CORS on the browser-reachable edge functions.
+// The edge functions' contract with the outside world: the CORS the
+// browser needs, and the Plaid paths that have to be spelled right.
 //
-//   node tests/cors.test.mjs     (runs in `npm test`, so in CI)
+//   node tests/edge-functions.test.mjs     (runs in `npm test`, so in CI)
+//
+// Neither half can be checked by running the functions — they are
+// Deno, and one of them talks to a bank. Both halves are checked by
+// importing the pure modules the functions import, and by reading
+// the handlers as text for the wiring. Two real bugs reached a user
+// through this gap on 2026-10-20 and both are pinned below.
 //
 // WHY THIS FILE EXISTS. Every edge function in this project was
 // written for the phone, which is not a browser and sends no Origin,
@@ -16,6 +23,7 @@
 // having its behavior described by a test that cannot run it.
 import { readFileSync } from "node:fs";
 import { ALLOWED_ORIGINS, corsHeaders, preflight } from "../supabase/functions/_shared/cors.ts";
+import { PLAID_ENDPOINTS, PRODUCTS } from "../supabase/functions/_shared/plaid.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -118,6 +126,45 @@ for (const fn of BROWSER_CALLED) {
   // followed by a response without them is still a blocked call.
   is(`${fn} binds its responses to the request's origin`, src.includes("const json = responder(req);"));
   not(`${fn} has no origin-less json left`, /\bjson = \(status/.test(src));
+}
+
+console.log("\n== the Plaid endpoint paths ==");
+
+// WRITTEN OUT, because one of them was wrong for a day and nothing
+// here could have known. `/item/public_token_exchange` (underscore)
+// is not an endpoint; `/item/public_token/exchange` (slash) is.
+// Plaid answers the first with NOT_FOUND, which reads as "that token
+// does not exist" and means "that URL does not exist" — so the first
+// sandbox connection failed AFTER Link succeeded, pointing at the
+// wrong half of the system.
+//
+// These are external facts, like the Supabase dashboard settings in
+// §5a, so the test pins the literal strings: a change has to be
+// deliberate. Each was verified against sandbox on 2026-10-20 with
+// an unauthenticated POST — Plaid answers MISSING_FIELDS when an
+// endpoint exists and NOT_FOUND when it does not, which needs no
+// credentials and is the check to re-run before adding one.
+{
+  const paths = Object.values(PLAID_ENDPOINTS).sort();
+  eq("exactly these seven, spelled exactly this way", paths, [
+    "/accounts/balance/get",
+    "/institutions/get_by_id",
+    "/item/get",
+    "/item/public_token/exchange",
+    "/item/remove",
+    "/link/token/create",
+    "/link/token/get",
+  ]);
+  // The one that bit, called out by name so a future edit has to
+  // walk past it.
+  eq("the exchange path has a SLASH before 'exchange', not an underscore",
+    PLAID_ENDPOINTS.itemPublicTokenExchange, "/item/public_token/exchange");
+  // And the products array, which decides what Plaid's own consent
+  // screen lists. Identity drops the routing-number scope that Auth
+  // would add; confirmed on the real screen 2026-10-20.
+  eq("one product, and it is identity", [...PRODUCTS], ["identity"]);
+  not("the Transactions product is never requested", PRODUCTS.includes("transactions"));
+  not("...nor Auth", PRODUCTS.includes("auth"));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

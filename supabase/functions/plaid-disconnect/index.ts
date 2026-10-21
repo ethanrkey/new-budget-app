@@ -26,6 +26,21 @@ import { preflight } from "../_shared/cors.ts";
 /** An hour between attempts on the same row, same as the Apple drain. */
 const RETRY_AFTER_MS = 3600_000;
 
+/**
+ * How long a queued removal is left alone before the drain touches it.
+ *
+ * THE RACE THIS CLOSES: `plaid-exchange` queues a removal the instant
+ * the exchange succeeds and cancels it a second later once the Item
+ * is stored (see plaid_queue_removal). A drain that ran inside that
+ * second would remove a connection the user had just successfully
+ * made, and the user would watch it appear and vanish.
+ *
+ * Ten minutes is far longer than that window and far shorter than
+ * the hourly schedule, so nothing waits meaningfully longer to be
+ * cleaned up.
+ */
+const SETTLE_MS = 10 * 60_000;
+
 Deno.serve(async (req) => {
   // BEFORE THE METHOD CHECK, not after: a preflight is an OPTIONS
   // request, so a handler that answers 405 first kills the real POST
@@ -49,10 +64,12 @@ Deno.serve(async (req) => {
   // ---- the queue, for accounts that no longer have an owner ----
   if (payload.drain) {
     const cutoff = new Date(Date.now() - RETRY_AFTER_MS).toISOString();
+    const settled = new Date(Date.now() - SETTLE_MS).toISOString();
     const { data: pending } = await admin
       .from("plaid_removals")
       .select("id, attempts")
       .is("removed_at", null)
+      .lt("queued_at", settled)
       .or(`last_attempt_at.is.null,last_attempt_at.lt.${cutoff}`)
       .limit(50);
 

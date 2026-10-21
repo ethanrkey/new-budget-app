@@ -124,7 +124,7 @@ export default function Connected() {
     if ("error" in started || !started.hostedUrl) {
       setBusy(false);
       feel.failure();
-      Alert.alert("Couldn't start", "We couldn't reach the connection service. Try again in a moment.");
+      Alert.alert("Couldn't start", `We couldn't reach the connection service (${"error" in started ? started.error : "no link"}). Try again in a moment.`);
       return;
     }
     // The browser closing tells us nothing — Hosted Link reports its

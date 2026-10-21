@@ -100,8 +100,16 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     const handler = Plaid.create({
       token: started.linkToken,
       onSuccess: async (publicToken) => {
-        const ok = await finishLink(supabase, publicToken);
-        if (!ok) { setBusy(false); setSaid("Your bank connected, but we couldn't finish saving it. Try again."); return; }
+        const done = await finishLink(supabase, publicToken);
+        if (!done.ok) {
+          setBusy(false);
+          // THE CODE IS SHOWN, not swallowed. This is allowlist-only
+          // and the people who see it are people the owner knows; a
+          // bare "try again" cost one round trip through the browser
+          // console and the function logs to learn one word.
+          setSaid(`Your bank connected, but we couldn't finish saving it (${done.code}). Nothing was kept — try again.`);
+          return;
+        }
         // PULL STRAIGHT AWAY. Connecting and then seeing nothing
         // happen is the worst possible first impression of a feature
         // whose entire promise is that the number keeps itself up to

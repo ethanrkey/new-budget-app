@@ -405,20 +405,55 @@ alter table plaid_removals drop column if exists access_token;
 create unique index if not exists plaid_removals_one_pending
   on plaid_removals (secret_id) where removed_at is null;
 
--- A token on its way to the removal queue, for the one case where
--- there is no Item row to hang it off: an exchange that succeeded at
--- Plaid and could not be recorded here.
+-- THE SAFETY NET, and it is armed BEFORE it is needed.
+--
+-- The window this closes: `/item/public_token/exchange` succeeds, so
+-- Plaid now believes this app has standing access to somebody's
+-- bank — and then the Item row, or the token row, fails to store, or
+-- the function is killed between the two. The access token existed
+-- only in that function's memory. Plaid has a live Item; we have no
+-- record of it; nothing will ever remove it. That is the one state
+-- this feature must never reach in production, because nobody can
+-- clean up what nobody knows about.
+--
+-- Per-branch cleanup does not close it, which is what the first
+-- version tried: every `if (error)` can queue a removal and a
+-- process that dies has no branch to be in.
+--
+-- So the removal is queued the instant the exchange returns, before
+-- anything else is attempted, and CANCELED once the Item and token
+-- are safely stored. Nothing to remember, nothing to catch: if the
+-- happy path does not reach its last line, the drain removes the
+-- Item within the hour. Returns the row id, which is what canceling
+-- it needs.
+--
+-- Dropped first because CREATE OR REPLACE cannot change a function's
+-- return type, and this one returned void until 2026-10-20.
+drop function if exists plaid_queue_removal(text, text);
 create or replace function plaid_queue_removal(p_access_token text, p_plaid_item_id text)
-returns void as $$
+returns bigint as $$
 declare
   sid uuid;
+  rid bigint;
 begin
   sid := vault.create_secret(
     p_access_token,
     'plaid_removal_' || gen_random_uuid()::text,
     'Plaid access token awaiting /item/remove.');
   insert into plaid_removals (secret_id, plaid_item_id) values (sid, p_plaid_item_id)
-    on conflict (secret_id) where removed_at is null do nothing;
+    returning id into rid;
+  return rid;
+end;
+$$ language plpgsql security definer set search_path = public, vault;
+
+-- Stand the net down. Called once the Item and its token are stored,
+-- which is the moment an orphan stops being possible.
+create or replace function plaid_cancel_removal(p_id bigint)
+returns void as $$
+begin
+  delete from vault.secrets
+   where id = (select secret_id from plaid_removals where id = p_id and removed_at is null);
+  delete from plaid_removals where id = p_id and removed_at is null;
 end;
 $$ language plpgsql security definer set search_path = public, vault;
 
@@ -448,6 +483,7 @@ revoke all on function plaid_store_token(uuid, text)        from public, anon, a
 revoke all on function plaid_read_token(uuid)               from public, anon, authenticated;
 revoke all on function plaid_forget_token(uuid)             from public, anon, authenticated;
 revoke all on function plaid_queue_removal(text, text)      from public, anon, authenticated;
+revoke all on function plaid_cancel_removal(bigint)        from public, anon, authenticated;
 revoke all on function plaid_read_removal_token(bigint)     from public, anon, authenticated;
 revoke all on function plaid_finish_removal(bigint)         from public, anon, authenticated;
 

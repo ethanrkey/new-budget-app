@@ -83,13 +83,24 @@ export async function readConnection(sb: {
 }
 
 /** Mint a Link token. `hosted` asks for the Hosted Link URL (iOS). */
+/**
+ * THE FUNCTIONS ANSWER 200 WITH `{ ok: false, code }` RATHER THAN A
+ * 5xx when a request was understood and did not work.
+ *
+ * supabase-js turns any non-2xx into a thrown `FunctionsHttpError`
+ * whose body the caller has to go digging for, so the useful part —
+ * Plaid's own error code — arrives as "something exploded". The
+ * first sandbox connection failed with `NOT_FOUND` and all the page
+ * could say was 502. `error` here is now a transport failure and
+ * nothing else; everything the server meant to say is in `code`.
+ */
 export async function startLink(sb: FunctionCaller, hosted: boolean): Promise<
   { linkToken: string; hostedUrl: string | null } | { error: string }
 > {
   const { data, error } = await sb.functions.invoke("plaid-link-token", { body: { hosted } });
-  if (error || !data) return { error: "could not start" };
-  const d = data as { link_token?: string; hosted_link_url?: string | null };
-  if (!d.link_token) return { error: "could not start" };
+  if (error || !data) return { error: "unreachable" };
+  const d = data as { ok?: boolean; code?: string; link_token?: string; hosted_link_url?: string | null };
+  if (d.ok === false || !d.link_token) return { error: d.code ?? "unknown" };
   return { linkToken: d.link_token, hostedUrl: d.hosted_link_url ?? null };
 }
 
@@ -101,9 +112,13 @@ export async function startLink(sb: FunctionCaller, hosted: boolean): Promise<
  * frontend callback — so the phone has nothing to hand back and
  * re-reads its connection instead.
  */
-export async function finishLink(sb: FunctionCaller, publicToken: string): Promise<boolean> {
+export async function finishLink(sb: FunctionCaller, publicToken: string): Promise<
+  { ok: true } | { ok: false; code: string }
+> {
   const { data, error } = await sb.functions.invoke("plaid-exchange", { body: { public_token: publicToken } });
-  return !error && !!(data as { connected?: boolean })?.connected;
+  if (error || !data) return { ok: false, code: "unreachable" };
+  const d = data as { ok?: boolean; code?: string; connected?: boolean };
+  return d.connected ? { ok: true } : { ok: false, code: d.code ?? "unknown" };
 }
 
 /** Ask the server whether a pull is due, and let it decide. */

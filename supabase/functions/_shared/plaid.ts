@@ -8,10 +8,32 @@
 // and must not be added — see PRODUCTS for why one of them is named in
 // the Link token anyway.
 
+/**
+ * EVERY PATH HERE WAS VERIFIED AGAINST SANDBOX ON 2026-10-20, and
+ * one of them was wrong until that day.
+ *
+ * `/item/public_token_exchange` (underscore) is not an endpoint;
+ * the real one is `/item/public_token/exchange` (slash). Plaid
+ * answers the first with `NOT_FOUND`, which reads like "that token
+ * does not exist" and is actually "that URL does not exist" — so
+ * the first sandbox connection failed AFTER Link had succeeded,
+ * with an error message pointing at the wrong half of the system.
+ *
+ * HOW TO CHECK ONE WITHOUT CREDENTIALS, which is why this is now a
+ * fact rather than a memory: Plaid answers an unauthenticated POST
+ * with `MISSING_FIELDS` when the endpoint exists and `NOT_FOUND`
+ * when it does not. No keys, no account, no risk:
+ *
+ *   curl -s -X POST -H 'Content-Type: application/json' -d '{}' \
+ *     https://sandbox.plaid.com/item/public_token/exchange
+ *
+ * All seven below answer MISSING_FIELDS. Re-run that loop before
+ * adding an endpoint, not after it fails in front of someone.
+ */
 export const PLAID_ENDPOINTS = {
   linkTokenCreate: "/link/token/create",
   linkTokenGet: "/link/token/get",
-  itemPublicTokenExchange: "/item/public_token_exchange",
+  itemPublicTokenExchange: "/item/public_token/exchange",
   accountsBalanceGet: "/accounts/balance/get",
   itemGet: "/item/get",
   institutionsGetById: "/institutions/get_by_id",

@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
   // user who already has a bank is not walked through Link to be told
   // no at the end of it.
   const { data: existing } = await admin.from("plaid_items").select("id").eq("user_id", userId).maybeSingle();
-  if (existing) return json(409, { error: "already connected" });
+  if (existing) return json(200, { ok: false, code: "ALREADY_CONNECTED" });
 
   let body: { hosted?: boolean } = {};
   try { body = await req.json(); } catch { /* an empty body means web */ }
@@ -72,7 +72,10 @@ Deno.serve(async (req) => {
   }, { admin, userId, trigger: "connect" });
 
   if ("error" in created) {
-    return json(502, { error: "could not start", code: created.error.code });
+    // 200 with a code, not a 502 — see plaid-exchange for why: a
+    // non-2xx becomes a thrown FunctionsHttpError and the page loses
+    // the one piece of information worth having.
+    return json(200, { ok: false, code: created.error.code });
   }
 
   // RECORDED BEFORE IT IS RETURNED, because the webhook will arrive
@@ -81,6 +84,7 @@ Deno.serve(async (req) => {
   await admin.from("plaid_link_sessions").insert({ link_token: created.data.link_token, user_id: userId });
 
   return json(200, {
+    ok: true,
     link_token: created.data.link_token,
     hosted_link_url: created.data.hosted_link_url ?? null,
     expiration: created.data.expiration,

@@ -120,9 +120,28 @@ Deno.serve(async (req) => {
   // ---- from here the two paths are the same ----
   const exchanged = await callPlaid<Exchanged>(conf.config, PLAID_ENDPOINTS.itemPublicTokenExchange,
     { public_token: publicToken }, { admin, userId, trigger });
-  if ("error" in exchanged) return json(502, { error: "could not finish", code: exchanged.error.code });
+  // A HANDLED FAILURE IS A 200, not a 502. supabase-js turns any
+  // non-2xx into a thrown FunctionsHttpError whose body the caller
+  // has to go digging for, so a 502 reaches the page as "something
+  // exploded" with the actual Plaid code buried. This is a request
+  // that was understood and did not work, and the client needs the
+  // code more than it needs the status.
+  if ("error" in exchanged) return json(200, { ok: false, code: exchanged.error.code });
 
   const { access_token, item_id } = exchanged.data;
+
+  // THE NET GOES UP HERE, one line after Plaid starts believing we
+  // have access to someone's bank and before anything else can fail.
+  // If the rest of this function does not reach its last line — a
+  // failed insert, a timeout, a process killed mid-flight — the
+  // drain removes this Item within the hour. Canceled on success.
+  // See plaid_queue_removal in supabase/plaid.sql.
+  const { data: safetyNet } = await admin.rpc("plaid_queue_removal", {
+    p_access_token: access_token, p_plaid_item_id: item_id,
+  });
+  const standDown = async () => {
+    if (safetyNet != null) await admin.rpc("plaid_cancel_removal", { p_id: safetyNet });
+  };
 
   // The bank's name, for Settings. Two calls, both read-only, both
   // about the institution rather than the person.
@@ -142,13 +161,10 @@ Deno.serve(async (req) => {
   }).select("id").single();
 
   if (insertError || !row) {
-    // WE HOLD AN ITEM WE CANNOT RECORD, which is the one state that
-    // must not be allowed to persist: Plaid believes this app has
-    // access to someone's bank and this app has no idea. Queue it for
-    // removal rather than dropping the token on the floor.
+    // The net is already up, so this branch does not have to clean
+    // anything up — it just has to not stand it down.
     console.error("[plaid-exchange] could not store item:", insertError?.message);
-    await admin.rpc("plaid_queue_removal", { p_access_token: access_token, p_plaid_item_id: item_id });
-    return json(500, { error: "could not store the connection" });
+    return json(200, { ok: false, code: "STORE_FAILED" });
   }
 
   // THROUGH THE VAULT, never as a column. `plaid_store_token`
@@ -160,12 +176,12 @@ Deno.serve(async (req) => {
     p_item_id: row.id, p_access_token: access_token,
   });
   if (tokenError) {
-    // Same reasoning as the branch above, one step later: Plaid
-    // believes we have access and we cannot store the proof of it.
+    // Same again: leave the net up and take our own half-written row
+    // back out, so the user is not shown a connection with no token
+    // behind it.
     console.error("[plaid-exchange] could not store token:", tokenError.message);
     await admin.from("plaid_items").delete().eq("id", row.id);
-    await admin.rpc("plaid_queue_removal", { p_access_token: access_token, p_plaid_item_id: item_id });
-    return json(500, { error: "could not store the connection" });
+    return json(200, { ok: false, code: "STORE_FAILED" });
   }
 
   // Which account was picked. Read from the balance endpoint because
@@ -182,5 +198,11 @@ Deno.serve(async (req) => {
     if (rows.length) await admin.from("plaid_accounts").insert(rows);
   }
 
-  return json(200, { connected: true, institution_name: institutionName });
+  // THE ITEM AND ITS TOKEN ARE STORED. An orphan is no longer
+  // possible, so the net comes down — and it comes down HERE, after
+  // the accounts read, because a connection with no account row is
+  // still a connection we can remove on request.
+  await standDown();
+
+  return json(200, { ok: true, connected: true, institution_name: institutionName });
 });
