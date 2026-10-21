@@ -686,6 +686,25 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 13, 2026-10-20, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked;
+  unchanged, as it must be: connected checking adds no native input,
+  which is the whole reason Hosted Link was chosen over the SDK.
+  Update group `3e6580e7-ee61-4c3e-b3cb-6c1987ad22b7`, iOS update
+  `01a15c21`, commit `f6e423b`. Published through
+  `mobile/scripts/ota.mjs`.
+
+  **Connected checking reaches the phone.** The Checking bar's five
+  states, the Refresh now / Log manually / Use bank balance sheet,
+  and the Settings connection block. Nothing is visible to an account
+  that is not in `plaid_beta`, which is every account but the
+  owner's.
+
+  Published mid-E2E so the owner can see the connected states on a
+  device while the web half is still being walked through; the
+  remaining steps are the re-run collision test, the refresh cap,
+  disconnect and toggle off.
+
 - **OTA UPDATE 12, 2026-10-20, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   from `mobile/`; unchanged. Update group
