@@ -18,10 +18,12 @@
 // ask Plaid a question about our own session; they cannot tell us the
 // answer.
 //
-// STILL OWED BEFORE PRODUCTION: Plaid's own `Plaid-Verification` JWT
-// check. The design above means a forgery cannot plant data, but it
-// can still make us spend a call, and the signature is the proper
-// answer to that. Written down rather than quietly skipped.
+// AND THE WEBHOOK IS NOW SIGNATURE-CHECKED (2026-10-21), which the
+// paragraph above used to say was still owed. The design meant a
+// forgery could not plant data; it could still make us spend calls,
+// and on a plan billed per request with ten Items for life that is
+// worth closing. See _shared/webhookVerify.ts for the algorithm and
+// for why the raw body text is read once and parsed afterwards.
 //
 // IT NEEDS CORS TOO, which is easy to talk yourself out of: this is
 // "the webhook function", and a webhook is not a browser. But the WEB
@@ -41,6 +43,22 @@
 import { PLAID_ENDPOINTS, callPlaid, readConfig } from "../_shared/plaid.ts";
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
 import { preflight } from "../_shared/cors.ts";
+import { type PlaidJwk, verifyPlaidWebhook } from "../_shared/webhookVerify.ts";
+
+/**
+ * Verification keys, by `kid`.
+ *
+ * ONE EXTRA PLAID CALL PER WEBHOOK WITHOUT THIS, which is the sort
+ * of cost that arrives as a bill rather than a bug. Module scope, so
+ * it lives as long as the isolate and no longer — a cold start
+ * fetches once and that is the correct amount of caching for
+ * something that must never serve a key Plaid has retired.
+ *
+ * ONLY LIVE KEYS ARE CACHED. A key with `expired_at` set is refused
+ * by the verifier and must not be remembered, or a rotation would be
+ * pinned in memory until the isolate died.
+ */
+const keyCache = new Map<string, PlaidJwk>();
 
 interface Exchanged { access_token: string; item_id: string }
 interface LinkSession { link_sessions?: Array<{ results?: { item_add_results?: Array<{ public_token?: string }> } }> }
@@ -64,8 +82,14 @@ Deno.serve(async (req) => {
     return json(500, { error: `not configured: ${conf.missing.join(", ")}` });
   }
 
+  // THE RAW TEXT, READ ONCE. The signature is over these exact
+  // bytes, so a JSON.parse followed by a re-stringify would be a
+  // different string the moment Plaid puts a space where we would
+  // not. Parsed afterwards, from the same text.
+  let raw = "";
+  try { raw = await req.text(); } catch { /* handled below */ }
   let payload: Record<string, unknown> = {};
-  try { payload = await req.json(); } catch { /* handled below */ }
+  try { payload = JSON.parse(raw); } catch { /* handled below */ }
 
   const admin = adminClient();
   let userId: string | null = null;
@@ -89,6 +113,36 @@ Deno.serve(async (req) => {
   } else if (payload.webhook_code === "SESSION_FINISHED") {
     // ---- the Hosted Link path: Plaid tells us a session ended ----
     trigger = "webhook";
+
+    // IS IT FROM PLAID. Before the table lookup, before the
+    // link/token/get, before anything that costs a call — which is
+    // the whole reason the check is worth having, given a forgery
+    // could never plant data in the first place.
+    const verified = await verifyPlaidWebhook({
+      header: req.headers.get("Plaid-Verification"),
+      body: raw,
+      fetchKey: async (keyId) => {
+        const cached = keyCache.get(keyId);
+        if (cached) return cached;
+        const got = await callPlaid<{ key?: PlaidJwk }>(
+          conf.config, PLAID_ENDPOINTS.webhookVerificationKeyGet,
+          { key_id: keyId }, { admin, userId: null, trigger: "verify" },
+        );
+        if ("error" in got || !got.data.key) return null;
+        // Live keys only — see the cache's note.
+        if (got.data.key.expired_at == null) keyCache.set(keyId, got.data.key);
+        return got.data.key;
+      },
+    });
+    if (!verified.ok) {
+      // 401 AND NOT A QUIET 200. Everything else in this function
+      // answers 200-and-ignore so Plaid stops retrying, but an
+      // unverified webhook is the one case where a retry is wanted:
+      // if this ever fires on a real one, iOS Connect is broken and
+      // the log should say so loudly rather than look like silence.
+      console.error("[plaid-exchange] webhook refused:", verified.reason);
+      return json(401, { error: "unverified", reason: verified.reason });
+    }
     const linkToken = String(payload.link_token ?? "");
     if (!linkToken) return json(200, { ignored: "no link_token" });
 
@@ -122,6 +176,12 @@ Deno.serve(async (req) => {
   } else {
     // Every other webhook Plaid sends. Acknowledged and dropped: an
     // unhandled webhook that 400s gets retried for days.
+    //
+    // DELIBERATELY NOT VERIFIED. Verification costs a Plaid call on
+    // a cold isolate, and this branch reads nothing, writes nothing
+    // and calls nothing — paying to authenticate a request before
+    // throwing it away is the wrong way round. The branch above,
+    // which spends calls, is verified before it spends any.
     return json(200, { ignored: String(payload.webhook_code ?? "no public_token") });
   }
 

@@ -24,6 +24,9 @@
 import { readFileSync } from "node:fs";
 import { ALLOWED_ORIGINS, corsHeaders, preflight } from "../supabase/functions/_shared/cors.ts";
 import { PLAID_ENDPOINTS, PRODUCTS, localDateIn } from "../supabase/functions/_shared/plaid.ts";
+import {
+  constantTimeEquals, sha256Hex, verifyPlaidWebhook,
+} from "../supabase/functions/_shared/webhookVerify.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -146,7 +149,7 @@ console.log("\n== the Plaid endpoint paths ==");
 // credentials and is the check to re-run before adding one.
 {
   const paths = Object.values(PLAID_ENDPOINTS).sort();
-  eq("exactly these seven, spelled exactly this way", paths, [
+  eq("exactly these eight, spelled exactly this way", paths, [
     "/accounts/balance/get",
     "/institutions/get_by_id",
     "/item/get",
@@ -154,6 +157,7 @@ console.log("\n== the Plaid endpoint paths ==");
     "/item/remove",
     "/link/token/create",
     "/link/token/get",
+    "/webhook_verification_key/get",
   ]);
   // The one that bit, called out by name so a future edit has to
   // walk past it.
@@ -216,6 +220,116 @@ console.log("\n== what day it is where the USER is ==");
   const days = zones.map((z) => localDateIn(z, now));
   is("every zone on earth lands within a day of UTC",
     days.every((d) => ["2026-10-19", "2026-10-20", "2026-10-21"].includes(d)));
+}
+
+console.log("\n== is the webhook actually from Plaid ==");
+//
+// REAL ES256, NOT A DESCRIPTION OF ONE. The verifier is pure Web
+// Crypto with the key fetch injected, so this generates a P-256 key
+// pair, signs real JWTs with it and hands the public half back
+// through `fetchKey`. A test that mocked the crypto would be a test
+// of the mock — and this is the one piece of code in the project
+// whose whole job is to say no to something an attacker chose.
+{
+  const enc = new TextEncoder();
+  const b64url = (bytes) => Buffer.from(bytes).toString("base64")
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const part = (obj) => b64url(enc.encode(JSON.stringify(obj)));
+
+  const pair = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const pub = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  const jwk = { kty: "EC", crv: "P-256", x: pub.x, y: pub.y, kid: "k1", alg: "ES256", expired_at: null };
+  const fetchKey = async (id) => (id === "k1" ? jwk : null);
+
+  async function sign(header, claims) {
+    const signing = `${part(header)}.${part(claims)}`;
+    const sig = await crypto.subtle.sign(
+      { name: "ECDSA", hash: "SHA-256" }, pair.privateKey, enc.encode(signing));
+    return `${signing}.${b64url(new Uint8Array(sig))}`;
+  }
+
+  const body = JSON.stringify({ webhook_code: "SESSION_FINISHED", link_token: "link-sandbox-1" });
+  const now = 1_800_000_000;
+  const good = { alg: "ES256", kid: "k1" };
+  const claims = async (over = {}) => ({
+    iat: now, request_body_sha256: await sha256Hex(body), ...over,
+  });
+
+  const verify = (header, over = {}) =>
+    verifyPlaidWebhook({ header, body, fetchKey, now, ...over });
+
+  is("a real Plaid webhook is accepted", (await verify(await sign(good, await claims()))).ok);
+
+  // THE CLASSIC JWT HOLE, closed twice over. Removing the alg check
+  // does NOT make this verifier accept `none` — it hardcodes
+  // ECDSA/P-256 and never dispatches on `alg`, so a forgery still
+  // dies on the signature. What these two pin is that it is refused
+  // FOR BEING THE WRONG ALGORITHM, early and by name, because the
+  // structure that makes it safe today is the kind that gets
+  // refactored tomorrow.
+  const forged = `${part({ alg: "none", kid: "k1" })}.${part(await claims())}.`;
+  eq("alg=none is refused, and refused for being alg=none",
+    (await verify(forged)).reason, "bad_alg:none");
+  eq("so is HS256, which a shared-secret forgery would use",
+    (await verify(`${part({ alg: "HS256", kid: "k1" })}.${part(await claims())}.x`)).reason,
+    "bad_alg:HS256");
+
+  // THE STEP THAT TIES THE SIGNATURE TO THIS BODY. Without it a
+  // valid signature over somebody else's payload authenticates any
+  // payload at all, which is the whole attack this is for.
+  eq("a valid signature over a DIFFERENT body is refused",
+    (await verifyPlaidWebhook({
+      header: await sign(good, await claims()), body: body + " ", fetchKey, now,
+    })).reason, "body_mismatch");
+  eq("...and a claim with no hash in it at all",
+    (await verify(await sign(good, { iat: now }))).reason, "no_body_hash");
+
+  // A signature is valid forever; freshness is what stops yesterday's
+  // captured webhook being replayed.
+  eq("six minutes old is too old",
+    (await verify(await sign(good, await claims({ iat: now - 6 * 60 })))).reason, "stale");
+  is("four minutes old is fine",
+    (await verify(await sign(good, await claims({ iat: now - 4 * 60 })))).ok);
+  eq("no iat, no verdict", (await verify(await sign(good, { request_body_sha256: await sha256Hex(body) }))).reason, "no_iat");
+
+  // The key itself.
+  eq("an unknown kid", (await verify(await sign({ alg: "ES256", kid: "nope" }, await claims()))).reason, "unknown_key");
+  eq("a RETIRED key is refused — Plaid still serves them",
+    (await verifyPlaidWebhook({
+      header: await sign(good, await claims()), body, now,
+      fetchKey: async () => ({ ...jwk, expired_at: 1_700_000_000 }),
+    })).reason, "expired_key");
+
+  // Signed by someone else's key, with everything else right.
+  const impostor = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const signing = `${part(good)}.${part(await claims())}`;
+  const badSig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" }, impostor.privateKey, enc.encode(signing));
+  eq("another key's signature is refused",
+    (await verify(`${signing}.${b64url(new Uint8Array(badSig))}`)).reason, "bad_signature");
+
+  // And the shapes that are not tokens.
+  eq("no header at all", (await verify(null)).reason, "no_verification_header");
+  eq("not a JWT", (await verify("hello")).reason, "malformed_jwt");
+
+  // The hash comparison does not leak where it stopped matching.
+  is("equal is equal", constantTimeEquals("abc", "abc"));
+  not("different length", constantTimeEquals("abc", "abcd"));
+  not("same length, one character out", constantTimeEquals("abc", "abd"));
+
+  // And the wiring: the verifier is worth nothing if the handler
+  // does not call it BEFORE it spends anything, on the RAW body.
+  const exchange = readFileSync(new URL("../supabase/functions/plaid-exchange/index.ts", import.meta.url), "utf8");
+  is("the handler verifies", exchange.includes("verifyPlaidWebhook("));
+  is("...on the raw text it received, not a re-stringify",
+    exchange.includes("body: raw,") && exchange.includes("await req.text()"));
+  not("...and never re-serializes the body", exchange.includes("JSON.stringify(payload)"));
+  is("...before the link/token/get that costs a call",
+    exchange.indexOf("verifyPlaidWebhook(") < exchange.indexOf("PLAID_ENDPOINTS.linkTokenGet"));
+  is("a refused webhook is a 401, not a quiet 200",
+    exchange.includes('return json(401, { error: "unverified"'));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

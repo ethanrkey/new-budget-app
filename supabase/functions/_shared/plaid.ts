@@ -38,6 +38,12 @@ export const PLAID_ENDPOINTS = {
   itemGet: "/item/get",
   institutionsGetById: "/institutions/get_by_id",
   itemRemove: "/item/remove",
+  // Verified live 2026-10-21 with an unauthenticated POST, as every
+  // path in this object now is: MISSING_FIELDS means it exists,
+  // NOT_FOUND means it does not. /item/public_token_exchange was
+  // written from memory and spelled with an underscore, and the
+  // first sandbox connection died on it.
+  webhookVerificationKeyGet: "/webhook_verification_key/get",
 } as const;
 
 export type PlaidEndpoint = (typeof PLAID_ENDPOINTS)[keyof typeof PLAID_ENDPOINTS];

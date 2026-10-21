@@ -1492,6 +1492,36 @@ const MUTATIONS = [
   ["the phone's hidden-rows warning goes back to raw ISO", "../mobile/components/LogBalance.tsx",
    "{HIDDEN.lede(confirming.length, fmtDate(date))}",
    "{HIDDEN.lede(confirming.length, date)}"],
+
+  // ---- is the webhook actually from Plaid (2026-10-21) ----
+  // The one piece of code here whose whole job is to say no to
+  // something an attacker chose, so every step of it gets broken.
+  ["a signature over somebody else's body authenticates ours",
+   "../supabase/functions/_shared/webhookVerify.ts",
+   '  if (!constantTimeEquals(claimed.toLowerCase(), await sha256Hex(body))) {\n    return { ok: false, reason: "body_mismatch" };\n  }',
+   "  // mutated"],
+  ["a captured webhook can be replayed tomorrow",
+   "../supabase/functions/_shared/webhookVerify.ts",
+   "  if (now - iat > WEBHOOK_MAX_AGE_SECONDS) return { ok: false, reason: \"stale\" };",
+   "  // mutated"],
+  ["a key Plaid retired is still trusted",
+   "../supabase/functions/_shared/webhookVerify.ts",
+   '  if (jwk.expired_at != null) return { ok: false, reason: "expired_key" };',
+   "  // mutated"],
+  ["the token names its own algorithm and is believed",
+   "../supabase/functions/_shared/webhookVerify.ts",
+   '  if (jwtHeader.alg !== "ES256") return { ok: false, reason: `bad_alg:${String(jwtHeader.alg)}` };',
+   "  // mutated"],
+  ["the hash comparison leaks where it stopped matching",
+   "../supabase/functions/_shared/webhookVerify.ts",
+   "  let diff = 0;\n  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);\n  return diff === 0;",
+   "  return a === b;"],
+  ["the body is re-serialized, so the hash is of a string Plaid never sent",
+   "../supabase/functions/plaid-exchange/index.ts",
+   "      body: raw,", "      body: JSON.stringify(payload),"],
+  ["the webhook is not checked at all",
+   "../supabase/functions/plaid-exchange/index.ts",
+   "    if (!verified.ok) {", "    if (false) {"],
 ];
 
 // ---------------------------------------------------------------

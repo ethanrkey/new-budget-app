@@ -3333,6 +3333,9 @@ owner submits):
   Functionality only; **not** used for tracking. "Purchase History" and
   "Payment Info" stay NO — balance is neither.
 - Third-party partner disclosure: Plaid, as a service provider.
+- **DONE 2026-10-21: Plaid's `Plaid-Verification` JWT check**, which
+  was the one item on this list that was code rather than paperwork.
+  See the section above.
 - The App Store description and any screenshot copy that says the app
   never connects to a bank has to stop saying it.
 
@@ -3450,6 +3453,97 @@ Disconnect → `plaid_items`, `plaid_tokens` and every `plaid_%` Vault
 secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
+
+### The webhook is signature-checked (2026-10-21) — off the list
+
+`Plaid-Verification` is an ES256 JWT. `_shared/webhookVerify.ts` does
+Plaid's five steps in Plaid's order, the key fetch injected so the
+module has no idea what a Plaid client is and can be tested against
+a key pair generated in the test:
+
+1. **Algorithm before signature.** To be straight about what this
+   buys here: `alg: none` was already shut by structure, because
+   nothing in the verifier reads `alg` to choose anything —
+   ECDSA/P-256/SHA-256 is hardcoded, so a forged `none` dies on the
+   signature regardless. The check is kept because that structure is
+   the kind that gets refactored, and because a refusal that says
+   `bad_alg:none` records in the log what someone was trying.
+2. **The key, through `/webhook_verification_key/get`**, and only a
+   live one — Plaid rotates keys and still serves the retired ones,
+   so a key with `expired_at` set is refused and never cached.
+3. **The signature**, with that key.
+4. **`iat` within five minutes.** A signature is valid forever;
+   this is what stops yesterday's captured webhook being replayed.
+5. **sha256 of the RAW body** against the `request_body_sha256`
+   claim, compared in constant time. This is the step that makes the
+   other four mean anything — without it, a valid signature over
+   somebody else's body authenticates any payload at all. Which is
+   why the handler reads `req.text()` once and parses afterwards: a
+   parse-then-re-stringify is a different string the moment Plaid
+   puts a space where we would not.
+
+**Fail closed, and the cost is named:** a bug here stops iOS
+connecting at all, because Hosted Link has no other completion
+signal. That is the right way round — a broken Connect is visible in
+a minute, an open webhook endpoint is not. A refused webhook answers
+**401, not the 200-and-ignore** the rest of that function uses: if
+this ever fires on a real one, the log should say so loudly.
+
+**Keys are cached by `kid` at module scope**, because an uncached
+verify is one extra Plaid call per webhook. The residual an attacker
+can still trigger: a forgery carrying a well-formed ES256 header
+with an unseen `kid` costs one `/webhook_verification_key/get`. It
+is bounded at one per kid per isolate and the key endpoint is not a
+billed product, so it is noted rather than fixed.
+
+**Verified live against the deployed function**, which is where this
+kind of check has to be verified:
+
+| sent | answer |
+|---|---|
+| no `Plaid-Verification` | 401 `no_verification_header` |
+| `Plaid-Verification: hello` | 401 `malformed_jwt` |
+| hand-built `alg: none` token | 401 `bad_alg:none` |
+| an unrelated `webhook_code` | 200 `ignored` — still free, still dropped |
+
+Before this, the first of those four would have reached
+`plaid_link_sessions` and, on a guessed `link_token`, spent a
+`/link/token/get`. The other webhook codes are **deliberately not
+verified**: that branch reads nothing, writes nothing and calls
+nothing, and paying for a Plaid call to authenticate a request
+before throwing it away is the wrong way round.
+
+### Switching to production keys — the order matters (2026-10-21)
+
+The owner is moving to production for his own checking only
+(allowlist = himself). Sequence, and the reason for it:
+
+1. **Disconnect the sandbox bank FIRST, while `PLAID_ENV` is still
+   `sandbox`.** A sandbox access token is meaningless to
+   production.plaid.com, so after the switch `/item/remove` for it
+   can only fail. Disconnect still completes on our side — the rows
+   go and the token is queued — but the queue then retries that
+   removal hourly, forever, logging a failed Plaid call each time,
+   because nothing in `plaid_removals` ever gives up. Clearing one
+   by hand is `delete from plaid_removals where id = …`; not doing
+   it in the first place is cheaper.
+2. `supabase secrets set PLAID_CLIENT_ID=… PLAID_SECRET=… PLAID_ENV=production`.
+   **The client id is the same across environments; the secret is
+   not.** Nothing needs redeploying — `readConfig()` reads the env
+   on every invocation.
+3. From then on `plaid_item_creations` records `env = 'production'`,
+   and only those rows spend one of the ten.
+
+**OAuth redirect URIs: checked, and not a blocker for either
+integration here.** Real banks are mostly OAuth where sandbox's
+First Platypus was not, so this looked like the obvious trap. Plaid's
+OAuth guide says web Link works without a registered `redirect_uri`,
+and iOS goes through Hosted Link, where Plaid hosts the page and
+owns the redirect. A redirect URI is for webview integrations and
+for the native SDK — **which the next binary will need**, so it
+belongs on the list for the SDK swap and not for this switch. If an
+institution is ever missing from Link in production, Plaid's
+troubleshooting puts the redirect-URI allowlist first.
 
 ### Plaid's Trial is TEN ITEMS EVER (2026-10-21)
 
