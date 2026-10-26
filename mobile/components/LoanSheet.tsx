@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import FormSheet, { useDiscardGuard } from "./FormSheet";
 import { DISCARD_ACCOUNT } from "../../src/content/logBalance.ts";
 import { T } from "../lib/theme";
+import { todayISO } from "../../src/engine/model.ts";
 import { FIELD_TEXT } from "../lib/fields";
 import DatePicker from "./DatePicker";
 import type { TrackerCategory } from "../../src/engine/types.ts";
@@ -53,7 +54,8 @@ export default function LoanSheet({
     : null;
 
   if (picking) {
-    return <DatePicker value={from || new Date().toISOString().slice(0, 10)} onPick={setFrom} onClose={() => setPicking(false)} />;
+    // Local date, not UTC — see CalendarView for what that costs.
+    return <DatePicker value={from || todayISO()} onPick={setFrom} onClose={() => setPicking(false)} />;
   }
 
   // ITS OWN SHEET NOW, not content inside the Dashboard's BottomSheet.

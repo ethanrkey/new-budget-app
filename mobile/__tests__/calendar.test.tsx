@@ -12,16 +12,55 @@ import { CALENDAR_COPY } from "../../src/content/calendar.ts";
 // show each day's NET, which is a true number and almost nobody's
 // question, and the detail panel footed with "Net · in · out".
 //
-// TODAY IS THE REAL TODAY HERE, deliberately. The component reads the
+// THE CLOCK IS PINNED, AND ONLY THE CLOCK. The component reads the
 // device clock, which is the thing the rebuild was asked to fix — the
 // marked day must never be derived from the balance's as-of date — so
-// the fixture is built AROUND whatever date this runs on rather than
-// pinned to one, and nothing here would survive the component going
-// back to deriving it.
-const today = new Date().toISOString().slice(0, 10);
-const shift = (iso: string, days: number) => {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
+// what is pinned here is the device clock itself, not the answer, and
+// nothing below would survive the component going back to deriving it
+// from the anchor. The anchor is four days earlier than this date,
+// which is what makes the two distinguishable.
+//
+// IT USED TO BE THE REAL TODAY, and the fixture was laid out around
+// it: bill at today+2, payday at +4, both at +6. All five of those
+// days have to sit in the month the calendar opens on, which is
+// today's, so the suite failed on the 26th of October 2026 — today+6
+// was November and the cell it asked for was not on screen. Nobody
+// had broken anything; the day had moved. Five fixture days and a
+// logged reading before the anchor cannot be fitted into one month
+// from an arbitrary starting point, so the starting point stops
+// being arbitrary.
+//
+// 23:30 LOCAL, which is the half of this that is not cosmetic. The
+// 15th at half past eleven at night is the 16th in Greenwich, so a
+// component that asks `toISOString()` what day it is marks tomorrow —
+// a real bug, found on the day this was pinned and fixed in the same
+// commit. Only discriminating in a zone behind UTC; here, in Eastern,
+// it is.
+const PINNED = new Date(2026, 9, 15, 23, 30);
+beforeAll(() => {
+  jest.useFakeTimers({
+    now: PINNED,
+    // Date and nothing else. userEvent and the renderer schedule real
+    // work on these, and a suite that fakes them waits for ever.
+    doNotFake: [
+      "hrtime", "nextTick", "performance", "queueMicrotask",
+      "requestAnimationFrame", "cancelAnimationFrame",
+      "requestIdleCallback", "cancelIdleCallback",
+      "setImmediate", "clearImmediate", "setInterval", "clearInterval",
+      "setTimeout", "clearTimeout",
+    ],
+  });
+});
+afterAll(() => { jest.useRealTimers(); });
+
+// Local, for the reason above: these dates are the ones a person
+// standing next to the phone would name.
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const today = iso(PINNED);
+const shift = (isoStr: string, days: number) => {
+  const [y, m, d] = isoStr.split("-").map(Number);
+  return iso(new Date(y!, m! - 1, d! + days));
 };
 const ANCHOR = shift(today, -4);
 const HORIZON = shift(today, 120);

@@ -5,7 +5,7 @@ import {
   calendarMonths, buildCalendarMonth, addMonthKey, cellAmountCompact,
   netAmountCompact, type CalendarDay,
 } from "../../src/engine/calendar.ts";
-import { categoryLabelOf } from "../../src/engine/model.ts";
+import { categoryLabelOf, todayISO } from "../../src/engine/model.ts";
 import { CALENDAR_COPY as COPY } from "../../src/content/calendar.ts";
 import { fmtDate, fmtLongDay, fmtMonthYear } from "../../src/shared/dates.ts";
 import type { BudgetState, LedgerRow, TrackerCategory } from "../../src/engine/types.ts";
@@ -51,7 +51,13 @@ export default function CalendarView({
   // THE DEVICE'S DATE, read here and never derived from the anchor.
   // Somebody who last checked their bank on the 3rd is still living
   // on the 17th.
-  const today = new Date().toISOString().slice(0, 10);
+  // LOCAL, NOT UTC. `new Date().toISOString().slice(0, 10)` is the
+  // date in Greenwich, so from about 8pm Eastern onward it is
+  // tomorrow — the calendar marked the wrong cell as today, opened on
+  // the wrong month on the last evening of a month, and dimmed a day
+  // that had not happened yet. Same trap toISODate exists to avoid,
+  // and the same one the Plaid functions hit on 2026-10-20.
+  const today = todayISO();
 
   // The checking account's own logged readings — real history, and
   // the only thing a past cell is allowed to show. The days before
