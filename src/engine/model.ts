@@ -199,6 +199,11 @@ export function categoryLabelOf(
         // toggle because turning the feature down is not the same as
         // never wanting to be asked.
         hideConnectHint: false,
+        // The FIXED / RECURRING section sorts itself by day of the
+        // month. See Settings.budgetBillSort for why an existing
+        // account inherits this without a migration and without
+        // losing the manual order it had.
+        budgetBillSort: "day" as const,
       },
       // primaryAccount() is the single source of truth for the anchor
       // balance/date. (Phase 1 briefly mirrored it back into settings as a

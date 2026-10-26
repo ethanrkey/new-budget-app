@@ -266,7 +266,31 @@ export interface Settings {
   connectedFeatures: boolean;
   /** "Want this automatic?" on the Log balance sheet, dismissed for good. */
   hideConnectHint: boolean;
+  /**
+   * How the FIXED / RECURRING section is ordered: by day of the month
+   * (then name), or by the manual order the user dragged it into.
+   *
+   * "day" IS THE DEFAULT, for new accounts and old ones alike — an
+   * account saved before this field existed simply has no value, and
+   * `{...base.settings, ...parsed.settings}` in normalize() gives it
+   * the default, which is the whole of the migration.
+   *
+   * NOTHING IS DELETED to make that happen. The stored `order` values
+   * stay exactly where they are and go inert for this section; the
+   * first manual drag writes them afresh from what is on screen (see
+   * adoptBillOrder in mutate.ts), so a stale order from before the
+   * sort can never resurface. The alternative — wiping `order` on
+   * every bill once, at load — throws away data to achieve the same
+   * screen, and cannot be undone if the sort is ever reconsidered.
+   *
+   * Flipped to "manual" by the first reorder of a row in that
+   * section, and there is no way back to "day" short of this field.
+   */
+  budgetBillSort: BillSort;
 }
+
+/** @see Settings.budgetBillSort */
+export type BillSort = "day" | "manual";
 
 // ---- The state blob ------------------------------------------------------
 
@@ -352,6 +376,22 @@ export interface BudgetRowValue {
 export interface BudgetExpenseValue extends BudgetRowValue {
   /** May be an orphaned id — see CategoryRef. */
   category: CategoryRef;
+  /**
+   * The day of the month this row's item falls on, 1-31. What the
+   * FIXED / RECURRING section sorts by.
+   *
+   * STAMPED IN computeBudget RATHER THAN WORKED OUT IN THE LAYOUT,
+   * because the layout is handed columns and has never been handed
+   * the items. Passing them in would have made the sort depend on a
+   * parameter three call sites could forget, and a forgotten one
+   * sorts silently by the wrong thing. Here it cannot go missing.
+   *
+   * A monthly rule uses its own `dayOfMonth` — its INTENDED day,
+   * which is stable even in a February that cannot hold the 31st.
+   * Everything else uses the day of its next occurrence, which for a
+   * one-off is simply its date. See sortDay in compute.ts.
+   */
+  day: number;
 }
 
 /** One month column of the Budget grid. */

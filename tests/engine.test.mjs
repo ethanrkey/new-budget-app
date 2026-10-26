@@ -2356,6 +2356,9 @@ const stateBA = normalize({
     { id: "ba-phone", name: "phone", amount: 40, category: "bill", cadence: "monthly", startDate: "2026-10-15", dayOfMonth: 15, order: 0 },
     { id: "ba-rent", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-10-01", dayOfMonth: 1, order: 1 },
     { id: "ba-ally", name: "Ally", amount: 20, category: "bill", cadence: "monthly", startDate: "2026-10-01", dayOfMonth: 1, order: 2 },
+    // Lowercase, and on the same day as two capitals — the only
+    // arrangement in which ignoring case changes the answer.
+    { id: "ba-amex", name: "amex", amount: 60, category: "bill", cadence: "monthly", startDate: "2026-10-01", dayOfMonth: 1, order: 3 },
   ],
   oneoffs: [],
 });
@@ -2364,14 +2367,15 @@ const layoutBA = (st, billSort) =>
     .sectionItems.bill.map((r) => r.name);
 
 eq("the day of the month decides, not the order anybody dragged",
-  layoutBA(stateBA, "day"), ["Ally", "Rent", "phone"]);
-// Ally and Rent are both the 1st. Alphabetical breaks that tie, and it
-// has to ignore case or every capital sorts above every lowercase —
-// "phone" would lead a list it is last in.
+  layoutBA(stateBA, "day"), ["Ally", "amex", "Rent", "phone"]);
+// Ally, amex and Rent are all the 1st. Alphabetical breaks that tie,
+// and it has to ignore case: a plain comparison puts every capital
+// above every lowercase, so "amex" would fall below "Rent" — out of
+// alphabetical order in the only list a person is scanning by name.
 eq("...and a shared day is broken alphabetically, case ignored",
-  layoutBA(stateBA, "day").slice(0, 2), ["Ally", "Rent"]);
+  layoutBA(stateBA, "day").slice(0, 3), ["Ally", "amex", "Rent"]);
 eq("an account that has dragged this section keeps its own order",
-  layoutBA(stateBA, "manual"), ["phone", "Rent", "Ally"]);
+  layoutBA(stateBA, "manual"), ["phone", "Rent", "Ally", "amex"]);
 
 // A monthly rule due on the 31st reads 31 in February too. Taking the
 // day off the next OCCURRENCE would read 28 and float the row up the
@@ -2409,27 +2413,27 @@ const csvLinesBA = csvBA.split("\r\n");
 const csvBillsBA = csvLinesBA
   .slice(csvLinesBA.indexOf("FIXED / RECURRING") + 1, csvLinesBA.indexOf("ONE-OFF"))
   .map((l) => l.split(",")[0]);
-eq("the CSV export lists them in the same order the screen does", csvBillsBA, ["Ally", "Rent", "phone"]);
+eq("the CSV export lists them in the same order the screen does", csvBillsBA, ["Ally", "amex", "Rent", "phone"]);
 
 // Leaving the sort: the first drag has to take the order off the screen
 // first, because the stored `order` of a sorted section means nothing.
-const adoptedBA = adoptBillOrder(stateBA, ["ba-ally", "ba-rent", "ba-phone"]);
+const adoptedBA = adoptBillOrder(stateBA, ["ba-ally", "ba-amex", "ba-rent", "ba-phone"]);
 eq("the first reorder switches the account to manual", adoptedBA.settings.budgetBillSort, "manual");
 eq("...and writes the order it was showing, not the one it had stored",
-  ["ba-ally", "ba-rent", "ba-phone"].map((id) => findItem(adoptedBA, id).order), [0, 1, 2]);
+  ["ba-ally", "ba-amex", "ba-rent", "ba-phone"].map((id) => findItem(adoptedBA, id).order), [0, 1, 2, 3]);
 eq("...so a swap afterwards actually moves the row",
   computeBudgetLayout(computeBudget(adoptedBA, "2026-12-01"), [], { billSort: "manual" })
     .sectionItems.bill.map((r) => r.name)
-    .join() === "Ally,Rent,phone"
+    .join() === "Ally,amex,Rent,phone"
   && computeBudgetLayout(computeBudget(swapOrder(adoptedBA, "ba-ally", "ba-rent"), "2026-12-01"), [], { billSort: "manual" })
-    .sectionItems.bill.map((r) => r.name).join(), "Rent,Ally,phone");
+    .sectionItems.bill.map((r) => r.name).join(), "Rent,amex,Ally,phone");
 // Called from both reorder paths without either checking first, so it
 // has to decline every group that is not this one.
 eq("a group that is not the bill section is left alone",
   adoptBillOrder(stateBA, ["nope"]).settings.budgetBillSort, "day");
 eq("an empty group is left alone", adoptBillOrder(stateBA, []).settings.budgetBillSort, "day");
 eq("an account already dragging keeps the order it dragged",
-  findItem(adoptBillOrder(adoptedBA, ["ba-phone", "ba-rent", "ba-ally"]), "ba-phone").order, 2);
+  findItem(adoptBillOrder(adoptedBA, ["ba-phone", "ba-rent", "ba-ally"]), "ba-phone").order, 3);
 
 // The migration, which is the absence of one: the default carries it.
 eq("an account saved before the sort existed gets it",

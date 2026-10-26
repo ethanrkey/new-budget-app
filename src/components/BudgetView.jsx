@@ -75,7 +75,8 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
   // `rowCat` (row -> category id) is deliberately not destructured: the
   // only thing that used it was the per-row role color, retired
   // 2026-10-06. The layout still groups by category — that is `savingGroups`.
-  const { otherIncome, sectionItems, savingGroups } = computeBudgetLayout(budget, trackerCategories);
+  const { otherIncome, sectionItems, savingGroups } =
+    computeBudgetLayout(budget, trackerCategories, { billSort: settings.budgetBillSort });
   const th = "py-2 px-3 text-right font-semibold whitespace-nowrap";
   const editRow = (key) => onEditRow && (() => onEditRow(key));
 
@@ -120,8 +121,11 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
       return {
         key,
         name: row.name,
-        up: onReorder && i > 0 ? () => onReorder(key, keys[i - 1]) : null,
-        down: onReorder && i < rows.length - 1 ? () => onReorder(key, keys[i + 1]) : null,
+        // `keys` goes along with the pair: a section still sorted by
+        // day has to adopt the order on screen before a swap of two
+        // `order` values can mean anything. See adoptBillOrder.
+        up: onReorder && i > 0 ? () => onReorder(key, keys[i - 1], keys) : null,
+        down: onReorder && i < rows.length - 1 ? () => onReorder(key, keys[i + 1], keys) : null,
         dragProps,
         isDragging: dragKey === key,
         isDragOver: overKey === key && dragKey !== key,

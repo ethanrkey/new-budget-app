@@ -2,7 +2,7 @@
 // (those live in the component that triggers the actual download)
 import { categoryLabelOf } from "./model.ts";
 import { computeBudgetLayout, BUDGET_SECTIONS } from "./budgetLayout.ts";
-import type { BudgetColumn, Ledger, TrackerCategory } from "./types.ts";
+import type { BillSort, BudgetColumn, Ledger, TrackerCategory } from "./types.ts";
 
 function csvCell(v: unknown): string {
   const s = v === null || v === undefined ? "" : String(v);
@@ -46,9 +46,17 @@ export function ledgerToCSV(ledger: Ledger, trackerCategories: TrackerCategory[]
 // The monthly grid, exactly as sectioned/ordered on screen (same
 // computeBudgetLayout() BudgetView renders from) — one row per line, one
 // column per month.
-export function budgetToCSV(budget: BudgetColumn[], trackerCategories: TrackerCategory[] = []): string {
+export function budgetToCSV(
+  budget: BudgetColumn[],
+  trackerCategories: TrackerCategory[] = [],
+  // The export matches the screen, and since 2026-10-26 the screen's
+  // FIXED / RECURRING section is sorted by day unless the account has
+  // dragged it. Passed in rather than defaulted here, so a CSV cannot
+  // disagree with the grid it claims to be a copy of.
+  billSort: BillSort = "day",
+): string {
   if (budget.length === 0) return "";
-  const layout = computeBudgetLayout(budget, trackerCategories);
+  const layout = computeBudgetLayout(budget, trackerCategories, { billSort });
   const lines = [csvRow(["", ...budget.map((c) => c.label)])];
   const row = (label: string, pick: (c: BudgetColumn) => number) => lines.push(csvRow([label, ...budget.map((c) => fmt(pick(c)))]));
 

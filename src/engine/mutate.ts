@@ -196,6 +196,36 @@ export function reorderList(state: BudgetState, ids: string[], id: string, befor
   };
 }
 
+/**
+ * The FIXED / RECURRING section is leaving its day sort for a manual
+ * one. Writes `order` across exactly this group from the sequence it is
+ * currently drawn in, and flips the account to "manual".
+ *
+ * CALLED BEFORE THE MOVE, NOT INSTEAD OF IT. Both move functions read
+ * `order`, and while the sort is on, the stored `order` of a bill is
+ * whatever it was months ago — arbitrary, possibly all equal. swapOrder
+ * would trade two meaningless numbers and the row would not move;
+ * reorderList would renumber correctly but the account would still be
+ * sorting by day and the drag would appear to do nothing. Adopting what
+ * is on screen first makes the move a move.
+ *
+ * A NO-OP unless this really is the bill group and the sort really is
+ * on, so the two reorder paths can call it unconditionally rather than
+ * each deciding for itself.
+ */
+export function adoptBillOrder(state: BudgetState, ids: string[]): BudgetState {
+  if (state.settings.budgetBillSort !== "day") return state;
+  if (!ids.length || findItem(state, ids[0]!)?.category !== "bill") return state;
+  const orderOf = new Map(ids.map((x, i) => [x, i]));
+  const patch = (it: any) => (orderOf.has(it.id) ? { ...it, order: orderOf.get(it.id) } : it);
+  return {
+    ...state,
+    settings: { ...state.settings, budgetBillSort: "manual" },
+    recurring: state.recurring.map(patch),
+    oneoffs: state.oneoffs.map(patch),
+  };
+}
+
 // ---- Tracker category (savings/debt/investment) CRUD ----
 // Deleting a category never touches items that reference it — an orphaned
 // category id just renders as a neutral "Uncategorized" (see

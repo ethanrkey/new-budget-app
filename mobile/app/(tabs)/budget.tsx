@@ -63,7 +63,8 @@ export default function BudgetScreen() {
 
   const { columns, rows } = useMemo(() => {
     const columns = computeBudget(state!, state!.settings.budgetHorizon);
-    const layout = computeBudgetLayout(columns, state!.trackerCategories);
+    const layout = computeBudgetLayout(columns, state!.trackerCategories,
+      { billSort: state!.settings.budgetBillSort });
     const cats = state!.trackerCategories;
     const out: (Cell | { section: string })[] = [];
 

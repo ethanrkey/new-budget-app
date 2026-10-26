@@ -10,7 +10,7 @@ import { getSession, onAuthChange, signOut, takeInvoluntarySignOut } from "./aut
 import { getDeviceTheme, setDeviceTheme } from "./theme.js";
 import { computeLedger, computeBudget, rowsHiddenByAnchor } from "./engine/compute.ts";
 import {
-  upsertItem, deleteItem, deleteItems, findItem, swapOrder, reorderList,
+  upsertItem, deleteItem, deleteItems, findItem, swapOrder, reorderList, adoptBillOrder,
   setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount,
   addCategory, updateCategory, deleteCategory, moveCategory,
   addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual,
@@ -158,11 +158,13 @@ export default function App() {
     setState((s) => clearOverride(s, ruleId, date));
     closeForm();
   }
-  function reorderRows(idA, idB) {
-    setState((s) => swapOrder(s, idA, idB));
+  // Both paths adopt first and move second — adoptBillOrder is a no-op
+  // for every group but a still-day-sorted FIXED / RECURRING one.
+  function reorderRows(idA, idB, ids = []) {
+    setState((s) => swapOrder(adoptBillOrder(s, ids), idA, idB));
   }
   function reorderDrop(ids, id, beforeId) {
-    setState((s) => reorderList(s, ids, id, beforeId));
+    setState((s) => reorderList(adoptBillOrder(s, ids), ids, id, beforeId));
   }
   // Tracker category (savings/debt/investment) CRUD — deleting one never
   // touches items still tagged with it (see mutate.ts's addCategory et al.).

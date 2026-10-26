@@ -11,12 +11,12 @@ export default function ExportMenu({ ledger, budget, trackerCategories = [], sta
     setOpen(false);
   }
   function exportBudget() {
-    downloadFile(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories), "text/csv;charset=utf-8;");
+    downloadFile(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories, state.settings.budgetBillSort), "text/csv;charset=utf-8;");
     setOpen(false);
   }
   function exportBoth() {
     downloadFile(`ledger-${todayISO()}.csv`, ledgerToCSV(ledger, trackerCategories), "text/csv;charset=utf-8;");
-    downloadFile(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories), "text/csv;charset=utf-8;");
+    downloadFile(`budget-${todayISO()}.csv`, budgetToCSV(budget, trackerCategories, state.settings.budgetBillSort), "text/csv;charset=utf-8;");
     setOpen(false);
   }
   // The Ledger/Budget CSVs are transaction/monthly-grid shaped and don't have

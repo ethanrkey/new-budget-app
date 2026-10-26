@@ -3,7 +3,7 @@ import { buildEvents } from "./generate.ts";
 import { CATEGORIES, categoryLabelOf, endOfMonthISO, primaryAccount, toISODate } from "./model.ts";
 import { roleOfCategory } from "./palette.ts";
 import type {
-  BudgetColumn, BudgetState, DayGroup, ISODate, Ledger, LedgerRow, MonthKey, SpendingMix, SpendingSlice,
+  BudgetColumn, BudgetEvent, BudgetState, DayGroup, ISODate, Ledger, LedgerRow, MonthKey, SpendingMix, SpendingSlice,
 } from "./types.ts";
 
 // LEDGER: every event with a running TD balance + stepped cumulative trackers.
@@ -91,6 +91,11 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
       byMonth[m.key] = { items: {}, otherItems: {}, takeHome: 0, payCount: 0, otherIn: 0 };
     }
 
+    // Which day of the month each row sorts on. Built once, from the
+    // rules themselves rather than from the events, because the two
+    // disagree for exactly the rules it matters most for — see sortDay.
+    const days = sortDays(state, events);
+
     // WHAT INCOME IS SPLIT BY, since 2026-10-17: whether it recurs, not
     // what it is called.
     //
@@ -150,6 +155,7 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
         val: (b.items[e.srcId]?.val || 0) - e.amount,
         category: e.category,
         order: e.order,
+        day: days[e.srcId] ?? dayOf(e.date),
       };
     }
 
@@ -167,7 +173,7 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
       const expenseItems: Record<string, any> = {};
       for (const [id, obj] of Object.entries(b.items) as Array<[string, any]>) {
         out += -obj.val;
-        expenseItems[id] = { name: obj.name, val: -obj.val, category: obj.category, order: obj.order };
+        expenseItems[id] = { name: obj.name, val: -obj.val, category: obj.category, order: obj.order, day: obj.day };
       }
 
       const startingPoint = idx === 0 ? 0 : prevCumulative;
@@ -197,6 +203,46 @@ export function computeBudget(state: BudgetState, horizonISO: ISODate): BudgetCo
   
 // ---- helpers ----
 function round(n: number): number { return Math.round(n * 100) / 100; }
+
+/** The day-of-month an ISO date falls on. String arithmetic, not a Date:
+ *  `new Date("2026-10-05")` is UTC midnight and reads as the 4th west of
+ *  Greenwich — the same trap toISODate exists to avoid. */
+function dayOf(date: ISODate): number { return Number(date.slice(8, 10)); }
+
+/**
+ * item id -> the day of the month the FIXED / RECURRING section sorts it
+ * by. Two rules, and the split is deliberate.
+ *
+ * A MONTHLY RULE USES ITS OWN `dayOfMonth`, the day it is MEANT to land
+ * on. Taking the next occurrence instead would read the 28th off a rule
+ * due on the 31st every February, and the row would move up the list for
+ * one month a year and back down again. The intended day is both the
+ * stabler answer and the truer one: rent is due on the 31st.
+ *
+ * EVERYTHING ELSE USES ITS NEXT OCCURRENCE — the earliest event the
+ * forecast holds for it, which is what `events` already is, sorted by
+ * date and filtered to the check-in date. For a one-off that is simply
+ * its own date. For a weekly or biweekly rule it is honest but restless:
+ * such a rule has no day of the month, so whatever is picked, the row
+ * moves as the weeks do. Said plainly in the spec rather than hidden.
+ *
+ * A rule with no occurrence in the window gets nothing here and falls
+ * back to the event's own date at the call site, which is the only date
+ * anyone has for it.
+ */
+function sortDays(state: BudgetState, events: BudgetEvent[]): Record<string, number> {
+  const monthlyDay: Record<string, number> = {};
+  for (const r of state.recurring || []) {
+    if (r.cadence === "monthly") monthlyDay[r.id] = r.dayOfMonth || dayOf(r.startDate);
+  }
+  const out: Record<string, number> = {};
+  // `events` is sorted by date, so the FIRST sighting of an id is its
+  // next occurrence. Later ones are not allowed to overwrite it.
+  for (const e of events) {
+    if (out[e.srcId] === undefined) out[e.srcId] = monthlyDay[e.srcId] ?? dayOf(e.date);
+  }
+  return out;
+}
 
 function monthLabel(iso: ISODate): string {
   const d = new Date(iso + "T00:00:00");

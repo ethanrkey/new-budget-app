@@ -3454,6 +3454,62 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### FIXED / RECURRING sorts itself by day (2026-10-26)
+
+The section is ordered by day of the month, then by name, on both
+clients and in the CSV export. Asked for on the owner's own use: a
+list of bills in the order they were typed answers no question, and
+the one it is scanned for is "what is left this month".
+
+**The tiebreaker is alphabetical, case-ignored.** Four bills on the
+1st is the normal case, and creation order among them reads as no
+order at all. Alphabetical is not meaningful, but it is stable and
+findable. `localeCompare`, not `<`: a bare comparison puts every
+capital above every lowercase, so a bill typed in lower case falls
+below a `Z`.
+
+**The day comes off the rule, not off the next occurrence — for
+monthly rules.** A rule due on the 31st reads 31 in February too.
+Taking the occurrence's day would read 28 and float the row up the
+list for one month a year and back down after it.
+
+**Weekly and biweekly rules read oddly, and this is the honest
+report of it.** They have no day of the month; whatever is picked
+moves as the weeks do, so such a row drifts up and down the section
+from one month to the next. The next occurrence is used because it
+is the only day the rule actually has. A weekly bill is rare enough
+that this was not worth a second ordering concept, but it is a real
+wart and it is the owner's to overrule.
+
+**Nothing was deleted to apply it.** The ask was to drop the stored
+manual order for the section; what shipped instead is
+`settings.budgetBillSort`, defaulting to `"day"`, which produces the
+identical screen for every existing account because an account
+saved before the field existed simply inherits the default. The
+stored `order` values go inert rather than away. The first manual
+drag calls `adoptBillOrder`, which writes `order` afresh from the
+sequence on screen and flips the account to `"manual"` — so a stale
+order from before the sort can never resurface, and the decision is
+reversible, which wiping the data would not have been.
+
+**Adopting happens BEFORE the move, not instead of it.** While the
+sort is on, a bill's stored `order` is arbitrary. `swapOrder` would
+trade two meaningless numbers and the row would not move; a drag
+would renumber correctly and then be overruled by the sort. Both web
+reorder paths now call `adoptBillOrder` first, and it declines every
+group that is not a day-sorted bill section.
+
+**KNOWN GAP: there is no way back to the day sort.** Once an account
+has dragged a row, it is manual for good, short of editing the
+field. No control was added because none was asked for. If the sort
+is worth having by default it is probably worth a "Sort by date"
+reset in the section header; flagged, not built.
+
+`computeBudgetLayout`'s `billSort` option defaults to `"day"` on
+purpose. Three places render this layout and a fourth exports it,
+and a forgotten call site should fail toward the new behavior rather
+than quietly keep the old one.
+
 ### The webhook we were not listening for (2026-10-21)
 
 **Answered from the dashboard logs** the owner read: three

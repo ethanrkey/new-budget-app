@@ -3,7 +3,7 @@
 // BudgetView (to render) and the CSV exporter (to match exactly what's on
 // screen) — one source of truth instead of two copies that can drift apart.
 
-import type { BudgetColumn, CategoryRef, TrackerCategory } from "./types.ts";
+import type { BillSort, BudgetColumn, CategoryRef, TrackerCategory } from "./types.ts";
 
 export type SectionKey = "bill" | "saving" | "oneoff";
 
@@ -115,12 +115,21 @@ function sectionFor(category: CategoryRef): SectionKey {
 //   that need to know which reorder group a row belongs to
 export function computeBudgetLayout(
   budget: BudgetColumn[],
-  trackerCategories: TrackerCategory[] = []
+  trackerCategories: TrackerCategory[] = [],
+  /**
+   * `billSort` DEFAULTS TO "day", which is the direction a forgotten
+   * call site should fail in: the new behavior, not the old one. Three
+   * places render this layout and a fourth exports it, and the cost of
+   * one of them missing the option is then a section that sorts the way
+   * every other one of them does.
+   */
+  opts: { billSort?: BillSort } = {}
 ): BudgetLayout {
   const sectionItems = { bill: [], saving: [], oneoff: [] } as Record<SectionKey, BudgetRow[]>;
   const otherIncome: BudgetRow[] = [];
   const rowCat: Record<string, CategoryRef> = {};
   const rowOrder: Record<string, number> = {};
+  const rowDay: Record<string, number> = {};
 
   // A row exists if any month has it; `seen` is what keeps one item from
   // being listed once per column it appears in. By id — the thing that
@@ -132,6 +141,7 @@ export function computeBudgetLayout(
       if (!seen.has(id)) { seen.add(id); sectionItems[secKey].push({ key: id, name: obj.name }); }
       rowCat[id] = obj.category;
       rowOrder[id] = obj.order ?? 0;
+      rowDay[id] = obj.day ?? 0;
     }
     for (const [id, obj] of Object.entries(col.otherInItems || {})) {
       if (!seen.has(id)) { seen.add(id); otherIncome.push({ key: id, name: obj.name }); }
@@ -141,10 +151,31 @@ export function computeBudgetLayout(
 
   // `?? 0` only where the compiler cannot see that every id was just
   // written into rowOrder above — the runtime result is unchanged.
+  const dayOf = (r: BudgetRow) => rowDay[r.key] ?? 0;
   const ord = (r: BudgetRow) => rowOrder[r.key] ?? 0;
   otherIncome.sort((a, b) => ord(a) - ord(b));
-  sectionItems.bill.sort((a, b) => ord(a) - ord(b));
   sectionItems.oneoff.sort((a, b) => ord(a) - ord(b));
+
+  // FIXED / RECURRING sorts by the day of the month, then by name.
+  //
+  // WHY A TIEBREAKER AT ALL: four bills on the 1st are four rows in
+  // whatever sequence the columns happened to yield, which is creation
+  // order, which looks like no order. Alphabetical is not meaningful,
+  // but it is STABLE and findable — the same list in the same sequence
+  // every time it is drawn, on both clients and in the CSV.
+  //
+  // `localeCompare` rather than `<`: "Ally" and "ally" are the same
+  // place in a list a person is reading, and a bare comparison puts
+  // every capital letter before every lowercase one.
+  //
+  // The manual order is NOT consulted here and is not gone either —
+  // see Settings.budgetBillSort. The first drag writes it back from
+  // what is on screen and this branch stops running.
+  if ((opts.billSort ?? "day") === "day") {
+    sectionItems.bill.sort((a, b) => dayOf(a) - dayOf(b) || a.name.localeCompare(b.name));
+  } else {
+    sectionItems.bill.sort((a, b) => ord(a) - ord(b));
+  }
 
   // Sort by `.order` rather than trusting the array's own position — moving
   // a category (mutate.ts's moveCategory) only swaps `.order` values, it
