@@ -24,7 +24,7 @@ export interface Connection {
  * The five pill states, named for what they MEAN. The owner dictated
  * the five strings; this is the question of which one you are in.
  */
-export type PillState = "manual" | "synced" | "loggedToday" | "stale" | "reconnect";
+export type PillState = "manual" | "synced" | "syncing" | "loggedToday" | "stale" | "reconnect";
 
 /**
  * How long after a successful sync the pill stops saying "synced
@@ -57,7 +57,21 @@ export function pillStateOf(
   snapshotSource: "manual" | "plaid" | undefined,
   snapshotDate: string,
   today: string,
+  /**
+   * A pull is in flight right now.
+   *
+   * ABOVE EVERYTHING INCLUDING RECONNECT, and it is the one state
+   * that outranks worst-news-first. The others describe a number
+   * that is on screen; this one says the answer is being fetched,
+   * and a reconnect prompt shown over a pull that may be about to
+   * succeed asks for work nobody may need to do. It lasts seconds.
+   *
+   * Default false, so every caller that has no idea whether a pull
+   * is running keeps the behavior it had.
+   */
+  syncing = false,
 ): PillState {
+  if (syncing && connection) return "syncing";
   if (!connection) return "manual";
   if (connection.status === "login_required") return "reconnect";
   if (!connection.lastSyncedAt) return "manual";
@@ -77,11 +91,12 @@ export function pillStateOf(
  */
 export function pillTextOf(
   state: PillState,
-  parts: { amount: string; asOf: string; syncedTime: string; syncedWhen: string },
+  parts: { amount: string; asOf: string; syncedTime: string; syncedWhen: string; loggedStamp: string },
 ): string {
   switch (state) {
     case "reconnect": return PILL.reconnect(parts.amount);
-    case "loggedToday": return PILL.loggedToday(parts.amount);
+    case "syncing": return PILL.syncing(parts.amount);
+    case "loggedToday": return PILL.loggedToday(parts.amount, parts.loggedStamp);
     case "stale": return PILL.stale(parts.amount, parts.syncedWhen);
     case "synced": return PILL.synced(parts.amount, parts.syncedTime);
     case "manual": return PILL.manual(parts.amount, parts.asOf);
@@ -95,11 +110,12 @@ export function pillTextOf(
  */
 export function pillSuffixOf(
   state: PillState,
-  parts: { asOf: string; syncedTime: string; syncedWhen: string },
+  parts: { asOf: string; syncedTime: string; syncedWhen: string; loggedStamp: string },
 ): string {
   switch (state) {
     case "reconnect": return PILL_SUFFIX.reconnect();
-    case "loggedToday": return PILL_SUFFIX.loggedToday();
+    case "syncing": return PILL_SUFFIX.syncing();
+    case "loggedToday": return PILL_SUFFIX.loggedToday(parts.loggedStamp);
     case "stale": return PILL_SUFFIX.stale(parts.syncedWhen);
     case "synced": return PILL_SUFFIX.synced(parts.syncedTime);
     case "manual": return PILL_SUFFIX.manual(parts.asOf);
@@ -116,6 +132,7 @@ export function pillLongOf(
 ): string {
   switch (state) {
     case "reconnect": return `${parts.amount} · ${PILL_SUFFIX_LONG.reconnect()}`;
+    case "syncing": return `${parts.amount} · ${PILL_SUFFIX_LONG.syncing()}`;
     case "loggedToday": return `${parts.amount} · ${PILL_SUFFIX_LONG.loggedToday(parts.loggedStamp)}`;
     case "stale": return `${parts.amount} · ${PILL_SUFFIX_LONG.stale(parts.syncedStamp)}`;
     case "synced": return `${parts.amount} · ${PILL_SUFFIX_LONG.synced(parts.syncedStamp)}`;

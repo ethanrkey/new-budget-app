@@ -16,7 +16,7 @@ const money = (n) =>
 // display only; the single button opens UpdateBalanceModal, where nothing
 // changes until Confirm. Stays visible on every tab because this balance is
 // the anchor every Ledger/Budget number is built from.
-export default function AccountStrip({ account, onUpdateClick, connection, newestSnapshot, onPull, onReconnect }) {
+export default function AccountStrip({ account, onUpdateClick, connection, newestSnapshot, onPull, onReconnect, syncing = false }) {
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState(null);
@@ -45,6 +45,9 @@ export default function AccountStrip({ account, onUpdateClick, connection, newes
     newestSnapshot?.date === account.balanceAsOf ? newestSnapshot?.source : undefined,
     account.balanceAsOf,
     todayISO(),
+    // A pull is running. The line said "as of 10/22" for the five
+    // seconds one takes, which reads as a tap that did nothing.
+    syncing || busy,
   );
   // THE WEB SAYS THE WHOLE STAMP, the phone says the short form —
   // the owner's call after seeing both. A browser has the room, and

@@ -449,7 +449,10 @@ export default function App() {
   // stale, and `reloadFromServer` did. The rule was right and it
   // had been switched off.
   const pullNow = useCallback((trigger) => duringPlaidWrite(async () => {
-    const result = await pullBalance(supabase, trigger);
+    setPulling(true);
+    let result;
+    try { result = await pullBalance(supabase, trigger); }
+    finally { setPulling(false); }
     if (!result) return "Couldn't reach your bank just now";
     if (!result.synced) return refreshOutcome(result.reason) ?? "Nothing to update";
     setConnection((c) => c && { ...c, status: result.status ?? c.status, lastSyncedAt: result.lastSyncedAt ?? c.lastSyncedAt });
@@ -470,6 +473,10 @@ export default function App() {
   // window belongs to the SERVER — per account, so one pull serves
   // every device — and this only decides whether to make the call.
   const [connection, setConnection] = useState(null);
+  // A pull is in flight. Drives the pill's "syncing…" — the line sat
+  // on "as of 10/22" for the five seconds a pull takes, which reads
+  // as a click that did nothing.
+  const [pulling, setPulling] = useState(false);
   const [plaidBeta, setPlaidBeta] = useState(false);
   const [connTick, setConnTick] = useState(0);
   const justConnected = useRef(false);
@@ -513,7 +520,10 @@ export default function App() {
       if (justConnected.current) { justConnected.current = false; return; }
       if (!shouldPullOnOpen({ connectedFeatures }, row)) return;
       await duringPlaidWrite(async () => {
-        const result = await pullBalance(supabase, "open");
+        setPulling(true);
+        let result;
+        try { result = await pullBalance(supabase, "open"); }
+        finally { if (!dead) setPulling(false); }
         if (dead || !result) return;
         setConnection((c) => c && { ...c, status: result.status ?? c.status, lastSyncedAt: result.lastSyncedAt ?? c.lastSyncedAt });
         // A pull that actually wrote changed a snapshot on the server,
@@ -597,6 +607,37 @@ export default function App() {
       window.removeEventListener("focus", check);
     };
   }, [session?.user?.id, adoptServerState]);
+
+  // A TAB COMING BACK IS AN OPEN. Pull-on-open ran once per page
+  // load, so a tab left open since the morning never asked again
+  // however long it sat — which is the one case the 12-hour window
+  // exists for. The browser's equivalent of "the app came back" is
+  // this pair of events, the same pair the staleness check above
+  // listens to.
+  //
+  // THE DECISION IS STILL THE SERVER'S. This asks; plaid-balance's
+  // claim decides, so a tab switched to five times in a minute
+  // costs five function calls and at most one call to a bank. The
+  // trigger is "open", never "refresh", so none of it touches the
+  // four manual refreshes a day.
+  useEffect(() => {
+    if (!connectedFeatures || !connection) return;
+    let asking = false;
+    async function onReturn() {
+      if (document.visibilityState !== "visible" || asking) return;
+      // Not while one of our own writes is outstanding: a pull
+      // started from the menu is already doing this.
+      if (plaidWriteInFlight()) return;
+      asking = true;
+      try { await pullNow("open"); } finally { asking = false; }
+    }
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [connectedFeatures, connection, pullNow]);
 
   // Per-device theme (theme.js) — NOT the same as settings.theme, which is
   // the synced account default. Re-derive whenever the account default
@@ -708,6 +749,7 @@ export default function App() {
       <AccountStrip
         account={account}
         connection={connection}
+        syncing={pulling}
         newestSnapshot={(state.accountSnapshots?.[account.id] ?? []).at(-1)}
         onUpdateClick={() => setUpdateBalanceOpen(true)}
         onPull={pullNow}

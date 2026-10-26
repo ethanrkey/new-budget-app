@@ -200,10 +200,34 @@ export const CONNECT_HINT_DISMISS = "Don't show again";
 export const PILL_SUFFIX = {
   /** Not connected, which is the ordinary case and reads as one. */
   manual: (date: string) => `as of ${date}`,
-  /** Connected and recently synced. */
-  synced: (time: string) => `synced ${time}`,
-  /** Connected, but today's number is one the user typed. Manual wins. */
-  loggedToday: () => "logged today",
+  /**
+   * Connected and recently synced.
+   *
+   * THE STAMP CARRIES ITS OWN DAY when it is not today — see
+   * fmtShortStamp. "synced 8:46 PM" beside a reading from Sunday was
+   * a lie told by a format, and the pill is the one line in the app
+   * whose whole job is to say how old the number is.
+   */
+  synced: (stamp: string) => `synced ${stamp}`,
+  /**
+   * A pull is happening right now.
+   *
+   * IT IS THE ONLY STATE THAT IS NOT ABOUT THE NUMBER BESIDE IT. The
+   * other five describe where the figure came from; this one says
+   * the app is busy finding out. Without it the pill sat on "as of
+   * 10/22" for the five seconds a pull takes and the tap read as
+   * having done nothing.
+   */
+  syncing: () => "syncing…",
+  /**
+   * Connected, but today's number is one the user typed. Manual wins.
+   *
+   * IT USED TO SAY "logged today" AND NOTHING ELSE. The day was the
+   * only fact in it, and the day is the one fact this state already
+   * guarantees — it exists precisely when the snapshot is today's.
+   * The time is the part the reader does not have.
+   */
+  loggedToday: (stamp: string) => `logged ${stamp}`,
   /** Connected, pulls are failing, so the last GOOD time is shown. */
   stale: (when: string) => `synced ${when}`,
   /**
@@ -231,6 +255,8 @@ export const PILL_SUFFIX = {
 export const PILL_SUFFIX_LONG = {
   manual: (date: string) => `as of ${date}`,
   synced: (stamp: string) => `synced ${stamp}`,
+  /** Same word on both clients; only the stamp's length differs. */
+  syncing: () => PILL_SUFFIX.syncing(),
   /** A manual override, with the moment it was typed. */
   loggedToday: (stamp: string) => `logged ${stamp}`,
   stale: (stamp: string) => `synced ${stamp}`,
@@ -239,8 +265,9 @@ export const PILL_SUFFIX_LONG = {
 
 export const PILL = {
   manual: (amount: string, date: string) => `${amount} · ${PILL_SUFFIX.manual(date)}`,
-  synced: (amount: string, time: string) => `${amount} · ${PILL_SUFFIX.synced(time)}`,
-  loggedToday: (amount: string) => `${amount} · ${PILL_SUFFIX.loggedToday()}`,
+  synced: (amount: string, stamp: string) => `${amount} · ${PILL_SUFFIX.synced(stamp)}`,
+  syncing: (amount: string) => `${amount} · ${PILL_SUFFIX.syncing()}`,
+  loggedToday: (amount: string, stamp: string) => `${amount} · ${PILL_SUFFIX.loggedToday(stamp)}`,
   stale: (amount: string, when: string) => `${amount} · ${PILL_SUFFIX.stale(when)}`,
   reconnect: (amount: string) => `${amount} · ${PILL_SUFFIX.reconnect()}`,
 } as const;

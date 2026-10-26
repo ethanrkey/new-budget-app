@@ -9,6 +9,7 @@ import SaveFailure from "./SaveFailure";
 import UnsavedNotice from "./UnsavedNotice";
 import { writeStash, clearStash, readStash, type Stash } from "../lib/stash";
 import { loadPrefs, savePrefs, DEFAULT_PREFS, type Prefs } from "../lib/prefs";
+import { load as loadConnection } from "../lib/connection";
 import * as feel from "../lib/haptics";
 import type { BudgetState } from "../../src/engine/types.ts";
 
@@ -75,9 +76,30 @@ export function StateProvider({ userId, children }: { userId: string; children: 
 
   // Felt only when it actually fetched. A pull that came back empty
   // handed because the network is down has nothing to confirm.
+  //
+  // IT ASKS THE BANK QUESTION FIRST, AND IT IS THE SAME QUESTION THE
+  // APP ASKS ON OPEN — trigger "open", so the server's 12-hour
+  // window decides and the day's four "Refresh now" taps are
+  // untouched. A swipe is not a demand for a billed call; it is "is
+  // there anything new". When the balance is fresh this is one
+  // function call that answers no, and the reload below is the
+  // whole of what happens.
+  //
+  // DELIBERATELY SILENT WHEN THERE WAS NOTHING TO PULL. The pill's
+  // own stamp is the feedback, and a toast saying "already up to
+  // date" after every swipe would be the app congratulating itself.
+  // The explicit Refresh now button still reports its outcome,
+  // because that one was asked a direct question.
+  const connectedFeatures = !!state?.settings.connectedFeatures;
   const pullToRefresh = useCallback(async () => {
+    if (connectedFeatures) {
+      // Never fatal to the gesture: a bank that cannot be reached
+      // must not stop the swipe from reloading what is already
+      // saved. The reload below is the part the user asked for.
+      try { await loadConnection({ connectedFeatures }); } catch { /* reload anyway */ }
+    }
     if (await refresh()) feel.light();
-  }, [refresh]);
+  }, [connectedFeatures, refresh]);
 
   useEffect(() => { resetStore(); refresh(); }, [refresh]);
   useEffect(() => { loadPrefs().then(setPrefs); }, []);

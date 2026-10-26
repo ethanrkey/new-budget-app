@@ -19,7 +19,7 @@ import { readFileSync } from "node:fs";
 import { normalize } from "../src/engine/stateShape.ts";
 import { updateAccountBalance, updateAccountSnapshot } from "../src/engine/mutate.ts";
 import { primaryAccount } from "../src/engine/model.ts";
-import { fmtDate, fmtInstant } from "../src/shared/dates.ts";
+import { fmtDate, fmtInstant, fmtShortStamp } from "../src/shared/dates.ts";
 import { HIDDEN_ROWS_COPY } from "../src/content/logBalance.ts";
 import { splitState, assembleState } from "../src/engine/entities.ts";
 import {
@@ -120,7 +120,12 @@ eq("not connected", PILL.manual("$1,204.19", "10/17"), "$1,204.19 · as of 10/17
 eq("connected and fresh", PILL.synced("$1,204.19", "8:14 AM"), "$1,204.19 · synced 8:14 AM");
 // MANUAL WINS ON THE DAY, and the pill has to say so rather than
 // claiming a sync whose number is not the one on screen.
-eq("connected, but today's number was typed", PILL.loggedToday("$1,204.19"), "$1,204.19 · logged today");
+// It used to say "logged today" and nothing else. The day was the
+// only fact in it, and the day is the one fact this state already
+// guarantees: it exists precisely when the snapshot is today's.
+eq("connected, but today's number was typed",
+  PILL.loggedToday("$1,204.19", "8:46 PM"), "$1,204.19 · logged 8:46 PM");
+eq("a pull is happening right now", PILL.syncing("$1,204.19"), "$1,204.19 · syncing…");
 eq("pulls failing — the last GOOD time, not 'now'",
   PILL.stale("$1,204.19", "10/18 7:02 AM"), "$1,204.19 · synced 10/18 7:02 AM");
 // Names the action, not the problem: "disconnected" tells you
@@ -222,11 +227,12 @@ for (const st of ["manual", "synced", "loggedToday", "stale"]) {
 
 // The state picks the string; neither client assembles its own.
 {
-  const parts = { amount: "$1,204.19", asOf: "10/17", syncedTime: "8:14 AM", syncedWhen: "10/18 7:02 AM" };
+  const parts = { amount: "$1,204.19", asOf: "10/17", syncedTime: "8:14 AM",
+    syncedWhen: "10/18 7:02 AM", loggedStamp: "8:46 PM" };
   eq("every state maps to the owner's own sentence",
-    ["manual", "synced", "loggedToday", "stale", "reconnect"].map((st) => pillTextOf(st, parts)),
-    ["$1,204.19 · as of 10/17", "$1,204.19 · synced 8:14 AM", "$1,204.19 · logged today",
-     "$1,204.19 · synced 10/18 7:02 AM", "$1,204.19 · Reconnect"]);
+    ["manual", "synced", "syncing", "loggedToday", "stale", "reconnect"].map((st) => pillTextOf(st, parts)),
+    ["$1,204.19 · as of 10/17", "$1,204.19 · synced 8:14 AM", "$1,204.19 · syncing…",
+     "$1,204.19 · logged 8:46 PM", "$1,204.19 · synced 10/18 7:02 AM", "$1,204.19 · Reconnect"]);
 }
 
 // THE PHONE DRAWS THE SAME WORDS IN TWO LINES, because its anchor
@@ -235,11 +241,11 @@ for (const st of ["manual", "synced", "loggedToday", "stale"]) {
 // change to the owner's wording cannot reach one client and not the
 // other.
 {
-  const parts = { asOf: "10/17", syncedTime: "8:14 AM", syncedWhen: "10/18 7:02 AM" };
-  const states = ["manual", "synced", "loggedToday", "stale", "reconnect"];
+  const parts = { asOf: "10/17", syncedTime: "8:14 AM", syncedWhen: "10/18 7:02 AM", loggedStamp: "8:46 PM" };
+  const states = ["manual", "synced", "syncing", "loggedToday", "stale", "reconnect"];
   eq("the phone's half-line, same words",
     states.map((st) => pillSuffixOf(st, parts)),
-    ["as of 10/17", "synced 8:14 AM", "logged today", "synced 10/18 7:02 AM", "Reconnect"]);
+    ["as of 10/17", "synced 8:14 AM", "syncing…", "logged 8:46 PM", "synced 10/18 7:02 AM", "Reconnect"]);
   // And the two really are one source: the web's line is the balance,
   // the separator, and exactly this.
   is("the web's line is the balance plus the phone's half",
@@ -686,6 +692,87 @@ console.log("\n== no page still says the app never connects to a bank ==");
   const landing = readFileSync(new URL("../src/components/Landing.jsx", import.meta.url), "utf8");
   is("the landing line is the owner's replacement, verbatim",
     landing.includes("Free. No bank connection required."));
+}
+
+// ---- The short stamp: the day, only when it is not today --------------
+console.log("\n== how old is this number ==");
+{
+  // A fixed "now" and instants built from it, so the assertions are
+  // about the FORMAT and not about when the suite happened to run.
+  const now = new Date(2026, 9, 26, 21, 15);
+  const at = (dayOffset, h, min) =>
+    new Date(2026, 9, 26 + dayOffset, h, min).toISOString();
+
+  eq("today is just the clock", fmtShortStamp(at(0, 20, 46), now), "8:46 PM");
+  eq("yesterday says so in words", fmtShortStamp(at(-1, 20, 46), now), "yesterday, 8:46 PM");
+  eq("older takes a date, with no year", fmtShortStamp(at(-6, 20, 46), now), "10/20, 8:46 PM");
+  // 11pm and 1am are two hours apart and two different days, and
+  // "yesterday" is a claim about the calendar, not about a span.
+  eq("eleven at night is yesterday to one in the morning",
+    fmtShortStamp(new Date(2026, 9, 25, 23, 30).toISOString(), new Date(2026, 9, 26, 1, 0)),
+    "yesterday, 11:30 PM");
+  eq("nothing synced yet is a dash", fmtShortStamp(null, now), "—");
+  eq("...and so is a string that is not an instant", fmtShortStamp("not a date", now), "—");
+  // The web is unchanged and says the whole thing, year included.
+  is("the web's stamp still carries the year",
+    /\d{4}/.test(fmtInstant(at(-6, 20, 46))));
+}
+
+// ---- "syncing…": the one state that is not about the number ----------
+console.log("\n== a pull in flight ==");
+{
+  const conn = (over = {}) => ({ institutionName: "Bank", status: "ok",
+    lastSyncedAt: "2026-10-20T12:46:00.000Z", mask: "1234", ...over });
+  const TODAY2 = "2026-10-20";
+  eq("a pull in flight says so", pillStateOf(conn(), "plaid", TODAY2, TODAY2, true), "syncing");
+  // It outranks even Reconnect: that prompt asks for work, and a
+  // pull that may be about to succeed is work nobody may need.
+  eq("...even over a connection asking to be signed into again",
+    pillStateOf(conn({ status: "login_required" }), "plaid", TODAY2, TODAY2, true), "syncing");
+  eq("...and over today's typed number",
+    pillStateOf(conn(), "manual", TODAY2, TODAY2, true), "syncing");
+  // Nothing to sync WITH is not syncing, whatever a caller passes.
+  eq("an account with no bank is never syncing",
+    pillStateOf(null, "manual", TODAY2, TODAY2, true), "manual");
+  // Every existing caller passes four arguments and must be unmoved.
+  eq("the flag defaults to off", pillStateOf(conn(), "plaid", TODAY2, TODAY2), "synced");
+}
+
+// ---- The swipe asks the same question the app asks on open -----------
+console.log("\n== what a swipe down costs ==");
+{
+  const provider = readFileSync(new URL("../mobile/components/StateProvider.tsx", import.meta.url), "utf8");
+  const pull = provider.slice(provider.indexOf("const pullToRefresh"), provider.indexOf("useEffect(() => { resetStore()"));
+  // THE POINT OF THE WHOLE BULLET: a swipe must not spend one of
+  // the four manual refreshes a day. `load` sends trigger "open",
+  // which the server gates on the 12-hour window and never counts.
+  is("the swipe goes through the connection load, not a refresh call",
+    pull.includes("loadConnection({ connectedFeatures })"));
+  is("...and never asks for a 'refresh' trigger", !pull.includes('"refresh"'));
+  is("...and reloads even when the bank could not be reached",
+    pull.includes("catch { /* reload anyway */ }"));
+  const conn = readFileSync(new URL("../mobile/lib/connection.ts", import.meta.url), "utf8");
+  is("and the load it calls is the open-trigger one", conn.includes('pullBalance(supabase as never, "open")'));
+  // And it reports a write only when there was one. Chrome reloads
+  // the whole state on this answer, so a load that always said no
+  // would leave the balance stale and a load that always said yes
+  // would refetch after every open.
+  is("...and reports a write only when the pull synced AND was applied",
+    conn.includes('wrote = result.synced && result.applied === "written";'));
+
+  // Coming back to the app is an open, on both clients.
+  const chrome = readFileSync(new URL("../mobile/components/Chrome.tsx", import.meta.url), "utf8");
+  // ANCHORED ON "active", because the dependency array two lines
+  // below the listener also names syncConnection — a looser match
+  // went on passing with the body of the listener deleted.
+  is("the phone asks again when it comes back to the foreground",
+    /next === "active"\) void syncConnection\(\);/.test(chrome));
+  is("...and reloads its state when the pull actually wrote",
+    chrome.includes("if (wrote) await refresh();"));
+  const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const onReturn = app.slice(app.indexOf("async function onReturn"), app.indexOf("document.addEventListener(\"visibilitychange\", onReturn)"));
+  is("the web asks again when the tab comes back", onReturn.includes('pullNow("open")'));
+  is("...and not while one of its own writes is outstanding", onReturn.includes("plaidWriteInFlight()"));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

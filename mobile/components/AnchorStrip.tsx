@@ -3,7 +3,7 @@ import { SymbolView } from "expo-symbols";
 import { T, money } from "../lib/theme";
 import { useBudget } from "./StateProvider";
 import { primaryAccount, todayISO } from "../../src/engine/model.ts";
-import { fmtClock, fmtDate, fmtInstant } from "../../src/shared/dates.ts";
+import { fmtDate, fmtShortStamp } from "../../src/shared/dates.ts";
 import { pillIsAction, pillStateOf, pillSuffixOf, type Connection } from "../../src/shared/connect.ts";
 
 // The verified checking balance, on every tab.
@@ -78,7 +78,7 @@ import { pillIsAction, pillStateOf, pillSuffixOf, type Connection } from "../../
 // balance, any account name, or any date. The first line shrinks the
 // ACCOUNT NAME instead, which is the one piece of it that is both
 // user-supplied and the least load-bearing.
-export default function AnchorStrip({ onPress, connection }: {
+export default function AnchorStrip({ onPress, connection, syncing = false }: {
   onPress?: () => void;
   /**
    * The bank connection, or null. Passed in rather than read here:
@@ -90,6 +90,8 @@ export default function AnchorStrip({ onPress, connection }: {
    * lives in Settings. What changes here is the second line.
    */
   connection?: Connection | null;
+  /** A pull is in flight; the pill says so. See PILL_SUFFIX.syncing. */
+  syncing?: boolean;
 }) {
   const { state, online } = useBudget();
   if (!state) return null;
@@ -106,14 +108,22 @@ export default function AnchorStrip({ onPress, connection }: {
     newest?.date === account.balanceAsOf ? newest?.source : undefined,
     account.balanceAsOf,
     todayISO(),
+    syncing,
   );
   // LOCAL, both halves. These used to slice the UTC date off the
   // instant and pair it with a local clock, which showed tomorrow's
   // date beside tonight's time. See fmtInstant.
+  //
+  // AND THE SHORT STAMP CARRIES ITS OWN DAY when it is not today.
+  // "synced 8:46 PM" is unambiguous on a phone you have just picked
+  // up and a lie on one you have not. See fmtShortStamp.
   const suffix = pillSuffixOf(pill, {
     asOf: fmtDate(account.balanceAsOf),
-    syncedTime: fmtClock(connection?.lastSyncedAt),
-    syncedWhen: connection?.lastSyncedAt ? fmtInstant(connection.lastSyncedAt) : "never",
+    syncedTime: fmtShortStamp(connection?.lastSyncedAt),
+    syncedWhen: connection?.lastSyncedAt ? fmtShortStamp(connection.lastSyncedAt) : "never",
+    // The moment the user typed it. Older rows predate `loggedAt`,
+    // and for those the word on its own is still true.
+    loggedStamp: newest?.loggedAt ? fmtShortStamp(newest.loggedAt) : "today",
   });
 
   return (

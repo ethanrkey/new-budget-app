@@ -141,6 +141,43 @@ export function fmtInstant(iso: string | null | undefined): string {
   return `${d.toLocaleDateString("en-US")}, ${fmtClock(iso)}`;
 }
 
+/**
+ * AN INSTANT, SHORT, WITH THE DAY ONLY WHEN IT IS NOT TODAY:
+ *
+ *   today      ->  "8:46 PM"
+ *   yesterday  ->  "yesterday, 8:46 PM"
+ *   older      ->  "10/20, 8:46 PM"
+ *
+ * The phone's form. A bare clock time is unambiguous on a phone you
+ * have just picked up and a lie on one you have not: "synced 8:46 PM"
+ * on a reading from Sunday reads as this evening. Adding the date to
+ * every stamp would be the other error — four extra characters on the
+ * line that truncates first (see AnchorStrip), for a day the reader
+ * already knows, 90% of the time.
+ *
+ * NO YEAR, and that is the one piece deliberately dropped. This
+ * answers "how old is this number", and a number old enough to need a
+ * year is answered by the date alone. The web says the whole thing —
+ * see fmtInstant and PILL_SUFFIX_LONG.
+ *
+ * `now` IS AN ARGUMENT so this can be asserted without a clock. It
+ * defaults to the real one, so no caller has to care.
+ */
+export function fmtShortStamp(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const clock = fmtClock(iso);
+  // Compared as LOCAL CALENDAR DAYS, not as a span of hours. 11pm and
+  // 1am are two hours apart and two different days, and "yesterday"
+  // is a claim about the calendar.
+  const dayOf = (x: Date) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+  if (dayOf(d) === dayOf(now)) return clock;
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (dayOf(d) === dayOf(yesterday)) return `yesterday, ${clock}`;
+  return `${d.getMonth() + 1}/${d.getDate()}, ${clock}`;
+}
+
 /** Just the clock part of an instant, local: "8:46 PM". */
 export function fmtClock(iso: string | null | undefined): string {
   if (!iso) return "—";

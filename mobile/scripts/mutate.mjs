@@ -966,6 +966,50 @@ const MUTATIONS = [
    "components/CalendarView.tsx",
    "          {detail.balance != null ? (", "          {false ? ("],
 
+  // 3b. sync timing: when the app asks, and what the pill says.
+  ["the short stamp drops the day and claims everything is today",
+   "../src/shared/dates.ts",
+   "  if (dayOf(d) === dayOf(now)) return clock;", "  if (true) return clock;"],
+  ["yesterday is named by date instead of by the word",
+   "../src/shared/dates.ts",
+   "  if (dayOf(d) === dayOf(yesterday)) return `yesterday, ${clock}`;", "  // mutated"],
+  // DROPPED, not forgotten: "yesterday is decided by hours elapsed"
+  // (now.getTime() - 24h in place of the previous calendar date).
+  // The two agree on every day of the year except the one after a
+  // fall-back transition, in a zone that has one — a 25-hour day is
+  // the only case where going back 24 hours of real time lands on a
+  // different calendar date than "yesterday". A test pinned to that
+  // instant would assert a timezone as much as a behavior, and would
+  // read as green on a machine running in UTC. The calendar form is
+  // still the right code; it is just not a difference this suite can
+  // honestly claim to be checking.
+  ["the pill goes back to sitting on the old stamp during a pull",
+   "../src/shared/connect.ts",
+   "  if (syncing && connection) return \"syncing\";", "  // mutated"],
+  ["a bankless account claims to be syncing",
+   "../src/shared/connect.ts",
+   "  if (syncing && connection) return \"syncing\";", "  if (syncing) return \"syncing\";"],
+  ["the pill says 'logged today' again, without the time",
+   "../src/content/connect.ts",
+   "  loggedToday: (stamp: string) => `logged ${stamp}`,", "  loggedToday: () => \"logged today\","],
+  ["a swipe down spends one of the day's four refreshes",
+   "components/StateProvider.tsx",
+   "      try { await loadConnection({ connectedFeatures }); } catch { /* reload anyway */ }",
+   "      // mutated"],
+  ["a bank that cannot be reached stops the swipe reloading",
+   "components/StateProvider.tsx",
+   "      try { await loadConnection({ connectedFeatures }); } catch { /* reload anyway */ }",
+   "      await loadConnection({ connectedFeatures });"],
+  ["the phone stops asking when it comes back to the foreground",
+   "components/Chrome.tsx",
+   "      if (next === \"active\") void syncConnection();", "      // mutated"],
+  ["a pull that wrote leaves the balance on screen stale",
+   "components/Chrome.tsx",
+   "    if (wrote) await refresh();", "    // mutated"],
+  ["the load stops reporting that it wrote",
+   "lib/connection.ts",
+   "          wrote = result.synced && result.applied === \"written\";", "          wrote = false;"],
+
   // 4a. a monthly rule in a month too short to hold its day.
   ["a monthly rule skips every month too short for its day",
    "../src/engine/generate.ts",
@@ -1394,8 +1438,8 @@ const MUTATIONS = [
    '  "Disconnecting removes Key Budget\'s access right away. Balances already pulled stay in your history. "',
    '  "Disconnecting removes Key Budget\'s access right away. "'],
   ["the pill claims a sync on a day the number was typed", "../src/content/connect.ts",
-   '  loggedToday: () => "logged today",',
-   '  loggedToday: () => "synced today",'],
+   '  loggedToday: (stamp: string) => `logged ${stamp}`,',
+   '  loggedToday: (stamp: string) => `synced ${stamp}`,'],
   ["the reconnect pill names the problem instead of the action", "../src/content/connect.ts",
    '  reconnect: () => "Reconnect",',
    '  reconnect: () => "Disconnected",'],

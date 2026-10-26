@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
 import { T } from "../lib/theme";
@@ -131,7 +131,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   // ONE LOAD PER APP OPEN, and none at all with the feature off:
   // `load` returns immediately when the account is not allowlisted or
   // has not opted in, so an ordinary manual user makes no request.
-  const { connection } = useConnection();
+  const { connection, syncing } = useConnection();
   // The SAME question the strip asks, asked once here so the sheet
   // and the bar cannot disagree about whether there is an override
   // to drop.
@@ -145,9 +145,40 @@ export function Chrome({ session, children }: { session: Session; children: Reac
     : "manual" as const;
   const [connectedSheet, setConnectedSheet] = useState(false);
   const connectedFeatures = !!state?.settings.connectedFeatures;
+
+  // THE WHOLE OF "ASK WHETHER A PULL IS DUE", in one callback,
+  // because it is wanted from two places that must not drift: a cold
+  // start and a return to the foreground.
+  //
+  // The 12-hour window is the SERVER's, so this asks every time and
+  // lets plaid-balance decide. Asking is a function call, not a
+  // billed Plaid call; it is the claim inside plaid_claim_pull that
+  // decides whether anyone's bank is contacted.
+  const syncConnection = useCallback(async () => {
+    const { wrote } = await loadConnection({ connectedFeatures });
+    // A PULL THAT WROTE MOVED A SNAPSHOT ON THE SERVER, and this app
+    // is holding the state from before it. Nothing else would have
+    // refetched, so the strip would go on showing the old balance
+    // beside a fresh "synced" stamp — the two halves of one line
+    // disagreeing.
+    if (wrote) await refresh();
+  }, [connectedFeatures, refresh]);
+
+  // BACK FROM THE BACKGROUND IS AN OPEN. A phone is not restarted
+  // between uses; it is picked up. Pull-on-open ran only on a cold
+  // start, so a phone that had been open since morning never
+  // refreshed again however long it sat — the one case the 12-hour
+  // window was written for.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") void syncConnection();
+    });
+    return () => { sub.remove(); };
+  }, [syncConnection]);
+
   useEffect(() => {
     void (async () => {
-      await loadConnection({ connectedFeatures });
+      await syncConnection();
       // AND ON A COLD START, A SESSION NOBODY FINISHED. The app can
       // be killed between Hosted Link and coming back, in which
       // case neither openLink's await nor the foreground listener
@@ -180,6 +211,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
       <View style={{ paddingTop: insets.top + 10 }}>
         <AnchorStrip
           connection={connection}
+          syncing={syncing}
           onPress={() => {
             // CONNECTED OPENS A CHOICE, NOT A FORM. Someone with a
             // bank may want either door — refresh, or type a number

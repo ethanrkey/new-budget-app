@@ -3454,6 +3454,67 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### Pull-on-open was only ever a cold start (2026-10-26)
+
+Reported from real use. The 12-hour staleness window is the
+server's, and the app asked it exactly once per launch — so a phone
+that had been open since morning, or a browser tab left up since
+yesterday, never asked again however long it sat. That is the one
+case the window was written for.
+
+**Coming back IS an open, on both clients.** The phone listens for
+`AppState` going `active`; the web listens for `visibilitychange`
+and `focus`, the same pair the document-staleness check already
+uses. Both run the identical code path as the cold start, so the
+two cannot drift.
+
+**Asking is cheap; pulling is not, and only the server pulls.** A
+tab switched to five times in a minute costs five edge-function
+calls and at most one call to a bank — `plaid_claim_pull` is one
+statement and only one caller gets past it. No client clock is ever
+consulted, for the reason syncGuard.ts gives.
+
+**Swipe-down runs the same check and spends nothing.** Trigger
+`"open"`, never `"refresh"`: the four manual refreshes a day belong
+to the Refresh now button, which is the only control that asks a
+direct question and so the only one that reports an outcome. A
+swipe on a fresh balance is one function call answering no, then an
+ordinary reload. It is deliberately silent — the pill's own stamp
+is the feedback, and a toast after every swipe saying "already up
+to date" is the app congratulating itself. A bank that cannot be
+reached never stops the reload.
+
+**A pull that wrote now reloads the state.** `load()` returns
+whether it wrote, and the caller refetches. It did not before: a
+cold-start pull moved a snapshot on the server and nothing on the
+phone noticed, so the strip showed yesterday's balance beside a
+fresh "synced" stamp — the two halves of one line disagreeing.
+
+**"syncing…" is the sixth pill state**, and the only one that is
+not about the number beside it. The other five say where the figure
+came from; this says the app is finding out. It outranks everything
+including Reconnect, which is the one place worst-news-first is
+overruled: a reconnect prompt drawn over a pull that may be about
+to succeed asks for work nobody may need to do, and it lasts
+seconds. A bankless account is never syncing, whatever a caller
+passes.
+
+**Short stamps carry their own day.** `fmtShortStamp`: "8:46 PM"
+today, "yesterday, 8:46 PM", "10/20, 8:46 PM" older — no year,
+because a number old enough to need one is answered by the date
+alone. "synced 8:46 PM" beside a reading from Sunday was a lie told
+by a format. The web is unchanged and still says the whole
+instant; that was the owner's call on 2026-10-20 and this does not
+revisit it. "logged today" became "logged 8:46 PM" for the same
+reason in reverse: the day was the only fact in it, and the day is
+the one fact that state already guarantees.
+
+Comparison is by CALENDAR DAY, not by hours elapsed — 11pm and 1am
+are two hours apart and two different days. The mutation for that
+distinction was dropped rather than faked: the two forms disagree
+only on the day after a fall-back transition, and a test pinned to
+that instant would be asserting a timezone.
+
 ### FIXED / RECURRING sorts itself by day (2026-10-26)
 
 The section is ordered by day of the month, then by name, on both
