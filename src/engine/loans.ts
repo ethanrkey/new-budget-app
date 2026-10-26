@@ -96,15 +96,25 @@ function round(n: number): number { return Math.round(n * 100) / 100; }
  * been above its original is measured from its PEAK, and from the
  * best it has reached since that peak.
  */
-function paidOffPercent(
-  original: number, peak: number, bestOwed: number | null,
-  outstanding: number | null, hasLogged: boolean,
-): number | null {
+function paidOff(original: number, amounts: number[]): {
+  peak: number; basis: number; everAboveOriginal: boolean; percentPaid: number | null;
+} {
+  // THE WHOLE CALCULATION, including the peak. An earlier version
+  // took `peak` and `bestOwed` as arguments and both call sites
+  // worked them out for themselves — which is the same two copies
+  // the extraction was for, moved one line up. The mutation runner
+  // found it: three lines of this file matched in two places.
+  const peak = Math.max(original, ...(amounts.length ? amounts : [original]));
+  // From the LAST snapshot that hit the peak — re-reaching an old
+  // high is as much a reset as setting a new one.
+  const peakAt = amounts.lastIndexOf(peak);
+  const bestOwed = peakAt < 0 ? null : Math.min(...amounts.slice(peakAt));
+  const outstanding = amounts.length ? amounts[amounts.length - 1]! : null;
   const everAboveOriginal = peak > original;
   const basis = everAboveOriginal ? peak : original;
-  if (!hasLogged || basis <= 0) return null;
-  const fraction = everAboveOriginal ? 1 - bestOwed! / peak : 1 - outstanding! / original;
-  return Math.min(100, Math.max(0, round(fraction * 100)));
+  if (outstanding == null || basis <= 0) return { peak, basis, everAboveOriginal, percentPaid: null };
+  const fraction = everAboveOriginal ? 1 - bestOwed! / peak : 1 - outstanding / original;
+  return { peak, basis, everAboveOriginal, percentPaid: Math.min(100, Math.max(0, round(fraction * 100))) };
 }
 function daysBetween(a: ISODate, b: ISODate): number {
   return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86400000);
@@ -194,23 +204,17 @@ export function computeDebtSummary(state: BudgetState): DebtSummary {
     if (latest) total += latest.amount;
     else unlogged++;
     const configured = isLoanConfigured(cat);
-    // THE SAME ARITHMETIC THE EXPANDED CARD USES, from the same
-    // function — see paidOffPercent. An unconfigured loan has no
-    // principal to measure against, so it gets no figure and the
-    // card draws no bar.
-    const original = Number(cat.originalPrincipal) || 0;
-    const amounts = snaps.map((x) => x.amount);
-    const peak = Math.max(original, ...(amounts.length ? amounts : [original]));
-    const peakAt = amounts.lastIndexOf(peak);
-    const bestOwed = peakAt < 0 ? null : Math.min(...amounts.slice(peakAt));
     return {
       id: cat.id,
       name: cat.name,
       outstanding: latest ? latest.amount : null,
       loggedOn: latest ? latest.date : null,
       configured,
+      // THE SAME ARITHMETIC THE EXPANDED CARD USES, from the same
+      // function. An unconfigured loan has no principal to measure
+      // against, so it gets no figure and the card draws no bar.
       percentPaid: configured
-        ? paidOffPercent(original, peak, bestOwed, latest ? latest.amount : null, latest != null)
+        ? paidOff(Number(cat.originalPrincipal) || 0, snaps.map((x) => x.amount)).percentPaid
         : null,
     };
   });
@@ -264,21 +268,11 @@ export function computeLoanProgress(state: BudgetState, cat: TrackerCategory, as
   const original = cat.originalPrincipal;
   const outstanding = latest ? latest.amount : null;
 
-  const amounts = snaps.map((s) => s.amount);
-  const peak = Math.max(original, ...(amounts.length ? amounts : [original]));
-  // From the LAST snapshot that hit the peak — re-reaching an old high is
-  // as much a reset as setting a new one, and taking the first occurrence
-  // would let a dip from years ago go on crediting a balance that has
-  // since climbed all the way back.
-  // -1 when the peak IS the original principal and no snapshot reached
-  // it — in which case everAboveOriginal is false and nothing below
-  // reads bestOwed.
-  const peakAt = amounts.lastIndexOf(peak);
-  const bestOwed = peakAt < 0 ? null : Math.min(...amounts.slice(peakAt));
-  const everAboveOriginal = peak > original;
-  const basis = everAboveOriginal ? peak : original;
-
-  const percentPaid = paidOffPercent(original, peak, bestOwed, outstanding, latest != null);
+  // ONE FUNCTION FOR THE WHOLE BASIS QUESTION — the peak, what it is
+  // measured against, and the percentage — because the collapsed
+  // debt card asks it too and a second copy is a second answer.
+  const { peak, basis, everAboveOriginal, percentPaid } =
+    paidOff(original, snaps.map((x) => x.amount));
 
   return {
     latest,

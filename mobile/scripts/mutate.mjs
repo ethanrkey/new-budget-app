@@ -179,8 +179,11 @@ const MUTATIONS = [
    'setSheet({ kind: "add", presetCategory: "income" })', 'setSheet({ kind: "add" })'],
   ["an invisible sheet still renders", "components/BottomSheet.tsx",
    'visible={visible}', 'visible'],
+  // Widened to the line that follows it: the delete row carries the
+  // same attribute, and the first match is the one that wins.
   ["history rows are tappable offline", "components/HistoryList.tsx",
-   'disabled={!online}', 'disabled={false}'],
+   'disabled={!online}\n                onPress={() => onEdit(e)}',
+   'disabled={false}\n                onPress={() => onEdit(e)}'],
   ["sparkline rests on the FIRST reading", "lib/charts.tsx",
    'const shown = active ?? points.length - 1;', 'const shown = active ?? 0;'],
   // The Ledger picker, reported twice and fixed on 2026-10-08. These
@@ -358,8 +361,11 @@ const MUTATIONS = [
    'return message || "Error.";'],
   ["the Google button is not drawn at all", "components/SignIn.tsx",
    "{GOOGLE_AVAILABLE && <GoogleButton", "{false && <GoogleButton"],
+  // Both sign-in handlers end on this line, so the anchor carries the
+  // comment above the Google one with it.
   ["the Google error is swallowed", "components/SignIn.tsx",
-   "    if (message) setError(message);", "    // mutated"],
+   "    // not worth a line of red under the button.\n    if (message) setError(message);",
+   "    // not worth a line of red under the button.\n    // mutated"],
   ["the export goes out as a nameless string again", "components/ExportSheet.tsx",
    "await Sharing.shareAsync(file.uri, { mimeType, UTI: uti, dialogTitle: filename });",
    "await Sharing.shareAsync(file.uri, {});"],
@@ -515,8 +521,11 @@ const MUTATIONS = [
    "        keyboardType=\"decimal-pad\""],
   ["the setup scroll view stops making room for the keyboard", "components/Setup.tsx",
    "              automaticallyAdjustKeyboardInsets\n", ""],
+  // The date row and the day row both wear the cue; this is the day
+  // one, so the anchor takes the line above it that says so.
   ["the payday row stops saying it is a control", "components/Setup.tsx",
-   "<Text style={styles.pickCue}>Change \u203a</Text>", "<Text style={styles.pickCue}></Text>"],
+   "        <Text style={styles.inputText}>{value}</Text>\n        <Text style={styles.pickCue}>Change \u203a</Text>",
+   "        <Text style={styles.inputText}>{value}</Text>\n        <Text style={styles.pickCue}></Text>"],
 
   ["groceries start on the day setup was run again", "../src/engine/setup.ts",
    "  const start = firstWeekdayOn(weekday, today);", "  const start = today;"],
@@ -627,9 +636,12 @@ const MUTATIONS = [
   // (see below), so there is nothing left for them to break.
   ["removing the last bill row leaves the step with none",
    "../src/engine/setup.ts", "  return left.length ? left : [emptyBillRow(today)];", "  return left;"],
+  // removeAccountRow has the identical first line, so the anchor
+  // starts at this function's own signature.
   ["a bill row other than the one swiped is removed",
-   "../src/engine/setup.ts", "  const left = rows.filter((_, i) => i !== index);",
-   "  const left = rows.filter((_, i) => i !== index + 1);"],
+   "../src/engine/setup.ts",
+   "): BillRow[] {\n  const left = rows.filter((_, i) => i !== index);",
+   "): BillRow[] {\n  const left = rows.filter((_, i) => i !== index + 1);"],
 
   // Written AFTER the first build 9 run, which reported two tests
   // nothing could kill. This is one of them made honest. The other
@@ -653,9 +665,12 @@ const MUTATIONS = [
   // 2 — the owner's word on the checking bar.
   // Now a mutation of the SHARED suffix, since both clients draw it
   // from one place — which is also the point of that refactor.
+  // PILL_SUFFIX and PILL_SUFFIX_LONG hold three identical lines
+  // between them, so each anchor here carries the line above it —
+  // the one the two objects do not share.
   ["the checking bar says \"verified\" again", "../src/content/connect.ts",
-   '  manual: (date: string) => `as of ${date}`,',
-   '  manual: (date: string) => `verified ${date}`,'],
+   '  /** Not connected, which is the ordinary case and reads as one. */\n  manual: (date: string) => `as of ${date}`,',
+   '  /** Not connected, which is the ordinary case and reads as one. */\n  manual: (date: string) => `verified ${date}`,'],
   ["a savings card stops saying when it was logged",
    "../mobile/app/(tabs)/dashboard.tsx",
    "{latest ? `logged ${fmtDate(latest.date)}`",
@@ -901,10 +916,12 @@ const MUTATIONS = [
    "  (v as string[]) ?? [];"],
 
   // 2. About and the tour are two rows.
+  // About passes the identical handler, so the anchor carries the
+  // line above it — the one only Settings has.
   ["Settings' tour row opens About instead of the tour",
    "components/Chrome.tsx",
-   "              onStartTour={() => { setScreen(null); setTouring(true); }}",
-   "              onStartTour={() => setScreen(\"about\")}"],
+   "              onOpenAbout={() => setScreen(\"about\")}\n              onStartTour={() => { setScreen(null); setTouring(true); }}",
+   "              onOpenAbout={() => setScreen(\"about\")}\n              onStartTour={() => setScreen(\"about\")}"],
 
   // 3. the Ledger's date column.
   ["the Ledger's column goes back to a full date",
@@ -966,21 +983,90 @@ const MUTATIONS = [
    "components/CalendarView.tsx",
    "          {detail.balance != null ? (", "          {false ? ("],
 
+  // 1a. THE OWED MUTATIONS, written down 2026-10-26: the form sheet
+  // and its guard, the four sheets converted to it, the web
+  // calendar's compaction, FIELD_TEXT, and setup's order.
+  ["a form with something typed in it can be swiped away",
+   "components/FormSheet.tsx",
+   "    <NativeSheet visible={visible} onClose={onRequestClose} swipeToClose={!dirty}>",
+   "    <NativeSheet visible={visible} onClose={onRequestClose} swipeToClose>"],
+  ["an untouched form asks before it closes",
+   "components/FormSheet.tsx",
+   "    if (!dirty) { onClose(); return; }", "    // mutated"],
+  ["Discard keeps what it said it would throw away",
+   "components/FormSheet.tsx",
+   "      { text: copy.discard, style: \"destructive\", onPress: onClose },",
+   "      { text: copy.discard, style: \"destructive\" },"],
+  ["the keep-it button is the destructive one",
+   "components/FormSheet.tsx",
+   "      { text: copy.keep, style: \"cancel\" },\n      { text: copy.discard, style: \"destructive\", onPress: onClose },",
+   "      { text: copy.discard, style: \"destructive\", onPress: onClose },\n      { text: copy.keep, style: \"cancel\" },"],
+  // ANCHORED ON THE JSX, not on the bare attribute: the phrase
+  // `presentationStyle="pageSheet"` appears in this file's own
+  // comment first, and a mutation that rewrites a comment is a
+  // mutation nothing can catch.
+  ["a form is a card drawn at the bottom of a modal again",
+   "components/NativeSheet.tsx",
+   "      presentationStyle=\"pageSheet\"\n      animationType=\"slide\"",
+   "      presentationStyle=\"overFullScreen\"\n      animationType=\"slide\""],
+  ["the loan sheet counts an untouched form as typed in",
+   "components/LoanSheet.tsx",
+   "  const dirty = name !== cat.name", "  const dirty = true || name !== cat.name"],
+  ["the loan sheet forgets that it opened holding the terms",
+   "components/LoanSheet.tsx",
+   "  const dirty = name !== cat.name\n    || original !== (cat.originalPrincipal != null ? String(cat.originalPrincipal) : \"\")",
+   "  const dirty = name !== \"\"\n    || original !== \"\""],
+  ["the category sheet never notices an edit",
+   "components/CategorySheet.tsx",
+   "  const dirty = JSON.stringify(d) !== JSON.stringify(initial);", "  const dirty = false;"],
+  ["the contribution offer forgets what was typed into it",
+   "components/ContributionPrompt.tsx",
+   "  const dirty = row.amount.trim() !== \"\";", "  const dirty = false;"],
+  ["the web calendar's cells go back to floating in a tall box",
+   "../src/components/CalendarView.jsx",
+   "flex flex-col justify-start min-h-[46px] sm:min-h-[48px]",
+   "min-h-[62px] sm:min-h-[132px] align-top", "drive_calendar"],
+  // THE WHOLE BLOCK, not just the wrapper's className. Dropping
+  // `flex` leaves two inline spans sitting on the same line anyway,
+  // so that mutation changed the spread and nothing a measurement
+  // could see — it survived. What the compaction actually did was
+  // merge two DIVS into one line, and undoing it means putting the
+  // second div back.
+  ["the net takes a line of its own again",
+   "../src/components/CalendarView.jsx",
+   "                <div className=\"flex items-baseline justify-between gap-1 leading-none\">\n                  <span className=\"text-[11px] sm:text-xs tabular-nums font-medium text-gray-900 dark:text-gray-100\">\n                    {cellAmountFull(cell.balance)}\n                  </span>\n                  {cell.net != null && (\n                    <span className={`text-[10px] tabular-nums shrink-0 ${\n                      cell.net < 0 ? \"text-expense\" : \"text-income\"}`}>\n                      {netAmountFull(cell.net)}\n                    </span>\n                  )}\n                </div>",
+   "                <div className=\"leading-none\">\n                  <div className=\"text-[11px] sm:text-xs tabular-nums font-medium text-gray-900 dark:text-gray-100\">\n                    {cellAmountFull(cell.balance)}\n                  </div>\n                  {cell.net != null && (\n                    <div className={`text-[10px] tabular-nums ${\n                      cell.net < 0 ? \"text-expense\" : \"text-income\"}`}>\n                      {netAmountFull(cell.net)}\n                    </div>\n                  )}\n                </div>", "drive_calendar"],
+  ["a field stops stating its letter spacing",
+   "lib/fields.ts", "  letterSpacing: 0,", "  // mutated"],
+  ["a field states a letter spacing, but the wrong one",
+   "lib/fields.ts", "  letterSpacing: 0,", "  letterSpacing: 8,"],
+  ["the other attribute that can ride a recycled view is left out",
+   "lib/fields.ts", "  fontVariant: [],", "  // mutated"],
+  ["setup asks for the balance last again",
+   "../src/content/setup.ts",
+   "  \"balance\", \"paycheck\", \"rent\", \"bills\", \"groceries\", \"accounts\", \"contributions\",",
+   "  \"paycheck\", \"rent\", \"bills\", \"groceries\", \"balance\", \"accounts\", \"contributions\","],
+  ["setup asks about contributions before the accounts they are into",
+   "../src/content/setup.ts",
+   "  \"balance\", \"paycheck\", \"rent\", \"bills\", \"groceries\", \"accounts\", \"contributions\",",
+   "  \"balance\", \"paycheck\", \"rent\", \"bills\", \"groceries\", \"contributions\", \"accounts\","],
+
   // 1b. how far along each loan is, on the collapsed debt card.
   ["the collapsed debt card goes back to a list of balances",
    "app/(tabs)/dashboard.tsx",
    "            {loan.percentPaid != null && (", "            {false && ("],
   ["a loan with no terms gets a bar anyway, reading as nothing paid",
    "../src/engine/loans.ts",
-   "      percentPaid: configured\n        ? paidOffPercent(original, peak, bestOwed, latest ? latest.amount : null, latest != null)\n        : null,",
-   "      percentPaid: paidOffPercent(original, peak, bestOwed, latest ? latest.amount : null, latest != null) ?? 0,"],
+   "      percentPaid: configured\n        ? paidOff(Number(cat.originalPrincipal) || 0, snaps.map((x) => x.amount)).percentPaid\n        : null,",
+   "      percentPaid: paidOff(Number(cat.originalPrincipal) || 0, snaps.map((x) => x.amount)).percentPaid ?? 0,"],
   ["a loan nobody has logged claims none of it is paid",
    "../src/engine/loans.ts",
-   "  if (!hasLogged || basis <= 0) return null;", "  if (basis <= 0) return 0;"],
+   "  if (outstanding == null || basis <= 0) return { peak, basis, everAboveOriginal, percentPaid: null };",
+   "  if (basis <= 0) return { peak, basis, everAboveOriginal, percentPaid: 0 };"],
   ["the collapsed card measures from the original even after interest",
    "../src/engine/loans.ts",
-   "  const fraction = everAboveOriginal ? 1 - bestOwed! / peak : 1 - outstanding! / original;",
-   "  const fraction = 1 - outstanding! / original;"],
+   "  const fraction = everAboveOriginal ? 1 - bestOwed! / peak : 1 - outstanding / original;",
+   "  const fraction = 1 - outstanding / original;"],
   ["the percentage is left out of what a screen reader hears",
    "app/(tabs)/dashboard.tsx",
    "              loan.percentPaid == null ? \"\" : `, ${Math.round(loan.percentPaid)}% paid off`}. Edit it.`}",
@@ -1110,7 +1196,7 @@ const MUTATIONS = [
    "  if (syncing && connection) return \"syncing\";", "  if (syncing) return \"syncing\";"],
   ["the pill says 'logged today' again, without the time",
    "../src/content/connect.ts",
-   "  loggedToday: (stamp: string) => `logged ${stamp}`,", "  loggedToday: () => \"logged today\","],
+   "   */\n  loggedToday: (stamp: string) => `logged ${stamp}`,", "   */\n  loggedToday: () => \"logged today\","],
   ["a swipe down spends one of the day's four refreshes",
    "components/StateProvider.tsx",
    "      try { await loadConnection({ connectedFeatures }); } catch { /* reload anyway */ }",
@@ -1165,11 +1251,11 @@ const MUTATIONS = [
    "    out[e.srcId] = monthlyDay[e.srcId] ?? dayOf(e.date);"],
   ["dragging a sorted section does not switch it to manual",
    "../src/engine/mutate.ts",
-   "    settings: { ...state.settings, budgetBillSort: \"manual\" },", "    settings: state.settings,"],
+   "  return { ...renumbered, settings: { ...state.settings, budgetBillSort: \"manual\" } };",
+   "  return renumbered;"],
   ["the first drag keeps the stored order instead of the one on screen",
    "../src/engine/mutate.ts",
-   "  const orderOf = new Map(ids.map((x, i) => [x, i]));",
-   "  const orderOf = new Map();"],
+   "  const renumbered = renumber(state, ids);", "  const renumbered = state;"],
   ["a drag in any other section drags the bill section with it",
    "../src/engine/mutate.ts",
    "  if (!ids.length || findItem(state, ids[0]!)?.category !== \"bill\") return state;", "  // mutated"],
@@ -1557,11 +1643,11 @@ const MUTATIONS = [
    '  "Disconnecting removes Key Budget\'s access right away. Balances already pulled stay in your history. "',
    '  "Disconnecting removes Key Budget\'s access right away. "'],
   ["the pill claims a sync on a day the number was typed", "../src/content/connect.ts",
-   '  loggedToday: (stamp: string) => `logged ${stamp}`,',
-   '  loggedToday: (stamp: string) => `synced ${stamp}`,'],
+   '   */\n  loggedToday: (stamp: string) => `logged ${stamp}`,',
+   '   */\n  loggedToday: (stamp: string) => `synced ${stamp}`,'],
   ["the reconnect pill names the problem instead of the action", "../src/content/connect.ts",
-   '  reconnect: () => "Reconnect",',
-   '  reconnect: () => "Disconnected",'],
+   '   */\n  reconnect: () => "Reconnect",',
+   '   */\n  reconnect: () => "Disconnected",'],
   // ---- the gate, which is the privacy promise in code (2026-10-20) ----
   ["the toggle alone opens Connect, without the allowlist", "../src/shared/connect.ts",
    "  return allowlisted && settings.connectedFeatures;",
@@ -2078,6 +2164,27 @@ export function preflight(list = MUTATIONS) {
   return list.filter(([, file, find]) => !readFileSync(file, "utf8").includes(find));
 }
 
+/**
+ * MUTATIONS WHOSE TARGET APPEARS MORE THAN ONCE in their file.
+ *
+ * `replace` takes the FIRST occurrence, and in this codebase the
+ * first occurrence of a line of code is very often the copy of it
+ * inside the comment above it. On 2026-10-26 a mutation aimed at
+ * `presentationStyle="pageSheet"` rewrote NativeSheet's own comment
+ * and left the component untouched — so it broke nothing, survived,
+ * and was reported as a behavior nothing tests. That is the worst
+ * direction for this tool to be wrong in: it manufactures work by
+ * accusing a passing test of being decoration.
+ *
+ * Fatal up front, like a target that has moved, and for the same
+ * reason: a mutation that may be editing prose is not evidence
+ * either way. The fix is always to widen the anchor until it is
+ * unique, which the message says.
+ */
+export function ambiguous(list = MUTATIONS) {
+  return list.filter(([, file, find]) => readFileSync(file, "utf8").split(find).length > 2);
+}
+
 export { MUTATIONS };
 
 /** @returns the process exit code. Writes files; call it from a program, not a test. */
@@ -2092,6 +2199,17 @@ export async function main(argv = process.argv) {
     console.log(`${stale.length} MUTATION(S) POINT AT CODE THAT HAS MOVED — fix or drop each one:\n`);
     for (const [label, file] of stale) console.log(`  ${label}  (${file})`);
     console.log("\nNothing was run. A mutation that cannot break anything is not evidence.");
+    return 1;
+  }
+
+  const doubled = ambiguous();
+  if (doubled.length) {
+    console.log(`${doubled.length} MUTATION(S) MATCH MORE THAN ONE PLACE — widen each anchor until it is unique:\n`);
+    for (const [label, file] of doubled) console.log(`  ${label}  (${file})`);
+    console.log("\nThe first match wins, and in this codebase the first match is");
+    console.log("usually the copy inside the comment above the code. A mutation that");
+    console.log("may be editing prose breaks nothing and survives, which reports a");
+    console.log("working test as decoration.");
     return 1;
   }
 

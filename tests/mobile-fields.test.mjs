@@ -111,6 +111,28 @@ is("every TextInput in the app was reached", inputs >= 18);
 const signIn = readFileSync("mobile/components/SignIn.tsx", "utf8");
 is("the six-digit code box still kerns", (styleBody(signIn, "codeField") ?? "").includes("letterSpacing: 8"));
 
+// AND WHAT THE PIN ACTUALLY SAYS. Every field spreading FIELD_TEXT
+// is worth nothing if FIELD_TEXT itself is wrong or empty — and
+// until 2026-10-26 nothing checked: three mutations that emptied it,
+// dropped half of it, and set the WRONG kern all survived a full
+// run, because the only thing watching was "is it spread".
+//
+// Imported, not read as text: this is one of the few things in this
+// file that IS a property of the value rather than of the source.
+const { FIELD_TEXT } = await import("../mobile/lib/fields.ts");
+is("the pin states a letter spacing", "letterSpacing" in FIELD_TEXT);
+is("...and it is zero, which is what a recycled kern has to be overwritten with",
+  FIELD_TEXT.letterSpacing === 0);
+is("the pin states a font variant too — the other attribute that can ride across",
+  "fontVariant" in FIELD_TEXT);
+is("...and it is empty, so a field wanting tabular figures states its own",
+  Array.isArray(FIELD_TEXT.fontVariant) && FIELD_TEXT.fontVariant.length === 0);
+// A value, never an absence: absence is precisely what the stale
+// attribute fills, so `undefined` here would be the bug wearing the
+// fix's name.
+is("neither is left undefined, which is the bug itself",
+  FIELD_TEXT.letterSpacing !== undefined && FIELD_TEXT.fontVariant !== undefined);
+
 // A SUITE THAT RUNS NO CHECKS EXITS 0 — see the note in
 // tests/mobile-firstrun.test.mjs. The floor is far below any real count.
 if (checks < 10) {

@@ -3454,6 +3454,58 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### The owed mutations, and what writing them found (2026-10-26)
+
+The backlog named six places with behavior and no mutation:
+`FormSheet`, `useDiscardGuard`, the four sheets converted to it, the
+web calendar's compaction, `FIELD_TEXT`, and setup's reorder.
+Thirty-one mutations now cover them. Writing them turned up four
+things worth more than the mutations themselves.
+
+**A mutation can edit a comment and nothing else.** The one aimed at
+`presentationStyle="pageSheet"` matched that phrase in NativeSheet's
+own comment FIRST, rewrote the prose, left the component untouched,
+broke nothing, and survived — and a survivor is reported as a
+behavior nothing tests. The tool was manufacturing work by accusing
+a working test of being decoration.
+
+`ambiguous()` now refuses, up front and fatally, any mutation whose
+target matches more than one place in its file, with the same
+reasoning as a target that has moved: a mutation that may be editing
+prose is not evidence either way. It found **twelve**. All twelve
+happened to be landing on code, so no past run was wrong — but that
+was luck, and one of them was landing on the WRONG code: "the payday
+row stops saying it is a control" was hitting the DATE row, which is
+tested, while the day row it names was not. Widening the anchor
+surfaced a genuinely unverified behavior that had been reported as
+caught for weeks.
+
+**Two of the twelve were duplication I had just written.** The
+collapsed debt card's percentage copied the peak arithmetic out of
+`computeLoanProgress`, and `adoptBillOrder` copied `reorderList`'s
+renumbering. Both are now one function (`paidOff`, `renumber`). The
+mutation runner found both, which is not what it is for and is the
+second time this week it has been the thing that noticed.
+
+**The browser fixture was not robust to the date.** `drive_calendar`
+died on 26 October waiting for a cell that said "money in": the
+paycheck is biweekly and the anchor two days back, so late in a
+month every payday can fall before it. The fixture now carries a
+refund and a household expense dated TODAY — the one date guaranteed
+to be inside the month the calendar opens on and at or after the
+anchor — and the grid-shape checks moved to NEXT month, which is
+always whole and always entirely forecast. A settle wait that was
+keyed on the data is keyed on the rendering instead.
+
+**The compaction needed measuring, not reading.** Moving the net
+back to a line of its own changes one className, and every DOM check
+in the drive passed with it undone. The drive now measures: the net's
+box and the balance's box must overlap vertically, and a quiet cell
+must still be under 80px. Written as an overlap rather than equal
+tops because the two sit on a shared baseline at different sizes.
+
+493 mutations.
+
 ### How far along each loan is, on the collapsed card (2026-10-26)
 
 A small bar per loan, between the name and the balance, with the

@@ -1,4 +1,4 @@
-import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { act, render, screen, userEvent, waitFor, within } from "@testing-library/react-native";
 import { ScrollView } from "react-native";
 import { dayPickerProps, pickerProps } from "./setup";
 import { fmtDate } from "../../src/shared/dates.ts";
@@ -269,7 +269,15 @@ test("the keyboard cannot hide a control: every field reports its focus", async 
   reports("Amount");                                    // rent
   // The due day is a picker row rather than a field, so like the
   // payday control it cannot take focus — it says it is a control.
-  expect(dayRow("What day of the month is your rent/mortgage payment due\\?")).toBeOnTheScreen();
+  const due = dayRow("What day of the month is your rent/mortgage payment due\\?");
+  expect(due).toBeOnTheScreen();
+  // AND IT SAYS SO ON THE SCREEN, not only to VoiceOver. A row that
+  // looks like a filled field and is really a button is the one
+  // people do not press. The label above covers the screen reader;
+  // this covers everybody else, and until 2026-10-26 nothing did:
+  // the mutation for it had been landing on the DATE row, which is
+  // a different component on a different step and is tested.
+  expect(within(due).getByText("Change ›")).toBeOnTheScreen();
   await press("Skip");
   reports("Bill 1 name");                               // bills
   reports("Bill 1 amount");

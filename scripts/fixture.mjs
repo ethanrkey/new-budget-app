@@ -117,6 +117,24 @@ export function fixtureState() {
       toward("r-cl", "Car payment",          310, 22, "c-car",   11),
     ],
     oneoffs: [
+      // TWO ON TODAY, ONE EACH WAY, and they are here for a reason
+      // that is not realism.
+      //
+      // The paycheck is biweekly and the anchor is two days back, so
+      // whether this month holds any income AFTER the anchor depends
+      // on what day of the month it happens to be — and on
+      // 2026-10-26 it did not: both October paydays fell before it,
+      // every cell in the month said "money out", and the calendar
+      // drive timed out waiting for one that said otherwise. Nothing
+      // was broken; the date had moved. A fixture dated relative to
+      // today has to be robust on all 31 of them.
+      //
+      // Today is the one date guaranteed to sit inside the month the
+      // calendar opens on AND at or after an anchor two days back, so
+      // a pair here makes "a day with money moving both ways" true
+      // every day of the year.
+      { id: "o-rebate", name: "Refund",        amount: 62,  category: "income", order: 15, date: TODAY, accountId: PRIMARY_ACCOUNT_ID },
+      { id: "o-house",  name: "Household",     amount: 48,  category: "oneoff", order: 16, date: TODAY, accountId: PRIMARY_ACCOUNT_ID },
       { id: "o-dent",  name: "Dentist",       amount: 180, category: "oneoff", order: 12, date: shiftDays(TODAY, 9),  accountId: PRIMARY_ACCOUNT_ID },
       { id: "o-fly",   name: "Flight home",   amount: 320, category: "oneoff", order: 13, date: shiftMonths(TODAY, 1, 20), accountId: PRIMARY_ACCOUNT_ID },
       { id: "o-gifts", name: "Holiday gifts", amount: 260, category: "oneoff", order: 14, date: shiftMonths(TODAY, 2, 12), accountId: PRIMARY_ACCOUNT_ID },

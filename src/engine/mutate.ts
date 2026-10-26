@@ -213,7 +213,21 @@ export function reorderList(state: BudgetState, ids: string[], id: string, befor
   const insertAt = beforeId ? rest.indexOf(beforeId) : rest.length;
   const next = insertAt < 0 ? [...rest, id] : [...rest.slice(0, insertAt), id, ...rest.slice(insertAt)];
 
-  const orderOf = new Map(next.map((x, i) => [x, i]));
+  return renumber(state, next);
+}
+
+/**
+ * Write `order` across exactly these ids, in this sequence, and
+ * leave every other item alone.
+ *
+ * ONE COPY, because two callers do it — a drag (reorderList) and a
+ * section leaving its day sort (adoptBillOrder). It was written out
+ * twice, and the mutation runner is what noticed: the same line
+ * matched in two places, so a mutation aimed at one of them could
+ * silently have been testing the other.
+ */
+function renumber(state: BudgetState, ids: string[]): BudgetState {
+  const orderOf = new Map(ids.map((x, i) => [x, i]));
   const patch = (it: any) => (orderOf.has(it.id) ? { ...it, order: orderOf.get(it.id) } : it);
   return {
     ...state,
@@ -242,14 +256,8 @@ export function reorderList(state: BudgetState, ids: string[], id: string, befor
 export function adoptBillOrder(state: BudgetState, ids: string[]): BudgetState {
   if (state.settings.budgetBillSort !== "day") return state;
   if (!ids.length || findItem(state, ids[0]!)?.category !== "bill") return state;
-  const orderOf = new Map(ids.map((x, i) => [x, i]));
-  const patch = (it: any) => (orderOf.has(it.id) ? { ...it, order: orderOf.get(it.id) } : it);
-  return {
-    ...state,
-    settings: { ...state.settings, budgetBillSort: "manual" },
-    recurring: state.recurring.map(patch),
-    oneoffs: state.oneoffs.map(patch),
-  };
+  const renumbered = renumber(state, ids);
+  return { ...renumbered, settings: { ...state.settings, budgetBillSort: "manual" } };
 }
 
 // ---- Tracker category (savings/debt/investment) CRUD ----

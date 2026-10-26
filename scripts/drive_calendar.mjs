@@ -126,14 +126,37 @@ try {
   // reading the cells straight after it caught a half-rendered grid
   // about one run in three — which reported real behavior as broken
   // and, worse, reported it inconsistently.
+  //
+  // WAITS FOR THE PANEL'S OWN HEADING rather than for a cell that
+  // says "money in". That was the settle condition until
+  // 2026-10-26, when it stopped being one: late in a month every
+  // payday can fall before the anchor, and the drive hung for five
+  // seconds and then died waiting for a cell that was never coming.
+  // A settle check has to be about rendering, not about the data.
+  await app.page.waitForFunction(
+    (pretty) => (document.querySelector("main")?.innerText ?? "").includes(pretty),
+    { timeout: 5000 }, expectLogged[0] && fmtLongDay(expectLogged[0]),
+  );
+
+  // ---- round two: color by direction, and the items in the cell ----
+  //
+  // ON NEXT MONTH, NOT THIS ONE. Everything below needs a month with
+  // a mix of busy and quiet forecast days, and THIS month stops
+  // being one as the month wears on: the anchor is two days back, so
+  // by the 26th there were six forecast days left and two of them
+  // had anything on them. The drive failed on 2026-10-26 with
+  // nothing broken — the date had moved. Next month is always whole
+  // and always entirely forecast, which is the only month that can
+  // be relied on to hold both kinds of day on all 31 starting dates.
+  await app.page.evaluate(() => {
+    document.querySelector('button[aria-label="Next month"]').click();
+  });
   await app.page.waitForFunction(
     () => [...document.querySelectorAll("button[aria-label]")]
       .filter((b) => /^\w+day, /.test(b.getAttribute("aria-label")))
       .some((b) => /money in/.test(b.getAttribute("aria-label"))),
     { timeout: 5000 },
   );
-
-  // ---- round two: color by direction, and the items in the cell ----
   const cells = await app.page.evaluate(() => {
     const paint = (el) => el && getComputedStyle(el).color;
     return [...document.querySelectorAll("button[aria-label]")]
@@ -150,11 +173,24 @@ try {
         const net = spans.find((x) => /^[+\u2212]/.test(x.innerText.trim()));
         const dayNum = b.querySelector("span");
         const items = [...b.querySelectorAll("li")].map((li) => li.innerText.replace(/\s+/g, " ").trim());
+        // THE WHOLE BOX, not its top. The two sit on a shared
+        // BASELINE and are different sizes, so their tops differ by
+        // a pixel or two by design; what distinguishes one line from
+        // two is whether the boxes overlap at all.
+        const box = (el) => {
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { top: Math.round(r.top), bottom: Math.round(r.bottom) };
+        };
         return {
           label: b.getAttribute("aria-label"),
           dots, items,
           balColor: paint(bal), dayColor: paint(dayNum),
           netText: net?.innerText.trim() ?? null, netColor: paint(net),
+          // MEASURED, because this one is a fact about layout and
+          // nothing in the DOM says it. See the assertion below.
+          balBox: box(bal), netBox: box(net),
+          cellHeight: Math.round(b.getBoundingClientRect().height),
         };
       });
   });
@@ -162,6 +198,25 @@ try {
   const busy = cells.filter((c) => /transaction/.test(c.label));
   const quiet = cells.filter((c) => !/transaction/.test(c.label) && /Balance after/.test(c.label));
   is("the month has both busy and quiet days to compare", busy.length > 2 && quiet.length > 2);
+
+  // THE NET SHARES THE BALANCE'S LINE, and this is measured rather
+  // than read off the markup — moving it to a line of its own
+  // changes one className and nothing else, so every DOM check in
+  // this file passed happily with the compaction undone. It cost
+  // ~11px on every busy row, 55px of a five-row month, which was
+  // the difference between the grid and its panel fitting an 800px
+  // laptop and not.
+  {
+    const withNet = busy.filter((c) => c.netBox && c.balBox);
+    is("there are busy days with a net to measure", withNet.length > 0);
+    const stacked = withNet.filter((c) =>
+      !(c.netBox.top < c.balBox.bottom && c.balBox.top < c.netBox.bottom));
+    eq("the net sits on the balance's own line, not under it", stacked.length, 0);
+    // And a quiet cell stays short. The old min-height held every
+    // row at 132px whether or not anything was in it.
+    const shortest = Math.min(...quiet.map((c) => c.cellHeight));
+    is(`a quiet cell is still compact (${shortest}px)`, shortest < 80);
+  }
 
   // EVERY DOT MATCHES WHAT THE LABEL SAYS MOVED, which is the check
   // that the colors mean something rather than that they exist.

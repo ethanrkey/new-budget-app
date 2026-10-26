@@ -645,6 +645,75 @@ describe("the contribution offer says why it will not take a number", () => {
   });
 });
 
+// THE OTHER THREE SHEETS' DIRTY-TRACKING, which nothing watched
+// until 2026-10-26: four mutations that made each of them forget
+// what had been typed all survived a full run. An edit sheet opens
+// HOLDING the thing's own values, so "is anything typed in here" is
+// a comparison against what it opened with, not an emptiness test —
+// which is exactly the kind of predicate that rots quietly.
+describe("an edit sheet knows whether it has been edited", () => {
+  const LoanSheet = require("../components/LoanSheet").default;
+  const CategorySheet = require("../components/CategorySheet").default;
+  const ContributionPrompt = require("../components/ContributionPrompt").default;
+  const swipeable = () => screen.getByTestId("native-sheet").props.allowSwipeDismissal;
+
+  const loan = { id: "car", name: "Car loan", kind: "debt" as const, order: 0,
+    originalPrincipal: 10000, interestRate: 5.5, interestStartDate: "2026-01-01" };
+
+  test("a loan sheet opened and not touched may be swiped away", async () => {
+    await render(<LoanSheet cat={loan} busy={false} onSave={() => {}} onClose={() => {}} />);
+    // THE POINT: every field is full, and none of it was typed here.
+    expect(swipeable()).toBe(true);
+  });
+
+  test("...and changing one of its terms makes UIKit refuse", async () => {
+    await render(<LoanSheet cat={loan} busy={false} onSave={() => {}} onClose={() => {}} />);
+    await userEvent.type(screen.getByLabelText("Interest rate"), "6");
+    expect(swipeable()).toBe(false);
+  });
+
+  test("...and so does clearing one it opened with", async () => {
+    await render(<LoanSheet cat={loan} busy={false} onSave={() => {}} onClose={() => {}} />);
+    await userEvent.clear(screen.getByLabelText("Original loan amount"));
+    expect(swipeable()).toBe(false);
+  });
+
+  // A WHOLE DRAFT, every field a string — the sheet's validator
+  // trims each one, so a partial fixture crashes rather than fails,
+  // which looks like a broken test instead of a missing field.
+  const draft = {
+    name: "Ally Savings", kind: "asset" as const, assetKind: "savings" as const,
+    originalPrincipal: "", interestRate: "", interestStartDate: "2026-01-01",
+    balance: "8200", asOf: "2026-10-01",
+  };
+
+  test("a category sheet opened and not touched may be swiped away", async () => {
+    await render(<CategorySheet title="Edit" draft={draft} creating={false} busy={false}
+      onSave={() => {}} onClose={() => {}} />);
+    expect(swipeable()).toBe(true);
+  });
+
+  test("...and a renamed one may not", async () => {
+    await render(<CategorySheet title="Edit" draft={draft} creating={false} busy={false}
+      onSave={() => {}} onClose={() => {}} />);
+    await userEvent.type(screen.getByLabelText("Name"), "!");
+    expect(swipeable()).toBe(false);
+  });
+
+  test("the contribution offer opens empty and swipes away", async () => {
+    await render(<ContributionPrompt category={{ id: "roth", name: "Roth IRA", kind: "asset" }}
+      busy={false} onSchedule={() => {}} onClose={() => {}} />);
+    expect(swipeable()).toBe(true);
+  });
+
+  test("...until an amount is typed into it", async () => {
+    await render(<ContributionPrompt category={{ id: "roth", name: "Roth IRA", kind: "asset" }}
+      busy={false} onSchedule={() => {}} onClose={() => {}} />);
+    await userEvent.type(screen.getByLabelText("Roth IRA contribution amount"), "25");
+    expect(swipeable()).toBe(false);
+  });
+});
+
 describe("a balance sheet is a system sheet too", () => {
   const LogBalance = require("../components/LogBalance").default;
   const { DISCARD_BALANCE } = require("../../src/content/logBalance.ts");
@@ -752,6 +821,19 @@ describe("a balance sheet is a system sheet too", () => {
     // ...and discarding is what closes it.
     await act(async () => { press(DISCARD_BALANCE.discard); });
     expect(closed).toHaveLength(1);
+  });
+
+  // THE ORDER AND THE STYLES, not just the words. "Keep editing"
+  // first and cancel-styled, "Discard" second and destructive, is
+  // what makes the safe answer the one a thumb reaches and the one
+  // Escape takes. Reversed, the dangerous button is the default.
+  test("the alert puts keeping first and marks discarding destructive", async () => {
+    await host();
+    await userEvent.type(screen.getByLabelText("Amount"), "40");
+    await act(async () => { screen.getByTestId("native-sheet").props.onRequestClose(); });
+    const btns = alerts[0]!.buttons as { text?: string; style?: string }[];
+    expect(btns.map((b) => b.text)).toEqual([DISCARD_BALANCE.keep, DISCARD_BALANCE.discard]);
+    expect(btns.map((b) => b.style)).toEqual(["cancel", "destructive"]);
   });
 
   test("an untouched sheet closes without asking", async () => {
