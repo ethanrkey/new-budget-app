@@ -42,6 +42,16 @@ export interface DebtSummaryRow {
   outstanding: number | null;
   loggedOn: ISODate | null;
   configured: boolean;
+  /**
+   * The same figure the expanded card shows, or null.
+   *
+   * NULL FOR AN UNCONFIGURED LOAN — one with no terms has no
+   * original principal, so there is nothing to be a percentage OF,
+   * and the collapsed card draws no bar for it. Also null before
+   * anything has been logged, which is not zero: zero would claim
+   * none of it is paid, and the truth is that nobody has said.
+   */
+  percentPaid: number | null;
 }
 
 export interface DebtSummary {
@@ -69,6 +79,33 @@ export interface LoanProgress {
 }
 
 function round(n: number): number { return Math.round(n * 100) / 100; }
+
+/**
+ * How much of this loan is paid off, 0-100, or null when nothing
+ * has been logged.
+ *
+ * ONE COPY, because two screens ask it. The expanded loan card
+ * always did; since 2026-10-26 the COLLAPSED debt card draws a bar
+ * per loan from the same number, and a second implementation of
+ * "percent paid" is a second answer waiting to disagree with the
+ * first in front of somebody who can see both.
+ *
+ * TWO CASES, for the reason computeLoanProgress has always given:
+ * "paid off" against the original principal is meaningless once
+ * interest has pushed the balance above it, so a loan that has ever
+ * been above its original is measured from its PEAK, and from the
+ * best it has reached since that peak.
+ */
+function paidOffPercent(
+  original: number, peak: number, bestOwed: number | null,
+  outstanding: number | null, hasLogged: boolean,
+): number | null {
+  const everAboveOriginal = peak > original;
+  const basis = everAboveOriginal ? peak : original;
+  if (!hasLogged || basis <= 0) return null;
+  const fraction = everAboveOriginal ? 1 - bestOwed! / peak : 1 - outstanding! / original;
+  return Math.min(100, Math.max(0, round(fraction * 100)));
+}
 function daysBetween(a: ISODate, b: ISODate): number {
   return Math.round((new Date(b + "T00:00:00").getTime() - new Date(a + "T00:00:00").getTime()) / 86400000);
 }
@@ -156,12 +193,25 @@ export function computeDebtSummary(state: BudgetState): DebtSummary {
     const latest = snaps.length ? snaps[snaps.length - 1]! : null;
     if (latest) total += latest.amount;
     else unlogged++;
+    const configured = isLoanConfigured(cat);
+    // THE SAME ARITHMETIC THE EXPANDED CARD USES, from the same
+    // function — see paidOffPercent. An unconfigured loan has no
+    // principal to measure against, so it gets no figure and the
+    // card draws no bar.
+    const original = Number(cat.originalPrincipal) || 0;
+    const amounts = snaps.map((x) => x.amount);
+    const peak = Math.max(original, ...(amounts.length ? amounts : [original]));
+    const peakAt = amounts.lastIndexOf(peak);
+    const bestOwed = peakAt < 0 ? null : Math.min(...amounts.slice(peakAt));
     return {
       id: cat.id,
       name: cat.name,
       outstanding: latest ? latest.amount : null,
       loggedOn: latest ? latest.date : null,
-      configured: isLoanConfigured(cat),
+      configured,
+      percentPaid: configured
+        ? paidOffPercent(original, peak, bestOwed, latest ? latest.amount : null, latest != null)
+        : null,
     };
   });
 
@@ -228,12 +278,7 @@ export function computeLoanProgress(state: BudgetState, cat: TrackerCategory, as
   const everAboveOriginal = peak > original;
   const basis = everAboveOriginal ? peak : original;
 
-  let percentPaid = null;
-  if (latest && basis > 0) {
-    percentPaid = everAboveOriginal
-      ? Math.min(100, Math.max(0, round((1 - bestOwed! / peak) * 100)))
-      : Math.min(100, Math.max(0, round((1 - outstanding! / original) * 100)));
-  }
+  const percentPaid = paidOffPercent(original, peak, bestOwed, outstanding, latest != null);
 
   return {
     latest,

@@ -754,7 +754,8 @@ function DebtOverviewCard({
   summary, online, onExpand, onAddLoan, onOpenLoan,
 }: {
   summary: { total: number; count: number; unlogged: number;
-             loans: { id: string; name: string; outstanding: number | null }[] };
+             loans: { id: string; name: string; outstanding: number | null;
+                      percentPaid: number | null }[] };
   online: boolean;
   onExpand: () => void;
   onAddLoan: () => void;
@@ -790,9 +791,31 @@ function DebtOverviewCard({
             disabled={!online}
             onPress={() => onOpenLoan(loan.id)}
             accessibilityRole="button"
-            accessibilityLabel={`${loan.name}, ${loan.outstanding == null ? COPY.debt.notLogged : money(loan.outstanding)}. Edit it.`}
+            // THE PERCENTAGE IS IN THE LABEL TOO. The bar is the
+            // only thing on this row that carries it visually, and
+            // a bar is nothing to a screen reader.
+            accessibilityLabel={`${loan.name}, ${loan.outstanding == null ? COPY.debt.notLogged : money(loan.outstanding)}${
+              loan.percentPaid == null ? "" : `, ${Math.round(loan.percentPaid)}% paid off`}. Edit it.`}
           >
             <Text style={styles.debtListName} numberOfLines={1}>{loan.name}</Text>
+            {/* HOW FAR ALONG, between the name and the figure — the
+                same percentage the expanded card shows, from the
+                same function. A list of balances says what is left
+                and nothing about movement, which is the half people
+                actually want from a debt.
+
+                NOTHING FOR AN UNCONFIGURED LOAN: with no terms there
+                is no original principal, so there is nothing to be a
+                percentage of, and an empty bar would read as "none
+                of it is paid" — a claim nobody has made. */}
+            {loan.percentPaid != null && (
+              <View style={styles.debtBarWrap}>
+                <View style={styles.debtBarTrack}>
+                  <View style={[styles.debtBarFill, { width: `${loan.percentPaid}%` }]} />
+                </View>
+                <Text style={styles.debtBarPct}>{Math.round(loan.percentPaid)}%</Text>
+              </View>
+            )}
             <Text style={loan.outstanding == null ? styles.debtListUnlogged : styles.debtListAmount}>
               {loan.outstanding == null ? COPY.debt.notLogged : money(loan.outstanding)}
             </Text>
@@ -866,6 +889,14 @@ const styles = StyleSheet.create({
   debtListName: { color: T.dim, fontSize: 14, flexShrink: 1 },
   debtListAmount: { color: T.text, fontSize: 14, fontVariant: ["tabular-nums"] },
   debtListUnlogged: { color: T.faint, fontSize: 12 },
+  // `center`, not the row's own `baseline`: a bar has no baseline,
+  // and aligning one to a text baseline hangs it below the line.
+  debtBarWrap: { flexDirection: "row", alignItems: "center", gap: 6, marginHorizontal: 8 },
+  debtBarTrack: { width: 56, height: 5, borderRadius: 3, backgroundColor: T.border, overflow: "hidden" },
+  // The same color the expanded card's bar uses — opening a loan
+  // should feel like this bar getting bigger, not a different chart.
+  debtBarFill: { height: "100%", borderRadius: 3, backgroundColor: LOAN_COLOR.dark },
+  debtBarPct: { color: T.faint, fontSize: 11, fontVariant: ["tabular-nums"], width: 30, textAlign: "right" },
   expandBtn: { alignSelf: "flex-end", marginTop: 12 },
   loanTag: { color: T.brass, fontSize: 9, fontWeight: "700", letterSpacing: 0.5, borderWidth: 1, borderColor: T.brass, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, overflow: "hidden" },
   loanBlock: { marginTop: 12, gap: 3 },

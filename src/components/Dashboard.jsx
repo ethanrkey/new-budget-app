@@ -821,7 +821,7 @@ function DebtSection({ summary, debtCats, isDark, state, today, onAddLoan, onLog
   return (
     <>
       {hasDebts && !visible ? (
-        <DebtOverviewCard summary={summary} onExpand={open} onAddLoan={addLoan} onEditLoan={onEditLoanById} />
+        <DebtOverviewCard summary={summary} onExpand={open} onAddLoan={addLoan} onEditLoan={onEditLoanById} isDark={isDark} />
       ) : (
         <AddLoanCard onAdd={onAddLoan} onCollapse={hasDebts ? close : undefined} />
       )}
@@ -871,7 +871,11 @@ function FanIn({ shown, index, count, children }) {
 // The collapsed state: total owed, then every loan in a compact scrolling
 // list. The list scrolls rather than capping the count — "just show the first
 // five" would hide exactly the loan someone is looking for.
-function DebtOverviewCard({ summary, onExpand, onAddLoan, onEditLoan }) {
+function DebtOverviewCard({ summary, onExpand, onAddLoan, onEditLoan, isDark }) {
+  // THE SAME COLOR THE EXPANDED CARD'S BAR USES. Opening a loan
+  // should feel like the same bar getting bigger, not a different
+  // chart about the same thing.
+  const barColor = LOAN_COLOR[isDark ? "dark" : "light"];
   return (
     <section className={CARD}>
       <div className="flex items-start justify-between gap-3">
@@ -900,6 +904,28 @@ function DebtOverviewCard({ summary, onExpand, onAddLoan, onEditLoan }) {
                 <span className="flex items-baseline gap-1.5 min-w-0">
                   <span className="truncate text-gray-700 dark:text-gray-300">{loan.name}</span>
                 </span>
+                {/* HOW FAR ALONG, between the name and the figure —
+                    the same percentage the expanded card shows, from
+                    the same function. A list of balances says what is
+                    left and nothing about movement, which is the half
+                    people actually want from a debt.
+
+                    NOTHING AT ALL FOR AN UNCONFIGURED LOAN. With no
+                    terms there is no original principal, so there is
+                    nothing to be a percentage of — an empty bar there
+                    would read as "none of it is paid", which is a
+                    claim nobody has made. Same for one never logged. */}
+                {loan.percentPaid != null && (
+                  <span className="hidden sm:flex items-center gap-1.5 shrink-0" aria-hidden>
+                    <span className="h-1.5 w-16 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                      <span
+                        className="block h-full rounded-full"
+                        style={{ width: `${loan.percentPaid}%`, backgroundColor: barColor }}
+                      />
+                    </span>
+                    <span className="text-xs tabular-nums text-gray-500 w-9 text-right">{Math.round(loan.percentPaid)}%</span>
+                  </span>
+                )}
                 <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-400">
                   {loan.outstanding == null
                     ? <span className="text-xs text-gray-400">{DASHBOARD_COPY.debt.notLogged}</span>

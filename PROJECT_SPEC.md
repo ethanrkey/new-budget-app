@@ -3454,6 +3454,36 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### How far along each loan is, on the collapsed card (2026-10-26)
+
+A small bar per loan, between the name and the balance, with the
+percentage beside it — both clients. A list of balances says what
+is LEFT and nothing about movement, which is the half people
+actually want from a debt.
+
+**The same figure the expanded card shows, from the same
+function.** `paidOffPercent` was lifted out of
+`computeLoanProgress` and is now called by `computeDebtSummary`
+too. Two implementations of "percent paid" would be two answers
+waiting to disagree in front of somebody who can open one card and
+see the other — and the two cases that make it non-obvious (a loan
+that has ever been above its original principal is measured from
+its PEAK, and from the best it has reached since) are exactly the
+kind that get copied wrong.
+
+**No bar for an unconfigured loan.** With no terms there is no
+original principal, so there is nothing to be a percentage OF. An
+empty bar would read as "none of it is paid", which is a claim
+nobody has made. Same for a loan nobody has logged: null, never
+zero.
+
+**The percentage is in the accessibility label too.** The bar is
+the only thing on the row carrying it visually, and a bar is
+nothing to a screen reader.
+
+The web hides the bar below the `sm` breakpoint, where the row has
+room for a name and a figure and nothing else.
+
 ### The last three forms that went dead without saying why (2026-10-26)
 
 LogBalance, ContributionPrompt and the web's EventForm grayed Save

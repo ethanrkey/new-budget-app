@@ -34,13 +34,18 @@ jest.mock("../lib/store", () => ({
 const { StateProvider } = require("../components/StateProvider");
 const Dashboard = require("../app/(tabs)/dashboard").default;
 
-/** A state with one savings account and `loans` debt categories. */
-function fixture(loans: { name: string; owed: number | null }[]) {
+/** A state with one savings account and `loans` debt categories.
+ *  `original` makes a loan CONFIGURED — without terms there is no
+ *  principal, and the collapsed card draws no progress bar. */
+function fixture(loans: { name: string; owed: number | null; original?: number }[]) {
   const base = normalize({
     accounts: [{ id: "checking", name: "Checking", kind: "checking", balance: 4000, balanceAsOf: "2026-10-01", order: 0 }],
     trackerCategories: [
       { id: "sav", name: "Ally Savings", order: 0, kind: "asset", assetKind: "savings" },
-      ...loans.map((l, i) => ({ id: `loan${i}`, name: l.name, order: i + 1, kind: "debt" })),
+      ...loans.map((l, i) => ({
+        id: `loan${i}`, name: l.name, order: i + 1, kind: "debt",
+        ...(l.original ? { originalPrincipal: l.original, interestRate: 5 } : {}),
+      })),
     ],
     recurring: [], oneoffs: [],
   });
@@ -223,6 +228,32 @@ test("with no loans there is nothing to collapse, so there is no overview", asyn
   expect(screen.getByText("Loans")).toBeOnTheScreen();
   expect(screen.queryByText("Debt")).toBeNull();
   expect(screen.queryByText(/Show \d+ loan/)).toBeNull();
+});
+
+// A list of balances says what is LEFT and nothing about movement,
+// which is the half people actually want from a debt. The bar is the
+// expanded card's own percentage, on the collapsed row.
+test("a configured loan shows how far along it is", async () => {
+  mockLoaded.state = fixture([{ name: "Car loan", owed: 7500, original: 10000 }]);
+  await mount();
+  expect(screen.getByText("25%")).toBeOnTheScreen();
+  // A bar is nothing to a screen reader, so the row says it too.
+  expect(screen.getByLabelText(/Car loan, \$7,500\.00, 25% paid off\. Edit it\./)).toBeOnTheScreen();
+});
+
+test("...and a loan with no terms shows no bar at all", async () => {
+  mockLoaded.state = fixture([{ name: "Student loan", owed: 9100 }]);
+  await mount();
+  // Not 0% — zero would claim none of it is paid, and with no
+  // principal recorded there is nothing to be a percentage of.
+  expect(screen.queryByText("0%")).toBeNull();
+  expect(screen.getByLabelText("Student loan, $9,100.00. Edit it.")).toBeOnTheScreen();
+});
+
+test("...nor does one nobody has logged", async () => {
+  mockLoaded.state = fixture([{ name: "Car loan", owed: null, original: 10000 }]);
+  await mount();
+  expect(screen.queryByText(/%$/)).toBeNull();
 });
 
 test("collapsed, the debt section is one card that names every loan", async () => {

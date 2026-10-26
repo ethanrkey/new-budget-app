@@ -1678,8 +1678,31 @@ check("counts every loan, configured or not", sumAJ.count, 3);
 check("total is the sum of LAST logged outstandings", sumAJ.total, 28360);
 check("an unlogged loan contributes nothing to the total", sumAJ.unlogged, 1);
 eq("an unlogged loan's balance is null, never 0", sumAJ.loans.find((l) => l.id === "new").outstanding, null);
-eq("rows carry what the card renders", sumAJ.loans[0], { id: "aa", name: "Student Loan AA", outstanding: 16120, loggedOn: "2026-09-01", configured: true });
+eq("rows carry what the card renders", sumAJ.loans[0],
+  { id: "aa", name: "Student Loan AA", outstanding: 16120, loggedOn: "2026-09-01", configured: true, percentPaid: 10.44 });
 eq("a loan with no terms is flagged unconfigured", sumAJ.loans.find((l) => l.id === "new").configured, false);
+
+// THE COLLAPSED CARD DRAWS A BAR PER LOAN, from the same figure the
+// expanded one shows. Two implementations of "percent paid" would be
+// two answers waiting to disagree in front of somebody who can open
+// one card and see the other.
+eq("the collapsed row's percentage is the expanded card's",
+  sumAJ.loans[0].percentPaid,
+  computeLoanProgress(stateAJ, stateAJ.trackerCategories.find((c) => c.id === "aa"), "2026-10-01").percentPaid);
+// No terms means no original principal, so there is nothing to be a
+// percentage OF — and no bar.
+eq("a loan with no terms has no percentage, so no bar",
+  sumAJ.loans.find((l) => l.id === "new").percentPaid, null);
+// Null and not zero: zero claims none of it is paid, and the truth
+// is that nobody has said.
+{
+  const neverLogged = normalize({
+    ...stateAJ,
+    balanceSnapshots: { ...stateAJ.balanceSnapshots, aa: [] },
+  });
+  eq("a configured loan nobody has logged has no percentage either",
+    computeDebtSummary(neverLogged).loans.find((l) => l.id === "aa").percentPaid, null);
+}
 
 // The collapsed card's total and the hero's Debt figure must never disagree —
 // they are two renderings of the same number.

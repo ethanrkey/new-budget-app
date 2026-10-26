@@ -966,6 +966,26 @@ const MUTATIONS = [
    "components/CalendarView.tsx",
    "          {detail.balance != null ? (", "          {false ? ("],
 
+  // 1b. how far along each loan is, on the collapsed debt card.
+  ["the collapsed debt card goes back to a list of balances",
+   "app/(tabs)/dashboard.tsx",
+   "            {loan.percentPaid != null && (", "            {false && ("],
+  ["a loan with no terms gets a bar anyway, reading as nothing paid",
+   "../src/engine/loans.ts",
+   "      percentPaid: configured\n        ? paidOffPercent(original, peak, bestOwed, latest ? latest.amount : null, latest != null)\n        : null,",
+   "      percentPaid: paidOffPercent(original, peak, bestOwed, latest ? latest.amount : null, latest != null) ?? 0,"],
+  ["a loan nobody has logged claims none of it is paid",
+   "../src/engine/loans.ts",
+   "  if (!hasLogged || basis <= 0) return null;", "  if (basis <= 0) return 0;"],
+  ["the collapsed card measures from the original even after interest",
+   "../src/engine/loans.ts",
+   "  const fraction = everAboveOriginal ? 1 - bestOwed! / peak : 1 - outstanding! / original;",
+   "  const fraction = 1 - outstanding! / original;"],
+  ["the percentage is left out of what a screen reader hears",
+   "app/(tabs)/dashboard.tsx",
+   "              loan.percentPaid == null ? \"\" : `, ${Math.round(loan.percentPaid)}% paid off`}. Edit it.`}",
+   "              \"\"}. Edit it.`}"],
+
   // 2a. forms that said nothing when Save would not work.
   ["Save goes dead again when the amount is not a number",
    "components/LogBalance.tsx",
