@@ -272,6 +272,46 @@ export const PILL = {
   reconnect: (amount: string) => `${amount} · ${PILL_SUFFIX.reconnect()}`,
 } as const;
 
+/**
+ * WHY CONNECT WAS REFUSED, in the user's terms.
+ *
+ * TWO OF THESE ARE NOT ERRORS. "Full" and "cooling down" are the
+ * guardrails working: Plaid's Trial is ten production Items EVER,
+ * removal does not give one back, and the alternative to saying so
+ * is a tester spending a slot nobody can get back. Neither sentence
+ * blames the user and neither offers a retry that would not work.
+ *
+ * `until` IS A FORMATTED DATE, not an instant — the caller formats
+ * it, because this file does not know which client it is in.
+ */
+export const CONNECT_REFUSED = {
+  /** Fewer slots are left than the beta keeps back. */
+  betaFull: "Connected checking is full during the beta.",
+  /**
+   * Disconnected recently. Says WHEN, because a refusal with no end
+   * date is a dead end, and says why, because otherwise it reads as
+   * a bug.
+   */
+  cooldown: (until: string) =>
+    `You disconnected recently. Connecting again makes a new connection rather than restoring the old one, so it is available again on ${until}.`,
+  /** Everything else: a real failure, and it says so plainly. */
+  failed: "Couldn't start. Try again in a moment.",
+} as const;
+
+/**
+ * Which of the three a refusal code is.
+ *
+ * ONE PLACE, so the phone and the browser cannot each decide what
+ * BETA_FULL means. An unknown code is a failure, which is the safe
+ * reading: a refusal nobody has written a sentence for is not a
+ * guardrail anybody designed.
+ */
+export function connectRefusedText(code: string, until: string | null): string {
+  if (code === "BETA_FULL") return CONNECT_REFUSED.betaFull;
+  if (code === "RECONNECT_COOLDOWN" && until) return CONNECT_REFUSED.cooldown(until);
+  return CONNECT_REFUSED.failed;
+}
+
 /** The sheet behind the pill when connected. */
 export const PILL_SHEET = {
   refresh: "Refresh now",

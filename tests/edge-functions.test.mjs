@@ -23,10 +23,14 @@
 // having its behavior described by a test that cannot run it.
 import { readFileSync } from "node:fs";
 import { ALLOWED_ORIGINS, corsHeaders, preflight } from "../supabase/functions/_shared/cors.ts";
-import { PLAID_ENDPOINTS, PRODUCTS, localDateIn } from "../supabase/functions/_shared/plaid.ts";
+import {
+  MAX_MANUAL_REFRESHES_PER_DAY, PLAID_ENDPOINTS, PLAID_SLOTS_RESERVED, PLAID_TRIAL_ITEMS,
+  PRODUCTS, RECONNECT_COOLDOWN_DAYS, betaIsFull, cooldownUntil, localDateIn,
+} from "../supabase/functions/_shared/plaid.ts";
 import {
   constantTimeEquals, sha256Hex, verifyPlaidWebhook,
 } from "../supabase/functions/_shared/webhookVerify.ts";
+import { CONNECT_REFUSED, connectRefusedText } from "../src/content/connect.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -506,6 +510,113 @@ console.log("\n== a webhook is a backup, not the only way home ==");
   // happily while this branch is the one that drops it.
   const recovered = web.slice(web.indexOf("const found = await recoverLink"), web.indexOf("onChanged?.(true)"));
   is("...and the web re-reads the connection once recovery succeeds", recovered.includes("await refresh();"));
+}
+
+// ---- The two guardrails before anyone else connects -------------------
+console.log("\n== ten Items, ever ==");
+{
+  const mint = readFileSync(new URL("../supabase/functions/plaid-link-token/index.ts", import.meta.url), "utf8");
+  const off = readFileSync(new URL("../supabase/functions/plaid-disconnect/index.ts", import.meta.url), "utf8");
+  const sql = readFileSync(new URL("../supabase/plaid.sql", import.meta.url), "utf8");
+
+  eq("the Trial is ten production Items", PLAID_TRIAL_ITEMS, 10);
+  eq("one of them is kept back", PLAID_SLOTS_RESERVED, 1);
+  eq("and a disconnect costs a month", RECONNECT_COOLDOWN_DAYS, 30);
+
+  // THE DECISIONS THEMSELVES, asked real questions. They are pure
+  // functions in _shared/plaid.ts precisely so this is possible:
+  // the handlers are Deno and cannot be run here, and reading one
+  // as text passes happily while the comparison inside it has been
+  // inverted — which is what three mutations did on 2026-10-26.
+  const NOW = new Date("2026-10-26T12:00:00Z");
+  const daysBefore = (n) => new Date(NOW.getTime() - n * 86_400_000).toISOString();
+  eq("never disconnected, so nothing to wait for", cooldownUntil(null, NOW), null);
+  eq("...and neither does a garbled timestamp", cooldownUntil("not a date", NOW), null);
+  is("disconnected yesterday is still cooling down", !!cooldownUntil(daysBefore(1), NOW));
+  is("...and so is one day short of the month", !!cooldownUntil(daysBefore(29), NOW));
+  eq("a month later it is over", cooldownUntil(daysBefore(31), NOW), null);
+  eq("the date it names is a month after the disconnect",
+    cooldownUntil(daysBefore(1), NOW).toISOString(), new Date(NOW.getTime() + 29 * 86_400_000).toISOString());
+
+  // Ten made, one kept back: full at nine.
+  eq("eight gone leaves room", betaIsFull(8, false), false);
+  eq("nine gone is full, because the tenth is the reserved one", betaIsFull(9, false), true);
+  eq("...and ten gone is certainly full", betaIsFull(10, false), true);
+  eq("the owner is never refused", betaIsFull(10, true), false);
+  eq("...not even at nine", betaIsFull(9, true), false);
+
+  // BOTH GUARDS ARE SERVER-SIDE, and both run before the link token
+  // is minted — a check made after it would refuse a user who has
+  // already been walked through Link, by which point the Item, and
+  // the slot, exist at Plaid.
+  const guarded = mint.slice(mint.indexOf('code: "ALREADY_CONNECTED"'), mint.indexOf("ALREADY_STARTING"));
+  is("the handler asks the cooldown function, not its own arithmetic",
+    guarded.includes("cooldownUntil(beta?.last_disconnected_at"));
+  is("...and the slot guard function, not its own",
+    guarded.includes("betaIsFull(count ?? 0, !!beta?.is_owner)"));
+  is("the cooldown is checked in the function, not the client", guarded.includes("RECONNECT_COOLDOWN"));
+  is("...and so is the slot guard", guarded.includes("BETA_FULL"));
+  is("both are checked before the link token is minted",
+    mint.indexOf('code: "BETA_FULL"') < mint.indexOf("const created = await callPlaid"));
+
+  // UPDATE MODE IS UNTOUCHED. It creates no Item and costs no slot,
+  // and it is exactly what someone with a broken connection should
+  // be doing — so it returns before any of this.
+  is("update mode returns before either guard",
+    mint.indexOf("if (body.update)") < mint.indexOf('code: "ALREADY_CONNECTED"'));
+
+  // SANDBOX IS EXEMPT, on both sides. A sandbox Item costs nothing,
+  // and a cooldown on the test account would make this untestable.
+  is("neither guard applies outside production", guarded.includes('if (env === "production")'));
+  is("...and a sandbox disconnect starts no cooldown",
+    off.includes('if ((item.env ?? conf.config.env) === "production") {'));
+
+  // THE COUNT COMES OUT OF THE LEDGER THAT NOTHING DELETES FROM.
+  // Live Items are not the question — removal does not give a slot
+  // back, so Items ever created is.
+  is("slots are counted from plaid_item_creations", guarded.includes('from("plaid_item_creations")'));
+  is("...filtered to production, because sandbox Items are free", guarded.includes('.eq("env", "production")'));
+  is("the owner's flag is what the guard is told", guarded.includes("!!beta?.is_owner"));
+
+  // The cooldown is remembered somewhere that outlives the removal
+  // queue, which drains.
+  is("the disconnect writes the moment it happened",
+    off.includes("update({ last_disconnected_at: new Date().toISOString() })"));
+  is("...on the allowlist row, not in the removal queue", sql.includes("alter table plaid_beta add column if not exists last_disconnected_at"));
+  is("...and the owner flag is a column somebody sets by hand",
+    sql.includes("alter table plaid_beta add column if not exists is_owner"));
+
+  // THE REFUSALS ARE NOT ERRORS, and the sentence for each lives in
+  // one place so the two clients cannot disagree.
+  eq("full says so plainly", connectRefusedText("BETA_FULL", null), CONNECT_REFUSED.betaFull);
+  is("cooling down says when it ends", connectRefusedText("RECONNECT_COOLDOWN", "11/25/2026").includes("11/25/2026"));
+  // A refusal with no end date is a dead end, so it falls back
+  // rather than printing "undefined".
+  eq("...and without a date it is an ordinary failure",
+    connectRefusedText("RECONNECT_COOLDOWN", null), CONNECT_REFUSED.failed);
+  eq("a code nobody wrote a sentence for is a failure, not a guardrail",
+    connectRefusedText("SOMETHING_NEW", null), CONNECT_REFUSED.failed);
+  const web = readFileSync(new URL("../src/components/ConnectedAccount.jsx", import.meta.url), "utf8");
+  const phone = readFileSync(new URL("../mobile/components/Connected.tsx", import.meta.url), "utf8");
+  is("the web says which refusal it was", web.includes("connectRefusedText(started.error"));
+  is("...and so does the phone", phone.includes("connectRefusedText(started.error"));
+}
+
+// ---- The refresh cap belongs to the person, not the connection --------
+console.log("\n== four refreshes a day, whose? ==");
+{
+  const bal = readFileSync(new URL("../supabase/functions/plaid-balance/index.ts", import.meta.url), "utf8");
+  const cap = bal.slice(bal.indexOf('if (trigger === "refresh") {'), bal.indexOf("CLAIM THE PULL"));
+  eq("four a day", MAX_MANUAL_REFRESHES_PER_DAY, 4);
+  // ALREADY TRUE, and pinned here so it stays true: the count is
+  // over plaid_api_log by user_id, so disconnecting and connecting
+  // again does not hand anybody a fresh four.
+  is("the cap counts by user", cap.includes('.eq("user_id", userId)'));
+  not("...and not by Item", cap.includes("item.id"));
+  // The DEBOUNCE is per Item on purpose, and is a different
+  // question: one pull serves every device, so two phones opening
+  // in the same second must not both call a bank.
+  is("the staleness claim is still per Item", bal.includes("plaid_claim_pull"));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

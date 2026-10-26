@@ -16,7 +16,8 @@
 //   npx supabase functions deploy plaid-link-token --project-ref <ref>
 // JWT verification stays ON: this mints a credential tied to a user.
 import {
-  PRODUCTS, ACCOUNT_FILTERS, PLAID_ENDPOINTS, callPlaid, defaultEnv, readConfig,
+  PRODUCTS, ACCOUNT_FILTERS, PLAID_ENDPOINTS, betaIsFull, callPlaid, cooldownUntil,
+  defaultEnv, readConfig,
 } from "../_shared/plaid.ts";
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
 import { preflight } from "../_shared/cors.ts";
@@ -52,7 +53,7 @@ Deno.serve(async (req) => {
   // connection and a sandbox test account at the same time — see
   // readConfig and supabase/plaid.sql §5b.
   const { data: beta } = await admin
-    .from("plaid_beta").select("env").eq("user_id", userId).maybeSingle();
+    .from("plaid_beta").select("env, is_owner, last_disconnected_at").eq("user_id", userId).maybeSingle();
   const env = existing?.env ?? beta?.env ?? defaultEnv();
 
   const conf = readConfig(env);
@@ -109,6 +110,33 @@ Deno.serve(async (req) => {
   // no at the end of it — which would be told no AFTER the Item, and
   // the slot, already existed at Plaid.
   if (existing) return json(200, { ok: false, code: "ALREADY_CONNECTED" });
+
+  // ---- THE TWO GUARDRAILS, AND ONLY FOR A NEW PRODUCTION ITEM ----
+  //
+  // EVERYTHING BELOW IS ABOUT SPENDING ONE OF TEN. Update mode has
+  // already returned above, because repairing a connection creates
+  // no Item; sandbox is exempt, because a sandbox Item costs
+  // nothing and is how this gets tested at all. Both checks run
+  // BEFORE the link token is minted, so nobody is walked through
+  // Link to be refused at the end of it.
+  if (env === "production") {
+    // (1) DISCONNECT IS NOT UNDO. Removing an Item does not return
+    // its slot, so a disconnect and a reconnect spend two to end up
+    // where you started.
+    const until = cooldownUntil(beta?.last_disconnected_at as string | null | undefined);
+    if (until) return json(200, { ok: false, code: "RECONNECT_COOLDOWN", until: until.toISOString() });
+
+    // (2) THE LAST SLOT IS THE OWNER'S. Counted out of the ledger
+    // that nothing deletes from, not out of plaid_items — live
+    // Items are not the question, Items ever created is.
+    const { count } = await admin
+      .from("plaid_item_creations")
+      .select("id", { count: "exact", head: true })
+      .eq("env", "production");
+    if (betaIsFull(count ?? 0, !!beta?.is_owner)) {
+      return json(200, { ok: false, code: "BETA_FULL" });
+    }
+  }
 
   // AND NOT TWICE AT ONCE. Two tabs, or a double tap, mint two link
   // tokens while `plaid_items` is still empty, and both can finish:

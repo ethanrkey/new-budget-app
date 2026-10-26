@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, PLAID_PORTAL_URL,
-  RECONNECT, TOGGLE_OFF_CONFIRM,
+  RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
 } from "../content/connect.ts";
 import { canReconnect, canSeeToggle, shouldRestoreToggle } from "../shared/connect.ts";
 import {
   disconnect as apiDisconnect, isAllowlisted, pullBalance, readConnection, recoverLink,
   startLink, finishLink,
 } from "../shared/plaidApi.ts";
-import { fmtInstant } from "../shared/dates.ts";
+import { fmtDate, fmtInstant } from "../shared/dates.ts";
 
 // Connected checking, on the web. The Settings → Account half: the
 // toggle, the bank, and the way out. The phone's twin is
@@ -156,7 +156,11 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     const started = await startLink(supabase, false, update);
     if ("error" in started) {
       setBusy(null);
-      setSaid(update ? RECONNECT.failed : "Couldn't start. Try again in a moment.");
+      // A REPAIR CANNOT HIT EITHER GUARDRAIL — update mode creates
+      // no Item — so its failure is still just a failure.
+      setSaid(update
+        ? RECONNECT.failed
+        : connectRefusedText(started.error, started.until ? fmtDate(started.until.slice(0, 10)) : null));
       return;
     }
 

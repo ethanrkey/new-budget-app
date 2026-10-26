@@ -3454,6 +3454,66 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### Two guardrails before anybody else connects (2026-10-26)
+
+Plaid's Trial is **ten production Items ever**. `/item/remove` does
+not give one back and two Items for one bank count twice, so every
+connection anybody makes is permanent against that number. One is
+spent. Six testers were about to be let near the other nine.
+
+**1. Disconnect is not undo.** After disconnecting, no NEW
+production Item for that person for `RECONNECT_COOLDOWN_DAYS` (30).
+Disconnect-then-reconnect spends two of ten to end up where you
+started, and nothing in the product said so. Connect now explains
+why and names the date it unlocks — a refusal with no end date is a
+dead end.
+
+**Update mode is untouched**, and the branch returns before either
+guard reaches it. Repairing a connection that is asking to be
+signed into again creates no Item, costs no slot, and is exactly
+what somebody in this position should be doing.
+
+**2. The last slot is the owner's.** When `PLAID_SLOTS_RESERVED`
+(1) or fewer remain, nobody but the owner may make a new
+connection: "Connected checking is full during the beta." The last
+slot is the only way to repair a connection that update mode
+cannot, and running out silently is the failure with no recovery on
+this plan.
+
+Counted out of `plaid_item_creations`, the ledger nothing deletes
+from — **live Items are the wrong question**, because removal does
+not give a slot back.
+
+**Sandbox is exempt from both**, on both sides. A sandbox Item
+costs nothing, and a cooldown on the test account would make this
+feature untestable.
+
+**Where the disconnect date lives: `plaid_beta.last_disconnected_at`,
+not `plaid_removals`.** That table is a QUEUE and rows leave it when
+the removal succeeds; a fact that has to outlive the drain cannot
+live in it. `plaid_beta.is_owner` is set by hand, like `env`, for
+the same reason — it is a decision about a person.
+
+**Both decisions are PURE FUNCTIONS in `_shared/plaid.ts`**
+(`cooldownUntil`, `betaIsFull`), and that is not tidiness. The edge
+functions cannot be run by the suite — they are Deno and one talks
+to a bank — so a decision left inline can only be checked by
+reading the handler as text, and three mutations walked straight
+through exactly such checks on the day this was written: the
+comparison was inverted and the text was still there. Moved out,
+they are asked real questions.
+
+**The refresh cap was already keyed by the person**, not the Item —
+`plaid_api_log` counted by `user_id` all along, so disconnecting and
+connecting again never handed anybody a fresh four. Now pinned by a
+test so it stays that way. The DEBOUNCE is per Item and should be:
+one pull serves every device, so two phones opening in the same
+second must not both call a bank.
+
+**Still to run before this takes effect:** `supabase/plaid.sql` §5c
+(two columns), the `is_owner` update for the owner's own row, and a
+redeploy of `plaid-link-token` and `plaid-disconnect`.
+
 ### A rule remembers what it used to cost (2026-10-26)
 
 The Spending tab's **Expected** is a statement about a month that

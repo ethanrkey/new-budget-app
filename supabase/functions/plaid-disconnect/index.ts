@@ -158,5 +158,22 @@ Deno.serve(async (req) => {
   await admin.from("plaid_items").delete().eq("id", item.id);
   await admin.from("plaid_link_sessions").delete().eq("user_id", userId);
 
+  // WHEN THEY DISCONNECTED, which is what the cooldown reads.
+  //
+  // ONLY FOR A PRODUCTION ITEM: a sandbox Item costs no slot, so
+  // disconnecting one has nothing to discourage, and locking the
+  // test account out for a month would make testing this feature
+  // impossible.
+  //
+  // Written AFTER the Item is gone, so a disconnect that failed
+  // halfway does not leave a cooldown over a connection that still
+  // exists. See plaid_beta.last_disconnected_at for why it is not
+  // in plaid_removals: that is a queue, and rows leave it.
+  if ((item.env ?? conf.config.env) === "production") {
+    await admin.from("plaid_beta")
+      .update({ last_disconnected_at: new Date().toISOString() })
+      .eq("user_id", userId);
+  }
+
   return json(200, { disconnected: true });
 });

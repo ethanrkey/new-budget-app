@@ -644,6 +644,40 @@ alter table plaid_beta add column if not exists env text;
 --    where user_id = (select id from auth.users where email = '<real address>');
 
 -- ---------------------------------------------------------------------------
+-- 5c. THE TWO GUARDRAILS BEFORE OTHER PEOPLE CONNECT (2026-10-26).
+--
+-- Plaid's Trial is TEN PRODUCTION ITEMS EVER. `/item/remove` does
+-- not give one back and two Items for one bank count twice, so every
+-- connection anybody makes is permanent against that number. Before
+-- six testers are let near it, two things have to be true that were
+-- not.
+--
+-- (1) DISCONNECT IS NOT UNDO. Disconnect-then-reconnect spends two
+--     of ten to end up where you started. After a disconnect, no NEW
+--     production Item for that person for RECONNECT_COOLDOWN_DAYS.
+--     Repairing a broken connection in UPDATE MODE is unaffected —
+--     it creates no Item, costs no slot, and is what someone in this
+--     position should be doing.
+--
+--     Recorded here rather than in plaid_removals, which is a QUEUE:
+--     rows leave it when the removal succeeds, so a fact that has to
+--     outlive the drain cannot live in it.
+alter table plaid_beta add column if not exists last_disconnected_at timestamptz;
+
+-- (2) THE LAST SLOT IS THE OWNER'S. When fewer than
+--     PLAID_SLOTS_RESERVED + 1 remain, nobody else may make a new
+--     connection: the last one is the only way to repair a
+--     connection that update mode cannot, and running out silently
+--     is the failure with no recovery on this plan.
+alter table plaid_beta add column if not exists is_owner boolean not null default false;
+
+--     Set by hand, once, for the owner's own row — the same way env
+--     is set, and for the same reason: it is a decision about a
+--     person, not a thing software should infer.
+--   update plaid_beta set is_owner = true
+--    where user_id = (select id from auth.users where email = '<owner address>');
+
+-- ---------------------------------------------------------------------------
 -- 6. THE BETA ALLOWLIST.
 --
 -- Trial is ten connections, so the toggle is not offered to everyone.

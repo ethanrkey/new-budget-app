@@ -8,10 +8,10 @@ import * as feel from "../lib/haptics";
 import { supabase } from "../lib/supabase";
 import { useBudget } from "./StateProvider";
 import NativeSheet from "./NativeSheet";
-import { fmtInstant } from "../../src/shared/dates.ts";
+import { fmtDate, fmtInstant } from "../../src/shared/dates.ts";
 import {
-  CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, PLAID_PORTAL_URL,
-  RECONNECT, TOGGLE_OFF_CONFIRM,
+  CONNECT_CONSENT, CONNECT_REFUSED, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
+  PLAID_PORTAL_URL, RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
 } from "../../src/content/connect.ts";
 import type { Connection } from "../../src/shared/connect.ts";
 import { canReconnect, canSeeToggle, shouldRestoreToggle } from "../../src/shared/connect.ts";
@@ -187,7 +187,16 @@ export default function Connected() {
       setBusy(null);
       feel.failure();
       if (update) { Alert.alert("Couldn't reconnect", RECONNECT.failed); return; }
-      Alert.alert("Couldn't start", `We couldn't reach the connection service (${"error" in started ? started.error : "no link"}). Try again in a moment.`);
+      // THE TWO GUARDRAILS ARE NOT ERRORS and must not read as
+      // ones. "Full" and "cooling down" are the Trial's ten Items
+      // being looked after; the sentence for each is in
+      // content/connect.ts so the phone and the browser cannot
+      // disagree about what BETA_FULL means. Anything else is a
+      // real failure and still says so.
+      const refusal = "error" in started
+        ? connectRefusedText(started.error, started.until ? fmtDate(started.until.slice(0, 10)) : null)
+        : CONNECT_REFUSED.failed;
+      Alert.alert("Couldn't start", refusal);
       return;
     }
 

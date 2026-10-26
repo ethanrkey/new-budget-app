@@ -121,12 +121,17 @@ export async function readConnection(sb: {
  * nothing else; everything the server meant to say is in `code`.
  */
 export async function startLink(sb: FunctionCaller, hosted: boolean, update = false): Promise<
-  { linkToken: string; hostedUrl: string | null; update: boolean } | { error: string }
+  { linkToken: string; hostedUrl: string | null; update: boolean } | { error: string; until?: string }
 > {
   const { data, error } = await sb.functions.invoke("plaid-link-token", { body: { hosted, update } });
   if (error || !data) return { error: "unreachable" };
-  const d = data as { ok?: boolean; code?: string; link_token?: string; hosted_link_url?: string | null };
-  if (d.ok === false || !d.link_token) return { error: d.code ?? "unknown" };
+  const d = data as {
+    ok?: boolean; code?: string; link_token?: string; hosted_link_url?: string | null; until?: string;
+  };
+  // `until` COMES BACK WITH THE REFUSAL, because the only useful
+  // thing to say about a cooldown is when it ends. A sentence that
+  // says "not yet" and not "until when" is a dead end.
+  if (d.ok === false || !d.link_token) return { error: d.code ?? "unknown", until: d.until };
   return { linkToken: d.link_token, hostedUrl: d.hosted_link_url ?? null, update };
 }
 

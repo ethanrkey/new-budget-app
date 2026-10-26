@@ -100,6 +100,82 @@ export const MAX_MANUAL_REFRESHES_PER_DAY = 4;
 /** And no faster than this, so a double-tap is one call. */
 export const REFRESH_DEBOUNCE_SECONDS = 60;
 
+/**
+ * Plaid's Trial plan: TEN PRODUCTION ITEMS, EVER.
+ *
+ * Not ten at a time. `/item/remove` does not give one back, and two
+ * Items for the same bank count twice — so every connection anybody
+ * makes is permanent against this number. Sandbox Items are free and
+ * are not counted; see plaid_item_creations.env.
+ */
+export const PLAID_TRIAL_ITEMS = 10;
+
+/**
+ * How many of the ten to keep back for the owner.
+ *
+ * WHEN FEWER THAN THIS MANY REMAIN, nobody else may make a new
+ * connection. The last slot is worth more than one more tester: it
+ * is the only way to repair a connection that cannot be repaired in
+ * update mode, and running out silently is the failure that has no
+ * recovery on this plan.
+ */
+export const PLAID_SLOTS_RESERVED = 1;
+
+/**
+ * After disconnecting, how long before a NEW production Item may be
+ * made for the same person.
+ *
+ * DISCONNECT IS NOT UNDO. Removing an Item does not return its slot,
+ * so disconnect-then-reconnect spends two of ten to end up where you
+ * started. A month is long enough that nobody does it by reflex and
+ * short enough that a real change of mind is not permanent.
+ *
+ * IT DOES NOT TOUCH UPDATE MODE. Repairing a connection that is
+ * asking to be signed into again creates no Item and costs no slot,
+ * and is exactly what someone in this position should be doing.
+ */
+export const RECONNECT_COOLDOWN_DAYS = 30;
+
+/**
+ * When may this person make a NEW production Item again?
+ *
+ * `null` means now. A date means not until then.
+ *
+ * A PURE FUNCTION, AND THAT IS THE POINT. The edge functions cannot
+ * be run by the test suite — they are Deno and one of them talks to
+ * a bank — so a decision left inline in a handler can only be
+ * checked by reading the handler as TEXT, and a text check passes
+ * happily while the comparison it is reading has been inverted.
+ * Three mutations proved exactly that on 2026-10-26. The decision
+ * lives here, where it can be asked real questions.
+ */
+export function cooldownUntil(
+  lastDisconnectedAt: string | null | undefined,
+  now: Date = new Date(),
+): Date | null {
+  if (!lastDisconnectedAt) return null;
+  const at = new Date(lastDisconnectedAt);
+  if (Number.isNaN(at.getTime())) return null;
+  const until = new Date(at.getTime() + RECONNECT_COOLDOWN_DAYS * 86_400_000);
+  return until > now ? until : null;
+}
+
+/**
+ * Is the beta full for this person?
+ *
+ * `created` is how many production Items have EVER been made — out
+ * of the ledger nothing deletes from, because removal does not give
+ * a slot back and live Items are therefore the wrong question.
+ *
+ * `<=` and not `<`: when PLAID_SLOTS_RESERVED remain, they are
+ * already the reserved ones. The owner is never refused; the whole
+ * purpose of holding one back is that it stays reachable.
+ */
+export function betaIsFull(created: number, isOwner: boolean): boolean {
+  if (isOwner) return false;
+  return PLAID_TRIAL_ITEMS - created <= PLAID_SLOTS_RESERVED;
+}
+
 export interface PlaidConfig {
   clientId: string;
   secret: string;
