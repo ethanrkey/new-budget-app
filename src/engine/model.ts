@@ -2,7 +2,7 @@
 // Everything (ledger rows, budget totals, balances) is COMPUTED from this.
 import type {
   Account, BudgetState, FixedCategoryMeta, ISODate, PaletteIndex,
-  Settings, TabId, TrackerCategory,
+  Settings, SupersededAmount, TabId, TrackerCategory,
 } from "./types.ts";
 
 // Fixed categories — not user-customizable. Any OTHER category value is a
@@ -269,6 +269,47 @@ export function categoryLabelOf(
   }
   export function todayISO(): ISODate {
     return toISODate(new Date());
+  }
+  /**
+   * What this rule cost on a given date.
+   *
+   * THE CURRENT AMOUNT IS THE DEFAULT AND THE FALLBACK. A rule with
+   * no history has always cost what it costs; a date at or after
+   * the last change costs what it costs now. Only a date before a
+   * recorded change reads out of the history, and then it is the
+   * FIRST entry it fits inside — the entries are ordered oldest
+   * first and each one's `until` is the day the next amount began.
+   *
+   * ONLY THE SPENDING TAB'S "EXPECTED" ASKS THIS. The forecast —
+   * the Budget, the Ledger, the calendar — is about what is coming,
+   * and what is coming costs today's amount. See
+   * RecurringItem.amountHistory.
+   */
+  export function amountOn(item: { amount: number; amountHistory?: SupersededAmount[] }, date: ISODate): number {
+    for (const past of item.amountHistory ?? []) {
+      if (date < past.until) return past.amount;
+    }
+    return item.amount;
+  }
+  /**
+   * Record that this rule's amount changed TODAY, keeping what it
+   * was. A no-op when the figure has not moved.
+   *
+   * TWO EDITS ON ONE DAY COLLAPSE into the first, which is the
+   * honest answer: the second amount never applied to an occurrence
+   * before today, so it was never in effect for anything the
+   * history is consulted about.
+   */
+  export function withAmountChange(
+    history: SupersededAmount[] | undefined,
+    previousAmount: number,
+    newAmount: number,
+    on: ISODate,
+  ): SupersededAmount[] | undefined {
+    if (previousAmount === newAmount) return history;
+    const past = history ?? [];
+    if (past.length && past[past.length - 1]!.until === on) return past;
+    return [...past, { until: on, amount: previousAmount }];
   }
   export function addMonthsISO(iso: ISODate, n: number): ISODate {
     const d = new Date(iso + "T00:00:00");

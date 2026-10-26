@@ -1,7 +1,7 @@
 // ---- Pure state transitions for create / update / delete of budget items ----
 // UI-free so the future iOS app reuses them. An "item" is a RecurringRule (has
 // a `cadence`) or a OneOff (has a `date`).
-import { uid, primaryAccount, sanitizeTabOrder, blankState } from "./model.ts";
+import { uid, primaryAccount, sanitizeTabOrder, blankState, todayISO, withAmountChange } from "./model.ts";
 import { occurrenceDates } from "./generate.ts";
 import { nextFreeHue } from "./palette.ts";
 import { newestSnapshot } from "./entities.ts";
@@ -27,7 +27,7 @@ export type CategoryPatch =
 // - One-off <-> recurring switch, or brand-new -> drop from both lists, append
 //   to the correct one.
 // - `order` is kept from the incoming item, else the existing one, else assigned.
-export function upsertItem(state: BudgetState, item: BudgetItem): BudgetState {
+export function upsertItem(state: BudgetState, item: BudgetItem, today: ISODate = todayISO()): BudgetState {
   const isRecurring = !!("cadence" in item && item.cadence);
   const existing =
     state.recurring.find((r) => r.id === item.id) ||
@@ -45,6 +45,32 @@ export function upsertItem(state: BudgetState, item: BudgetItem): BudgetState {
     order: item.order ?? existing?.order ?? nextOrder(state),
     accountId: item.accountId ?? existing?.accountId ?? primaryAccount(state).id,
   };
+
+  // WHAT IT USED TO COST, KEPT. The Spending tab's "Expected" is a
+  // statement about a month that has already happened, and it was
+  // computed from today's amount — so putting the electric bill up
+  // from $110 to $140 rewrote every past month's Expected and turned
+  // a year of accurate logging into a year of apparent overspending.
+  //
+  // RECORDED FOR EVERY RECURRING RULE, not only the ones flagged as
+  // variable: the flag can be turned on later, and a history that
+  // only starts when somebody ticks a box is a history with a hole
+  // in it. It costs one small object per actual change of figure.
+  //
+  // `today` IS AN ARGUMENT with the clock as its default, so the
+  // engine stays assertable without one and no caller has to think
+  // about it.
+  if (isRecurring && existing && "cadence" in existing && existing.cadence) {
+    // THE STORED HISTORY, NEVER THE INCOMING ONE. No form owns this
+    // field; it is written here and read by the Spending tab. A
+    // caller that round-trips an item it loaded a while ago would
+    // otherwise hand back a stale history and erase every change
+    // recorded since — which is precisely the kind of quiet data
+    // loss this field exists to prevent.
+    next.amountHistory = withAmountChange(
+      existing.amountHistory, existing.amount, item.amount, today,
+    );
+  }
 
   if (isRecurring && state.recurring.some((r) => r.id === item.id)) {
     return { ...state, recurring: state.recurring.map((r) => (r.id === item.id ? next : r)) };

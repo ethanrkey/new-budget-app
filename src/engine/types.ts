@@ -117,6 +117,27 @@ interface ItemBase {
   color?: PaletteIndex | null;
 }
 
+/**
+ * ONE SUPERSEDED AMOUNT, and the date it stopped applying.
+ *
+ * `amount` applied to every occurrence dated STRICTLY BEFORE
+ * `until`. The rule's own `amount` applies from `until` onward, so
+ * there is never an entry for the current figure and never an
+ * invariant tying the two together — the newest amount lives in
+ * exactly one place, where it always did.
+ *
+ * WHY "until" AND NOT "from", which is the usual shape: a list of
+ * from-dates has to end with an entry duplicating `item.amount`,
+ * and then two fields can disagree. Every path that writes an
+ * amount would have to remember to keep them in step, and one that
+ * forgot would silently report the wrong history.
+ */
+export interface SupersededAmount {
+  /** The day the NEW amount took effect. Occurrences before it used `amount`. */
+  until: ISODate;
+  amount: number;
+}
+
 /** A rule that generates events forever (or until endDate). */
 export interface RecurringItem extends ItemBase {
   cadence: Cadence;
@@ -126,6 +147,25 @@ export interface RecurringItem extends ItemBase {
   dayOfMonth?: number;
   /** Flagged "Track actual vs. budgeted" — appears on the Spending tab. */
   variable?: boolean;
+  /**
+   * What this rule used to cost, oldest first.
+   *
+   * THE SPENDING TAB'S "EXPECTED" IS A STATEMENT ABOUT A MONTH THAT
+   * HAS ALREADY HAPPENED, and before this it was computed from
+   * today's amount. Putting the electric bill up from $110 to $140
+   * rewrote every past month's Expected to $140 and turned a year of
+   * accurate logging into a year of apparent overspending.
+   *
+   * ONLY THE SPENDING TAB READS IT. The Budget, the Ledger and the
+   * calendar are the forecast — they are about what is coming, and
+   * what is coming costs the current amount. See amountOn().
+   *
+   * Not the same thing as an occurrence override: an override says
+   * "this one time it was different" and is deliberately excluded
+   * from Expected, because that is how the real bill gets entered.
+   * This says "it used to be different, always".
+   */
+  amountHistory?: SupersededAmount[];
 }
 
 /** A single dated transaction. */

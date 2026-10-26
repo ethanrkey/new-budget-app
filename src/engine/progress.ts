@@ -13,7 +13,7 @@
 //    "2 vs 3 paydays" reality already true for paychecks) vs. whatever real
 //    total was logged in monthlyActuals.
 import { occurrenceDates } from "./generate.ts";
-import { primaryAccount } from "./model.ts";
+import { amountOn, primaryAccount } from "./model.ts";
 import type {
   BalanceSnapshot, BudgetState, Contribution, ISODate, MonthKey, RecurringItem,
 } from "./types.ts";
@@ -92,8 +92,22 @@ export function computeCategoryHistory(state: BudgetState, categoryId: string): 
 // fires in that specific month — not always 1, now that variable bills can
 // be any cadence, not just monthly.
 export function computeMonthVariance(item: RecurringItem, monthlyActuals: BudgetState["monthlyActuals"] | undefined, monthKey: MonthKey): MonthVariance {
-  const occurrences = occurrenceDates(item, endOfMonth(monthKey)).filter((d) => d.slice(0, 7) === monthKey).length;
-  const expected = round(item.amount * occurrences);
+  const dates = occurrenceDates(item, endOfMonth(monthKey)).filter((d) => d.slice(0, 7) === monthKey);
+  const occurrences = dates.length;
+  // SUMMED PER OCCURRENCE, at the amount in effect on each DATE.
+  //
+  // It was `item.amount * occurrences`, which is the same answer
+  // until the amount changes and a wrong one for ever afterwards:
+  // every past month's Expected was recomputed from today's figure,
+  // so putting the electric bill up turned a year of accurate
+  // logging into a year of apparent overspending. Per date rather
+  // than per month because a rule can change mid-month and the
+  // occurrence on the 5th was still the old price.
+  //
+  // An occurrence OVERRIDE is deliberately not consulted here. That
+  // is how the real bill gets entered, and Expected is what was
+  // expected.
+  const expected = round(dates.reduce((sum, d) => sum + amountOn(item, d), 0));
   const actual = monthlyActuals?.[item.id]?.[monthKey];
   return {
     monthKey,

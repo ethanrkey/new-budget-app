@@ -2324,6 +2324,92 @@ console.log("\n== snapshot lists come back in date order ==");
   eq("newest last", snaps[snaps.length - 1].date, "2026-10-08");
 }
 
+// ---------- Scenario AY: what a rule USED to cost ----------
+console.log("\n== Scenario AY: Expected does not get rewritten ==");
+{
+  const base = {
+    id: "ay", name: "Electric", amount: 110, category: "bill", order: 0,
+    cadence: "monthly", startDate: "2026-06-12", dayOfMonth: 12, variable: true,
+  };
+  let st = normalize({
+    settings: { budgetHorizon: "2027-01-01", ledgerHorizon: "2027-01-01" },
+    accounts: [{ id: "checking", name: "Checking", balance: 0, balanceAsOf: "2026-06-01" }],
+    recurring: [base], oneoffs: [],
+    monthlyActuals: { ay: { "2026-06": 108, "2026-07": 112 } },
+  });
+
+  // Before any change, nothing is recorded and nothing moves.
+  eq("a rule nobody has edited has no history", st.recurring[0].amountHistory, undefined);
+  eq("...and its Expected is the amount, once per month",
+    computeMonthVariance(st.recurring[0], st.monthlyActuals, "2026-06").expected, 110);
+
+  // The bill goes up on 15 October.
+  st = upsertItem(st, { ...base, amount: 140 }, "2026-10-15");
+  eq("the old figure is kept, with the day it stopped applying",
+    st.recurring[0].amountHistory, [{ until: "2026-10-15", amount: 110 }]);
+  eq("...and the rule itself carries the new one", st.recurring[0].amount, 140);
+
+  // THE WHOLE POINT. June was $110 when June happened.
+  const rule = st.recurring[0];
+  eq("June's Expected is what June cost", computeMonthVariance(rule, st.monthlyActuals, "2026-06").expected, 110);
+  eq("...so a month logged accurately still reads accurate",
+    computeMonthVariance(rule, st.monthlyActuals, "2026-06").difference, -2);
+  eq("November's Expected is the new figure",
+    computeMonthVariance(rule, st.monthlyActuals, "2026-11").expected, 140);
+  // The 12th is before the 15th, so October's own occurrence was
+  // still the old price. Per occurrence, not per month.
+  eq("an occurrence earlier in the month of the change keeps the old price",
+    computeMonthVariance(rule, st.monthlyActuals, "2026-10").expected, 110);
+
+  // A second rise, and both eras survive.
+  const st2 = upsertItem(st, { ...rule, amount: 155 }, "2026-12-01");
+  eq("a second change appends rather than replacing",
+    st2.recurring[0].amountHistory, [{ until: "2026-10-15", amount: 110 }, { until: "2026-12-01", amount: 140 }]);
+  eq("the oldest era still reads its own price",
+    computeMonthVariance(st2.recurring[0], st2.monthlyActuals, "2026-06").expected, 110);
+  eq("the middle era reads the middle price",
+    computeMonthVariance(st2.recurring[0], st2.monthlyActuals, "2026-11").expected, 140);
+  eq("and the newest reads the newest",
+    computeMonthVariance(st2.recurring[0], st2.monthlyActuals, "2026-12").expected, 155);
+
+  // Editing anything else must not pretend the price moved.
+  const renamed = upsertItem(st, { ...rule, name: "Power" }, "2026-12-01");
+  eq("renaming a rule records no price change", renamed.recurring[0].amountHistory.length, 1);
+  // Two edits in one day collapse: the second figure was never in
+  // effect for an occurrence before that day. The second call hands
+  // back a STALE item — the one loaded before the first edit — which
+  // is what a form does, and the stored history still wins.
+  const twice = upsertItem(upsertItem(st, { ...rule, amount: 150 }, "2026-12-01"),
+    { ...rule, amount: 160 }, "2026-12-01");
+  eq("two changes on one day leave one entry",
+    twice.recurring[0].amountHistory, [{ until: "2026-10-15", amount: 110 }, { until: "2026-12-01", amount: 140 }]);
+  eq("...and a stale history handed back by a form cannot erase it",
+    upsertItem(st2, { ...base, amount: 200, amountHistory: [] }, "2027-01-04")
+      .recurring[0].amountHistory.length, 3);
+
+  // THE FORECAST IS UNTOUCHED. It is about what is coming, and what
+  // is coming costs the current amount.
+  const byMonth = (key) => computeBudget(st, "2026-11-01").find((c) => c.key === key).expenseItems.ay.val;
+  eq("a past month in the BUDGET still uses today's amount", byMonth("2026-06"), 140);
+  eq("...and so does a forecast month", byMonth("2026-11"), 140);
+
+  // THE BOUNDARY. A change made on the very day the bill falls due
+  // applies to that occurrence: "from the 12th" includes the 12th,
+  // which is the ordinary reading and the only one that makes two
+  // consecutive eras meet without a gap or an overlap.
+  const onTheDay = upsertItem(st, { ...rule, amount: 190 }, "2026-11-12");
+  eq("a change made on the day the bill falls due applies to it",
+    computeMonthVariance(onTheDay.recurring[0], st.monthlyActuals, "2026-11").expected, 190);
+  eq("...and the month before it is untouched",
+    computeMonthVariance(onTheDay.recurring[0], st.monthlyActuals, "2026-10").expected, 110);
+
+  // An occurrence override stays out of Expected. It is how the real
+  // bill is entered, and Expected is what was expected.
+  const withOverride = setOverride(st, "ay", "2026-11-12", 400);
+  eq("an occurrence override does not move Expected",
+    computeMonthVariance(withOverride.recurring[0], st.monthlyActuals, "2026-11").expected, 140);
+}
+
 // ---------- Scenario AZ: a monthly rule fires in every month ----------
 console.log("\n== Scenario AZ: short months ==");
 const monthlyOn = (day) => buildAllEvents({

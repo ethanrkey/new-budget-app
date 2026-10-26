@@ -3454,6 +3454,51 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### A rule remembers what it used to cost (2026-10-26)
+
+The Spending tab's **Expected** is a statement about a month that
+has already happened, and it was computed from the rule's CURRENT
+amount. Putting the electric bill up from $110 to $140 rewrote
+every past month's Expected to $140 and turned a year of accurate
+logging into a year of apparent overspending.
+
+`RecurringItem.amountHistory` is a list of superseded amounts,
+oldest first, each `{ until, amount }` — "this amount applied to
+every occurrence dated strictly before `until`".
+
+**`until`, not `from`, and that is the load-bearing choice.** A
+list of from-dates has to end with an entry duplicating
+`item.amount`, and then two fields can disagree; every path that
+writes an amount would have to keep them in step, and one that
+forgot would report the wrong history silently. With `until`, the
+newest figure lives in exactly one place, where it always did, and
+a rule with no history behaves exactly as before.
+
+**Expected is summed PER OCCURRENCE, not per month** — a rule can
+change mid-month, and the occurrence on the 5th was still the old
+price. A change made on the day the bill falls due applies to that
+occurrence: "from the 12th" includes the 12th, which is the only
+reading in which two eras meet with neither a gap nor an overlap.
+
+**Recorded for every recurring rule, not only variable ones.** The
+flag can be turned on later, and a history that starts when
+somebody ticks a box is a history with a hole in it.
+
+**Written from the STORED history, never the incoming one.** No
+form owns this field. A caller that round-trips an item it loaded a
+while ago would otherwise hand back a stale history and erase every
+change recorded since — the exact quiet data loss the field exists
+to prevent.
+
+**The forecast is untouched.** The Budget, the Ledger and the
+calendar are about what is coming, and what is coming costs
+today's amount. Only `computeMonthVariance` calls `amountOn`.
+
+**An occurrence override is still excluded from Expected**, on the
+owner's instruction and for the reason that has always applied: an
+override is how the real bill gets entered, and Expected is what
+was expected.
+
 ### Pull-on-open was only ever a cold start (2026-10-26)
 
 Reported from real use. The 12-hour staleness window is the
