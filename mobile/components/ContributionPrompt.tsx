@@ -3,7 +3,7 @@ import {
   ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import FormSheet, { useDiscardGuard } from "./FormSheet";
-import { DISCARD_CONTRIBUTION } from "../../src/content/logBalance.ts";
+import { DISCARD_CONTRIBUTION, WHY_NOT } from "../../src/content/logBalance.ts";
 import DatePicker from "./DatePicker";
 import { T } from "../lib/theme";
 import { FIELD_TEXT } from "../lib/fields";
@@ -40,7 +40,12 @@ export default function ContributionPrompt({
   const [picking, setPicking] = useState(false);
   const set = (patch: Partial<ContributionRow>) => setRow((r) => ({ ...r, ...patch }));
   const isDebt = category.kind === "debt";
-  const valid = Number(row.amount) > 0;
+  // WHY Add WOULD NOT WORK, rather than a button that stops
+  // responding. Zero is refused and now says so: a contribution of
+  // nothing is not a contribution, and the form used to decline it
+  // without a word.
+  const why = WHY_NOT.contribution(row.amount);
+  const [said, setSaid] = useState<string | null>(null);
   // The amount is the only thing typed here — the cadence and the
   // date open on answers and a row with neither touched has nothing
   // to lose.
@@ -112,6 +117,8 @@ export default function ContributionPrompt({
             />
           )}
 
+          {said ? <Text style={styles.err}>{said}</Text> : null}
+
           <View style={styles.row}>
             <Pressable
               style={[styles.btn, styles.ghost]} onPress={requestClose} disabled={busy}
@@ -120,9 +127,11 @@ export default function ContributionPrompt({
               <Text style={styles.ghostText}>{PROMPT.skip}</Text>
             </Pressable>
             <Pressable
-              style={[styles.btn, styles.primary, (!valid || busy) && styles.disabled]}
-              disabled={!valid || busy}
-              onPress={() => onSchedule(row)}
+              // Disabled only while saving — a write in flight, not
+              // a verdict on what has been typed.
+              style={[styles.btn, styles.primary, busy && styles.disabled]}
+              disabled={busy}
+              onPress={() => { if (why) { setSaid(why); return; } setSaid(null); onSchedule(row); }}
               accessibilityRole="button" accessibilityLabel={PROMPT.add}
             >
               {busy ? <ActivityIndicator color="#111827" /> : <Text style={styles.primaryText}>{PROMPT.add}</Text>}
@@ -154,4 +163,5 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: T.brass },
   primaryText: { color: "#111827", fontSize: 15, fontWeight: "700" },
   disabled: { opacity: 0.4 },
+  err: { color: T.expense, fontSize: 13, marginTop: 12 },
 });

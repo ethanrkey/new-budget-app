@@ -616,6 +616,35 @@ describe("the transaction form is presented as a system sheet", () => {
 // than pixels for the reason above: `presentationStyle` and
 // `allowSwipeDismissal` are instructions to UIKit, and whether they
 // are the right instructions is the part this harness can answer.
+// The same decision, on the other sheet that made it: the offer to
+// schedule a contribution. Zero was declined in silence, which is
+// the worst of the three — the number is there, the button looks
+// pressable, and nothing happens.
+describe("the contribution offer says why it will not take a number", () => {
+  const ContributionPrompt = require("../components/ContributionPrompt").default;
+  const { CONTRIBUTION_PROMPT } = require("../../src/content/setup.ts");
+  const category = { id: "roth", name: "Roth IRA", kind: "asset" as const };
+
+  test("zero is refused, and says so", async () => {
+    const scheduled: unknown[] = [];
+    await render(<ContributionPrompt category={category} busy={false}
+      onSchedule={(r: unknown) => scheduled.push(r)} onClose={() => {}} />);
+    await userEvent.type(screen.getByLabelText("Roth IRA contribution amount"), "0");
+    await userEvent.press(screen.getByLabelText(CONTRIBUTION_PROMPT.add));
+    expect(screen.getByText("Enter an amount more than zero.")).toBeTruthy();
+    expect(scheduled).toEqual([]);
+  });
+
+  test("a real amount goes through", async () => {
+    const scheduled: { amount: string }[] = [];
+    await render(<ContributionPrompt category={category} busy={false}
+      onSchedule={(r: { amount: string }) => scheduled.push(r)} onClose={() => {}} />);
+    await userEvent.type(screen.getByLabelText("Roth IRA contribution amount"), "250");
+    await userEvent.press(screen.getByLabelText(CONTRIBUTION_PROMPT.add));
+    expect(scheduled.map((r) => r.amount)).toEqual(["250"]);
+  });
+});
+
 describe("a balance sheet is a system sheet too", () => {
   const LogBalance = require("../components/LogBalance").default;
   const { DISCARD_BALANCE } = require("../../src/content/logBalance.ts");
@@ -648,6 +677,41 @@ describe("a balance sheet is a system sheet too", () => {
     // NOT transparent, and no card of its own — the scrim-plus-card
     // structure is exactly what left the gap under the old one.
     expect(modal.props.transparent).toBeFalsy();
+  });
+
+  // SAVE ALWAYS RESPONDS AND SAYS WHAT IS WRONG. It used to go gray
+  // and stop answering, which is indistinguishable — to the person
+  // looking at it — from an app that is broken. Same decision the
+  // transaction and category sheets already made.
+  test("Save with nothing typed says what is missing", async () => {
+    const wrote: number[] = [];
+    await render(<LogBalance title="Log the current balance of Ally" cta="Log balance" busy={false}
+      onSubmit={(n: number) => wrote.push(n)} onClose={() => {}} />);
+    await userEvent.press(screen.getByLabelText("Log balance"));
+    expect(screen.getByText("Enter the balance.")).toBeTruthy();
+    expect(wrote).toEqual([]);
+  });
+
+  test("...and a stray letter is named, not ignored", async () => {
+    await host();
+    await userEvent.type(screen.getByLabelText("Amount"), "40o");
+    await userEvent.press(screen.getByLabelText("Log balance"));
+    expect(screen.getByText("That is not a number.")).toBeTruthy();
+  });
+
+  test("nothing is said before Save has been pressed", async () => {
+    await host();
+    expect(screen.queryByText("Enter the balance.")).toBeNull();
+  });
+
+  test("a good number saves, and says nothing", async () => {
+    const wrote: number[] = [];
+    await render(<LogBalance title="Log the current balance of Ally" cta="Log balance" busy={false}
+      onSubmit={(n: number) => wrote.push(n)} onClose={() => {}} />);
+    await userEvent.type(screen.getByLabelText("Amount"), "40");
+    await userEvent.press(screen.getByLabelText("Log balance"));
+    expect(wrote).toEqual([40]);
+    expect(screen.queryByText("That is not a number.")).toBeNull();
   });
 
   test("with nothing typed it may be swiped away", async () => {

@@ -11,7 +11,7 @@ import DatePicker from "./DatePicker";
 import { T, money } from "../lib/theme";
 import { FIELD_TEXT } from "../lib/fields";
 import { todayISO } from "../../src/engine/model.ts";
-import { HIDDEN_ROWS_COPY as HIDDEN, DISCARD_BALANCE, DATE_LABEL } from "../../src/content/logBalance.ts";
+import { HIDDEN_ROWS_COPY as HIDDEN, DISCARD_BALANCE, DATE_LABEL, WHY_NOT } from "../../src/content/logBalance.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
 
 // The first write surface on the phone, and the right one to be first:
@@ -59,7 +59,13 @@ export default function LogBalance({
   // there turned out to be some. Null means "not asked yet".
   const [confirming, setConfirming] = useState<HiddenRow[] | null>(null);
   const parsed = amount.trim() === "" ? null : Number(amount);
-  const valid = parsed != null && !Number.isNaN(parsed);
+  // WHY SAVE WOULD NOT WORK, rather than a button that stops
+  // responding. Null means nothing is wrong, which is also the
+  // permission to submit. Shown only once Save has been pressed —
+  // a red line over a form nobody has typed in yet is worse than
+  // the dead button it replaces.
+  const why = WHY_NOT.balance(amount);
+  const [said, setSaid] = useState<string | null>(null);
   // TYPED IS DIRTY, valid or not: "4." and "40o" are both somebody
   // part way through a number, and losing them to a stray swipe is
   // the same loss as losing a good one. The date is not dirtiness —
@@ -77,7 +83,8 @@ export default function LogBalance({
   // earns its interruption by naming specific rows; shown when there
   // are none it is noise, and noise is how a warning stops being read.
   function submit() {
-    if (!valid) return;
+    if (why) { setSaid(why); return; }
+    setSaid(null);
     const dropping = hiddenRows?.(date) ?? [];
     if (dropping.length > 0 && confirming == null) { setConfirming(dropping); return; }
     onSubmit(parsed!, date);
@@ -166,6 +173,8 @@ export default function LogBalance({
             </Text>
           )}
 
+          {said ? <Text style={styles.err}>{said}</Text> : null}
+
           <View style={styles.row}>
             {/* Both buttons carry a role and a label. They did not, so
                 VoiceOver read the one that writes a balance as an
@@ -178,8 +187,10 @@ export default function LogBalance({
               <Text style={styles.ghostText}>Cancel</Text>
             </Pressable>
             <Pressable
-              style={[styles.btn, styles.primary, (!valid || busy) && styles.disabled]}
-              disabled={!valid || busy}
+              // DISABLED ONLY WHILE SAVING. That is a write in
+              // flight, not a verdict on what has been typed.
+              style={[styles.btn, styles.primary, busy && styles.disabled]}
+              disabled={busy}
               onPress={submit}
               accessibilityRole="button" accessibilityLabel={cta}
             >
@@ -244,6 +255,7 @@ const styles = StyleSheet.create({
   label: { color: T.faint, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 },
   field: { ...FIELD_TEXT, backgroundColor: T.bg, borderColor: T.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, color: T.text, fontSize: 16, minHeight: 48, justifyContent: "center" },
   warn: { color: T.dim, fontSize: 12, lineHeight: 17, marginTop: 10 },
+  err: { color: T.expense, fontSize: 13, marginTop: 12 },
   row: { flexDirection: "row", gap: 10, marginTop: 16 },
   btn: { flex: 1, minHeight: 48, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   ghost: { borderWidth: 1, borderColor: T.border },

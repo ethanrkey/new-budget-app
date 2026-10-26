@@ -3454,6 +3454,44 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### The last three forms that went dead without saying why (2026-10-26)
+
+LogBalance, ContributionPrompt and the web's EventForm grayed Save
+out on a validation failure and said nothing. A dead button with no
+explanation is, to the person looking at it, indistinguishable from
+an app that is broken — it is the thing people tap twice and then
+give up on. The phone's transaction and category sheets already
+validated on press; these were the last three that did not.
+
+**Save always responds and names what is wrong.** It is still
+disabled WHILE SAVING, which is not a verdict on what was typed: it
+is one write in flight, and tapping twice would be two.
+
+**Nothing is said until Save has been pressed.** A red line over a
+form nobody has typed in yet is worse than the dead button it
+replaces.
+
+**The reasons live in `content/logBalance.ts` as `WHY_NOT`**, one
+function per form, each returning `null` when there is nothing
+wrong — so a form cannot disable its button on one rule and refuse
+the press on another. Two predicates that have to agree are one
+that will not.
+
+Three things the old silence was hiding:
+
+- **An overdraft is a balance.** A negative number has always been
+  valid and still is; so is zero.
+- **A contribution of nothing is not a contribution.** Zero was
+  declined without a word, which is the worst of the three: the
+  number is there, the button looks pressable, nothing happens. It
+  now says "Enter an amount more than zero."
+- **An occurrence override of zero is real** — "this month it was
+  nothing" — and is accepted.
+
+The event form names the FIRST thing missing, not every one. A list
+of everything wrong with a form you are halfway through is a
+scolding.
+
 ### Two guardrails before anybody else connects (2026-10-26)
 
 Plaid's Trial is **ten production Items ever**. `/item/remove` does

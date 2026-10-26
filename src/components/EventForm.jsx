@@ -3,6 +3,7 @@ import { CATEGORIES, CADENCES, uid, todayISO } from "../engine/model.ts";
 import { initialCategory, categoryOnModeChange } from "../shared/entryDefaults.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
 import { fmtDate } from "../shared/dates.ts";
+import { WHY_NOT } from "../content/logBalance.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -106,10 +107,17 @@ export default function EventForm({
   // Validity and the orphan check sit OUTSIDE the guard: useSubmitOnce burns
   // its one shot the moment it is called, so a warning raised inside it
   // would leave "Save anyway" dead.
-  const validOcc = occAmount !== "" && !isNaN(Number(occAmount));
-  const valid = occScope ? validOcc : !!name && amount !== "" && !isNaN(Number(amount));
+  // WHY SAVE WOULD NOT WORK, in a sentence, rather than a button
+  // that stops responding. The phone's transaction and category
+  // sheets already worked this way; this was the last form on
+  // either client that answered a stray letter in a number field
+  // with silence. Null is "nothing wrong", which is also the
+  // permission to submit.
+  const why = occScope ? WHY_NOT.occurrence(occAmount) : WHY_NOT.event(name, amount);
+  const [said, setSaid] = useState(null);
   function trySave() {
-    if (!valid) return;
+    if (why) { setSaid(why); return; }
+    setSaid(null);
     if (!occScope && mode === "recurring" && initial?.cadence && onCheckOrphans && pendingOrphans === null) {
       const lost = onCheckOrphans({
         ...initial, cadence, startDate, endDate: endDate || null,
@@ -311,11 +319,17 @@ export default function EventForm({
           </div>
         )}
 
+        {said && (
+          <p className="text-xs text-red-600 dark:text-red-400 mt-4" role="alert">{said}</p>
+        )}
+
         <div className="flex gap-3 mt-6">
           <button onClick={onCancel} className="flex-1 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-sm">Cancel</button>
           <button
             onClick={trySave}
-            disabled={!valid || submitted}
+            /* Disabled only once it HAS been submitted — one write in
+               flight, not a verdict on what has been typed. */
+            disabled={submitted}
             className="flex-1 py-2 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-medium disabled:opacity-40"
           >
             {pendingOrphans ? "Save anyway" : "Save"}

@@ -78,6 +78,56 @@ export const LOG_BALANCE_TITLE = (account: string) =>
  * places to fix everything — so the word is a prop with a default,
  * and it lives here where both clients read it.
  */
+/**
+ * WHY SAVE WOULD NOT WORK, said out loud.
+ *
+ * THE RULE THESE THREE NOW FOLLOW, which the transaction sheet and
+ * the category sheet already did: the button always responds and
+ * says what is wrong. A dead button with no explanation is the
+ * thing people tap twice and then give up on — and "Save" grayed
+ * out because of a stray letter in a number field is indentical, to
+ * the person looking at it, to an app that is broken.
+ *
+ * The button is still disabled WHILE SAVING. That is not a
+ * validation state; it is one write in flight, and tapping it twice
+ * would be two.
+ *
+ * Each returns null when there is nothing wrong, which is also
+ * "may this be submitted".
+ */
+export const WHY_NOT = {
+  /** A balance: any number at all, including a negative one. */
+  balance: (typed: string): string | null => {
+    if (typed.trim() === "") return "Enter the balance.";
+    return Number.isNaN(Number(typed)) ? "That is not a number." : null;
+  },
+  /**
+   * A contribution: a number ABOVE zero. Zero is refused on purpose
+   * and says so — a contribution of nothing is not a contribution,
+   * and the old form silently declined it.
+   */
+  contribution: (typed: string): string | null => {
+    if (typed.trim() === "") return "Enter an amount.";
+    const n = Number(typed);
+    if (Number.isNaN(n)) return "That is not a number.";
+    return n > 0 ? null : "Enter an amount more than zero.";
+  },
+  /** One occurrence's own amount, on the web's event form. */
+  occurrence: (typed: string): string | null => {
+    if (typed.trim() === "") return "Enter an amount for this date.";
+    return Number.isNaN(Number(typed)) ? "That is not a number." : null;
+  },
+  /**
+   * A rule or a one-off: it needs a name AND an amount, and the
+   * message names whichever is missing rather than both.
+   */
+  event: (name: string, typed: string): string | null => {
+    if (!name.trim()) return "Give it a name.";
+    if (typed.trim() === "") return "Enter an amount.";
+    return Number.isNaN(Number(typed)) ? "That is not a number." : null;
+  },
+} as const;
+
 export const DATE_LABEL = {
   balance: "As of",
   contribution: "On",

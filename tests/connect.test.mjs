@@ -20,7 +20,7 @@ import { normalize } from "../src/engine/stateShape.ts";
 import { updateAccountBalance, updateAccountSnapshot } from "../src/engine/mutate.ts";
 import { primaryAccount } from "../src/engine/model.ts";
 import { fmtDate, fmtInstant, fmtShortStamp } from "../src/shared/dates.ts";
-import { HIDDEN_ROWS_COPY } from "../src/content/logBalance.ts";
+import { HIDDEN_ROWS_COPY, WHY_NOT } from "../src/content/logBalance.ts";
 import { splitState, assembleState } from "../src/engine/entities.ts";
 import {
   CONNECT_CONSENT, CONNECT_HINT, CONNECT_HINT_DISMISS, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
@@ -692,6 +692,50 @@ console.log("\n== no page still says the app never connects to a bank ==");
   const landing = readFileSync(new URL("../src/components/Landing.jsx", import.meta.url), "utf8");
   is("the landing line is the owner's replacement, verbatim",
     landing.includes("Free. No bank connection required."));
+}
+
+// ---- Why Save would not work, said out loud --------------------------
+console.log("\n== a dead button with no explanation ==");
+{
+  // A GOOD VALUE RETURNS NULL, which is also the permission to
+  // submit — one expression, so a form cannot disable its button on
+  // one rule and refuse the press on another.
+  eq("a plain balance is fine", WHY_NOT.balance("40"), null);
+  eq("...and so is a negative one — an overdraft is a balance", WHY_NOT.balance("-12.50"), null);
+  eq("...and zero", WHY_NOT.balance("0"), null);
+  eq("nothing typed asks for it", WHY_NOT.balance(""), "Enter the balance.");
+  eq("...and whitespace is nothing typed", WHY_NOT.balance("   "), "Enter the balance.");
+  eq("a stray letter is named", WHY_NOT.balance("40o"), "That is not a number.");
+
+  // A CONTRIBUTION OF NOTHING IS NOT A CONTRIBUTION, and the form
+  // used to decline zero without a word.
+  eq("a contribution needs to be above zero", WHY_NOT.contribution("0"), "Enter an amount more than zero.");
+  eq("...and a negative one is refused too", WHY_NOT.contribution("-5"), "Enter an amount more than zero.");
+  eq("a real contribution is fine", WHY_NOT.contribution("25"), null);
+  eq("nothing typed asks for an amount", WHY_NOT.contribution(""), "Enter an amount.");
+
+  // The event form needs two things and names whichever is missing,
+  // not both: a list of everything wrong with a form you have
+  // half-filled is a scolding.
+  eq("no name is named first", WHY_NOT.event("", "40"), "Give it a name.");
+  eq("...then the amount", WHY_NOT.event("Rent", ""), "Enter an amount.");
+  eq("a whole row is fine", WHY_NOT.event("Rent", "1500"), null);
+  eq("one occurrence needs its own amount", WHY_NOT.occurrence(""), "Enter an amount for this date.");
+  eq("...and it may be zero, which is a real override", WHY_NOT.occurrence("0"), null);
+
+  // AND THE BUTTONS THEMSELVES. Disabled only while a write is in
+  // flight, which is not a verdict on what has been typed.
+  const forms = [
+    ["../mobile/components/LogBalance.tsx", "disabled={busy}"],
+    ["../mobile/components/ContributionPrompt.tsx", "disabled={busy}"],
+    ["../src/components/EventForm.jsx", "disabled={submitted}"],
+  ];
+  for (const [file, expected] of forms) {
+    const src = readFileSync(new URL(file, import.meta.url), "utf8");
+    is(`${file.split("/").pop()} disables Save only while saving`, src.includes(expected));
+    not(`...and never on what was typed`, /disabled=\{!(valid|why)/.test(src));
+    is(`...and asks WHY_NOT instead`, src.includes("WHY_NOT."));
+  }
 }
 
 // ---- The short stamp: the day, only when it is not today --------------
