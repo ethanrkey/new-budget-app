@@ -137,13 +137,37 @@ function advance(d: Date, rule: RecurringItem): Date {
     case "biweekly": next.setDate(next.getDate() + 14); break;
     case "yearly":   next.setFullYear(next.getFullYear() + 1); break;
     case "monthly":
-    default:
+    default: {
+      // THE 1st FIRST, and that is the whole of the fix.
+      //
+      // `setMonth(+1)` on the 31st of January asks for the 31st of
+      // February, which JavaScript resolves by rolling forward into
+      // March — so the clamp below then ran against MARCH and the
+      // rule skipped February outright. A bill due on the 31st fired
+      // only in 31-day months: it was missing from February, April,
+      // June, September and November, five months a year, in the
+      // Budget totals and the Ledger alike. One due on the 29th or
+      // 30th was missing from February. Nothing reported it because
+      // nothing is louder about a row that is absent than about one
+      // that is wrong.
+      //
+      // Landing on the 1st before changing month makes the overflow
+      // impossible, and the clamp then reads the month meant. The
+      // type has promised this since it was written — "Monthly rules
+      // keep their intended day when a month is short" — and
+      // ledgerCsvImport's nextExpectedMonthlyDate was already doing
+      // it correctly next door.
+      //
+      // THE INTENDED DAY COMES OFF THE RULE, not off `d`. Reading it
+      // from the date in hand compounds a clamp: Jan 31 clamps to
+      // Feb 28 and every later month then inherits the 28th. A
+      // rule's day is a property of the rule.
+      const want = rule.dayOfMonth || Number(rule.startDate.slice(8, 10));
+      next.setDate(1);
       next.setMonth(next.getMonth() + 1);
-      // keep the intended day-of-month if provided
-      if (rule.dayOfMonth) {
-        next.setDate(Math.min(rule.dayOfMonth, daysInMonth(next)));
-      }
+      next.setDate(Math.min(want, daysInMonth(next)));
       break;
+    }
   }
   return next;
 }

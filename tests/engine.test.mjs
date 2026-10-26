@@ -1,6 +1,6 @@
 // Engine test harness — pure Node, no framework. Run: npm test  (CI runs it on every push)
 import { computeLedger, computeBudget, computeSpendingByCategory, groupByDay, rowsHiddenByAnchor } from "../src/engine/compute.ts";
-import { upsertItem, deleteItem, deleteItems, findItem, swapOrder, reorderList, setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
+import { upsertItem, deleteItem, deleteItems, findItem, swapOrder, reorderList, adoptBillOrder, setOverride, clearOverride, orphanedOverrideDates, wipeToNewAccount, addCategory, updateCategory, deleteCategory, moveCategory, addBalanceSnapshot, updateBalanceSnapshot, deleteBalanceSnapshot, setMonthlyActual, deleteMonthlyActual, updateAccountBalance, updateAccountSnapshot, deleteAccountSnapshot, setupLoan, setupAsset, moveTab, addContribution, updateContribution, deleteContribution, countTaggedItems } from "../src/engine/mutate.ts";
 import { computeCategoryHistory, computeMonthVariance, computeLoggedContributions, computeNetPosition, lastMonthKeys, activeMonthKeys, fixedSoFar } from "../src/engine/progress.ts";
 import { computeLoanExpected, computeLoanHistory, computeLoanProgress, computeDebtSummary, isLoanConfigured } from "../src/engine/loans.ts";
 import { buildAllEvents } from "../src/engine/generate.ts";
@@ -318,7 +318,10 @@ const stateJ = {
 const budgetJ = computeBudget(stateJ, stateJ.settings.budgetHorizon);
 const layoutJ = computeBudgetLayout(budgetJ, stateJ.trackerCategories);
 const names = (rows) => rows.map((r) => r.name);
-eq("bill section sorted by order (Rent order=2, Internet order=3)", names(layoutJ.sectionItems.bill), ["Rent", "Internet"]);
+// Rent is the 2nd, Internet the 5th, and their manual order says the
+// same — which is why this assertion survived the day sort landing
+// without noticing. Both orders are pinned below, in Scenario BA.
+eq("bill section in day order (Rent 2nd, Internet 5th)", names(layoutJ.sectionItems.bill), ["Rent", "Internet"]);
 eq("rows carry the item's id as their key", layoutJ.sectionItems.bill.map((r) => r.key), ["j-bill1", "j-bill2"]);
 eq("saving section clusters by category (roth before loans) despite order (loans=0, roth=1)",
   names(layoutJ.sectionItems.saving), ["Roth IRA", "Loan pmt"]);
@@ -2320,6 +2323,119 @@ console.log("\n== snapshot lists come back in date order ==");
   eq("oldest first", snaps[0].date, "2026-09-21");
   eq("newest last", snaps[snaps.length - 1].date, "2026-10-08");
 }
+
+// ---------- Scenario AZ: a monthly rule fires in every month ----------
+console.log("\n== Scenario AZ: short months ==");
+const monthlyOn = (day) => buildAllEvents({
+  settings: {}, accounts: [{ id: "checking", balance: 0, balanceAsOf: "2026-01-01" }],
+  recurring: [{ id: "az", name: "Rent", amount: 1, category: "bill", order: 0,
+    cadence: "monthly", startDate: `2026-01-${day}`, dayOfMonth: Number(day) }],
+  oneoffs: [], trackerCategories: [], overrides: {},
+}, "2026-12-31").map((e) => e.date);
+
+// A bill due on the 31st used to fire ONLY in 31-day months — absent
+// from February, April, June, September and November. The forecast
+// was short by one rent in five months of every year.
+eq("a rule due on the 31st fires twelve times, not seven", monthlyOn("31").length, 12);
+eq("...and February takes the last day it has", monthlyOn("31")[1], "2026-02-28");
+eq("...and March goes straight back to the 31st, not the 28th", monthlyOn("31")[2], "2026-03-31");
+eq("...and a 30-day month takes its own last day", monthlyOn("31")[3], "2026-04-30");
+eq("a rule due on the 30th no longer skips February", monthlyOn("30").length, 12);
+eq("...nor one due on the 29th", monthlyOn("29").length, 12);
+eq("a rule due on the 28th was always fine, and still is", monthlyOn("28").length, 12);
+
+// ---------- Scenario BA: FIXED / RECURRING sorts itself by day ----------
+console.log("\n== Scenario BA: the bill section's day sort ==");
+
+// Every manual `order` here is the REVERSE of the day order, so a row
+// that comes out right cannot have come out right by accident.
+const stateBA = normalize({
+  settings: { budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  accounts: [{ id: "checking", name: "Checking", balance: 0, balanceAsOf: "2026-10-01" }],
+  recurring: [
+    { id: "ba-phone", name: "phone", amount: 40, category: "bill", cadence: "monthly", startDate: "2026-10-15", dayOfMonth: 15, order: 0 },
+    { id: "ba-rent", name: "Rent", amount: 1500, category: "bill", cadence: "monthly", startDate: "2026-10-01", dayOfMonth: 1, order: 1 },
+    { id: "ba-ally", name: "Ally", amount: 20, category: "bill", cadence: "monthly", startDate: "2026-10-01", dayOfMonth: 1, order: 2 },
+  ],
+  oneoffs: [],
+});
+const layoutBA = (st, billSort) =>
+  computeBudgetLayout(computeBudget(st, st.settings.budgetHorizon), st.trackerCategories, { billSort })
+    .sectionItems.bill.map((r) => r.name);
+
+eq("the day of the month decides, not the order anybody dragged",
+  layoutBA(stateBA, "day"), ["Ally", "Rent", "phone"]);
+// Ally and Rent are both the 1st. Alphabetical breaks that tie, and it
+// has to ignore case or every capital sorts above every lowercase —
+// "phone" would lead a list it is last in.
+eq("...and a shared day is broken alphabetically, case ignored",
+  layoutBA(stateBA, "day").slice(0, 2), ["Ally", "Rent"]);
+eq("an account that has dragged this section keeps its own order",
+  layoutBA(stateBA, "manual"), ["phone", "Rent", "Ally"]);
+
+// A monthly rule due on the 31st reads 31 in February too. Taking the
+// day off the next OCCURRENCE would read 28 and float the row up the
+// list for one month a year.
+const stateBAFeb = normalize({
+  settings: { budgetHorizon: "2027-03-01", ledgerHorizon: "2027-03-01" },
+  accounts: [{ id: "checking", name: "Checking", balance: 0, balanceAsOf: "2027-02-01" }],
+  recurring: [
+    { id: "ba-card", name: "Card", amount: 100, category: "bill", cadence: "monthly", startDate: "2026-01-31", dayOfMonth: 31, order: 0 },
+    { id: "ba-gym", name: "Gym", amount: 30, category: "bill", cadence: "monthly", startDate: "2026-01-30", dayOfMonth: 30, order: 1 },
+  ],
+  oneoffs: [],
+});
+eq("a monthly rule sorts on the day it MEANS, even in February",
+  layoutBA(stateBAFeb, "day"), ["Gym", "Card"]);
+
+// Weekly, biweekly, yearly and a one-off filed under bills have no day
+// of the month of their own; each sorts on its next occurrence.
+const stateBAMixed = normalize({
+  settings: { budgetHorizon: "2026-12-01", ledgerHorizon: "2026-12-01" },
+  accounts: [{ id: "checking", name: "Checking", balance: 0, balanceAsOf: "2026-10-01" }],
+  recurring: [
+    { id: "ba-wk", name: "Weekly", amount: 10, category: "bill", cadence: "weekly", startDate: "2026-10-08", order: 0 },
+    { id: "ba-yr", name: "Yearly", amount: 10, category: "bill", cadence: "yearly", startDate: "2026-10-20", order: 1 },
+  ],
+  oneoffs: [{ id: "ba-off", name: "One time", amount: 10, category: "bill", date: "2026-10-03", order: 2 }],
+});
+eq("a weekly, a yearly and a one-off all sort on their next occurrence",
+  layoutBA(stateBAMixed, "day"), ["One time", "Weekly", "Yearly"]);
+
+// The whole point of stamping the day in computeBudget: the CSV is a
+// copy of the grid, and a copy that sorts differently is not one.
+const csvBA = budgetToCSV(computeBudget(stateBA, "2026-12-01"), stateBA.trackerCategories, "day");
+const csvLinesBA = csvBA.split("\r\n");
+const csvBillsBA = csvLinesBA
+  .slice(csvLinesBA.indexOf("FIXED / RECURRING") + 1, csvLinesBA.indexOf("ONE-OFF"))
+  .map((l) => l.split(",")[0]);
+eq("the CSV export lists them in the same order the screen does", csvBillsBA, ["Ally", "Rent", "phone"]);
+
+// Leaving the sort: the first drag has to take the order off the screen
+// first, because the stored `order` of a sorted section means nothing.
+const adoptedBA = adoptBillOrder(stateBA, ["ba-ally", "ba-rent", "ba-phone"]);
+eq("the first reorder switches the account to manual", adoptedBA.settings.budgetBillSort, "manual");
+eq("...and writes the order it was showing, not the one it had stored",
+  ["ba-ally", "ba-rent", "ba-phone"].map((id) => findItem(adoptedBA, id).order), [0, 1, 2]);
+eq("...so a swap afterwards actually moves the row",
+  computeBudgetLayout(computeBudget(adoptedBA, "2026-12-01"), [], { billSort: "manual" })
+    .sectionItems.bill.map((r) => r.name)
+    .join() === "Ally,Rent,phone"
+  && computeBudgetLayout(computeBudget(swapOrder(adoptedBA, "ba-ally", "ba-rent"), "2026-12-01"), [], { billSort: "manual" })
+    .sectionItems.bill.map((r) => r.name).join(), "Rent,Ally,phone");
+// Called from both reorder paths without either checking first, so it
+// has to decline every group that is not this one.
+eq("a group that is not the bill section is left alone",
+  adoptBillOrder(stateBA, ["nope"]).settings.budgetBillSort, "day");
+eq("an empty group is left alone", adoptBillOrder(stateBA, []).settings.budgetBillSort, "day");
+eq("an account already dragging keeps the order it dragged",
+  findItem(adoptBillOrder(adoptedBA, ["ba-phone", "ba-rent", "ba-ally"]), "ba-phone").order, 2);
+
+// The migration, which is the absence of one: the default carries it.
+eq("an account saved before the sort existed gets it",
+  normalize({ settings: {} }).settings.budgetBillSort, "day");
+eq("...and one that has already dragged keeps manual",
+  normalize({ settings: { budgetBillSort: "manual" } }).settings.budgetBillSort, "manual");
 
 // A SUITE THAT RUNS NO CHECKS EXITS 0, and that is not hypothetical: a
 // bad edit truncated tests/signin.test.mjs to its header on 2026-10-14
