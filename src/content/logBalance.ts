@@ -94,10 +94,20 @@ export const LOG_BALANCE_TITLE = (account: string) =>
  *
  * Each returns null when there is nothing wrong, which is also
  * "may this be submitted".
+ *
+ * EVERY ONE COERCES ITS INPUT, because these run on RENDER. A saved
+ * one-off's amount is a NUMBER, the web's event form seeded its field
+ * straight from it, and `.trim()` on a number threw — which, during
+ * render and with no error boundary, blanked the entire app the moment
+ * anyone clicked an existing one-off (2026-10-26 to 10-28, production).
+ * A validator is the last thing that should be able to crash a form.
  */
+const text = (typed: unknown): string => String(typed ?? "");
+
 export const WHY_NOT = {
   /** A balance: any number at all, including a negative one. */
-  balance: (typed: string): string | null => {
+  balance: (raw: unknown): string | null => {
+    const typed = text(raw);
     if (typed.trim() === "") return "Enter the balance.";
     return Number.isNaN(Number(typed)) ? "That is not a number." : null;
   },
@@ -106,14 +116,16 @@ export const WHY_NOT = {
    * and says so — a contribution of nothing is not a contribution,
    * and the old form silently declined it.
    */
-  contribution: (typed: string): string | null => {
+  contribution: (raw: unknown): string | null => {
+    const typed = text(raw);
     if (typed.trim() === "") return "Enter an amount.";
     const n = Number(typed);
     if (Number.isNaN(n)) return "That is not a number.";
     return n > 0 ? null : "Enter an amount more than zero.";
   },
   /** One occurrence's own amount, on the web's event form. */
-  occurrence: (typed: string): string | null => {
+  occurrence: (raw: unknown): string | null => {
+    const typed = text(raw);
     if (typed.trim() === "") return "Enter an amount for this date.";
     return Number.isNaN(Number(typed)) ? "That is not a number." : null;
   },
@@ -121,8 +133,9 @@ export const WHY_NOT = {
    * A rule or a one-off: it needs a name AND an amount, and the
    * message names whichever is missing rather than both.
    */
-  event: (name: string, typed: string): string | null => {
-    if (!name.trim()) return "Give it a name.";
+  event: (name: unknown, raw: unknown): string | null => {
+    const typed = text(raw);
+    if (!text(name).trim()) return "Give it a name.";
     if (typed.trim() === "") return "Enter an amount.";
     return Number.isNaN(Number(typed)) ? "That is not a number." : null;
   },

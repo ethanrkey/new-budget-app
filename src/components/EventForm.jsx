@@ -20,7 +20,10 @@ export default function EventForm({
   // reason to make the user pick that themselves too.
   const [mode, setMode] = useState(initial?.cadence || presetCategory ? "recurring" : "oneoff");
   const [name, setName] = useState(initial?.name ?? "");
-  const [amount, setAmount] = useState(initial?.amount ?? "");
+  // A STRING, like every other field this form types into. A saved item's
+  // amount is a number, and seeding the field with it raw crashed the
+  // validator on render — see WHY_NOT. occAmount below always did this.
+  const [amount, setAmount] = useState(initial?.amount != null ? String(initial.amount) : "");
   // The default follows the tab until the user disagrees once. See
   // src/shared/entryDefaults.ts for why it then stops following.
   const [category, setCategory] = useState(

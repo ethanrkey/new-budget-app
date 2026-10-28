@@ -1063,6 +1063,8 @@ written here in the same sitting** — there is no other record of it.
   the thing they cover changes: `scripts/drive_calendar.mjs` (12
   checks), `scripts/drive_setup.mjs` (21), `scripts/drive_demo_restore.mjs`
   (9). They start Vite and Chrome, so they are not in `npm test`.
+  (`scripts/drive_edit.mjs`, 9 checks, joined them 2026-10-28 after
+  opening an existing item blanked the app in production.)
 
 - **1.0.0 (13), 2026-10-16** — a device pass on build 12. Six items.
   Build 12 confirmed good on a device: still signed in after the
@@ -3453,6 +3455,56 @@ Disconnect → `plaid_items`, `plaid_tokens` and every `plaid_%` Vault
 secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
+
+### A black screen from one `.trim()` (2026-10-28, production)
+
+Reported from real use: clicking an existing one-off in the Ledger
+("Truck service diagnosis") blanked keybudget.app to a black page, and
+so did clicking any row in the Budget. Recurring occurrences still
+opened. Live from b4937e7 (10-26) until this commit.
+
+**THE CAUSE WAS ONE TYPE.** b4937e7 gave EventForm a `WHY_NOT.event`
+check that runs ON RENDER and calls `.trim()` on the amount. The form
+seeded that field with `initial.amount`, and a saved item's amount is
+a NUMBER — so the first render of any existing item threw. An
+occurrence edit survived only because `occAmount` was already
+`String()`-wrapped. A Budget row opens the rule by id with no date,
+so it took the same path as a one-off and died the same way. Every
+check of this form read its SOURCE (the web has no renderer harness),
+and source cannot tell you what type a field holds.
+
+**THREE FIXES, each sufficient alone, because the bug got through two
+layers that should each have stopped it:**
+
+- The validators coerce (`String(typed ?? "")`), all four of them. A
+  validator that runs on render is the last thing that should be able
+  to crash a form.
+- EventForm keeps `amount` a string, like every field it types into.
+- **`src/components/ErrorBoundary.jsx`** around the root and around
+  every modal and form App.jsx mounts (nine of them). The black page was
+  not the bug; it was what the bug looked like with nothing to catch
+  it. A form that throws now shows "Something went wrong opening this"
+  over an app that is still there, and Close returns you to it.
+
+**PROVEN IN BOTH DIRECTIONS.** `tests/web-forms.test.mjs` (in `npm
+test`) RENDERS EventForm — esbuild compiles the JSX and
+react-dom/server runs it — for an existing one-off, a Budget-row rule,
+an occurrence, a new item and an amount of zero. It fails ten checks
+with the fix reverted. `scripts/drive_edit.mjs` (9 checks, by hand,
+Vite + Chrome) clicks a one-off in the Ledger and Rent in the Budget.
+With the fix reverted and the boundary kept it shows the fallback with
+the app still standing; with both reverted it reproduces production:
+no `main`, no `nav`, nothing to click.
+
+**iOS WAS NOT AFFECTED, so no OTA.** Every phone sheet stringifies
+its amount before it reaches state (`draftOf`, `draftOfCategory`,
+`LoanSheet`, `TransactionSheet`'s `occAmount`), and LogBalance and
+ContributionPrompt start blank. The coercion is in the shared
+validators, so the phone gets it with its next build regardless.
+
+**The standing lesson:** a check that reads source is evidence about
+text, not about behavior. This form had a source grep that confirmed
+the new `disabled={submitted}` — and nothing that ever opened it.
 
 ### The owed mutations, and what writing them found (2026-10-26)
 

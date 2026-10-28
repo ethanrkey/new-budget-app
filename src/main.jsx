@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.jsx'
 import Landing from './components/Landing.jsx'
 import Privacy from './components/Privacy.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 // Three pages, one bundle, no router dependency. The app has exactly three
 // URLs and none of them nest, so a path switch is the whole requirement —
@@ -29,6 +30,8 @@ const Page = path === "/" ? Landing : path === "/privacy" ? Privacy : App;
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Page />
+    <ErrorBoundary>
+      <Page />
+    </ErrorBoundary>
   </StrictMode>,
 )

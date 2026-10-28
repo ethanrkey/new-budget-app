@@ -31,4 +31,5 @@ export const SUITES = [
   "tests/mobile-fields.test.mjs",
   "tests/connect.test.mjs",
   "tests/edge-functions.test.mjs",
+  "tests/web-forms.test.mjs",
 ];

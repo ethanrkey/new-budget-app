@@ -37,6 +37,7 @@ import GuidedTour from "./components/GuidedTour.jsx";
 import SignIn from "./components/SignIn.jsx";
 import SyncNotice from "./components/SyncNotice.jsx";
 import CategoryManager from "./components/CategoryManager.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { supabase } from "./supabase.js";
 import { duringPlaidWrite, isAllowlisted as plaidAllowlisted, plaidWriteInFlight, pullBalance, readConnection } from "./shared/plaidApi.ts";
 import { shouldPullOnOpen, shouldOfferHint, refreshOutcome } from "./shared/connect.ts";
@@ -777,7 +778,9 @@ export default function App() {
 
       {quickEntryOpen && (
         <div className="px-3 sm:px-6 pt-3">
-          <QuickEntry onAdd={addItem} onRemove={removeItem} onClose={() => setQuickEntryOpen(false)} trackerCategories={state.trackerCategories} />
+          <ErrorBoundary onClose={() => setQuickEntryOpen(false)}>
+            <QuickEntry onAdd={addItem} onRemove={removeItem} onClose={() => setQuickEntryOpen(false)} trackerCategories={state.trackerCategories} />
+          </ErrorBoundary>
         </div>
       )}
 
@@ -885,37 +888,43 @@ export default function App() {
       </main>
 
       {formOpen && (
-        <EventForm
-          key={editing?.id ?? "new"}
-          initial={editing ?? undefined}
-          presetCategory={addPresetCategory}
-          trackerCategories={state.trackerCategories}
-          occurrenceDate={editingDate}
-          overrideAmount={editing && editingDate ? state.overrides?.[editing.id]?.[editingDate] ?? null : null}
-          onSaveOverride={saveOverride}
-          onClearOverride={removeOverride}
-          onCheckOrphans={(next) => orphanedOverrideDates(state, next, ledgerHorizonOf(state))}
-          onSave={saveItem}
-          onCancel={closeForm}
-          onDelete={editing ? () => removeItem(editing.id) : undefined}
-        />
+        <ErrorBoundary onClose={closeForm}>
+          <EventForm
+            key={editing?.id ?? "new"}
+            initial={editing ?? undefined}
+            presetCategory={addPresetCategory}
+            trackerCategories={state.trackerCategories}
+            occurrenceDate={editingDate}
+            overrideAmount={editing && editingDate ? state.overrides?.[editing.id]?.[editingDate] ?? null : null}
+            onSaveOverride={saveOverride}
+            onClearOverride={removeOverride}
+            onCheckOrphans={(next) => orphanedOverrideDates(state, next, ledgerHorizonOf(state))}
+            onSave={saveItem}
+            onCancel={closeForm}
+            onDelete={editing ? () => removeItem(editing.id) : undefined}
+          />
+        </ErrorBoundary>
       )}
 
       {importOpen && (
-        <ImportCSV
-          onImport={importCSV}
-          onRestoreBackup={restoreBackup}
-          onClose={() => setImportOpen(false)}
-          trackerCategories={state.trackerCategories}
-          currentState={state}
-        />
+        <ErrorBoundary onClose={() => setImportOpen(false)}>
+          <ImportCSV
+            onImport={importCSV}
+            onRestoreBackup={restoreBackup}
+            onClose={() => setImportOpen(false)}
+            trackerCategories={state.trackerCategories}
+            currentState={state}
+          />
+        </ErrorBoundary>
       )}
 
       {tutorialOpen && (
-        <Tutorial
-          onClose={() => setTutorialOpen(false)}
-          onStartTour={() => { setTutorialOpen(false); setTourOpen(true); }}
-        />
+        <ErrorBoundary onClose={() => setTutorialOpen(false)}>
+          <Tutorial
+            onClose={() => setTutorialOpen(false)}
+            onStartTour={() => { setTutorialOpen(false); setTourOpen(true); }}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Fires after the FIRST setup this account completes, and after
@@ -926,11 +935,13 @@ export default function App() {
           pick the opening tab, so "where the tour ends" and "where
           this app lands" are one thing rather than two that agree. */}
       {tourOpen && (
-        <GuidedTour
-          onGoToTab={setTab}
-          landingTab={sanitizeTabOrder(state.settings.tabOrder)[0]}
-          onClose={() => setTourOpen(false)}
-        />
+        <ErrorBoundary onClose={() => setTourOpen(false)}>
+          <GuidedTour
+            onGoToTab={setTab}
+            landingTab={sanitizeTabOrder(state.settings.tabOrder)[0]}
+            onClose={() => setTourOpen(false)}
+          />
+        </ErrorBoundary>
       )}
 
       {showOnboarding && (
@@ -938,79 +949,87 @@ export default function App() {
       )}
 
       {settingsOpen && (
-        <SettingsModal
-          isDark={isDark}
-          onToggleTheme={toggleTheme}
-          onOpenCategories={() => { setSettingsOpen(false); setCategoryManagerFrom("settings"); }}
-          onOpenAccount={() => { setSettingsOpen(false); setAccountOpen(true); }}
-          onOpenSetup={() => { setSettingsOpen(false); setShowOnboarding(true); }}
-          onOpenAbout={() => { setSettingsOpen(false); setTutorialOpen(true); }}
-          onStartTour={() => { setSettingsOpen(false); setTourOpen(true); }}
-          onWipe={wipeData}
-          email={session?.user?.email}
-          deletionRequest={deletionRequest}
-          onRequestDeletion={async () => {
-            const res = await requestAccountDeletion(session.user.id);
-            if (res.ok) setDeletionRequest(res.request);
-            return res;
-          }}
-          onCancelDeletion={async () => {
-            const res = await cancelAccountDeletion(session.user.id);
-            if (res.ok) setDeletionRequest(null);
-            return res;
-          }}
-          onClose={() => setSettingsOpen(false)}
-        />
+        <ErrorBoundary onClose={() => setSettingsOpen(false)}>
+          <SettingsModal
+            isDark={isDark}
+            onToggleTheme={toggleTheme}
+            onOpenCategories={() => { setSettingsOpen(false); setCategoryManagerFrom("settings"); }}
+            onOpenAccount={() => { setSettingsOpen(false); setAccountOpen(true); }}
+            onOpenSetup={() => { setSettingsOpen(false); setShowOnboarding(true); }}
+            onOpenAbout={() => { setSettingsOpen(false); setTutorialOpen(true); }}
+            onStartTour={() => { setSettingsOpen(false); setTourOpen(true); }}
+            onWipe={wipeData}
+            email={session?.user?.email}
+            deletionRequest={deletionRequest}
+            onRequestDeletion={async () => {
+              const res = await requestAccountDeletion(session.user.id);
+              if (res.ok) setDeletionRequest(res.request);
+              return res;
+            }}
+            onCancelDeletion={async () => {
+              const res = await cancelAccountDeletion(session.user.id);
+              if (res.ok) setDeletionRequest(null);
+              return res;
+            }}
+            onClose={() => setSettingsOpen(false)}
+          />
+        </ErrorBoundary>
       )}
 
       {accountOpen && (
-        <AccountScreen
-          email={session?.user?.email}
-          providers={session?.user?.app_metadata?.providers}
-          createdAt={session?.user?.created_at}
-          settings={state.settings}
-          setSettings={setSettings}
-          onChanged={(didPull) => {
-            justConnected.current = !!didPull;
-            setConnTick((t) => t + 1);
-            void duringPlaidWrite(reloadFromServer);
-          }}
-          onSignOut={() => signOut()}
-          onBack={() => { setAccountOpen(false); setSettingsOpen(true); }}
-          onClose={() => setAccountOpen(false)}
-        />
+        <ErrorBoundary onClose={() => setAccountOpen(false)}>
+          <AccountScreen
+            email={session?.user?.email}
+            providers={session?.user?.app_metadata?.providers}
+            createdAt={session?.user?.created_at}
+            settings={state.settings}
+            setSettings={setSettings}
+            onChanged={(didPull) => {
+              justConnected.current = !!didPull;
+              setConnTick((t) => t + 1);
+              void duringPlaidWrite(reloadFromServer);
+            }}
+            onSignOut={() => signOut()}
+            onBack={() => { setAccountOpen(false); setSettingsOpen(true); }}
+            onClose={() => setAccountOpen(false)}
+          />
+        </ErrorBoundary>
       )}
 
       {updateBalanceOpen && (
-        <UpdateBalanceModal
-          account={account}
-          onConfirm={confirmBalance}
-          onClose={() => setUpdateBalanceOpen(false)}
-          offerConnectHint={shouldOfferHint(state.settings, plaidBeta)}
-          onOpenSettings={() => { setUpdateBalanceOpen(false); setAccountOpen(true); }}
-          onHideHint={() => setSettings({ hideConnectHint: true })}
-          // Only the CHECKING balance moves the forecast's starting
-          // point, so only this one previews what it hides. The
-          // contribution modal below reuses this component and passes
-          // nothing, which is correct — a contribution hides nothing.
-          hiddenRows={(asOf) => rowsHiddenByAnchor(state, asOf, ledgerHorizonOf(state))}
-        />
+        <ErrorBoundary onClose={() => setUpdateBalanceOpen(false)}>
+          <UpdateBalanceModal
+            account={account}
+            onConfirm={confirmBalance}
+            onClose={() => setUpdateBalanceOpen(false)}
+            offerConnectHint={shouldOfferHint(state.settings, plaidBeta)}
+            onOpenSettings={() => { setUpdateBalanceOpen(false); setAccountOpen(true); }}
+            onHideHint={() => setSettings({ hideConnectHint: true })}
+            // Only the CHECKING balance moves the forecast's starting
+            // point, so only this one previews what it hides. The
+            // contribution modal below reuses this component and passes
+            // nothing, which is correct — a contribution hides nothing.
+            hiddenRows={(asOf) => rowsHiddenByAnchor(state, asOf, ledgerHorizonOf(state))}
+          />
+        </ErrorBoundary>
       )}
 
       {categoryManagerFrom && (
-        <CategoryManager
-          categories={state.trackerCategories}
-          onAdd={addTrackerCategory}
-          onUpdate={updateTrackerCategory}
-          onDelete={deleteTrackerCategory}
-          onMove={moveTrackerCategory}
-          onClose={() => setCategoryManagerFrom(null)}
-          onBack={
-            categoryManagerFrom === "settings"
-              ? () => { setCategoryManagerFrom(null); setSettingsOpen(true); }
-              : undefined
-          }
-        />
+        <ErrorBoundary onClose={() => setCategoryManagerFrom(null)}>
+          <CategoryManager
+            categories={state.trackerCategories}
+            onAdd={addTrackerCategory}
+            onUpdate={updateTrackerCategory}
+            onDelete={deleteTrackerCategory}
+            onMove={moveTrackerCategory}
+            onClose={() => setCategoryManagerFrom(null)}
+            onBack={
+              categoryManagerFrom === "settings"
+                ? () => { setCategoryManagerFrom(null); setSettingsOpen(true); }
+                : undefined
+            }
+          />
+        </ErrorBoundary>
       )}
     </div>
   );
