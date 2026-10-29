@@ -686,6 +686,46 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 17, 2026-10-29, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group
+  `f6dcc67d-ea19-47b7-aaff-84c8576d82b6`, iOS update `01a18898`,
+  commit `916430e`. Published through `mobile/scripts/ota.mjs`.
+
+  **EIGHT DAYS OF iOS WORK HAD NEVER SHIPPED.** Found by the owner: the
+  collapsed Debt card on the phone had no progress bars, though
+  66e1578 put them in `dashboard.tsx` on 10-26. `eas update:list` said
+  the newest production update was OTA 16, built from `a5842b2` on
+  10-21 — so every mobile commit from `c3f7c06` to HEAD was in the
+  repo and on nobody's phone. This one carries all of it: the debt
+  card's per-loan bars, FIXED / RECURRING sorted by day, coming back
+  to the app as an open (foreground pull) and the swipe-down check,
+  the "syncing…" pill, day-aware short stamps, the calendar asking
+  the phone rather than Greenwich what day it is, the bill on the
+  31st, a rule remembering what it used to cost, Save saying why on
+  LogBalance and ContributionPrompt, and the connect guardrails'
+  wording (which reads `until` only if the server sends it, so it is
+  safe ahead of the plaid.sql §5c deploy).
+
+  **THE LESSON IS THE GAP, NOT THE UPDATE.** A commit that touches
+  `mobile/` is not shipped until an OTA names it, and nothing in the
+  commit flow says so. Before saying an iOS change is done, compare
+  `eas update:view <newest group> --json`'s `gitCommitHash` against
+  HEAD. The private draft of the privacy page was stashed for the
+  publish (ota.mjs refuses a dirty tree) and is web-only either way.
+
+- **OTA UPDATES 15 AND 16, 2026-10-21 — BACKFILLED 2026-10-29 from
+  `eas update:list`**, because neither was ever written here. Both on
+  build 13's runtime. **15:** group
+  `2d7b75a4-7ddf-43f9-9cc0-bbc5e30a4b5c`, iOS update `01a15e77`,
+  commit `fe93bff`, "Ask Plaid directly: no connection can be lost to
+  a missing webhook". **16:** group
+  `fd3adb51-f4e7-4985-8556-a5d9fc62d0b7`, iOS update `01a15eb3`,
+  commit `a5842b2`, "Hold the latest commit, not one from before
+  sign-in". Whether the fingerprint was checked before each is not
+  recorded; the runtime they landed on is build 13's, which is what
+  the check protects.
+
 - **OTA UPDATE 14, 2026-10-21, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group
