@@ -15,6 +15,7 @@
 import { build } from "esbuild";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { WHY_NOT } from "../src/content/logBalance.ts";
+import { deletePrompt } from "../src/content/transaction.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -46,7 +47,9 @@ const out = await build({
       import { renderToString } from "react-dom/server";
       import { createElement } from "react";
       import EventForm from "./src/components/EventForm.jsx";
+      import ConfirmDialog from "./src/components/ConfirmDialog.jsx";
       export const render = (props) => renderToString(createElement(EventForm, props));
+      export const renderConfirm = (props) => renderToString(createElement(ConfirmDialog, props));
     `,
     resolveDir: new URL("..", import.meta.url).pathname,
     loader: "jsx",
@@ -90,6 +93,33 @@ console.log("\n== every way into the event form opens it ==");
   opens("a recurring occurrence from the Ledger", { initial: rule, occurrenceDate: "2026-11-02", overrideAmount: 1700, onSaveOverride: noop, onClearOverride: noop });
   opens("a brand-new item", {});
   opens("an amount of zero", { initial: { ...oneoff, amount: 0 } });
+}
+
+console.log("\n== the Ledger asks before it deletes, and says what goes ==");
+{
+  // Words exactly as the owner dictated them, 2026-10-29.
+  const rent = { name: "Rent", cadence: "monthly" };
+  const truck = { name: "Truck service diagnosis" };
+  eq("a rule says it takes every date", deletePrompt([rent]),
+    { title: "Delete Rent?", body: "This removes every date it generates." });
+  eq("a one-off is just named", deletePrompt([truck]),
+    { title: "Delete Truck service diagnosis?", body: null });
+  eq("a batch of one-offs is counted", deletePrompt([truck, truck, truck, truck]),
+    { title: "Delete 4 items?", body: null });
+  eq("a batch with one rule in it says so", deletePrompt([truck, rent, truck, truck]).body,
+    "One of them is a recurring rule. This removes every date it generates.");
+  eq("...and with several, how many", deletePrompt([rent, rent, truck]).body,
+    "2 of them are recurring rules. This removes every date they generate.");
+  eq("...and with nothing but rules, all of them", deletePrompt([rent, rent]).body,
+    "All of them are recurring rules. This removes every date they generate.");
+  eq("a nameless item still gets a question", deletePrompt([{ name: "" }]).title, "Delete this item?");
+
+  const html = mod.renderConfirm({ title: "Delete Rent?", body: "This removes every date it generates.",
+    confirmLabel: "Delete", cancelLabel: "Cancel", onConfirm: noop, onCancel: noop });
+  eq("the dialog is an alertdialog", html.includes('role="alertdialog"'), true);
+  eq("...with the question and the consequence", html.includes("Delete Rent?") && html.includes("every date it generates"), true);
+  eq("...Cancel BEFORE Delete, so the safe one is first", html.indexOf(">Cancel<") < html.indexOf(">Delete<"), true);
+  eq("...and Delete wears the expense red", /bg-expense[^"]*"[^>]*>Delete</.test(html), true);
 }
 
 // The error boundary is proven in a browser (scripts/drive_edit.mjs):

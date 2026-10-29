@@ -1065,6 +1065,8 @@ written here in the same sitting** — there is no other record of it.
   (9). They start Vite and Chrome, so they are not in `npm test`.
   (`scripts/drive_edit.mjs`, 9 checks, joined them 2026-10-28 after
   opening an existing item blanked the app in production.)
+  (`scripts/drive_delete.mjs`, 17 checks, 2026-10-29: every Ledger
+  delete asks first.)
 
 - **1.0.0 (13), 2026-10-16** — a device pass on build 12. Six items.
   Build 12 confirmed good on a device: still signed in after the
@@ -1995,6 +1997,8 @@ fifth tab never needs a migration.
   balance; month headers; optional per-category cumulative columns
   (checklist picker); per-occurrence amount overrides (below);
   multi-select delete; per-item color override; projection horizon slider.
+  **Every delete from the Ledger asks first** — the row's ✕ and the batch
+  alike, in `ConfirmDialog` (2026-10-29, see the roadmap entry).
   **The Ledger projects at most 12 months** (`LEDGER_MAX_MONTHS`), against
   the Budget's 36: nobody plans transaction-by-transaction two years out, so
   most of the old range was dead slider. The cap is applied on READ, by
@@ -3455,6 +3459,54 @@ Disconnect → `plaid_items`, `plaid_tokens` and every `plaid_%` Vault
 secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
+
+### The Ledger's ✕ deleted a whole rule on one click (2026-10-29)
+
+Owner's report: the row's ✕ deleted immediately, and on a recurring
+row it deletes the RULE — `onDelete(baseId(id))` strips the occurrence
+date, so the ✕ beside one October rent takes every rent there is. The
+most destructive single click in the app, and the only delete on the
+web with no second step.
+
+**Every Ledger delete now asks, in `src/components/ConfirmDialog.jsx`.**
+Words dictated by the owner, written as `deletePrompt(items)` in
+`src/content/transaction.ts` so they are a pure function of what is
+about to go:
+
+| what | asks |
+|---|---|
+| a rule | "Delete Rent?" / "This removes every date it generates." |
+| a one-off | "Delete Truck service diagnosis?" |
+| a batch | "Delete 4 items?", plus how many are rules if any are |
+
+The batch used to confirm inline ("Yes, delete · Keep"); it now goes
+through the same dialog, so the batch and the single ✕ cannot ask
+different questions. "Delete 4 items?" alone hides the one fact that
+makes it worse than it sounds, which is why the count of rules is
+said.
+
+**Cancel is focused**, so Enter or Space pressed without reading loses
+nothing; Escape and a click on the scrim cancel; Delete is the expense
+red and the only way through.
+
+**THE OTHER WEB DELETES, checked the same day.** Already two-step and
+left alone: the event form's Delete, Dashboard history rows,
+the asset and loan modals, the category manager, Wipe data. The Budget
+and the calendar have no delete of their own (a Budget row opens the
+event form). Two that remove without asking, reported rather than
+changed because neither is a ✕ and both are undone by retyping:
+clearing a Spending month's actual and blurring deletes that month's
+logged figure, and the event form's "Remove this date's override" drops a
+date's override. Quick entry's ✕ is the undo of something added
+seconds ago and should stay one click. **iOS is unchanged:** it
+already confirms through the action sheet.
+
+**Proven:** `tests/web-forms.test.mjs` checks every prompt shape and
+renders the dialog; `scripts/drive_delete.mjs` (17 checks, by hand)
+clicks a rule, a one-off and a batch of three in Chrome, and checks
+that Escape, Enter-on-Cancel, a scrim click and Cancel each delete
+nothing. Against the old LedgerView it fails on the first click: Rent
+was gone before anything was asked.
 
 ### A black screen from one `.trim()` (2026-10-28, production)
 

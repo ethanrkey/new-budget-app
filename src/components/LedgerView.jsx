@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { groupByMonth, computeSpendingByCategory } from "../engine/compute.ts";
 import { todayISO, ledgerHorizonOf, LEDGER_MAX_MONTHS } from "../engine/model.ts";
 import HorizonSlider from "./HorizonSlider.jsx";
@@ -7,6 +7,9 @@ import SpendingMix from "./SpendingMix.jsx";
 import CalendarView from "./CalendarView.jsx";
 import { getDeviceFlag, setDeviceFlag } from "../devicePrefs.js";
 import { fmtMonthDay } from "../shared/dates.ts";
+import { findItem } from "../engine/mutate.ts";
+import { deletePrompt, DELETE_CONFIRM } from "../content/transaction.ts";
+import ConfirmDialog from "./ConfirmDialog.jsx";
 
 const money = (n) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -46,7 +49,10 @@ export default function LedgerView({
 
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
-  const [confirming, setConfirming] = useState(false);
+  // THE ITEM IDS A DELETE IS WAITING ON, or null. Both the row's ✕ and
+  // the batch delete stop here and ask; neither deletes on its own.
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const cancelDelete = useCallback(() => setPendingDelete(null), []);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [calendar, setCalendarState] = useState(() => getDeviceFlag(CALENDAR_PREF, false));
   const setCalendar = (next) => { setDeviceFlag(CALENDAR_PREF, next); setCalendarState(next); };
@@ -54,7 +60,7 @@ export default function LedgerView({
   function toggleSelectMode() {
     setSelectMode((v) => !v);
     setSelected(new Set());
-    setConfirming(false);
+    setPendingDelete(null);
   }
   function toggleSelected(id) {
     setSelected((prev) => {
@@ -64,11 +70,19 @@ export default function LedgerView({
       return next;
     });
   }
-  function confirmDeleteSelected() {
-    onDeleteMany([...selected]);
-    setSelected(new Set());
-    setConfirming(false);
+  function confirmDelete() {
+    const ids = pendingDelete;
+    setPendingDelete(null);
+    if (ids.length === 1) onDeleteItem(ids[0]);
+    else onDeleteMany(ids);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
   }
+  const pendingItems = (pendingDelete ?? []).map((id) => findItem(state, id)).filter(Boolean);
+  const prompt = pendingItems.length ? deletePrompt(pendingItems) : null;
   function toggleColumnVisible(id) {
     const next = visibleIds.has(id)
       ? [...visibleIds].filter((x) => x !== id)
@@ -117,21 +131,12 @@ export default function LedgerView({
             {selectMode ? "Cancel select" : "Select"}
           </button>
           {selectMode && selected.size > 0 && (
-            confirming ? (
-              <span className="text-sm text-expense">
-                Delete {selected.size} item{selected.size === 1 ? "" : "s"}?{" "}
-                <button onClick={confirmDeleteSelected} className="font-semibold underline">Yes, delete</button>
-                {" · "}
-                <button onClick={() => setConfirming(false)} className="underline">Keep</button>
-              </span>
-            ) : (
-              <button
-                onClick={() => setConfirming(true)}
-                className="px-3 py-2 sm:py-1.5 rounded-lg bg-expense text-white text-sm font-medium hover:opacity-90"
-              >
-                Delete selected ({selected.size})
-              </button>
-            )
+            <button
+              onClick={() => setPendingDelete([...selected])}
+              className="px-3 py-2 sm:py-1.5 rounded-lg bg-expense text-white text-sm font-medium hover:opacity-90"
+            >
+              Delete selected ({selected.size})
+            </button>
           )}
           <div className="text-sm text-gray-500">
             Ending balance:{" "}
@@ -249,7 +254,7 @@ export default function LedgerView({
                 selected={selected}
                 onToggleSelected={toggleSelected}
                 onEdit={onEditItem}
-                onDelete={(id) => onDeleteItem(baseId(id))}
+                onDelete={(id) => setPendingDelete([baseId(id)])}
               />
             ))}
           </tbody>
@@ -275,6 +280,16 @@ export default function LedgerView({
         )}
       </div>
       </>
+      )}
+      {prompt && (
+        <ConfirmDialog
+          title={prompt.title}
+          body={prompt.body}
+          confirmLabel={DELETE_CONFIRM.delete}
+          cancelLabel={DELETE_CONFIRM.cancel}
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
+        />
       )}
     </div>
   );
