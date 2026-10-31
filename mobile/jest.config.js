@@ -17,6 +17,16 @@ module.exports = {
   preset: "jest-expo",
   testMatch: ["<rootDir>/__tests__/**/*.test.tsx"],
   setupFilesAfterEnv: ["<rootDir>/__tests__/setup.ts"],
+  // 20s, not jest's 5s default. CI run 41223203802 (2026-10-31) failed
+  // "it opens on the first question and counts the rest" with
+  // "Exceeded timeout of 5000 ms": the first test of the slowest suite
+  // pays for the first mount, and userEvent.type is slow on a shared
+  // runner. Nothing was wrong with it. Locally the heaviest tests, in
+  // setupflow AND chrome, take ~2s, so on a runner 2-3x slower several
+  // sit near 5s. One limit for every suite, so the next slow suite
+  // doesn't fail the same way. A test that really hangs still fails,
+  // just after 20s instead of 5.
+  testTimeout: 20000,
   // The engine lives ABOVE this package (../src/engine) and is compiled by
   // babel here, but it resolves its runtime helpers from its own directory
   // and finds nothing — the repo root has no node_modules. Metro solves the
