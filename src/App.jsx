@@ -39,8 +39,8 @@ import SyncNotice from "./components/SyncNotice.jsx";
 import CategoryManager from "./components/CategoryManager.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { supabase } from "./supabase.js";
-import { duringPlaidWrite, isAllowlisted as plaidAllowlisted, plaidWriteInFlight, pullBalance, readConnection } from "./shared/plaidApi.ts";
-import { shouldPullOnOpen, shouldOfferHint, refreshOutcome } from "./shared/connect.ts";
+import { duringPlaidWrite, isAllowlisted as plaidAllowlisted, plaidWriteInFlight, pullBalance, pullIsDue, readConnection } from "./shared/plaidApi.ts";
+import { shouldPullOnOpen, shouldOfferHint, refreshOutcome, syncMoved } from "./shared/connect.ts";
 
 export default function App() {
   // undefined = still checking for a session, null = signed out, object = signed in
@@ -455,7 +455,16 @@ export default function App() {
     try { result = await pullBalance(supabase, trigger); }
     finally { setPulling(false); }
     if (!result) return "Couldn't reach your bank just now";
-    if (!result.synced) return refreshOutcome(result.reason) ?? "Nothing to update";
+    if (!result.synced) {
+      // Nothing pulled HERE — but if the stamp moved, somebody else's
+      // pull wrote a balance this tab has not read.
+      const before = connectionRef.current?.lastSyncedAt ?? null;
+      if (syncMoved(before, result.lastSyncedAt)) {
+        setConnection((c) => c && { ...c, lastSyncedAt: result.lastSyncedAt });
+        await reloadFromServer();
+      }
+      return refreshOutcome(result.reason) ?? "Nothing to update";
+    }
     setConnection((c) => c && { ...c, status: result.status ?? c.status, lastSyncedAt: result.lastSyncedAt ?? c.lastSyncedAt });
     await reloadFromServer();
     // `kept_manual` means the write was declined because today's
@@ -474,11 +483,19 @@ export default function App() {
   // window belongs to the SERVER — per account, so one pull serves
   // every device — and this only decides whether to make the call.
   const [connection, setConnection] = useState(null);
+  // For pullNow, a useCallback that must not capture a stale copy —
+  // the lesson reloadFromServer already paid for.
+  const connectionRef = useRef(null);
+  connectionRef.current = connection;
   // A pull is in flight. Drives the pill's "syncing…" — the line sat
   // on "as of 10/22" for the five seconds a pull takes, which reads
   // as a click that did nothing.
   const [pulling, setPulling] = useState(false);
   const [plaidBeta, setPlaidBeta] = useState(false);
+  // Has the first read of the connection finished? Until it has, an
+  // account with connected features on says "syncing…", not the
+  // manual "as of" — see pillStateOf's `connecting`.
+  const [connChecked, setConnChecked] = useState(false);
   const [connTick, setConnTick] = useState(0);
   const justConnected = useRef(false);
   const setSettingsRef = useRef(() => {});
@@ -489,7 +506,7 @@ export default function App() {
       const ok = await plaidAllowlisted(supabase);
       if (dead) return;
       setPlaidBeta(ok);
-      if (!ok) return;
+      if (!ok) { setConnChecked(true); return; }
       // THE HINT'S AUDIENCE HAS THE FEATURE OFF, so the allowlist is
       // read either way — and since 2026-10-21 so is the CONNECTION.
       //
@@ -505,6 +522,7 @@ export default function App() {
       // everyone who never connected it returns the same nothing.
       const row = await readConnection(supabase);
       if (dead) return;
+      setConnChecked(true);
       if (!row) { setConnection(null); return; }
       if (!connectedFeatures) {
         // A live bank is never left behind a switch that says off.
@@ -525,11 +543,25 @@ export default function App() {
         let result;
         try { result = await pullBalance(supabase, "open"); }
         finally { if (!dead) setPulling(false); }
-        if (dead || !result) return;
+        if (dead) return;
+        if (!result) {
+          // THE REPLY WAS LOST, NOT NECESSARILY THE PULL. One select on
+          // our own table says whether the server wrote anyway — the
+          // phone showed "synced 7:50 AM" beside yesterday's balance
+          // from exactly this (2026-10-30).
+          const again = await readConnection(supabase);
+          if (dead || !again) return;
+          setConnection(again);
+          if (syncMoved(row.lastSyncedAt, again.lastSyncedAt)) await reloadFromServer();
+          return;
+        }
         setConnection((c) => c && { ...c, status: result.status ?? c.status, lastSyncedAt: result.lastSyncedAt ?? c.lastSyncedAt });
         // A pull that actually wrote changed a snapshot on the server,
-        // and nothing in this tab would have noticed.
-        if (result.synced && result.applied === "written") await reloadFromServer();
+        // and nothing in this tab would have noticed. So did one that
+        // another device made while this tab was loading.
+        if ((result.synced && result.applied === "written") || syncMoved(row.lastSyncedAt, result.lastSyncedAt)) {
+          await reloadFromServer();
+        }
       });
     })();
     return () => { dead = true; };
@@ -629,6 +661,11 @@ export default function App() {
       // Not while one of our own writes is outstanding: a pull
       // started from the menu is already doing this.
       if (plaidWriteInFlight()) return;
+      // NOT UNTIL THE SERVER'S WINDOW HAS PASSED (2026-10-30). Every
+      // tab switch used to ask, and the pill flashed "syncing…" over a
+      // balance that was fresh the whole time. The server says how
+      // long; pullIsDue measures it on two clocks. See pullDue.
+      if (!pullIsDue()) return;
       asking = true;
       try { await pullNow("open"); } finally { asking = false; }
     }
@@ -751,6 +788,7 @@ export default function App() {
         account={account}
         connection={connection}
         syncing={pulling}
+        connecting={connectedFeatures && !connChecked}
         newestSnapshot={(state.accountSnapshots?.[account.id] ?? []).at(-1)}
         onUpdateClick={() => setUpdateBalanceOpen(true)}
         onPull={pullNow}

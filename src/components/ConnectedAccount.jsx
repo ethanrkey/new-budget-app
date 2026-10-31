@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, PLAID_PORTAL_URL,
+  BETA_NOTE, CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, PLAID_PORTAL_URL,
   RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
 } from "../content/connect.ts";
 import { canReconnect, canSeeToggle, shouldRestoreToggle } from "../shared/connect.ts";
@@ -110,8 +110,17 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     if (settings.connectedFeatures) connectedRow.current = null;
   }, [settings, onSetSettings]);
 
-  // Absent for anyone not on the list — not disabled, not explained.
-  if (!canSeeToggle(!!allowlisted)) return null;
+  // NOT ON THE LIST: one line saying the feature exists and is a small
+  // beta, and nothing to press. Nothing at all while the answer is still
+  // coming, so an allowlisted account never flashes the beta note.
+  if (allowlisted === null) return null;
+  if (!canSeeToggle(allowlisted)) {
+    return (
+      <section className="mt-5 border-t border-gray-100 dark:border-gray-800 pt-4">
+        <p className="text-xs text-gray-500 max-w-sm">{BETA_NOTE}</p>
+      </section>
+    );
+  }
 
   async function toggle(next) {
     if (!next && connection) {

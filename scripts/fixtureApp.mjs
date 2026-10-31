@@ -12,6 +12,7 @@
 // be left switched on by accident; the whole deception lives in this file.
 //
 // Needs Google Chrome installed (CHROME=/path overrides) and nothing else.
+import { todayISO } from "../src/engine/model.ts";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { readFileSync, existsSync } from "node:fs";
@@ -133,7 +134,13 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
   };
 
   const now = new Date().toISOString();
-  const today = now.slice(0, 10);
+  // THE LOCAL DAY, as the page computes it — never the UTC slice of
+  // `now`. After 8 PM Eastern those disagree, the stand-in looked for
+  // tomorrow's snapshot row, wrote nothing and still answered
+  // "written", and drive_connected failed every evening (found
+  // 2026-10-30 at 10:17 PM). The calendar's Greenwich bug, in the
+  // harness this time.
+  const today = todayISO();
   let syncedAt = plaid?.lastSyncedAt ?? now;
   /** Every trigger the page asked for, in order, for the drive to read. */
   const calls = [];
@@ -184,6 +191,15 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
       if (url.includes("/functions/v1/plaid-balance")) {
         const trigger = JSON.parse(req.postData() || "{}").trigger ?? "open";
         calls.push(trigger);
+        // OPTIONAL, AND READ ON EVERY CALL so a drive can change them
+        // between phases: `nextPullIn` is the server's "ask again in"
+        // (absent, the client asks every time, as with an old server),
+        // and `fresh` answers the way plaid-balance does inside its
+        // 12-hour window — no pull, no write.
+        const next = plaid.nextPullIn == null ? {} : { next_pull_in_seconds: plaid.nextPullIn };
+        if (plaid.fresh && trigger === "open") {
+          return send({ connected: true, status: "ok", synced: false, reason: "fresh", last_synced_at: syncedAt, ...next });
+        }
         // IT WRITES INTO THE ROWS THE PAGE RELOADS FROM, exactly as
         // the edge function writes to budget_entities — so a page
         // that fails to re-read shows the old number and fails here.
@@ -198,13 +214,13 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
         const theirs = (dated?.data?.source ?? "manual") === "manual";
         syncedAt = new Date().toISOString();
         if (dated && theirs && trigger !== "adopt") {
-          return send({ connected: true, status: "ok", synced: true, applied: "kept_manual", last_synced_at: syncedAt });
+          return send({ connected: true, status: "ok", synced: true, applied: "kept_manual", last_synced_at: syncedAt, ...next });
         }
         if (dated) {
           dated.data = { ...dated.data, amount: plaid.available ?? 956.79, source: "plaid", externalId: "fix" };
           dated.version += 1;
         }
-        return send({ connected: true, status: "ok", synced: true, applied: "written", last_synced_at: syncedAt });
+        return send({ connected: true, status: "ok", synced: true, applied: "written", last_synced_at: syncedAt, ...next });
       }
     }
 

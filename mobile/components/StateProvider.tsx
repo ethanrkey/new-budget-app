@@ -96,7 +96,7 @@ export function StateProvider({ userId, children }: { userId: string; children: 
       // Never fatal to the gesture: a bank that cannot be reached
       // must not stop the swipe from reloading what is already
       // saved. The reload below is the part the user asked for.
-      try { await loadConnection({ connectedFeatures }); } catch { /* reload anyway */ }
+      try { await loadConnection({ connectedFeatures }, "swipe"); } catch { /* reload anyway */ }
     }
     if (await refresh()) feel.light();
   }, [connectedFeatures, refresh]);

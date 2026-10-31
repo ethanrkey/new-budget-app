@@ -90,7 +90,11 @@ console.log("\n== every way into the event form opens it ==");
   eq("...with its amount in the field", /value="1650"/.test(ruleHtml), true);
 
   // The path that always worked, kept working.
-  opens("a recurring occurrence from the Ledger", { initial: rule, occurrenceDate: "2026-11-02", overrideAmount: 1700, onSaveOverride: noop, onClearOverride: noop });
+  const occ = opens("a recurring occurrence from the Ledger", { initial: rule, occurrenceDate: "2026-11-02", overrideAmount: 1700, onSaveOverride: noop, onClearOverride: noop });
+  // The owner's words, 2026-10-30.
+  eq("...which says it edits this instance only", occ.includes("Edit this instance only."), true);
+  eq("...and names the series' own amount", occ.includes("Current recurring amount: $1,650.00"), true);
+  eq("...and no longer lectures about what belongs to the rule", /belong to the rule|The rule says|keeps the rule/.test(occ), false);
   opens("a brand-new item", {});
   opens("an amount of zero", { initial: { ...oneoff, amount: 0 } });
 }

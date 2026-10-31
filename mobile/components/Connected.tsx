@@ -10,7 +10,7 @@ import { useBudget } from "./StateProvider";
 import NativeSheet from "./NativeSheet";
 import { fmtDate, fmtInstant } from "../../src/shared/dates.ts";
 import {
-  CONNECT_CONSENT, CONNECT_REFUSED, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
+  BETA_NOTE, CONNECT_CONSENT, CONNECT_REFUSED, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
   PLAID_PORTAL_URL, RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
 } from "../../src/content/connect.ts";
 import type { Connection } from "../../src/shared/connect.ts";
@@ -55,7 +55,7 @@ export default function Connected() {
   // pill had no way to learn that a bank now existed until the app
   // was restarted. The store in lib/connection.ts is the one answer
   // and everything that changes it writes there.
-  const { connection, allowlisted } = useConnection();
+  const { connection, allowlisted, loaded } = useConnection();
   const [consenting, setConsenting] = useState(false);
   const [busy, setBusy] = useState<null | "connecting" | "reconnecting" | "saving" | "disconnecting">(null);
 
@@ -122,9 +122,22 @@ export default function Connected() {
     return () => { sub.remove(); };
   }, [allowlisted, on, refreshConnection, resyncState]);
 
-  // Nothing at all for anyone not on the list. Not a disabled row,
-  // not an explanation — absent.
-  if (!canSeeToggle(allowlistedNow() || allowlisted)) return null;
+  // NOT ON THE LIST: one line saying the feature exists and is a small
+  // beta, and nothing to press. Nothing until the allowlist answer is
+  // in, so an allowlisted account never flashes the beta note.
+  if (!canSeeToggle(allowlistedNow() || allowlisted)) {
+    if (!loaded) return null;
+    return (
+      <>
+        <Text style={styles.sectionLabel}>Connected features</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Text style={[styles.rowSub, { flex: 1 }]}>{BETA_NOTE}</Text>
+          </View>
+        </View>
+      </>
+    );
+  }
 
   async function setToggle(next: boolean) {
     if (next) {

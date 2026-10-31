@@ -45,3 +45,15 @@ export function deletePrompt(items: { name: string; cadence?: string | null }[])
 }
 
 export const DELETE_CONFIRM = { delete: "Delete", cancel: "Cancel" } as const;
+
+/**
+ * Editing one date of a recurring item, on both clients — the owner's
+ * words, 2026-10-30. The form used to explain itself at length ("Name,
+ * category, cadence and dates belong to the rule…"); it now says what
+ * this screen does and what the series' own amount is, and nothing
+ * else.
+ */
+export const OCCURRENCE_EDIT = {
+  only: "Edit this instance only.",
+  current: (amount: string) => `Current recurring amount: ${amount}`,
+} as const;

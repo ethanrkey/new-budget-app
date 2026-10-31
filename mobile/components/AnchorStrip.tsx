@@ -78,7 +78,7 @@ import { pillIsAction, pillStateOf, pillSuffixOf, type Connection } from "../../
 // balance, any account name, or any date. The first line shrinks the
 // ACCOUNT NAME instead, which is the one piece of it that is both
 // user-supplied and the least load-bearing.
-export default function AnchorStrip({ onPress, connection, syncing = false }: {
+export default function AnchorStrip({ onPress, connection, syncing = false, connecting = false }: {
   onPress?: () => void;
   /**
    * The bank connection, or null. Passed in rather than read here:
@@ -92,6 +92,8 @@ export default function AnchorStrip({ onPress, connection, syncing = false }: {
   connection?: Connection | null;
   /** A pull is in flight; the pill says so. See PILL_SUFFIX.syncing. */
   syncing?: boolean;
+  /** The connection is still being read. See pillStateOf's `connecting`. */
+  connecting?: boolean;
 }) {
   const { state, online } = useBudget();
   if (!state) return null;
@@ -109,6 +111,7 @@ export default function AnchorStrip({ onPress, connection, syncing = false }: {
     account.balanceAsOf,
     todayISO(),
     syncing,
+    connecting,
   );
   // LOCAL, both halves. These used to slice the UTC date off the
   // instant and pair it with a local clock, which showed tomorrow's

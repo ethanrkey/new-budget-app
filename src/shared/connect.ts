@@ -70,8 +70,22 @@ export function pillStateOf(
    * is running keeps the behavior it had.
    */
   syncing = false,
+  /**
+   * The connection has not been read yet, on an account that has
+   * connected features on (2026-10-30).
+   *
+   * A cold start drew "as of 10/27" — the MANUAL label — for the
+   * second before the row arrived and the pill turned into "synced
+   * 7:50 AM". For an account with a bank that is the app saying,
+   * briefly and wrongly, that there is no bank. While it is still
+   * finding out it says so. Once the read is done this is false
+   * again, and an account that turns out to have nothing connected
+   * reads "as of" like any other.
+   */
+  connecting = false,
 ): PillState {
   if (syncing && connection) return "syncing";
+  if (connecting && !connection) return "syncing";
   if (!connection) return "manual";
   if (connection.status === "login_required") return "reconnect";
   if (!connection.lastSyncedAt) return "manual";
@@ -269,4 +283,55 @@ export function refreshOutcome(reason: string | undefined): string | null {
     case "no_local_account": return "Your bank didn't return a balance";
     default: return null;
   }
+}
+
+/**
+ * WHEN TO STOP ASKING (2026-10-30).
+ *
+ * Every focus and every foreground used to ask plaid-balance whether
+ * a pull was due, and the pill said "syncing…" for each — five tab
+ * switches, five flashes, over a balance that was fresh the whole
+ * time. The server now answers with how long until it would pull
+ * (`next_pull_in_seconds`, by ITS clock), and the client skips the
+ * question until that has passed.
+ *
+ * TWO CLOCKS, AND EITHER ONE CAN SAY "ASK". The wall clock can be
+ * wrong; the monotonic one (performance.now) does not advance while
+ * a laptop sleeps on some platforms, which is exactly the overnight
+ * tab the 12-hour window exists for. Skipping needs BOTH to agree it
+ * is too soon, so a wrong answer needs both to be wrong at once.
+ * And a cold start always asks, because a new process has no
+ * deadline at all — so the worst any clock fault can do is delay a
+ * pull until the next launch, never prevent one.
+ */
+export interface PullDeadline { wallAt: number; monoAt: number }
+
+export function deadlineFrom(seconds: number | null | undefined, wallNow: number, monoNow: number): PullDeadline | null {
+  if (seconds == null || !Number.isFinite(seconds)) return null;
+  const ms = Math.max(0, seconds) * 1000;
+  return { wallAt: wallNow + ms, monoAt: monoNow + ms };
+}
+
+/** No deadline is "ask": nothing has told us it is too soon. */
+export function pullDue(deadline: PullDeadline | null, wallNow: number, monoNow: number): boolean {
+  if (!deadline) return true;
+  return wallNow >= deadline.wallAt || monoNow >= deadline.monoAt;
+}
+
+/**
+ * HAS THE BANK MOVED SINCE WE LAST LOOKED?
+ *
+ * A pull this device made reports whether it wrote. A pull it did
+ * NOT see the answer to — another device's, a cron's, or its own
+ * whose reply was lost — reports nothing, and the only trace on this
+ * device is `last_synced_at` moving. That is how the phone showed
+ * "synced 7:50 AM" beside yesterday's $818.50 (2026-10-30): the stamp
+ * came from a re-read of the connection, the balance from a state
+ * nobody re-read. A stamp that moves means the rows may have, so the
+ * state is re-read.
+ */
+export function syncMoved(before: string | null | undefined, after: string | null | undefined): boolean {
+  if (!after) return false;
+  if (!before) return true;
+  return Date.parse(after) > Date.parse(before);
 }

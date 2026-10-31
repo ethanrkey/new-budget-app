@@ -91,6 +91,23 @@ export const ACCOUNT_FILTERS = {
 export const BALANCE_STALE_AFTER_HOURS = 12;
 
 /**
+ * How long until an "open" would pull again, by THE SERVER'S clock.
+ *
+ * Sent back so a client can stop asking on every focus and every
+ * foreground (2026-10-30). The decision is still ours: the client
+ * learns a duration, never a time to compare its own clock against,
+ * and measures it on two clocks of its own — see pullDue in
+ * src/shared/connect.ts. Zero means "ask now"; a connection that has
+ * never synced is always zero.
+ */
+export function nextPullInSeconds(lastSyncedAt: string | null, nowMs: number): number {
+  if (!lastSyncedAt) return 0;
+  const age = (nowMs - Date.parse(lastSyncedAt)) / 1000;
+  if (Number.isNaN(age)) return 0;
+  return Math.max(0, Math.ceil(BALANCE_STALE_AFTER_HOURS * 3600 - age));
+}
+
+/**
  * "Refresh now", capped. Two automatic pulls a day plus this is about
  * 180 calls per item per month, which is a number worth knowing before
  * a bill arrives rather than after.

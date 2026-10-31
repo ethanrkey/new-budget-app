@@ -68,7 +68,7 @@ export const CONNECT_CONSENT: ConsentScreen = {
     // ours first would have thought Plaid's was the lie.
     "Your bank connection is handled by Plaid. Plaid will have access to your account and balance info and your contact info — more than Key Budget uses. Plaid's own screen will tell you this too.",
     "Your bank login goes to Plaid and your bank. Key Budget never sees it.",
-    "Disconnect anytime in Settings. That removes Key Budget's access right away. Balances already pulled stay in your history, the same as ones you typed.",
+    "Disconnect anytime in Settings. That ends Key Budget's access at once, or, if Plaid can't be reached at that moment, keeps trying every hour until it can. Balances already pulled stay in your history, the same as ones you typed.",
     // Their rights against PLAID, which we cannot exercise for them
     // and must therefore name. Without this the screen quietly
     // implies that disconnecting here is the end of it.
@@ -89,7 +89,7 @@ export const CONNECT_CONSENT: ConsentScreen = {
  * and this is read by someone who has decided to leave.
  */
 export const DISCONNECT_NOTE =
-  "Disconnecting removes Key Budget's access right away. Balances already pulled stay in your history. "
+  "Disconnecting ends Key Budget's access at once, or keeps trying every hour if Plaid can't be reached. Balances already pulled stay in your history. "
   + "Connecting again later starts a new connection, not this one. "
   + "To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.";
 
@@ -173,6 +173,17 @@ export const CONNECT_TOGGLE = "Connect your bank";
 export const CONNECT_TOGGLE_SUB =
   "When on, Key Budget can read your checking balance — and nothing else. "
   + "You can always log balances by hand instead.";
+
+/**
+ * What everyone NOT on the allowlist sees where the toggle would be
+ * (2026-10-30, owner's wording). It used to be nothing at all, which
+ * was honest but left a tester who had heard about the feature
+ * wondering whether their app was broken. It describes the present
+ * rather than promising a date: App Review reads "coming soon" as a
+ * placeholder.
+ */
+export const BETA_NOTE =
+  "Bank connection — in a small private beta for now. Everything else works by hand, exactly as it does today.";
 
 export const CONNECT_HINT = "Want this automatic? Turn on connected features in Settings.";
 export const CONNECT_HINT_DISMISS = "Don't show again";

@@ -4,6 +4,7 @@ import { initialCategory, categoryOnModeChange } from "../shared/entryDefaults.t
 import { useSubmitOnce } from "../useSubmitOnce.js";
 import { fmtDate } from "../shared/dates.ts";
 import { WHY_NOT } from "../content/logBalance.ts";
+import { OCCURRENCE_EDIT } from "../content/transaction.ts";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -164,7 +165,7 @@ export default function EventForm({
             </div>
             <p className="text-xs text-gray-500 mt-1.5">
               {occScope
-                ? <>Changing {initial.name} on {fmtDate(occurrenceDate)} only. Every other date keeps the rule&apos;s amount.</>
+                ? OCCURRENCE_EDIT.only
                 : <>Changing the rule for {initial.name} — every date, past and future. Dates you&apos;ve already given their own amount keep it.</>}
             </p>
           </div>
@@ -184,17 +185,13 @@ export default function EventForm({
                 onKeyDown={(e) => { if (e.key === "Enter") trySave(); }}
               />
               <p className="text-xs text-gray-400 mt-1">
-                The rule says {money(initial.amount)}.
+                {OCCURRENCE_EDIT.current(money(initial.amount))}
                 {overrideAmount != null && " This date is already overridden."}
               </p>
             </div>
-            {/* Everything else belongs to the rule, so it is not shown here
-                rather than shown disabled — a grayed field you can never
-                use on this screen is just clutter. */}
-            <p className="text-xs text-gray-500">
-              Name, category, cadence and dates belong to the rule. Switch to
-              <strong className="font-medium"> Every time</strong> to change those.
-            </p>
+            {/* Everything else belongs to the series, so it is not shown
+                here rather than shown disabled — a grayed field you can
+                never use on this screen is just clutter. */}
             {overrideAmount != null && (
               <button
                 onClick={() => onClearOverride(initial.id, occurrenceDate)}

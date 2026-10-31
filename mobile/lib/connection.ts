@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import type { Connection } from "../../src/shared/connect.ts";
-import { shouldPullOnOpen } from "../../src/shared/connect.ts";
-import { isAllowlisted, pullBalance, readConnection } from "../../src/shared/plaidApi.ts";
+import { shouldPullOnOpen, syncMoved } from "../../src/shared/connect.ts";
+import { forgetPullDeadline, isAllowlisted, pullBalance, pullIsDue, readConnection } from "../../src/shared/plaidApi.ts";
 
 // ONE ANSWER TO "IS THERE A BANK", shared by everything that asks.
 //
@@ -27,9 +27,30 @@ const announce = () => { for (const l of listeners) l(); };
 
 /** What a load did, for a caller that has state to keep in step. */
 export interface LoadResult {
-  /** A pull happened AND it wrote a new balance. See load(). */
-  wrote: boolean;
+  /**
+   * The balance on the server may have moved since the state was
+   * read — re-read it. True when a pull this device made wrote, AND
+   * when `last_synced_at` moved by any other route: another device's
+   * pull, or this device's own whose reply never arrived. See
+   * syncMoved.
+   */
+  reload: boolean;
 }
+
+/**
+ * Why load() was called, because the four do not ask the same thing.
+ *
+ *   cold        a launch. Always asks — a new process has no deadline
+ *               — and the pill says "syncing…" until it knows.
+ *   foreground  back from the background. Asks NOTHING, not even our
+ *               own table, until the server's window has passed. This
+ *               was a function call and a "syncing…" flash on every
+ *               single return to the app (2026-10-30).
+ *   swipe       pull-to-refresh. Always asks, because somebody asked;
+ *               says "syncing…" only if a pull is actually due.
+ *   connect     after Link. Always asks.
+ */
+export type LoadReason = "cold" | "foreground" | "swipe" | "connect";
 
 /** The last known connection. Null means none, or not loaded yet. */
 export const connectionNow = (): Connection | null => current;
@@ -42,25 +63,36 @@ export function setConnection(next: Connection | null): void {
   announce();
 }
 
+const asConnection = (row: Awaited<ReturnType<typeof readConnection>>): Connection | null => row && {
+  institutionName: row.institutionName, status: row.status,
+  lastSyncedAt: row.lastSyncedAt, mask: row.mask,
+};
+
 /**
  * Read the connection, and pull a balance if one is due.
  *
- * THE 12-HOUR WINDOW IS THE SERVER'S, not ours. This asks on every
- * open and lets `plaid-balance` decide — the clock is per account so
- * that one pull serves every device, and this codebase does not
- * trust device clocks (see syncGuard.ts). A client that skipped the
- * call because its own clock said "too soon" is the one way to end
- * up with a balance nobody ever refreshed.
+ * THE 12-HOUR WINDOW IS STILL THE SERVER'S. What changed on
+ * 2026-10-30 is that the server now says how long is left, and a
+ * foreground return waits that long before asking again — measured
+ * on two device clocks, either of which can end the wait (see
+ * pullDue). A cold start always asks, so no clock fault can do worse
+ * than delay a pull to the next launch.
  */
-export function load(settings: { connectedFeatures: boolean }): Promise<LoadResult> {
+export function load(settings: { connectedFeatures: boolean }, reason: LoadReason = "cold"): Promise<LoadResult> {
   if (inFlight) return inFlight;
+  // NOTHING DUE, NOTHING ASKED. Only once something has been loaded:
+  // a "foreground" before the first load is a cold start in disguise.
+  if (reason === "foreground" && loaded && current && !pullIsDue()) {
+    return Promise.resolve({ reload: false });
+  }
+  const seenBefore = loaded ? current?.lastSyncedAt ?? null : undefined;
   inFlight = (async () => {
-    let wrote = false;
+    let reload = false;
     try {
       allowlisted = await isAllowlisted(supabase as never);
       if (!allowlisted) {
         current = null;
-        return { wrote };
+        return { reload };
       }
       // READ EVEN WITH THE TOGGLE OFF, for an allowlisted account.
       //
@@ -77,45 +109,45 @@ export function load(settings: { connectedFeatures: boolean }): Promise<LoadResu
       // code, and for everybody who never connected it returns the
       // same nothing it always did. The caller puts the toggle back
       // when a row turns up — see shouldRestoreToggle.
-      const row = await readConnection(supabase as never);
-      current = row && {
-        institutionName: row.institutionName, status: row.status,
-        lastSyncedAt: row.lastSyncedAt, mask: row.mask,
-      };
+      current = asConnection(await readConnection(supabase as never));
+      const readSynced = current?.lastSyncedAt ?? null;
+      // A STAMP THAT MOVED WHILE WE WERE AWAY is somebody else's pull,
+      // and the balance it wrote is not in the state we hold.
+      if (seenBefore !== undefined && syncMoved(seenBefore, readSynced)) reload = true;
       // NO PULL while the feature is off. Finding the row is about
       // not hiding it; spending a billed call on an account that has
       // switched the feature off is a different thing entirely.
-      if (!settings.connectedFeatures) return { wrote };
+      if (!settings.connectedFeatures) return { reload };
       if (shouldPullOnOpen(settings, current)) {
-        // ANNOUNCED BEFORE AND AFTER, so the pill can say so. A pull
-        // takes about five seconds and the strip used to sit on "as
-        // of 10/22" throughout, which reads as a tap that did
-        // nothing. See PILL_SUFFIX.syncing.
-        syncing = true;
-        announce();
+        // "syncing…" WHEN A PULL IS REALLY LIKELY, and on a cold
+        // start, which has no way to know and promised not to say
+        // "as of" in the meantime. A swipe over a fresh balance is a
+        // function call answering no; it says nothing.
+        syncing = reason !== "swipe" || pullIsDue();
+        if (syncing) announce();
         let result;
         try {
           result = await pullBalance(supabase as never, "open");
         } finally {
           syncing = false;
         }
-        // A pull that actually wrote changes the snapshot the state
-        // provider is holding, so the number on screen would be the
-        // old one until something else refetched. Re-reading the
-        // connection is not enough; the caller re-syncs state.
         if (result) {
           current = current && {
             ...current,
             status: result.status ?? current.status,
             lastSyncedAt: result.lastSyncedAt ?? current.lastSyncedAt,
           };
-          // REPORTED, because only the caller can act on it. A pull
-          // that wrote has moved a snapshot on the server and the
-          // state this app is holding is now the old one — the
-          // balance on screen would stay stale until something else
-          // happened to refetch. Returning it is how the caller
-          // knows to, without reloading after every open.
-          wrote = result.synced && result.applied === "written";
+          if (result.synced && result.applied === "written") reload = true;
+          // Fresh, but fresher than the row we read a moment ago:
+          // another device pulled in between.
+          if (syncMoved(readSynced, result.lastSyncedAt)) reload = true;
+        } else {
+          // THE REPLY WAS LOST, NOT NECESSARILY THE PULL. The server
+          // may have written and then failed to tell us; one select
+          // on our own table says whether it did.
+          const again = asConnection(await readConnection(supabase as never));
+          if (again) current = again;
+          if (syncMoved(readSynced, again?.lastSyncedAt)) reload = true;
         }
       }
     } catch {
@@ -127,7 +159,7 @@ export function load(settings: { connectedFeatures: boolean }): Promise<LoadResu
       loaded = true;
       announce();
     }
-    return { wrote };
+    return { reload };
   })().finally(() => { inFlight = null; });
   return inFlight;
 }
@@ -140,6 +172,7 @@ export function reset(): void {
   // A sign-out in the middle of a pull must not leave the next
   // account's pill saying "syncing…" for ever.
   syncing = false;
+  forgetPullDeadline();
   announce();
 }
 

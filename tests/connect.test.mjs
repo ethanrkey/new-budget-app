@@ -23,15 +23,15 @@ import { fmtDate, fmtInstant, fmtShortStamp } from "../src/shared/dates.ts";
 import { HIDDEN_ROWS_COPY, WHY_NOT } from "../src/content/logBalance.ts";
 import { splitState, assembleState } from "../src/engine/entities.ts";
 import {
-  CONNECT_CONSENT, CONNECT_HINT, CONNECT_HINT_DISMISS, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
+  BETA_NOTE, CONNECT_CONSENT, CONNECT_HINT, CONNECT_HINT_DISMISS, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
   PILL, PILL_SHEET, PLAID_PORTAL_URL, TOGGLE_OFF_CONFIRM,
 } from "../src/content/connect.ts";
 import {
   pillStateOf, pillTextOf, pillSuffixOf, pillLongOf, pillIsAction, shouldPullOnOpen,
   canOfferConnect, canReconnect, canSeeToggle, canUseBankBalance, shouldOfferHint,
-  shouldRestoreToggle, refreshOutcome,
+  shouldRestoreToggle, refreshOutcome, deadlineFrom, pullDue, syncMoved,
 } from "../src/shared/connect.ts";
-import { duringPlaidWrite, plaidWriteInFlight, pullBalance } from "../src/shared/plaidApi.ts";
+import { duringPlaidWrite, plaidWriteInFlight, pullBalance, pullIsDue, forgetPullDeadline } from "../src/shared/plaidApi.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -73,7 +73,7 @@ eq("the login never reaches us",
 // pulled is their own record of their own money.
 eq("disconnecting is immediate, and keeps what was pulled",
   CONNECT_CONSENT.bullets[3],
-  "Disconnect anytime in Settings. That removes Key Budget's access right away. Balances already pulled stay in your history, the same as ones you typed.");
+  "Disconnect anytime in Settings. That ends Key Budget's access at once, or, if Plaid can't be reached at that moment, keeps trying every hour until it can. Balances already pulled stay in your history, the same as ones you typed.");
 
 // Their rights against PLAID, which this app cannot exercise for
 // them. Without this the screen quietly implies disconnecting here is
@@ -106,7 +106,7 @@ is("and so does the note beside Disconnect", DISCONNECT_NOTE.includes("my.plaid.
 eq("the Portal URL", PLAID_PORTAL_URL, "https://my.plaid.com");
 eq("disconnecting says all four things: access, history, the cost of coming back, Plaid's copy",
   DISCONNECT_NOTE,
-  "Disconnecting removes Key Budget's access right away. Balances already pulled stay in your history. "
+  "Disconnecting ends Key Budget's access at once, or keeps trying every hour if Plaid can't be reached. Balances already pulled stay in your history. "
   + "Connecting again later starts a new connection, not this one. "
   + "To see or delete what Plaid holds, use Plaid Portal at my.plaid.com.");
 
@@ -791,7 +791,7 @@ console.log("\n== what a swipe down costs ==");
   // the four manual refreshes a day. `load` sends trigger "open",
   // which the server gates on the 12-hour window and never counts.
   is("the swipe goes through the connection load, not a refresh call",
-    pull.includes("loadConnection({ connectedFeatures })"));
+    pull.includes('loadConnection({ connectedFeatures }, "swipe")'));
   is("...and never asks for a 'refresh' trigger", !pull.includes('"refresh"'));
   is("...and reloads even when the bank could not be reached",
     pull.includes("catch { /* reload anyway */ }"));
@@ -802,7 +802,7 @@ console.log("\n== what a swipe down costs ==");
   // would leave the balance stale and a load that always said yes
   // would refetch after every open.
   is("...and reports a write only when the pull synced AND was applied",
-    conn.includes('wrote = result.synced && result.applied === "written";'));
+    conn.includes('if (result.synced && result.applied === "written") reload = true;'));
 
   // Coming back to the app is an open, on both clients.
   const chrome = readFileSync(new URL("../mobile/components/Chrome.tsx", import.meta.url), "utf8");
@@ -810,13 +810,74 @@ console.log("\n== what a swipe down costs ==");
   // below the listener also names syncConnection — a looser match
   // went on passing with the body of the listener deleted.
   is("the phone asks again when it comes back to the foreground",
-    /next === "active"\) void syncConnection\(\);/.test(chrome));
+    /next === "active"\) void syncConnection\("foreground"\);/.test(chrome));
   is("...and reloads its state when the pull actually wrote",
-    chrome.includes("if (wrote) await refresh();"));
+    chrome.includes("if (reload) await refresh();"));
   const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
   const onReturn = app.slice(app.indexOf("async function onReturn"), app.indexOf("document.addEventListener(\"visibilitychange\", onReturn)"));
   is("the web asks again when the tab comes back", onReturn.includes('pullNow("open")'));
   is("...and not while one of its own writes is outstanding", onReturn.includes("plaidWriteInFlight()"));
+}
+
+console.log("\n== when to stop asking, on two clocks (2026-10-30) ==");
+{
+  const d = deadlineFrom(3600, 1_000_000, 50_000);
+  eq("an hour from now on both clocks", d, { wallAt: 1_000_000 + 3_600_000, monoAt: 50_000 + 3_600_000 });
+  eq("no deadline at all is 'ask'", pullDue(null, 0, 0), true);
+  eq("an answer without a deadline sets none", deadlineFrom(null, 1, 1), null);
+  eq("inside the window on both clocks: do not ask", pullDue(d, 1_000_000 + 60_000, 50_000 + 60_000), false);
+  // THE LAPTOP THAT SLEPT: the monotonic clock barely moved, the wall
+  // clock moved twelve hours. Either clock can end the wait.
+  eq("the wall clock alone says due: ask", pullDue(d, 1_000_000 + 3_600_000, 50_000 + 1), true);
+  // THE WRONG WALL CLOCK: set back a day, but the process has been up
+  // an hour.
+  eq("the monotonic clock alone says due: ask", pullDue(d, 0, 50_000 + 3_600_000), true);
+  eq("a deadline of zero is due at once", pullDue(deadlineFrom(0, 5, 5), 5, 5), true);
+  eq("a negative from a confused server is clamped to now", pullDue(deadlineFrom(-30, 5, 5), 5, 5), true);
+}
+
+console.log("\n== pullBalance records the server's deadline, and forgets it on a failure ==");
+{
+  forgetPullDeadline();
+  const answering = (data, error = null) => ({ functions: { invoke: async () => ({ data, error }) } });
+  is("with nothing heard, a pull is due", pullIsDue());
+  await pullBalance(answering({ connected: true, synced: false, reason: "fresh", last_synced_at: "x", next_pull_in_seconds: 3600 }), "open");
+  not("after 'ask again in an hour', it is not", pullIsDue());
+  await pullBalance(answering(null, new Error("network")), "open");
+  is("a failed call forgets it, so the next return asks", pullIsDue());
+  await pullBalance(answering({ connected: true, synced: false, reason: "fresh", last_synced_at: "x" }), "open");
+  is("an old server that sends no deadline leaves every return asking", pullIsDue());
+  await pullBalance(answering({ connected: true, synced: false, next_pull_in_seconds: 0 }), "open");
+  is("zero is due", pullIsDue());
+  forgetPullDeadline();
+}
+
+console.log("\n== a stamp that moved means the balance may have ==");
+{
+  is("later is moved", syncMoved("2026-10-30T07:00:00Z", "2026-10-30T07:50:00Z"));
+  not("the same is not", syncMoved("2026-10-30T07:50:00Z", "2026-10-30T07:50:00Z"));
+  not("earlier is not", syncMoved("2026-10-30T07:50:00Z", "2026-10-30T07:00:00Z"));
+  is("first ever sync is moved", syncMoved(null, "2026-10-30T07:50:00Z"));
+  not("no stamp after is not", syncMoved("2026-10-30T07:50:00Z", null));
+}
+
+console.log("\n== the pill while the connection is still being read ==");
+{
+  eq("connecting, no row yet: syncing, never 'as of'", pillStateOf(null, "manual", "2026-10-27", TODAY, false, true), "syncing");
+  eq("not connecting, no row: manual, as before", pillStateOf(null, "manual", "2026-10-27", TODAY, false, false), "manual");
+  eq("a bankless account is still never syncing by a pull flag", pillStateOf(null, undefined, "2026-10-27", TODAY, true), "manual");
+  eq("once the row is here, connecting stops mattering", pillStateOf(conn(), "plaid", TODAY, TODAY, false, true), "synced");
+}
+
+console.log("\n== the beta note, for everyone not on the list ==");
+eq("the owner's words, verbatim", BETA_NOTE,
+  "Bank connection — in a small private beta for now. Everything else works by hand, exactly as it does today.");
+{
+  const web = readFileSync(new URL("../src/components/ConnectedAccount.jsx", import.meta.url), "utf8");
+  const phone = readFileSync(new URL("../mobile/components/Connected.tsx", import.meta.url), "utf8");
+  is("the web shows it", web.includes("{BETA_NOTE}"));
+  is("the phone shows it", phone.includes("{BETA_NOTE}"));
+  not("neither says 'coming soon', which App Review reads as a placeholder", /coming soon/i.test(BETA_NOTE));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

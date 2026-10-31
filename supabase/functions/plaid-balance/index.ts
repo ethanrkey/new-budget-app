@@ -13,7 +13,7 @@
 // Deploy:
 //   npx supabase functions deploy plaid-balance --project-ref <ref>
 import {
-  BALANCE_STALE_AFTER_HOURS, MAX_MANUAL_REFRESHES_PER_DAY, REFRESH_DEBOUNCE_SECONDS,
+  BALANCE_STALE_AFTER_HOURS, MAX_MANUAL_REFRESHES_PER_DAY, REFRESH_DEBOUNCE_SECONDS, nextPullInSeconds,
   PLAID_ENDPOINTS, callPlaid, localDateIn, needsReconnect, readConfig,
 } from "../_shared/plaid.ts";
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
@@ -161,7 +161,8 @@ Deno.serve(async (req) => {
       .eq("endpoint", PLAID_ENDPOINTS.accountsBalanceGet)
       .gte("called_at", since);
     if ((count ?? 0) >= MAX_MANUAL_REFRESHES_PER_DAY) {
-      return json(200, { connected: true, status: item.status, synced: false, reason: "daily_cap", last_synced_at: item.last_synced_at });
+      return json(200, { connected: true, status: item.status, synced: false, reason: "daily_cap", last_synced_at: item.last_synced_at,
+        next_pull_in_seconds: nextPullInSeconds(item.last_synced_at, now) });
     }
   }
 
@@ -189,6 +190,9 @@ Deno.serve(async (req) => {
       connected: true, status: item.status, synced: false,
       reason: trigger === "refresh" || trigger === "reconnect" ? "just_now" : "fresh",
       last_synced_at: item.last_synced_at,
+      // So the client can stop asking until this has passed. See
+      // nextPullInSeconds.
+      next_pull_in_seconds: nextPullInSeconds(item.last_synced_at, now),
     });
   }
   // Claiming wrote `now()` up front, so every path out of here that
@@ -260,5 +264,6 @@ Deno.serve(async (req) => {
     // than claiming a sync it did not apply.
     applied: wrote,
     last_synced_at: syncedAt,
+    next_pull_in_seconds: BALANCE_STALE_AFTER_HOURS * 3600,
   });
 });

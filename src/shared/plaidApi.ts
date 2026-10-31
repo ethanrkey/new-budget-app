@@ -10,6 +10,7 @@
 // POSTs to our own functions; Link itself is opened by the client
 // that has a browser to open it in. That is what lets the gate be
 // checked before anything is loaded.
+import { deadlineFrom, pullDue, type PullDeadline } from "./connect.ts";
 
 /**
  * IS ONE OF OUR OWN SERVER-SIDE WRITES OUTSTANDING?
@@ -36,6 +37,19 @@ export async function duringPlaidWrite<T>(fn: () => Promise<T>): Promise<T> {
   writesInFlight += 1;
   try { return await fn(); } finally { writesInFlight -= 1; }
 }
+
+/**
+ * WHEN THE SERVER SAID TO ASK AGAIN, measured on this device's two
+ * clocks. Set by every answer from plaid-balance that carries
+ * `next_pull_in_seconds`, so both clients get it from the one call
+ * they both make. Null — a cold start, an old server, a failed call —
+ * means "ask". See pullDue.
+ */
+let deadline: PullDeadline | null = null;
+const mono = (): number => (globalThis.performance?.now ? globalThis.performance.now() : Date.now());
+export const pullIsDue = (): boolean => pullDue(deadline, Date.now(), mono());
+/** Forget it: sign-out, disconnect, tests. */
+export const forgetPullDeadline = (): void => { deadline = null; };
 
 /** The slice of supabase-js this module uses. */
 export interface FunctionCaller {
@@ -65,6 +79,8 @@ export interface PullResult {
   applied?: string;
   reason?: string;
   lastSyncedAt: string | null;
+  /** Seconds until the server would pull again, by its clock. */
+  nextPullInSeconds: number | null;
 }
 
 /**
@@ -214,8 +230,10 @@ export async function pullBalance(
 ): Promise<PullResult | null> {
   return duringPlaidWrite(async () => {
     const { data, error } = await sb.functions.invoke("plaid-balance", { body: { trigger, timeZone: deviceTimeZone() } });
-    if (error || !data) return null;
+    if (error || !data) { deadline = null; return null; }
     const d = data as Record<string, unknown>;
+    const next = typeof d.next_pull_in_seconds === "number" ? d.next_pull_in_seconds : null;
+    deadline = deadlineFrom(next, Date.now(), mono());
     return {
       connected: !!d.connected,
       synced: !!d.synced,
@@ -223,6 +241,7 @@ export async function pullBalance(
       applied: d.applied as string | undefined,
       reason: d.reason as string | undefined,
       lastSyncedAt: (d.last_synced_at as string | null) ?? null,
+      nextPullInSeconds: next,
     };
   });
 }

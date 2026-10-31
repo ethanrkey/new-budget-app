@@ -11,6 +11,7 @@ import { CADENCES } from "../../src/engine/model.ts";
 import { blankDraft, draftOf, draftError, overrideError, canTrackActuals, draftTouched, type Draft } from "../lib/edit";
 import type { BudgetItem, BudgetState, ISODate, Cadence } from "../../src/engine/types.ts";
 import { fmtDate } from "../../src/shared/dates.ts";
+import { OCCURRENCE_EDIT } from "../../src/content/transaction.ts";
 
 // The editor. It has NO SCOPE CONTROL, which is the point of asking first:
 // in occurrence mode it shows one field, because one field is all that
@@ -114,9 +115,8 @@ export default function TransactionSheet({
     return (
       <Sheet onClose={onClose}>
         <Text style={styles.title}>{mode.item.name} on {fmtDate(mode.date)}</Text>
-        <Text style={styles.dim}>
-          Only this date. Every other date keeps the rule&apos;s {money(mode.item.amount)}.
-        </Text>
+        <Text style={styles.dim}>{OCCURRENCE_EDIT.only}</Text>
+        <Text style={styles.dim}>{OCCURRENCE_EDIT.current(money(mode.item.amount))}</Text>
         <Field label="Amount">
           <TextInput
             style={styles.field} keyboardType="decimal-pad" placeholder="0.00"

@@ -104,5 +104,49 @@ try {
   await app.close();
 }
 
+// ---- a tab coming back, with the server saying when to ask --------
+//
+// 2026-10-30: every focus asked plaid-balance and the bar flashed
+// "syncing…" each time, over a balance that was fresh throughout. The
+// server now answers with next_pull_in_seconds; the tab does not ask
+// again until that has passed.
+console.log("\n== a tab switched to five times does not ask five times ==");
+{
+  const plaid = { available: 956.79, mask: "2403", nextPullIn: 12 * 3600, fresh: true };
+  const app2 = await openFixtureApp({ state: connectedState(), plaid });
+  try {
+    await app2.load();
+    eq("the page load asks once", app2.calls.join(","), "open");
+    // Watch the bar for "syncing" from here on, so a flash shorter than
+    // any poll still counts.
+    await app2.page.evaluate(() => {
+      window.__sawSyncing = false;
+      new MutationObserver(() => {
+        if (document.body.textContent.includes("syncing")) window.__sawSyncing = true;
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
+    const comeBack = () => app2.page.evaluate(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+    });
+    for (let i = 0; i < 5; i++) { await comeBack(); await new Promise((r) => setTimeout(r, 150)); }
+    await new Promise((r) => setTimeout(r, 600));
+    eq("...and five returns inside the window ask nothing", app2.calls.join(","), "open");
+    eq("...and the bar never said syncing", await app2.page.evaluate(() => window.__sawSyncing), false);
+
+    // The window passes. Nothing about the page changes but the
+    // server's answer; the next return asks.
+    plaid.nextPullIn = 0;
+    await clickByText(app2.page, "Balance ▾");
+    await clickByText(app2.page, "Refresh now");
+    await new Promise((r) => setTimeout(r, 1200));
+    await comeBack();
+    await new Promise((r) => setTimeout(r, 1200));
+    eq("once the server says it is due, a return asks again", app2.calls.join(","), "open,refresh,open");
+  } finally {
+    await app2.close();
+  }
+}
+
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);
 process.exit(failures === 0 ? 0 : 1);

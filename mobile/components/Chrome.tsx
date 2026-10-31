@@ -21,7 +21,7 @@ import Setup from "./Setup";
 import { shouldRunSetup } from "../lib/setup";
 import { dismissedBy, withDismissalBy } from "../lib/dismissal";
 import { applySetup, markSetupSeen, markTourSeen, type SetupAnswers } from "../../src/engine/setup.ts";
-import { allowlistedNow, connectionNow, load as loadConnection, useConnection } from "../lib/connection";
+import { allowlistedNow, connectionNow, load as loadConnection, useConnection, type LoadReason } from "../lib/connection";
 import { recoverLink } from "../../src/shared/plaidApi.ts";
 import { supabase } from "../lib/supabase";
 import ConnectedSheet from "./ConnectedSheet";
@@ -131,7 +131,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   // ONE LOAD PER APP OPEN, and none at all with the feature off:
   // `load` returns immediately when the account is not allowlisted or
   // has not opted in, so an ordinary manual user makes no request.
-  const { connection, syncing } = useConnection();
+  const { connection, syncing, loaded: connectionLoaded } = useConnection();
   // The SAME question the strip asks, asked once here so the sheet
   // and the bar cannot disagree about whether there is an override
   // to drop.
@@ -145,6 +145,9 @@ export function Chrome({ session, children }: { session: Session; children: Reac
     : "manual" as const;
   const [connectedSheet, setConnectedSheet] = useState(false);
   const connectedFeatures = !!state?.settings.connectedFeatures;
+  // Still finding out whether there is a bank, on an account that
+  // has one switched on. The pill says "syncing…", not "as of".
+  const connecting = connectedFeatures && !connectionLoaded;
 
   // THE WHOLE OF "ASK WHETHER A PULL IS DUE", in one callback,
   // because it is wanted from two places that must not drift: a cold
@@ -154,14 +157,14 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   // lets plaid-balance decide. Asking is a function call, not a
   // billed Plaid call; it is the claim inside plaid_claim_pull that
   // decides whether anyone's bank is contacted.
-  const syncConnection = useCallback(async () => {
-    const { wrote } = await loadConnection({ connectedFeatures });
+  const syncConnection = useCallback(async (reason: LoadReason) => {
+    const { reload } = await loadConnection({ connectedFeatures }, reason);
     // A PULL THAT WROTE MOVED A SNAPSHOT ON THE SERVER, and this app
     // is holding the state from before it. Nothing else would have
     // refetched, so the strip would go on showing the old balance
     // beside a fresh "synced" stamp — the two halves of one line
     // disagreeing.
-    if (wrote) await refresh();
+    if (reload) await refresh();
   }, [connectedFeatures, refresh]);
 
   // BACK FROM THE BACKGROUND IS AN OPEN. A phone is not restarted
@@ -171,14 +174,14 @@ export function Chrome({ session, children }: { session: Session; children: Reac
   // window was written for.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
-      if (next === "active") void syncConnection();
+      if (next === "active") void syncConnection("foreground");
     });
     return () => { sub.remove(); };
   }, [syncConnection]);
 
   useEffect(() => {
     void (async () => {
-      await syncConnection();
+      await syncConnection("cold");
       // AND ON A COLD START, A SESSION NOBODY FINISHED. The app can
       // be killed between Hosted Link and coming back, in which
       // case neither openLink's await nor the foreground listener
@@ -186,7 +189,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
       // call unless there is really something unfinished.
       if (connectedFeatures && allowlistedNow() && !connectionNow()) {
         const found = await recoverLink(supabase as never);
-        if (found.ok) { await loadConnection({ connectedFeatures }); await refresh(); }
+        if (found.ok) { await loadConnection({ connectedFeatures }, "connect"); await refresh(); }
       }
       // A LIVE BANK IS NEVER LEFT HIDDEN. `load` now reads the row
       // for an allowlisted account whether or not the toggle is on,
@@ -212,6 +215,7 @@ export function Chrome({ session, children }: { session: Session; children: Reac
         <AnchorStrip
           connection={connection}
           syncing={syncing}
+          connecting={connecting}
           onPress={() => {
             // CONNECTED OPENS A CHOICE, NOT A FORM. Someone with a
             // bank may want either door — refresh, or type a number

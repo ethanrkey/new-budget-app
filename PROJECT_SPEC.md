@@ -593,8 +593,12 @@ written here in the same sitting** — there is no other record of it.
   docs were not clear on it — the `signInWithOtp` reference says the
   presence of `{{ .Token }}` sends a code "instead" — and the answer came
   from a real send that arrived and signed in on the device, 2026-10-10.
-- **Providers enabled: google, email.** `apple` is off, and turning it on
-  is part of the Sign in with Apple work, not a separate step.
+- **Providers enabled: google, email, apple** — confirmed in the
+  dashboard by the owner 2026-10-30. This line said `apple` was off
+  until then, two weeks after Sign in with Apple shipped (10-13); it
+  was true when written and nobody came back to it. **Email OTP length
+  is 6**, also confirmed 10-30, which is the number `CODE_LENGTH` and
+  `normalizeCode` assume (see the 8-digit note above).
 - `mailer_autoconfirm` is false.
 
 **EAS (`@ethankey/key-budget`, project `b1d6b66c-…`)**
@@ -1684,6 +1688,13 @@ written here in the same sitting** — there is no other record of it.
   > the app's full function is available on the phone without visiting
   > the website. Account deletion is in Settings, at the root rather
   > than behind a submenu.
+  > Bank connection is an invite-only beta for the developer's family
+  > and friends and isn't available to reviewers; the app is fully
+  > functional without it.
+
+  The last two lines were added 2026-10-30, owner's wording, because
+  the App Store copy and privacy label now mention a bank connection
+  and a reviewer who cannot reach it would otherwise ask to.
 
   The standing rule that produced the old version still applies and is
   worth keeping: do not name a sign-in method before the build has it.
@@ -3365,8 +3376,9 @@ on the device.
 **PRIVACY PAGES AND APP STORE LABELS — listed, not submitted** (the
 owner submits):
 
-- `src/components/Privacy.jsx` — a "Connected accounts (optional)"
-  section: what is requested (checking balance), what is never
+- ~~`src/components/Privacy.jsx` — a "Connected accounts (optional)"
+  section~~ **DONE 2026-10-30**, approved by the owner as drafted
+  pending a voice pass; see the roadmap entry of that date. It was to cover: what is requested (checking balance), what is never
   requested (transactions), that credentials go to Plaid and the bank
   and never to this app, that Plaid is the processor, and that
   disconnecting deletes the connection immediately.
@@ -3400,7 +3412,7 @@ and that the bank login goes to Plaid and the bank rather than here.
 `tests/connect.test.mjs` greps both pages for the three retired
 phrases, because a false privacy claim is the worst kind of stale
 copy and the obvious page was not the only one carrying it. **The
-full "Connected accounts (optional)" section above is still owed** —
+full "Connected accounts (optional)" section above was still owed** (written 2026-10-30) —
 this was the correction, not the rewrite.
 
 **The consent screen's Continue button was orange** (`bg-amber-500`),
@@ -3499,6 +3511,138 @@ Disconnect → `plaid_items`, `plaid_tokens` and every `plaid_%` Vault
 secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
+
+### The bank stops being asked on every focus, and the balance re-reads itself (2026-10-30)
+
+Four owner reports about one strip, fixed together because they are
+one mechanism.
+
+**1. "syncing…" ON EVERY RETURN, web and (since OTA 17) iOS.** A
+return asked plaid-balance, and the client could not know until the
+answer whether a pull would happen, so it said "syncing…" for every
+ask. **`plaid-balance` now returns `next_pull_in_seconds`** — the
+remaining 12-hour window by the SERVER's clock, from
+`nextPullInSeconds` in `_shared/plaid.ts` — on the fresh answer, the
+cap and a pull. `pullBalance` records it as a deadline on two device
+clocks (`deadlineFrom`), and a focus or foreground does NOT ASK AT
+ALL until `pullDue` says so. **Either clock can end the wait**: the
+wall clock can be wrong, and performance.now() may not advance while a
+laptop sleeps, which is the overnight tab the window exists for.
+Skipping needs both to agree it is too soon. A cold start always asks
+(a new process has no deadline), a failed call forgets the deadline,
+and an old server that sends none leaves every return asking — so the
+worst a clock fault can do is delay a pull to the next launch. This
+reverses the 10-26 "no client clock is ever consulted" on the owner's
+instruction, with the reason it was written still answered: the
+client never compares its clock to a server timestamp, only measures
+a duration the server gave it.
+
+"syncing…" now means a pull is really likely: a return that asks only
+does so once the deadline has passed. A swipe on the phone always asks
+(somebody asked) and says "syncing…" only if a pull is due. **Deployed:
+`plaid-balance`, 2026-10-30, by CLI**; it boots and refuses an
+unauthenticated call.
+
+**2. "as of 10/27" on an iOS cold start, before "synced 7:50 AM".**
+For the second before the connection row arrived, the pill drew the
+MANUAL label on an account with a bank. `pillStateOf` takes a sixth
+argument, `connecting` — the row has not been read yet on an account
+with connected features on — and answers "syncing". Both clients pass
+it. Once the read is done it is false again, and an account with the
+feature on but nothing connected reads "as of" like any other.
+
+**3. "synced 7:50 AM" BESIDE $818.50, on a phone that had pulled.**
+The Ledger did not recompute until a swipe showed $3,065.69. A mounted
+test of the obvious path (cold start, pull writes, state reloads)
+PASSED against the old code, so that was not it. What fits every
+symptom is a pull the phone never heard the end of: the server wrote,
+the reply was lost, `wrote` stayed false, and the next ask read a
+moved `last_synced_at` while the server said "fresh". The stamp moved;
+nothing re-read the state. **`syncMoved(before, after)`** now forces a
+re-read whenever `last_synced_at` advances, by any route — this
+device's lost reply (one select on our own table after a failed pull
+says whether the server wrote anyway), another device's pull, or one
+found on the way back. `load()`'s result is renamed `reload` from
+`wrote`, because that is what it now means.
+
+**THE PHONE NOW HAS A MOUNTED TEST OF THIS, `mobile/__tests__/connected.test.tsx`**
+— the counterpart of the web's drive_connected. The server is stood in
+for the way the real one behaves: a pull writes into the rows
+loadState reads, and only a re-read shows it. Eight cases: the
+cold-start reload, "syncing" while the row is being read, "as of" once
+it knows there is nothing, the lost reply, another device's pull found
+on return, no ask inside the window (not even our own table), an ask
+once it lapses, and a silent swipe. **Six fail against the old
+client**; the two that pass either way are the positive controls.
+`scripts/drive_connected.mjs` gained a section: five tab returns
+inside the window ask nothing and never draw "syncing", and the first
+return after the server says "due" asks. Against the old App.jsx: six
+asks and a "syncing" flash.
+
+**4. THE BROWSER FIXTURE THOUGHT IT WAS TOMORROW.** drive_connected
+failed four checks at HEAD, before any of this: `fixtureApp.mjs` took
+"today" as the UTC slice of `now`, so after 8 PM Eastern its
+stand-in for plaid-balance looked for tomorrow's snapshot row, wrote
+nothing, and answered "written" anyway. Found at 10:17 PM. It reads
+`todayISO()` now. The calendar's Greenwich bug, in the harness.
+
+**THE COPY IN THE SAME BATCH, all the owner's wording:**
+
+- The privacy page's "Connected accounts (optional)" section, approved
+  as drafted pending a voice pass, with the "What I collect" bullet
+  replaced by: "If you connect your bank: your checking balance, the
+  account's name and last four digits, and your bank's name. More on
+  that below." Every sentence was checked against `plaid.sql` and
+  `plaid-disconnect` before it was shown to him; the paragraph on the
+  two records that outlive a connection (`plaid_api_log`'s user id,
+  `plaid_item_creations`' bank name) is there because the page's own
+  "your data is deleted with it" is only true with it said.
+- **"removes Key Budget's access right away" was not true when Plaid
+  is unreachable** — the token is queued and retried hourly. The
+  consent bullet and `DISCONNECT_NOTE` now say "ends Key Budget's
+  access at once, or keeps trying every hour if Plaid can't be
+  reached". `TOGGLE_OFF_CONFIRM` still says "disconnects <bank> right
+  away" and has the same gap; not in the owner's list, reported here.
+- **`BETA_NOTE`** where the toggle would be, for everyone not on the
+  allowlist, on both clients: "Bank connection — in a small private
+  beta for now. Everything else works by hand, exactly as it does
+  today." Drawn only once the allowlist answer is in, so an allowlisted
+  account never flashes it. Deliberately not "coming soon": App Review
+  reads that as a placeholder.
+- **Editing one date of a recurring item** (`OCCURRENCE_EDIT`, both
+  clients): "Edit this instance only." and "Current recurring amount:
+  $232.04". The paragraph about name, category, cadence and dates
+  belonging to the rule is gone.
+- The review notes gained the beta sentence, and §5a's providers line
+  is corrected (Apple IS on; OTP length is 6).
+- **No confirm** for clearing a Spending actual or removing a date's
+  override, on the owner's call.
+
+**"RULE" IN USER-FACING TEXT, listed for a later copy pass** (the
+owner is not a fan of the word). Code identifiers and comments
+excluded.
+
+- Web: `Landing.jsx:50` ("Describe your money as rules"),
+  `WipeData.jsx:40` and `DeleteAccount.jsx:73` ("Every recurring
+  rule, one-off and per-date edit"), `ImportCSV.jsx:152, 180, 207`
+  ("N recurring rules", "deletes every existing recurring rule"),
+  `SpendingView.jsx:36` ("the rule's amount"), `BudgetView.jsx:59`
+  ("as you add recurring rules"), `EventForm.jsx` — the Every time
+  helper ("Changing the rule for X"), the orphan warning ("Moving the
+  rule…", "revert to the rule's amount") and its Delete ("Delete this
+  rule and all its dates?"), `LedgerView.jsx:267` (the empty state's
+  "a recurring rule (rent, a paycheck…)"), and `deletePrompt`'s batch
+  bodies ("One of them is a recurring rule…", owner-dictated
+  2026-10-29).
+- iOS: `Settings.tsx:66, 228` ("Every rule, one-off…", "every
+  rule"), `ExportSheet.tsx:89` ("Everything: rules, categories…"),
+  `ScopeSheet.tsx:46, 49, 52, 55, 81` ("keeps the rule's amount",
+  "Changes the rule", "Reset <date> to the rule", "Removes the rule"),
+  `TransactionSheet.tsx:146` ("Changes every date this rule
+  generates"), `(tabs)/spending.tsx:49` ("the rule's amount"),
+  `(tabs)/index.tsx:119` (the toast "… reset to the rule").
+- Shared, `src/content/about.ts`: lines 54, 104, 107, 132, 184, 222,
+  223.
 
 ### The Ledger's ✕ deleted a whole rule on one click (2026-10-29)
 
@@ -3778,6 +3922,37 @@ second must not both call a bank.
 (two columns), the `is_owner` update for the owner's own row, and a
 redeploy of `plaid-link-token` and `plaid-disconnect`.
 
+**THE STEPS, EXACTLY, written out 2026-10-30 at the owner's request,
+before he allowlists anyone.** In order — the functions read the
+columns, so the columns come first:
+
+1. SQL editor, **as one run**:
+   ```sql
+   alter table plaid_beta add column if not exists last_disconnected_at timestamptz;
+   alter table plaid_beta add column if not exists is_owner boolean not null default false;
+   update plaid_beta set is_owner = true
+    where user_id = (select id from auth.users where email = '<owner address>');
+   ```
+   Both `alter`s are `if not exists`, so a second run is harmless.
+2. Check it took — exactly one row, his:
+   ```sql
+   select u.email, b.is_owner, b.last_disconnected_at
+     from plaid_beta b join auth.users u on u.id = b.user_id
+    where b.is_owner;
+   ```
+3. Deploy the two functions that read them (no `--no-verify-jwt` on
+   either; that flag belongs to `plaid-exchange` alone):
+   ```
+   npx supabase functions deploy plaid-link-token --project-ref kjcvtpmorftjyejjskwm
+   npx supabase functions deploy plaid-disconnect --project-ref kjcvtpmorftjyejjskwm
+   ```
+4. Only then, the allowlist inserts at the top of `plaid.sql`.
+
+**What the clients do in the meantime:** nothing different. The
+connect sheet reads `until` only when the server sends it, so a phone
+or tab running the guardrail copy against undeployed functions behaves
+exactly as before.
+
 ### A rule remembers what it used to cost (2026-10-26)
 
 The Spending tab's **Expected** is a statement about a month that
@@ -3840,8 +4015,12 @@ two cannot drift.
 **Asking is cheap; pulling is not, and only the server pulls.** A
 tab switched to five times in a minute costs five edge-function
 calls and at most one call to a bank — `plaid_claim_pull` is one
-statement and only one caller gets past it. No client clock is ever
-consulted, for the reason syncGuard.ts gives.
+statement and only one caller gets past it. ~~No client clock is ever
+consulted, for the reason syncGuard.ts gives.~~ **Superseded
+2026-10-30:** every return asked, and the pill flashed "syncing…" each
+time. The server now says how long until it would pull, and a return
+waits that long on two device clocks — see "The bank stops being
+asked on every focus" below.
 
 **Swipe-down runs the same check and spends nothing.** Trigger
 `"open"`, never `"refresh"`: the four manual refreshes a day belong

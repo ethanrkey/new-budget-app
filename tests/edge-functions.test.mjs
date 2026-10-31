@@ -25,7 +25,7 @@ import { readFileSync } from "node:fs";
 import { ALLOWED_ORIGINS, corsHeaders, preflight } from "../supabase/functions/_shared/cors.ts";
 import {
   MAX_MANUAL_REFRESHES_PER_DAY, PLAID_ENDPOINTS, PLAID_SLOTS_RESERVED, PLAID_TRIAL_ITEMS,
-  PRODUCTS, RECONNECT_COOLDOWN_DAYS, betaIsFull, cooldownUntil, localDateIn,
+  PRODUCTS, RECONNECT_COOLDOWN_DAYS, betaIsFull, cooldownUntil, localDateIn, nextPullInSeconds,
 } from "../supabase/functions/_shared/plaid.ts";
 import {
   constantTimeEquals, sha256Hex, verifyPlaidWebhook,
@@ -617,6 +617,19 @@ console.log("\n== four refreshes a day, whose? ==");
   // question: one pull serves every device, so two phones opening
   // in the same second must not both call a bank.
   is("the staleness claim is still per Item", bal.includes("plaid_claim_pull"));
+}
+
+console.log("\n== how long until the next pull, by the server's clock ==");
+{
+  const t = Date.parse("2026-10-30T08:00:00Z");
+  eq("never synced: ask now", nextPullInSeconds(null, t), 0);
+  eq("just synced: the whole window", nextPullInSeconds("2026-10-30T08:00:00Z", t), 12 * 3600);
+  eq("synced an hour ago: eleven hours left", nextPullInSeconds("2026-10-30T07:00:00Z", t), 11 * 3600);
+  eq("synced 13 hours ago: ask now, never negative", nextPullInSeconds("2026-10-29T19:00:00Z", t), 0);
+  eq("an unreadable stamp: ask now", nextPullInSeconds("garbage", t), 0);
+  eq("rounded UP, so a client never asks a second early", nextPullInSeconds("2026-10-30T07:59:59.500Z", t), 12 * 3600);
+  const bal = readFileSync(new URL("../supabase/functions/plaid-balance/index.ts", import.meta.url), "utf8");
+  eq("plaid-balance sends it on the fresh answer, the cap and a pull", bal.split("next_pull_in_seconds").length - 1, 3);
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

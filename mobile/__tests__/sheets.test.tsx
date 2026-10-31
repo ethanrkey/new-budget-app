@@ -383,6 +383,22 @@ describe("the editor refuses bad input, and says why", () => {
     );
     expect(screen.getByLabelText("Save this date")).toBeDisabled();
   });
+
+  test("one date's sheet says what it does and the series' amount, in the owner's words", async () => {
+    const item = state.recurring[0];
+    await render(
+      <BottomSheet visible onClose={() => {}}>
+        <TransactionSheet
+          mode={{ kind: "occurrence", item, date: "2026-12-01", current: null }}
+          state={state} busy={false} onSaveDraft={() => {}} orphanCount={() => 0}
+          onSaveOccurrence={() => {}} onClose={() => {}}
+        />
+      </BottomSheet>
+    );
+    expect(screen.getByText("Edit this instance only.")).toBeTruthy();
+    expect(screen.getByText(`Current recurring amount: $${item.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`)).toBeTruthy();
+    expect(screen.queryByText(/keeps the rule/)).toBeNull();
+  });
 });
 
 describe("the host itself", () => {
