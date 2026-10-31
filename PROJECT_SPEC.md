@@ -690,6 +690,18 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 19, 2026-10-31, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group
+  `6a42d949-4b86-4251-9387-d28c6be4fdd9`, iOS update `01a19387`,
+  commit `c5e4245`. Published through `mobile/scripts/ota.mjs`.
+
+  The short stamp now puts the time first and always names the day:
+  "synced 12:55 PM, today", "synced 8:46 PM, yesterday",
+  "synced 8:46 PM, 10/20", and the same for "logged". The owner's
+  call: a bare "12:55 PM" left the reader to work out that no day
+  meant today. The web is unchanged.
+
 - **OTA UPDATE 18, 2026-10-31, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group
