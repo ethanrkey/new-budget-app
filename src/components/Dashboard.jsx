@@ -375,13 +375,14 @@ function ChartTip({ active, payload, label, color }) {
 // projected display. The engine still computes it — computeLoanHistory
 // annotates every reading — and putting the line back is a render change,
 // not a re-derivation, for whenever forecast accuracy is picked up again.
-function HistoryChart({ data, color, isDark, emptyHint }) {
+// Exported for tests/web-forms.test.mjs, which renders the empty state.
+export function HistoryChart({ data, color, isDark, emptyHint }) {
   const points = data.filter((d) => d.amount != null);
   if (points.length < 2) {
     return (
       <div className="h-40 rounded-xl bg-gray-50 dark:bg-gray-800/40 flex items-center justify-center text-center px-6">
         <p className="text-xs text-gray-400">
-          {points.length === 1 ? `One point so far (${fmtDay(points[0].date)}). ` : ""}
+          {points.length === 1 ? `One data point so far (${fmtDay(points[0].date)}). ` : ""}
           {emptyHint}
         </p>
       </div>
@@ -505,7 +506,7 @@ function CheckingCard({ account, snapshots, isDark, onUpdate, onUpdateSnapshot, 
         <button onClick={onUpdate} className={BTN}>Update balance</button>
       </div>
       <HistoryChart data={snapshots.map((s) => ({ date: s.date, amount: s.amount }))} color={color} isDark={isDark}
-        emptyHint="This is where you stand. Confirm it again next time you check your bank and this becomes a line." />
+        emptyHint="Update your checking balance over time to see a chart of your balance history." />
       <HistoryList entries={snapshots} onUpdate={onUpdateSnapshot} onDelete={onDeleteSnapshot} />
     </section>
   );
@@ -561,7 +562,7 @@ function AssetCard({ category, color, isDark, history, contributions, today, onL
       </div>
 
       <HistoryChart data={data} color={color} isDark={isDark}
-        emptyHint="This is where you stand. Log it again next month and this becomes a line." />
+        emptyHint="Log this balance over time to see a chart of its history." />
 
       {/* Contributions are LOGGED, never summed from the ledger — the ledger
           is a forecast, so that figure would be what you planned to put in.

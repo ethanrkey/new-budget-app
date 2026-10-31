@@ -13,7 +13,7 @@
 // compiles the JSX in memory and react-dom/server runs the render,
 // which is exactly the code path that threw.
 import { build } from "esbuild";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { WHY_NOT } from "../src/content/logBalance.ts";
 import { deletePrompt } from "../src/content/transaction.ts";
 
@@ -48,15 +48,19 @@ const out = await build({
       import { createElement } from "react";
       import EventForm from "./src/components/EventForm.jsx";
       import ConfirmDialog from "./src/components/ConfirmDialog.jsx";
+      import { HistoryChart } from "./src/components/Dashboard.jsx";
       export const render = (props) => renderToString(createElement(EventForm, props));
       export const renderConfirm = (props) => renderToString(createElement(ConfirmDialog, props));
+      export const renderChart = (props) => renderToString(createElement(HistoryChart, props));
     `,
     resolveDir: new URL("..", import.meta.url).pathname,
     loader: "jsx",
   },
   bundle: true, write: false, format: "esm", platform: "node",
   // React stays external so the bundle and the render share ONE copy.
-  external: ["react", "react-dom", "react/*", "react-dom/*"],
+  // Recharts too: it is CommonJS and require()s React, which a bundled
+  // ESM file cannot do.
+  external: ["react", "react-dom", "react/*", "react-dom/*", "recharts"],
   jsx: "automatic", logLevel: "silent",
 });
 // Inside the repo, so `react` resolves from node_modules.
@@ -124,6 +128,28 @@ console.log("\n== the Ledger asks before it deletes, and says what goes ==");
   eq("...with the question and the consequence", html.includes("Delete Rent?") && html.includes("every date it generates"), true);
   eq("...Cancel BEFORE Delete, so the safe one is first", html.indexOf(">Cancel<") < html.indexOf(">Delete<"), true);
   eq("...and Delete wears the expense red", /bg-expense[^"]*"[^>]*>Delete</.test(html), true);
+}
+
+// ---- A history chart with too few points to draw ---------------------
+// The sentence is in two parts: "One data point so far (date). " only
+// when there is exactly one, and the card's own hint always. Both
+// counts have to read as English, so both are written out in full.
+console.log("\n== the chart before it is a chart ==");
+{
+  const text = (html) => html.replace(/<[^>]+>/g, "").replace(/<!-- -->/g, "");
+  const CHECKING = "Update your checking balance over time to see a chart of your balance history.";
+  const OTHER = "Log this balance over time to see a chart of its history.";
+  const one = [{ date: "2026-10-31", amount: 4000 }];
+  eq("checking, one point", text(mod.renderChart({ data: one, color: "#000", isDark: false, emptyHint: CHECKING })),
+    "One data point so far (10/31). Update your checking balance over time to see a chart of your balance history.");
+  eq("another account, one point", text(mod.renderChart({ data: one, color: "#000", isDark: false, emptyHint: OTHER })),
+    "One data point so far (10/31). Log this balance over time to see a chart of its history.");
+  eq("checking, no points: the hint alone", text(mod.renderChart({ data: [], color: "#000", isDark: false, emptyHint: CHECKING })), CHECKING);
+  eq("another account, no points", text(mod.renderChart({ data: [{ date: "2026-10-31", amount: null }], color: "#000", isDark: false, emptyHint: OTHER })), OTHER);
+  // And the cards pass exactly these, so the checks above are of the real copy.
+  const src = readFileSync(new URL("../src/components/Dashboard.jsx", import.meta.url), "utf8");
+  eq("the checking card passes that hint", src.includes(`emptyHint="${CHECKING}"`), true);
+  eq("...and the account card passes its own", src.includes(`emptyHint="${OTHER}"`), true);
 }
 
 // The error boundary is proven in a browser (scripts/drive_edit.mjs):
