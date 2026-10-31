@@ -72,6 +72,40 @@ try {
   await cancel();
 
   eq("nothing threw anywhere on the page", thrown, []);
+
+  // THE BOUNDARY ITSELF, which nothing above can reach: with the fix in
+  // place the form never throws. So make it throw, the way it did in
+  // production — `.trim()` failing during EventForm's render — for the
+  // length of ONE click, then put trim back. No app code is touched.
+  await app.goToTab("ledger");
+  // UNTIL THE RENDER HAS RUN, not until the click returns: React 18
+  // flushes a click's update in a microtask after the handler, so
+  // restoring in a `finally` put trim back before the form ever drew.
+  await app.page.evaluate(() => new Promise((done) => {
+    const real = String.prototype.trim;
+    String.prototype.trim = function () { throw new TypeError("trim is broken for this click"); };
+    [...document.querySelectorAll('button[title="Edit"]')].find((b) => real.call(b.textContent) === "Dentist").click();
+    setTimeout(() => { String.prototype.trim = real; done(); }, 50);
+  }));
+  await new Promise((r) => setTimeout(r, 400));
+  const caught = await app.page.evaluate(() => ({
+    fallback: document.body.innerText.includes("Something went wrong opening this."),
+    shell: !!document.querySelector("main") && !!document.querySelector("nav"),
+    page: document.body.innerText.includes("Something went wrong.") && !document.querySelector("nav"),
+  }));
+  is("a form that throws shows the small fallback", caught.fallback);
+  is("...over an app that is still there", caught.shell);
+  eq("...and not the whole-page one", caught.page, false);
+  await app.page.evaluate(() => {
+    [...document.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent.trim() === "Close").click();
+  });
+  await new Promise((r) => setTimeout(r, 300));
+  const after = await app.page.evaluate(() => ({
+    fallback: document.body.innerText.includes("Something went wrong"),
+    formOpen: [...document.querySelectorAll("input")].some((i) => i.value === "Dentist"),
+    shell: !!document.querySelector("nav"),
+  }));
+  eq("Close takes it away and leaves the app as it was", after, { fallback: false, formOpen: false, shell: true });
 } finally {
   await app.close();
 }

@@ -42,6 +42,7 @@ const mockServer = {
   holdItems: null as Promise<void> | null,
   noItem: false,
   invoked: 0,
+  notListed: false,
 };
 mockServer.onWrite = () => { mockServer.state = withBalance(NEW, todayISO(), "plaid"); };
 
@@ -49,7 +50,7 @@ jest.mock("../lib/supabase", () => {
   const table = (t: string) => ({
     select: () => ({
       maybeSingle: async () => {
-        if (t === "plaid_beta") return { data: { user_id: "u1" } };
+        if (t === "plaid_beta") return { data: mockServer.notListed ? null : { user_id: "u1" } };
         if (t === "plaid_items" && mockServer.holdItems) { const h = mockServer.holdItems; mockServer.holdItems = null; await h; }
         if (t === "plaid_items" && mockServer.noItem) return { data: null };
         if (t === "plaid_items") return { data: { institution_name: "First Platypus", status: "ok", last_synced_at: mockServer.lastSyncedAt } };
@@ -129,6 +130,7 @@ beforeEach(() => {
   mockServer.holdItems = null;
   mockServer.noItem = false;
   mockServer.invoked = 0;
+  mockServer.notListed = false;
   connection.reset();
   plaidApi.forgetPullDeadline();
 });
@@ -221,7 +223,7 @@ describe("a swipe over a fresh balance", () => {
     let calling = false;
     supabase.functions.invoke.mockImplementationOnce(async (...a: unknown[]) => { calling = true; await gate; return real(...a); });
     let done!: Promise<unknown>;
-    act(() => { done = connection.load({ connectedFeatures: true }, "swipe"); });
+    await act(async () => { done = connection.load({ connectedFeatures: true }, "swipe"); });
     // Checked WHILE THE CALL IS OUT, which is when the old code said
     // "syncing…" over a balance that was fresh the whole time.
     await waitFor(() => expect(calling).toBe(true));
@@ -229,5 +231,30 @@ describe("a swipe over a fresh balance", () => {
     await act(async () => { release(); await done; });
     expect(mockServer.pulls).toEqual(["open", "open"]);
     supabase.functions.invoke.mockImplementation(real);
+  });
+});
+
+describe("Settings, for an account not on the allowlist", () => {
+  const Connected = require("../components/Connected").default;
+  const NOTE = "Bank connection — in a small private beta for now. Everything else works by hand, exactly as it does today.";
+  async function mountSettings() {
+    await render(
+      <StateProvider userId="u1">
+        <Chrome session={session}><Connected /></Chrome>
+      </StateProvider>
+    );
+  }
+
+  it("says the feature is a small private beta, and offers nothing to press", async () => {
+    mockServer.notListed = true;
+    await mountSettings();
+    expect(await screen.findByText(NOTE)).toBeTruthy();
+    expect(screen.queryByText("Connect your bank")).toBeNull();
+  });
+
+  it("an allowlisted account sees the toggle and never the note", async () => {
+    await mountSettings();
+    expect(await screen.findByText("Connect your bank")).toBeTruthy();
+    expect(screen.queryByText(NOTE)).toBeNull();
   });
 });
