@@ -1,6 +1,6 @@
 // The full mutation run, sharded across git worktrees.
 //
-//   node scripts/mutate_all.mjs            (from mobile/, 6 shards)
+//   node scripts/mutate_all.mjs            (from mobile/, 2 shards)
 //   node scripts/mutate_all.mjs --shards 4
 //
 // WHY THIS EXISTS. The catalog is 415 mutations and each one costs a
@@ -30,7 +30,20 @@ const REPO = resolve(fileURLToPath(import.meta.url), "../../..");
 const SHEDS = resolve(REPO, "..", ".mutate-shards");
 const git = (...a) => execFileSync("git", ["-C", REPO, ...a], { encoding: "utf8" }).trim();
 
-const shards = Number(process.argv[process.argv.indexOf("--shards") + 1]) || 6;
+// TWO, AND NO MORE (2026-10-31). Six shards and then four crashed the
+// owner's Mac on consecutive nights — each shard is a jest run plus, for
+// the drive-backed mutations, Vite and Chrome, and macOS logged memory
+// pressure (JetsamEvent) both times. Both runs were lost outright, since
+// results are merged only at the end. The default is the safe number so
+// that a bare invocation is not the dangerous one; asking for more is
+// refused rather than trusted.
+const MAX_SHARDS = 2;
+const asked = Number(process.argv[process.argv.indexOf("--shards") + 1]) || MAX_SHARDS;
+if (asked > MAX_SHARDS) {
+  console.log(`--shards ${asked} refused: at most ${MAX_SHARDS}. More crashed the machine twice (2026-10-30/31).`);
+  process.exit(1);
+}
+const shards = asked;
 const capMinutes = Number(process.argv[process.argv.indexOf("--cap") + 1]) || 600;
 
 if (git("status", "--porcelain")) {

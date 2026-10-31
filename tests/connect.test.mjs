@@ -550,7 +550,7 @@ for (const [what, text] of [
   is(`${what} still says the history is kept`, text.includes("stay in your history"));
 }
 eq("the toggle-off confirm names the bank",
-  TOGGLE_OFF_CONFIRM.body("First Platypus Bank").includes("disconnects First Platypus Bank right away"), true);
+  TOGGLE_OFF_CONFIRM.body("First Platypus Bank").includes("disconnects First Platypus Bank at once, or keeps trying every hour if Plaid can't be reached"), true);
 
 console.log("\n== the hidden-rows warning uses the app's date format ==");
 // It was handing in the raw ISO, so the one sentence in that flow

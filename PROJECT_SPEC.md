@@ -3512,6 +3512,29 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### The full mutation run crashed the Mac twice (2026-10-30/31)
+
+Started after the batch below, at `6d44a5d`, with 514 mutations:
+first on six shards, then on four under `nice`. **Both runs took the
+owner's Mac down**; macOS logged a JetsamEvent (memory pressure) and a
+disk-writes report. Each shard is a jest run and, for the
+drive-backed mutations, Vite and Chrome as well. **Neither run left a
+result**, because `mutate_all.mjs` merges only once every shard has
+finished.
+
+What it left was one mutated `lib/edit.ts` in each shard worktree.
+Each was restored from its own `.mutate-restore.json` with
+`recoverJournal()`, checked clean against the commit, and the
+worktrees removed. The main tree was never touched; a worktree is
+exactly the isolation it was built for.
+
+**The standing rule now, the owner's:** no mutation run without his
+explicit go, and never more than two shards. `mutate_all.mjs` defaults
+to 2 and REFUSES `--shards` above it, so a bare invocation is no
+longer the dangerous one. The 21 new mutations and 6 repointed ones
+written for this batch (`6d44a5d`) are committed and pass preflight,
+but **have not been run.**
+
 ### The bank stops being asked on every focus, and the balance re-reads itself (2026-10-30)
 
 Four owner reports about one strip, fixed together because they are
@@ -3601,8 +3624,9 @@ nothing, and answered "written" anyway. Found at 10:17 PM. It reads
   is unreachable** — the token is queued and retried hourly. The
   consent bullet and `DISCONNECT_NOTE` now say "ends Key Budget's
   access at once, or keeps trying every hour if Plaid can't be
-  reached". `TOGGLE_OFF_CONFIRM` still says "disconnects <bank> right
-  away" and has the same gap; not in the owner's list, reported here.
+  reached". `TOGGLE_OFF_CONFIRM` had the same gap and now says the same
+  thing ("disconnects <bank> at once, or keeps trying every hour if
+  Plaid can't be reached"), on the owner's yes, 2026-10-31.
 - **`BETA_NOTE`** where the toggle would be, for everyone not on the
   allowlist, on both clients: "Bank connection — in a small private
   beta for now. Everything else works by hand, exactly as it does

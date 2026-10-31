@@ -134,7 +134,8 @@ export const RECONNECT = {
 export const TOGGLE_OFF_CONFIRM = {
   title: "Turn off connected features?",
   body: (bank: string) =>
-    `This disconnects ${bank} right away. Balances already pulled stay in your history, `
+    `This disconnects ${bank} at once, or keeps trying every hour if Plaid can't be reached. `
+    + "Balances already pulled stay in your history, "
     + "the same as ones you typed. Connecting again later starts a new connection, not this one.",
   keep: "Keep it on",
   turnOff: "Turn off",
