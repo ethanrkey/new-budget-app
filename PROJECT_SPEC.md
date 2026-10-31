@@ -690,6 +690,24 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 18, 2026-10-31, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group
+  `359597bf-50cc-4914-a894-55ab8c9e3ea2`, iOS update `01a192f0`,
+  commit `b318556`. Published through `mobile/scripts/ota.mjs`, the
+  same hour the web went out from the same commit.
+
+  The 10-30 batch: a return to the app asks plaid-balance only once
+  the server's window has passed (and so no longer flashes
+  "syncing…"); a cold start says "syncing…", never "as of", until the
+  connection is read; the balance re-reads whenever `last_synced_at`
+  moves, which is the "synced 7:50 AM beside $818.50" fix; the beta
+  note for accounts not on the allowlist; "Edit this instance only."
+  and "Current recurring amount" on one date's sheet; and the three
+  disconnect sentences that now say what happens when Plaid is down.
+  Works against the deployed plaid-balance (10-30) and against an old
+  one: without `next_pull_in_seconds` every return simply asks.
+
 - **OTA UPDATE 17, 2026-10-29, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group
