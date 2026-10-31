@@ -70,8 +70,56 @@ export default function Privacy() {
               the sign-in too, and that token is what does it. It is used for that and nothing else,
               and it is destroyed when your account is.
             </li>
+            <li>
+              If you connect your bank: your checking balance, the account&apos;s name and last four
+              digits, and your bank&apos;s name. More on that below.
+            </li>
             <li>Nothing else. No analytics, no tracking, no advertising, nothing sold to anyone.</li>
           </ul>
+
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 pt-4">
+            Connected accounts (optional)
+          </h2>
+          <p>
+            Connecting a bank is off unless you turn it on, and the app is complete without it. If you
+            do connect, Key Budget reads the balance of the one checking account you pick. It never asks
+            for, receives or stores your transactions, and never your full account or routing number.
+          </p>
+          <p>
+            Your bank login goes to Plaid and your bank, never to Key Budget. Plaid is the service that
+            makes the connection, and the only other company that handles your banking information for
+            this app. When you connect, Plaid&apos;s own screen says it can reach your account and
+            balance info and your contact info. That is more than Key Budget uses: none of the contact
+            info is ever requested from Plaid or stored here. What Plaid holds is covered by{" "}
+            <a
+              className="underline underline-offset-2"
+              href="https://plaid.com/legal/#end-user-privacy-policy"
+            >
+              Plaid&apos;s privacy policy
+            </a>
+            , and you can see or delete it at{" "}
+            <a className="underline underline-offset-2" href="https://my.plaid.com">
+              my.plaid.com
+            </a>
+            .
+          </p>
+          <p>
+            The key Plaid gives Key Budget for reading your balance is stored encrypted, apart from the
+            rest of your data, and nothing in the app itself can read it.
+          </p>
+          <p>
+            Disconnecting, in Settings, ends the connection at Plaid and deletes it here — the key, the
+            bank name and the account details — rather than keeping it as inactive. If Plaid can&apos;t be
+            reached at that moment, the app keeps trying every hour until it can. Balances already pulled
+            stay in your history, the same as ones you typed, and are deleted with your account like
+            everything else. Deleting your account ends the connection at Plaid too.
+          </p>
+          <p>
+            Two records outlive a connection, and neither holds a balance. One notes each call to Plaid
+            (when, what kind, and whether it worked), so I can see what the service costs. The other
+            counts connections made, with the bank&apos;s name and no person attached, because
+            Plaid&apos;s plan limits how many there can ever be.
+          </p>
 
           <p className="pt-2">
             Questions:{" "}
