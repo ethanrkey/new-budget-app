@@ -738,7 +738,7 @@ console.log("\n== a dead button with no explanation ==");
   }
 }
 
-// ---- The short stamp: the day, only when it is not today --------------
+// ---- The short stamp: time first, then the day, today included -------
 console.log("\n== how old is this number ==");
 {
   // A fixed "now" and instants built from it, so the assertions are
@@ -747,14 +747,20 @@ console.log("\n== how old is this number ==");
   const at = (dayOffset, h, min) =>
     new Date(2026, 9, 26 + dayOffset, h, min).toISOString();
 
-  eq("today is just the clock", fmtShortStamp(at(0, 20, 46), now), "8:46 PM");
-  eq("yesterday says so in words", fmtShortStamp(at(-1, 20, 46), now), "yesterday, 8:46 PM");
-  eq("older takes a date, with no year", fmtShortStamp(at(-6, 20, 46), now), "10/20, 8:46 PM");
+  eq("today says so, after the time", fmtShortStamp(at(0, 20, 46), now), "8:46 PM, today");
+  eq("yesterday says so in words", fmtShortStamp(at(-1, 20, 46), now), "8:46 PM, yesterday");
+  eq("older takes a date, with no year", fmtShortStamp(at(-6, 20, 46), now), "8:46 PM, 10/20");
+  const said = (state, iso) => pillSuffixOf(state, { asOf: "10/20", syncedTime: fmtShortStamp(iso, now),
+    syncedWhen: fmtShortStamp(iso, now), loggedStamp: fmtShortStamp(iso, now) });
+  eq("the pill: synced today", said("synced", at(0, 12, 55)), "synced 12:55 PM, today");
+  eq("...synced yesterday", said("stale", at(-1, 20, 46)), "synced 8:46 PM, yesterday");
+  eq("...synced on a date", said("stale", at(-6, 20, 46)), "synced 8:46 PM, 10/20");
+  eq("...and a log reads the same way", said("loggedToday", at(0, 12, 55)), "logged 12:55 PM, today");
   // 11pm and 1am are two hours apart and two different days, and
   // "yesterday" is a claim about the calendar, not about a span.
   eq("eleven at night is yesterday to one in the morning",
     fmtShortStamp(new Date(2026, 9, 25, 23, 30).toISOString(), new Date(2026, 9, 26, 1, 0)),
-    "yesterday, 11:30 PM");
+    "11:30 PM, yesterday");
   eq("nothing synced yet is a dash", fmtShortStamp(null, now), "—");
   eq("...and so is a string that is not an instant", fmtShortStamp("not a date", now), "—");
   // The web is unchanged and says the whole thing, year included.

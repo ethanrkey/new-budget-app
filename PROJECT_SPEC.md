@@ -3960,9 +3960,12 @@ test so it stays that way. The DEBOUNCE is per Item and should be:
 one pull serves every device, so two phones opening in the same
 second must not both call a bank.
 
-**Still to run before this takes effect:** `supabase/plaid.sql` §5c
-(two columns), the `is_owner` update for the owner's own row, and a
-redeploy of `plaid-link-token` and `plaid-disconnect`.
+**IN EFFECT SINCE 2026-10-31.** The owner ran §5c (both columns,
+`is_owner` on his row, and the check: exactly one row comes back,
+his). Both functions were then redeployed, and each answers OPTIONS
+with 204 and an unauthenticated POST with 401. **First testers
+allowlisted 2026-10-31:** three people, added by the owner (step 4
+below), connecting in production.
 
 **THE STEPS, EXACTLY, written out 2026-10-30 at the owner's request,
 before he allowlists anyone.** In order — the functions read the
