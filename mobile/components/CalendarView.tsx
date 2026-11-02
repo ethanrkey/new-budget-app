@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { T, money } from "../lib/theme";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, cellAmountCompact,
-  netAmountCompact, type CalendarDay,
+  netAmountCompact, netTone, rowTone, rowSign, isOverdrawn, type CalendarDay, type AmountTone,
 } from "../../src/engine/calendar.ts";
 import { categoryLabelOf, todayISO } from "../../src/engine/model.ts";
 import { CALENDAR_COPY as COPY } from "../../src/content/calendar.ts";
@@ -31,18 +31,30 @@ import type { BudgetState, LedgerRow, TrackerCategory } from "../../src/engine/t
 //    42.9pt. Both fit. At 12pt the second one does not.
 //
 // Kept from the web because they are rules: identity never rests on
-// color, so the detail list names the category in words, and there
-// are NO warning tints — a negative projected balance is a minus sign.
+// color, so the detail list names the category in words. A balance
+// below zero is red and zero is gray, on both clients — see
+// isOverdrawn and netTone in engine/calendar.ts (2026-11-02).
+//
+// 4. A TAP BRINGS THE DAY CARD INTO VIEW, by just enough and only if it
+//    does not already fit — see lib/reveal.ts. The Ledger's list owns
+//    the scrolling, so it is handed in as `reveal`.
+// 5. THE CARD NEVER SHRINKS WITHIN A MONTH. Going from a busy day to an
+//    empty one made the content shorter, the list clamped its offset,
+//    and the whole page jumped up under the finger. So the card keeps
+//    the height of the tallest one shown this month, as a minimum.
+//    Paging months starts over: that re-lays out the grid anyway.
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export default function CalendarView({
-  state, rows, categories, onPick,
+  state, rows, categories, onPick, reveal,
 }: {
   state: BudgetState;
   rows: LedgerRow[];
   categories: TrackerCategory[];
   onPick?: (id: string) => void;
+  /** Scroll the enclosing list so this box is fully visible. */
+  reveal?: (box: View) => void;
 }) {
   const { width } = useWindowDimensions();
   const account = state.accounts[0]!;
@@ -78,6 +90,20 @@ export default function CalendarView({
   // anything at all.
   const [monthKey, setMonthKey] = useState(today.slice(0, 7));
   const [picked, setPicked] = useState<string>(today);
+  const detailRef = useRef<View>(null);
+  // Only a TAP reveals. Opening the tab, or paging a month, must not
+  // scroll anything on its own.
+  const revealNext = useRef(false);
+  const [cardFloor, setCardFloor] = useState(0);
+  useEffect(() => { setCardFloor(0); }, [monthKey]);
+  useEffect(() => {
+    if (!revealNext.current) return;
+    revealNext.current = false;
+    // One frame, so the new card has been laid out before it is measured.
+    const id = requestAnimationFrame(() => { if (detailRef.current) reveal?.(detailRef.current); });
+    return () => cancelAnimationFrame(id);
+  }, [picked, reveal]);
+  const pick = (date: string) => { revealNext.current = true; setPicked(date); };
 
   const month = useMemo(
     () => buildCalendarMonth({
@@ -141,7 +167,7 @@ export default function CalendarView({
           ) : (
             <Pressable
               key={c.date}
-              onPress={() => setPicked(c.date)}
+              onPress={() => pick(c.date)}
               style={[
                 styles.cell,
                 { width: cell, height: cell + 20 },
@@ -172,7 +198,7 @@ export default function CalendarView({
                 // was dimmer on quiet days for one round and that
                 // read as two kinds of balance; the dots and the
                 // +/- line are what tell the two apart.
-                <Text style={styles.bal} numberOfLines={1}>
+                <Text style={[styles.bal, isOverdrawn(c.balance) && styles.overdrawn]} numberOfLines={1}>
                   {cellAmountCompact(c.balance)}
                 </Text>
               )}
@@ -183,13 +209,13 @@ export default function CalendarView({
                   one tap away, in the panel, and in the VoiceOver
                   label for anyone who cannot see the grid at all. */}
               {c.balance == null && c.logged != null && (
-                <Text style={styles.bal} numberOfLines={1}>
+                <Text style={[styles.bal, isOverdrawn(c.logged) && styles.overdrawn]} numberOfLines={1}>
                   {cellAmountCompact(c.logged)}
                 </Text>
               )}
               {c.net != null && (
                 <Text
-                  style={[styles.net, { color: c.net < 0 ? T.expense : T.income }]}
+                  style={[styles.net, { color: TONE_INK[netTone(c.net)] }]}
                   numberOfLines={1}
                 >
                   {netAmountCompact(c.net)}
@@ -199,8 +225,18 @@ export default function CalendarView({
           ))}
       </View>
 
+      <Text style={styles.legend}>{COPY.legend}</Text>
+
       {detail && (
-        <View style={styles.detail}>
+        <View
+          ref={detailRef}
+          style={[styles.detail, { minHeight: cardFloor }]}
+          testID="calendar-day-card"
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            if (h > cardFloor) setCardFloor(h);
+          }}
+        >
           <Text style={styles.detailHead}>{fmtLongDay(detail.date)}</Text>
 
           {/* THE HEADLINE, not a footnote. This replaced
@@ -209,16 +245,16 @@ export default function CalendarView({
               opened for. */}
           {detail.balance != null ? (
             <View style={styles.balanceLine}>
-              <Text style={styles.balanceLabel}>{COPY.balanceAfter}</Text>
-              <Text style={styles.balanceBig}>{money(detail.balance)}</Text>
+              <Text style={styles.balanceLabel} numberOfLines={1}>{COPY.balanceAfter}</Text>
+              <Text style={[styles.balanceBig, isOverdrawn(detail.balance) && styles.overdrawn]}>{money(detail.balance)}</Text>
             </View>
           ) : detail.logged != null ? (
             // A DIFFERENT SENTENCE, not the same one about a
             // different number: this is what was recorded, not what
             // is projected.
             <View style={styles.balanceLine}>
-              <Text style={styles.balanceLabel}>{COPY.loggedBalance}</Text>
-              <Text style={styles.balanceBig}>{money(detail.logged)}</Text>
+              <Text style={styles.balanceLabel} numberOfLines={1}>{COPY.loggedBalance}</Text>
+              <Text style={[styles.balanceBig, isOverdrawn(detail.logged) && styles.overdrawn]}>{money(detail.logged)}</Text>
             </View>
           ) : (
             <Text style={styles.noForecast}>
@@ -235,8 +271,8 @@ export default function CalendarView({
               <Text style={styles.detailName} numberOfLines={1}>{r.name}</Text>
               {/* Identity never rests on color: the category in words. */}
               <Text style={styles.detailCat}>{catName(r)}</Text>
-              <Text style={[styles.detailAmt, { color: r.direction === "in" ? T.income : T.expense }]}>
-                {r.direction === "in" ? "+" : "−"}{money(r.amount).replace("-", "")}
+              <Text style={[styles.detailAmt, { color: TONE_INK[rowTone(r)] }]}>
+                {rowSign(r)}{money(Math.abs(r.amount))}
               </Text>
             </Pressable>
           ))}
@@ -252,7 +288,10 @@ function ariaFor(c: CalendarDay): string {
   if (c.isToday) parts.push("today");
   if (c.balance != null) parts.push(`${COPY.balanceAfter} ${money(c.balance)}`);
   else if (c.logged != null) parts.push(`${COPY.loggedBalance} ${money(c.logged)}`);
-  if (c.net != null) parts.push(`${c.net < 0 ? "down" : "up"} ${money(Math.abs(c.net))}`);
+  if (c.net != null) {
+    const t = netTone(c.net);
+    parts.push(t === "zero" ? "no net change" : `${t === "out" ? "down" : "up"} ${money(Math.abs(c.net))}`);
+  }
   if (c.rows.length) {
     parts.push(`${c.rows.length} transaction${c.rows.length === 1 ? "" : "s"}`);
     // THE DOTS' MEANING, IN WORDS. They are the one mark in the cell
@@ -262,6 +301,9 @@ function ariaFor(c: CalendarDay): string {
   }
   return parts.join(", ");
 }
+
+// Direction's ink; zero is the faint gray the card's quiet text wears.
+const TONE_INK: Record<AmountTone, string> = { in: T.income, out: T.expense, zero: T.faint };
 
 const styles = StyleSheet.create({
   monthBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 10 },
@@ -285,9 +327,16 @@ const styles = StyleSheet.create({
   net: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"] },
   detail: { margin: 16, padding: 14, backgroundColor: T.surface, borderRadius: 14, borderWidth: 1, borderColor: T.border, gap: 8 },
   detailHead: { color: T.text, fontWeight: "700" },
+  // ONE LINE, measured 2026-11-02 in SF Pro: "Checking balance after:"
+  // is 134.2pt at 12pt and "-$123,456.78" 150.3pt at 22pt bold
+  // tabular, so with the 8pt gap the line is 292.5pt in the 313pt a
+  // 375pt phone leaves inside the card. If a larger text size ever
+  // overflows it, the LABEL gives way (truncates), never the number.
   balanceLine: { flexDirection: "row", alignItems: "baseline", gap: 8 },
-  balanceLabel: { color: T.faint, fontSize: 12 },
-  balanceBig: { color: T.text, fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  balanceLabel: { color: T.faint, fontSize: 12, flexShrink: 1 },
+  balanceBig: { color: T.text, fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"], flexShrink: 0 },
+  overdrawn: { color: T.expense },
+  legend: { color: T.faint, fontSize: 10, textAlign: "center", marginTop: 6, paddingHorizontal: 16 },
   noForecast: { color: T.faint, fontSize: 12 },
   quiet: { color: T.faint, fontSize: 12 },
   detailRow: { flexDirection: "row", alignItems: "center", gap: 8 },

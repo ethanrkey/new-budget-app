@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { categoryLabelOf, todayISO, primaryAccount, ledgerHorizonOf } from "../engine/model.ts";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, cellAmountFull, netAmountFull,
+  netTone, rowTone, rowSign, isOverdrawn,
 } from "../engine/calendar.ts";
 import { CALENDAR_COPY as COPY } from "../content/calendar.ts";
 import { fmtDate, fmtLongDay, fmtMonthYear } from "../shared/dates.ts";
@@ -22,16 +23,16 @@ import { fmtDate, fmtLongDay, fmtMonthYear } from "../shared/dates.ts";
 // the phone in src/engine/calendar.ts, including which days have no
 // forecast at all; the words are shared in src/content/calendar.ts.
 //
-// NO WARNING COLORS. A negative projected BALANCE is a minus sign and
-// nothing else. Tinting the low days turns a map of where the money
-// goes into a verdict on it, and the app does not make that call here.
+// A BALANCE BELOW ZERO IS RED (2026-11-02, the owner's call, reversing
+// the 10-17 "no warning colors" rule): scrolling ahead, a projected
+// overdraft has to stand out, and a minus sign in a grid of figures
+// did not. See isOverdrawn in engine/calendar.ts.
 //
-// The dots and the day's net ARE colored, which is not a reversal of
-// that: direction of flow is the same red and green every amount in
-// this app already wears, and it is a fact rather than a judgment.
-// Identity never rests on color either way — the cell lists the items
-// in words, the aria-label says them, and the panel below repeats
-// them.
+// The dots and the day's net are colored by direction, red out and
+// green in, and ZERO IS GRAY: a $0 occurrence or a day that nets to
+// nothing moved no money either way. See netTone / rowTone. Identity
+// never rests on color either way: the cell lists the items in words,
+// the aria-label says them, and the panel below repeats them.
 //
 // THE WEB CELL CARRIES MORE THAN THE PHONE'S, deliberately. It is
 // three times the width and was mostly empty, so it also lists the
@@ -191,12 +192,11 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                   Reading order is unchanged: balance, then net. */}
               {cell.balance != null && (
                 <div className="flex items-baseline justify-between gap-1 leading-none">
-                  <span className="text-[11px] sm:text-xs tabular-nums font-medium text-gray-900 dark:text-gray-100">
+                  <span className={`text-[11px] sm:text-xs tabular-nums font-medium ${balanceInk(cell.balance)}`}>
                     {cellAmountFull(cell.balance)}
                   </span>
                   {cell.net != null && (
-                    <span className={`text-[10px] tabular-nums shrink-0 ${
-                      cell.net < 0 ? "text-expense" : "text-income"}`}>
+                    <span className={`text-[10px] tabular-nums shrink-0 ${TONE_INK[netTone(cell.net)]}`}>
                       {netAmountFull(cell.net)}
                     </span>
                   )}
@@ -207,7 +207,7 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                   lives one click away in the panel, and in the
                   aria-label for anyone who cannot see the grid. */}
               {cell.balance == null && cell.logged != null && (
-                <div className="text-[11px] sm:text-xs tabular-nums leading-none font-medium text-gray-900 dark:text-gray-100">
+                <div className={`text-[11px] sm:text-xs tabular-nums leading-none font-medium ${balanceInk(cell.logged)}`}>
                   {cellAmountFull(cell.logged)}
                 </div>
               )}
@@ -218,7 +218,7 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
                   {cell.rows.slice(0, ITEM_CAP).map((r) => (
                     <li key={r.id} className="flex items-baseline justify-between gap-1 text-[10px] leading-[1.05]">
                       <span className="truncate text-gray-500 dark:text-gray-400">{r.name}</span>
-                      <span className={`shrink-0 tabular-nums ${r.direction === "in" ? "text-income" : "text-expense"}`}>
+                      <span className={`shrink-0 tabular-nums ${TONE_INK[rowTone(r)]}`}>
                         {netAmountFull(r.direction === "in" ? r.amount : -r.amount)}
                       </span>
                     </li>
@@ -235,8 +235,11 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
         })}
       </div>
 
+      <p className="mt-1 text-center text-[10px] text-gray-400">{COPY.legend}</p>
+
       {selectedDay && (
         <DayDetail
+          key={monthKey}
           cell={selectedDay}
           anchor={anchor}
           catName={catName}
@@ -253,7 +256,10 @@ function ariaFor(cell) {
   if (cell.isToday) parts.push("today");
   if (cell.balance != null) parts.push(`${COPY.balanceAfter} ${cellAmountFull(cell.balance)}`);
   else if (cell.logged != null) parts.push(`${COPY.loggedBalance} ${cellAmountFull(cell.logged)}`);
-  if (cell.net != null) parts.push(`${cell.net < 0 ? "down" : "up"} ${cellAmountFull(Math.abs(cell.net))}`);
+  if (cell.net != null) {
+    const t = netTone(cell.net);
+    parts.push(t === "zero" ? "no net change" : `${t === "out" ? "down" : "up"} ${cellAmountFull(Math.abs(cell.net))}`);
+  }
   if (cell.rows.length) {
     parts.push(`${cell.rows.length} transaction${cell.rows.length === 1 ? "" : "s"}`);
     // THE DOTS' MEANING, IN WORDS. They are the one mark here that
@@ -264,9 +270,22 @@ function ariaFor(cell) {
   return parts.join(", ");
 }
 
+// THE CARD NEVER SHRINKS WITHIN A MONTH (2026-11-02, same as the
+// phone). Scrolled to the bottom of the page, going from a busy day to
+// a quiet one made the page shorter and the browser pulled everything
+// down under the pointer: measured 64px on the fixture. So the card
+// keeps the tallest height it has had as its minimum. `key={monthKey}`
+// above remounts it per month, which is what starts that over.
 function DayDetail({ cell, anchor, catName, onEditItem }) {
+  const box = useRef(null);
+  const [floor, setFloor] = useState(0);
+  useLayoutEffect(() => {
+    const h = box.current?.offsetHeight ?? 0;
+    if (h > floor) setFloor(h);
+  }, [cell, floor]);
   return (
-    <div className="mt-1 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-1.5">
+    <div ref={box} style={{ minHeight: floor || undefined }}
+      className="mt-1 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-1.5">
       <h3 className="text-sm font-medium">{fmtLongDay(cell.date)}</h3>
 
       {/* THE HEADLINE, not a footnote. This replaced "net $X", which
@@ -275,14 +294,14 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
       {cell.balance != null ? (
         <p className="mt-0.5 mb-1.5 tabular-nums">
           <span className="text-xs text-gray-500">{COPY.balanceAfter}</span>{" "}
-          <span className="text-lg font-semibold">{money(cell.balance)}</span>
+          <span className={`text-lg font-semibold ${isOverdrawn(cell.balance) ? "text-expense" : ""}`}>{money(cell.balance)}</span>
         </p>
       ) : cell.logged != null ? (
         // A DIFFERENT SENTENCE, not the same one about a different
         // number: this is what was recorded, not what is projected.
         <p className="mt-0.5 mb-1.5 tabular-nums">
           <span className="text-xs text-gray-500">{COPY.loggedBalance}</span>{" "}
-          <span className="text-lg font-semibold">{money(cell.logged)}</span>
+          <span className={`text-lg font-semibold ${isOverdrawn(cell.logged) ? "text-expense" : ""}`}>{money(cell.logged)}</span>
         </p>
       ) : (
         <p className="mt-0.5 mb-1.5 text-xs text-gray-400">
@@ -307,8 +326,8 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
                   {r.overridden && <span className="text-xs text-gray-400 shrink-0">· edited</span>}
                   <span className="text-xs text-gray-400 shrink-0">{catName(r)}</span>
                 </span>
-                <span className={`shrink-0 tabular-nums ${r.direction === "in" ? "text-income" : "text-expense"}`}>
-                  {r.direction === "in" ? "+" : "−"}{money(r.amount)}
+                <span className={`shrink-0 tabular-nums ${TONE_INK[rowTone(r)]}`}>
+                  {rowSign(r)}{money(Math.abs(r.amount))}
                 </span>
               </button>
             </li>
@@ -318,6 +337,10 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
     </div>
   );
 }
+
+// Direction's ink. Zero is the same gray as the panel's quiet text.
+const TONE_INK = { in: "text-income", out: "text-expense", zero: "text-gray-400" };
+const balanceInk = (n) => (isOverdrawn(n) ? "text-expense" : "text-gray-900 dark:text-gray-100");
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });

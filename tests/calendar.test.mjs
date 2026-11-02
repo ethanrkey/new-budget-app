@@ -19,7 +19,10 @@ import { upsertItem, updateAccountBalance } from "../src/engine/mutate.ts";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, daysInMonth,
   cellAmountCompact, cellAmountFull, netAmountCompact, netAmountFull,
+  netTone, rowTone, rowSign, isOverdrawn,
 } from "../src/engine/calendar.ts";
+import { revealDelta } from "../mobile/lib/reveal.ts";
+import { CALENDAR_COPY } from "../src/content/calendar.ts";
 
 let failures = 0, checks = 0;
 const show = (v) => JSON.stringify(v);
@@ -392,6 +395,51 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
   }
   eq("no balance under two million is longer than six characters", longest, 6);
   eq("...and only two shapes get there", [...shapes].sort(), ["-9,999", "-99.9k"]);
+}
+
+// ---- 2026-11-02: zero is gray, an overdraft is red ------------------
+console.log("\n== which ink ==");
+{
+  eq("a day that nets to nothing is neither in nor out", netTone(0), "zero");
+  eq("...including one that rounds to nothing in the cell", netTone(0.4), "zero");
+  eq("a day down is out", netTone(-12), "out");
+  eq("a day up is in", netTone(1800), "in");
+  eq("a $0 occurrence is zero, whatever its direction says", rowTone({ direction: "out", amount: 0 }), "zero");
+  eq("...and so is a $0 paycheck", rowTone({ direction: "in", amount: 0 }), "zero");
+  eq("a cent is still money", rowTone({ direction: "out", amount: 0.01 }), "out");
+  eq("a $0 row has no sign: '$0.00', never '−$0.00'", rowSign({ direction: "out", amount: 0 }), "");
+  eq("an out row's sign is the real minus", rowSign({ direction: "out", amount: 5 }), "\u2212");
+  eq("an in row's is plus", rowSign({ direction: "in", amount: 5 }), "+");
+  eq("below zero is overdrawn", isOverdrawn(-0.01), true);
+  eq("zero is not", isOverdrawn(0), false);
+  eq("a projected -$820 is", isOverdrawn(-820), true);
+  eq("a positive balance is not", isOverdrawn(4000), false);
+
+  // A $0 one-off lights NO dot: it moved no money either way.
+  let z = upsertItem(state, { id: "zero", name: "Skipped service", amount: 0, category: "bill", date: "2026-10-21" });
+  const zl = computeLedger(z, HORIZON);
+  const day = buildCalendarMonth({ key: "2026-10", rows: zl.rows, startBalance: 4000,
+    anchor: ANCHOR, today: TODAY, horizon: HORIZON }).cells.find((c) => c && c.day === 21);
+  eq("the $0 day still lists the row", day.rows.map((r) => r.name), ["Skipped service"]);
+  eq("...lights neither dot", [day.hasIn, day.hasOut], [false, false]);
+  eq("...and nets to zero, which is gray", netTone(day.net), "zero");
+}
+
+// ---- 2026-11-02: the words, written out -------------------------------
+{
+  eq("the legend", CALENDAR_COPY.legend, "Checking balance at end of day · future days are projected");
+  eq("the day card's label", CALENDAR_COPY.balanceAfter, "Checking balance after:");
+}
+
+// ---- 2026-11-02: a tapped day's card, brought into view -------------
+console.log("\n== reveal the day card ==");
+{
+  const view = { top: 100, bottom: 700 };
+  eq("a card that fits does not move", revealDelta({ top: 400, bottom: 650 }, view), 0);
+  eq("...nor one that touches the bottom exactly", revealDelta({ top: 400, bottom: 700 }, view), 0);
+  eq("a card under the tab bar scrolls down by exactly the overflow", revealDelta({ top: 600, bottom: 820 }, view), 120);
+  eq("a card above the view scrolls up to its top", revealDelta({ top: 60, bottom: 300 }, view), -40);
+  eq("a card taller than the view brings its TOP in, not its bottom", revealDelta({ top: 500, bottom: 1300 }, view), 400);
 }
 
 if (checks < 20) {

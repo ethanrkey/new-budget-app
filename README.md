@@ -11,11 +11,17 @@ actually owe on each loan, what groceries actually cost last month. The forecast
 tells you where you're headed; the logged numbers tell you where you are. The
 app never quietly blends the two.
 
+Typing your balance in is the default and always works. If you'd rather not,
+you can **connect your checking account** and the app reads that one balance
+from your bank. Only the balance, never your transactions (see
+[Connected checking](#connected-checking-optional) below).
+
 Built for myself, in the open. **Work in progress** — the web app is live and in
 daily use, and an Expo/React Native iOS client in `mobile/` shares the same
 calculation engine verbatim. The phone does the whole job now: setup, every
 kind of entry and edit, the accounts you track, export and account deletion.
-It is in TestFlight and headed for the App Store.
+It is in TestFlight and headed for the App Store, and small fixes reach
+installed phones as over-the-air updates rather than new builds.
 
 ---
 
@@ -76,7 +82,10 @@ net carried forward. Rows are reorderable, the horizon is a slider.
 The projection expanded into individual dated transactions with a running
 balance, grouped by month — or the same data as a **month calendar**, where
 every day carries the projected end-of-day checking balance and a click opens
-that day's transactions.
+that day's transactions. A projected overdraft shows in red, so it stands out
+when you scroll ahead. Amounts are green in and red out, and a $0 amount is
+gray because nothing moved. Past days show only balances you actually logged,
+never a forecast run backwards.
 Either way there's a collapsible **Planned spending** breakdown
 above it — where the money in this window is going, by category, as a sorted
 horizontal bar. It's the forecast, and it says so: no logged number touches
@@ -103,12 +112,32 @@ comparison and nothing more: what you log here never changes the Ledger or the
 Budget, which always show what your rule says. Forecast and reality stay in
 separate columns, here as everywhere else.
 
+### Connected checking (optional)
+
+Off unless you turn it on, and the app is complete without it. Connect one
+checking account through [Plaid](https://plaid.com) and Key Budget reads its
+balance when you open the app, at most once every twelve hours. If you want it
+sooner, "Refresh now" behind the balance pulls it, up to four times a day. The pulled balance goes in
+exactly where a typed one would, so it moves the forecast's starting point and
+nothing else. It never asks for, receives or stores your transactions, or your
+full account or routing number. Your bank login goes to Plaid and your bank,
+never here.
+
+A balance you type on a day still wins over the bank's for that day, and the
+pill under the balance always says which one you're looking at ("synced
+8:46 PM, today" or "logged 9:20 PM, today"). Disconnecting, in Settings, ends
+the connection at Plaid and deletes it here. What's stored and why is on the
+[privacy page](https://keybudget.app/privacy).
+
+**Right now it's a small private beta**, opened account by account. The rest
+of the app works by hand for everyone, exactly as before.
+
 ---
 
 ## Also in here
 
 - **Sign in with Apple, with Google, or with a six-digit emailed code** on the
-  phone; Google or a magic link on the web. Your data is per-account and private.
+  phone; Google, or an emailed link or code, on the web. Your data is per-account and private.
 - **Per-device theme** — light on the laptop, dark on the phone, from one account.
 - **Drag the tabs** into your own order (desktop); the app opens on the first one.
 - **A setup wizard** that gets you from nothing to a working forecast —
@@ -128,7 +157,11 @@ separate columns, here as everywhere else.
 - **Delete your account** from Settings: a 7-day grace period you can cancel,
   then everything goes, including the sign-in itself.
 - **Export** the Ledger or Budget as CSV, or the whole account as JSON.
-- Fully editable, fully deletable logged values. Nothing is append-only.
+- Fully editable, fully deletable logged values. Nothing is append-only. Every
+  delete asks first, and says what it will take with it (a rule's every
+  date, for instance).
+- **A plain-language [privacy page](https://keybudget.app/privacy)**: what's
+  collected, what isn't, and what connecting a bank adds.
 - **Safe on more than one device** — a phone holding an out-of-date copy can't
   overwrite newer data, and says so instead of failing silently. Anything it
   had to discard is kept as a downloadable copy.
@@ -138,8 +171,10 @@ separate columns, here as everywhere else.
 ## Tech stack
 
 React 18 + Vite · TypeScript (the whole engine; the UI stays JSX) · Tailwind CSS v3 ·
-Recharts · Supabase (Postgres + Auth) · deployed on Vercel · GitHub Actions for
-CI. No state library, no component library, no backend of my own.
+Recharts · Supabase (Postgres, Auth, Vault, and Deno edge functions for Apple
+and Plaid) · Plaid (balance only) · Expo / React Native with EAS Update for the
+phone · deployed on Vercel · GitHub Actions for CI. No state library, no
+component library, and no server of my own beyond those few edge functions.
 
 ## Architecture
 
@@ -150,17 +185,24 @@ src/
   storage.js    the ONLY place that talks to the backend
   App.jsx       owns the single state object; loads it once, autosaves changes
 mobile/         the Expo client; imports src/engine directly, never a copy
-tests/          the engine test suite (plain Node, no framework)
-scripts/        migration, verification, the palette gate, the screenshots
-supabase/       entities.sql — one table, RLS policies (audited live 2026-10-02; see PROJECT_SPEC §5)
+src/shared/     what both clients share besides the engine: dates, the
+                connection's pill states, the Plaid client calls
+src/content/    every user-facing string both clients show, in one place
+tests/          plain-Node suites, no framework
+scripts/        migration, verification, the palette and spelling gates,
+                browser drives, the screenshots
+supabase/       entities.sql (one table, RLS; audited live 2026-10-02), plaid.sql,
+                and functions/: the edge functions for Apple and Plaid
 ```
 
 **Everything with a number in it lives in `src/engine`** as a pure function of
 the state. That's the whole design decision the rest follows from:
 
-- It's testable without a browser. `npm test` runs ~620 assertions over
-  amortization, budget math, every data migration, and CSV round-trips in about
-  a second, with no test framework at all.
+- It's testable without a browser. `npm test` runs about 2,100 assertions in
+  19 plain-Node suites, with no test framework at all. They cover amortization,
+  budget math, every data migration, CSV round-trips, the calendar, the bank
+  connection's decisions and the edge functions' pure parts. The phone's
+  ~260 renderer tests (jest) run after them.
 - The Ledger and the Budget can't disagree, because both are derived from one
   generated event list rather than computed separately.
 - The iOS client reuses the engine verbatim instead of reimplementing (and
@@ -207,18 +249,20 @@ VITE_SUPABASE_URL=https://<project>.supabase.co
 VITE_SUPABASE_ANON_KEY=<the publishable/anon key>
 ```
 
-Other scripts: `npm test` (engine suite + migrations + the palette gate),
-`npm run lint`, `npm run typecheck`, `npm run build`. CI runs all of them on
-every push. `npm run screenshots` regenerates the four images above from
+Other scripts: `npm test` (every suite, the palette and spelling gates, and the
+phone's tests), `npm run lint`, `npm run typecheck`, `npm run build`. CI runs
+all of them on every push. Connected checking needs Plaid keys and the edge
+functions deployed; without them the app simply never offers it. `npm run screenshots` regenerates the four images above from
 fixture data — they are generated, not taken, so they cannot quietly drift
 from the UI.
 
 ## Status and what's next
 
-In daily use and actively built on. The iOS client's write path is finished and
-the near-term work is the App Store itself — the listing, the privacy answers
-and review. Then goal-based savings targets. Later: multiple accounts and
-payment methods, credit cards, and bank linking.
+In daily use and actively built on. The iOS client does the whole job, and
+connected checking is in a small private beta. The near-term work is the App
+Store itself: the listing, the privacy answers and review. Then goal-based
+savings targets. Later: multiple accounts and payment methods, and credit
+cards.
 
 Design decisions, the full data model, and the roadmap live in
 [PROJECT_SPEC.md](PROJECT_SPEC.md), which is kept in sync with the code by rule.

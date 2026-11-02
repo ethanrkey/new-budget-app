@@ -10,7 +10,14 @@ export const CALENDAR_COPY = {
   /** Leads the detail panel. The question the grid exists to answer.
    *  The cell above it is rounded to whole dollars for room; this one
    *  is the exact figure, because it is the day you asked about. */
-  balanceAfter: "Balance after:",
+  balanceAfter: "Checking balance after:",
+  /**
+   * One quiet line under the grid saying what the cell numbers are.
+   * Added 2026-11-02: a column of bare figures with no heading reads as
+   * anything (net? spent?), and "projected" is the half people miss.
+   * No dots in it. The dots explain themselves in the day card.
+   */
+  legend: "Checking balance at end of day · future days are projected",
   /** Before anything has been picked. */
   hint: "Pick a day to see where your balance lands and what moved it.",
   /**

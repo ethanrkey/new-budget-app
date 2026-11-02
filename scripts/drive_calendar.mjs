@@ -51,7 +51,7 @@ try {
       todayLabel: todayCell?.getAttribute("aria-label") ?? null,
       todayCount: cells.filter((b) => b.getAttribute("aria-current") === "date").length,
       dimmed: cells.filter((b) => b.className.includes("opacity-40")).map((b) => b.getAttribute("aria-label")),
-      withBalance: cells.filter((b) => /Balance after/.test(b.getAttribute("aria-label"))).length,
+      withBalance: cells.filter((b) => /balance after/i.test(b.getAttribute("aria-label"))).length,
       panel,
     };
   });
@@ -69,7 +69,7 @@ try {
   // Every dimmed cell is dimmed because there is no forecast for it,
   // which is exactly the set with no balance in its label.
   eq("no dimmed cell claims a balance",
-    seen.dimmed.filter((l) => /Balance after/.test(l)).length, 0);
+    seen.dimmed.filter((l) => /balance after/i.test(l)).length, 0);
   // And the dimmed set is exactly the days this month that fall
   // before the balance's as-of date AND have no logged reading on
   // them — not "roughly the start of the month". A past day the user
@@ -196,7 +196,7 @@ try {
   });
 
   const busy = cells.filter((c) => /transaction/.test(c.label));
-  const quiet = cells.filter((c) => !/transaction/.test(c.label) && /Balance after/.test(c.label));
+  const quiet = cells.filter((c) => !/transaction/.test(c.label) && /balance after/i.test(c.label));
   is("the month has both busy and quiet days to compare", busy.length > 2 && quiet.length > 2);
 
   // THE NET SHARES THE BALANCE'S LINE, and this is measured rather
@@ -305,7 +305,7 @@ try {
   // the cell's own format, not the panel's.
   const cellText = await app.page.evaluate(() => {
     const b = [...document.querySelectorAll("button[aria-label]")]
-      .find((x) => /^\w+day, /.test(x.getAttribute("aria-label")) && /Balance after/.test(x.getAttribute("aria-label")));
+      .find((x) => /^\w+day, /.test(x.getAttribute("aria-label")) && /balance after/i.test(x.getAttribute("aria-label")));
     return b.innerText.trim();
   });
   is("a cell's number is whole dollars", /\$[\d,]+$/.test(cellText.split("\n").pop()));

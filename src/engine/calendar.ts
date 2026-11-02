@@ -221,8 +221,10 @@ export function buildCalendarMonth({
       balance: outsideForecast ? null : running,
       logged,
       busy: rows.length > 0,
-      hasIn: rows.some((r) => r.direction === "in"),
-      hasOut: rows.some((r) => r.direction === "out"),
+      // A $0 row moves nothing, so it lights neither dot (2026-11-02,
+      // with zero going gray). It is still listed, in gray.
+      hasIn: rows.some((r) => rowTone(r) === "in"),
+      hasOut: rows.some((r) => rowTone(r) === "out"),
       net: outsideForecast || rows.length === 0 ? null : round(running - before),
       rows,
       isToday: date === today,
@@ -252,9 +254,8 @@ export function cellAmountFull(n: number): string {
  * No dollar sign and no cents, because the cell is about 39pt wide at
  * the narrowest iPhone this runs on and the column heading above it
  * has already established that these are dollars. A negative is a
- * minus and nothing else — no red, no tint. The calendar is a map of
- * where the balance goes, and coloring the low days turns a map into
- * a warning, which is a judgment this app does not make here.
+ * minus here; the red is the client's, from isOverdrawn (2026-11-02,
+ * which reversed the old "no warning tints" rule).
  *
  * The thresholds shorten rather than truncate: past $10k the hundreds
  * stop mattering at a glance, and past $100k so does the thousand.
@@ -308,4 +309,41 @@ export function netAmountCompact(n: number): string {
   if (r === 0) return "0";
   const body = cellAmountCompact(Math.abs(r));
   return `${r < 0 ? "\u2212" : "+"}${body}`;
+}
+
+// ---- Which ink an amount wears (2026-11-02) ------------------------------
+//
+// ZERO IS NEITHER. An occurrence edited down to $0 showed as a red
+// "−$0.00", and a day whose ins and outs canceled showed a green "0".
+// Both claimed a direction that did not happen. Gray, on both clients,
+// in the cells and in the day card.
+export type AmountTone = "in" | "out" | "zero";
+
+/** A day's net, at the precision the cell shows it (whole dollars). */
+export function netTone(net: number): AmountTone {
+  const r = Math.round(net);
+  return r === 0 ? "zero" : r < 0 ? "out" : "in";
+}
+
+/** One transaction, at the precision the day card shows it (cents). */
+export function rowTone(row: { direction: string; amount: number }): AmountTone {
+  if (Math.round(Math.abs(row.amount) * 100) === 0) return "zero";
+  return row.direction === "in" ? "in" : "out";
+}
+
+/** "+", "−" or nothing: a $0 row claims no direction in its sign either. */
+export function rowSign(row: { direction: string; amount: number }): string {
+  const t = rowTone(row);
+  return t === "zero" ? "" : t === "in" ? "+" : "\u2212";
+}
+
+/**
+ * AN END-OF-DAY BALANCE BELOW ZERO IS RED, on the calendar only. The
+ * owner's call, 2026-11-02, reversing the 10-17 "no warning colors"
+ * rule: scrolling ahead, a projected overdraft has to stand out, and a
+ * minus sign in a grid of figures does not. A cent under counts.
+ * Logged (past) balances are what happened and get the same rule.
+ */
+export function isOverdrawn(balance: number): boolean {
+  return Math.round(balance * 100) < 0;
 }

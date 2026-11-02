@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert, Platform, Pressable, RefreshControl, SectionList, StyleSheet, Text, View,
 } from "react-native";
@@ -14,6 +14,7 @@ import TransactionSheet, { type SheetMode } from "../../components/TransactionSh
 import FirstRun from "../../components/FirstRun";
 import { T, money } from "../../lib/theme";
 import { useTabScrollInset } from "../../lib/tabInset";
+import { revealDelta } from "../../lib/reveal";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
 import { ledgerHorizonOf } from "../../../src/engine/model.ts";
 import { showFirstRun } from "../../lib/firstRun";
@@ -40,6 +41,23 @@ export default function LedgerScreen() {
   // the last thing on the page and its bottom edge sat under the
   // glass at full scroll. See lib/tabInset.ts.
   const tabInset = useTabScrollInset();
+  // THE CALENDAR'S REVEAL (2026-11-02). The list is what scrolls, so the
+  // list is what moves when a tapped day's card would sit under the tab
+  // bar. The visible area is this screen's box minus `tabInset` (the
+  // bar, the home indicator and the same gap the content keeps), and
+  // the move is exactly the overflow: see lib/reveal.ts.
+  const wrapRef = useRef<View>(null);
+  const calListRef = useRef<SectionList<number>>(null);
+  const calOffset = useRef(0);
+  const revealCard = useCallback((card: View) => {
+    wrapRef.current?.measureInWindow((_x, wy, _w, wh) => {
+      card.measureInWindow((_cx, cy, _cw, ch) => {
+        const delta = revealDelta({ top: cy, bottom: cy + ch }, { top: wy, bottom: wy + wh - tabInset });
+        if (Math.abs(delta) < 1) return;
+        calListRef.current?.getScrollResponder()?.scrollTo({ y: Math.max(0, calOffset.current + delta), animated: true });
+      });
+    });
+  }, [tabInset]);
   const [horizon, setHorizon] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [calendar, setCalendar] = useState(false);
@@ -239,9 +257,12 @@ export default function LedgerScreen() {
   );
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} ref={wrapRef}>
       {calendar ? (
         <SectionList
+          ref={calListRef}
+          onScroll={(e) => { calOffset.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={16}
           sections={[{ title: "", data: [0] }]}
           keyExtractor={() => "cal"}
           ListHeaderComponent={header}
@@ -249,7 +270,7 @@ export default function LedgerScreen() {
           renderSectionHeader={() => null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
           renderItem={() => (
-            <CalendarView state={state!} rows={rows} categories={state!.trackerCategories} />
+            <CalendarView state={state!} rows={rows} categories={state!.trackerCategories} reveal={revealCard} />
           )}
         />
       ) : (

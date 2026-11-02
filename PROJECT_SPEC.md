@@ -2153,9 +2153,10 @@ fifth tab never needs a migration.
   dimmed and carry no number; **the ledger horizon** is where it stops, and
   days after it are dimmed too. Today is a bold underlined number, the
   selected day is the cell's border and fill — two marks, never one.
-  Opening the calendar selects today. **NO WARNING TINTS**: a negative
+  Opening the calendar selects today. ~~**NO WARNING TINTS**: a negative
   projected balance is a minus sign and nothing else, because coloring the
-  low days turns a map of where the money goes into a verdict on it.
+  low days turns a map of where the money goes into a verdict on it.~~
+  **Reversed 2026-11-02 by the owner**; see ROUND THREE below.
   Cumulative columns and multi-select hide in calendar mode, being
   list-only concepts.
   **ROUND TWO, 2026-10-17 (OTA 2).** The first round was legible and
@@ -2197,6 +2198,53 @@ fifth tab never needs a migration.
   already works; the gaps between cells, above the weekday header and
   around the panel are all tighter; and **the net moved onto the
   balance's line**, which was worth ~11px on every busy row.
+
+  **ROUND THREE, 2026-11-02 (OTA 20), both clients.** The owner's six
+  items, all decided by him:
+
+  1. **A legend**, one gray line under the grid: "Checking balance at
+     end of day · future days are projected" (`CALENDAR_COPY.legend`).
+     No dots in it; the day card explains those.
+  2. **Zero is gray.** A $0 occurrence (one date edited to $0) showed a
+     red "−$0.00", and a day whose ins and outs canceled showed a green
+     "0". Both claimed a direction nothing moved in. `netTone` (whole
+     dollars, the cell's precision) and `rowTone` (cents, the card's)
+     in `engine/calendar.ts` decide it for both clients. A $0 row also
+     **loses its sign** ("$0.00", via `rowSign`) and **lights no dot**:
+     `hasIn`/`hasOut` now count only rows that move money. It is still
+     listed. The labels say "no net change" for a zero day.
+  3. **A balance below zero is red**, in the cell and in the card,
+     projected or logged (`isOverdrawn`: a cent under counts). This
+     reverses the no-warning-tints rule above: scrolling ahead, a
+     projected overdraft has to stand out, and a minus sign in a grid of
+     figures did not. The Ledger list is unchanged; it already did.
+  4. **Phone: a tap brings the day card into view**, scrolling the
+     Ledger's list by exactly the overflow and not at all if the card
+     already fits (`mobile/lib/reveal.ts`; a card taller than the view
+     brings its TOP in). The visible area is the screen's box minus
+     `useTabScrollInset()`, the same number the content pads with, so
+     the two cannot disagree. Only a tap reveals: opening the tab or
+     paging a month never scrolls.
+     **The card never shrinks within a month** (both clients): it keeps
+     the tallest height it has had as its minimum, and paging months
+     starts over. A fixed minimum would still shrink after any day
+     busier than it, and the jump this fixes is exactly that: scrolled
+     to the bottom, a busy day then a quiet one made the page shorter
+     and pulled it down under the finger. **The web had it too**,
+     measured at 64px on the fixture, so it got the same rule.
+  5. README brought up to date (connected checking, the privacy page,
+     the stack, current test counts).
+  6. **"Balance after:" is now "Checking balance after:"**. Measured
+     in SF Pro: the label is 134.2pt at 12pt and "-$123,456.78" is
+     150.3pt at 22pt bold tabular, so with the 8pt gap the line is
+     292.5pt in the 313pt a 375pt phone leaves inside the card. If a
+     larger text size ever overflows it, the label truncates and the
+     number never does.
+
+  Covered by `tests/calendar.test.mjs` (tones, dots, reveal, copy),
+  `mobile/__tests__/calendar-ink.test.tsx` (six of its seven fail
+  against the old component; the seventh is the shared label) and
+  `scripts/drive_calendar_ink.mjs` (11 checks, web, in a browser).
 
   `scripts/measure_calendar.mjs` is the measurement, and it checks
   three months rather than one, because "it fits" is a claim about
