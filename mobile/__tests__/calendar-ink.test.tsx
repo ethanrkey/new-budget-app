@@ -108,13 +108,19 @@ test("a tap asks the list to bring the card into view; opening does not", async 
   expect(reveal.mock.calls[0][0]).toBeTruthy();
 });
 
-test("the card never shrinks within a month", async () => {
+test("the page never shrinks within a month, and the card is never padded", async () => {
   await mount();
+  const space = () => screen.getByTestId("calendar-day-space");
   const card = () => screen.getByTestId("calendar-day-card");
-  // A busy day laid the card out 300pt tall...
-  await act(async () => { fireEvent(card(), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 343, height: 300 } } }); });
-  // ...so a quiet one keeps that as its minimum, and the page under
-  // the finger does not jump.
+  // A busy day laid the space out 300pt tall...
+  await act(async () => { fireEvent(space(), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 300 } } }); });
+  // ...so a quiet one keeps that much room, and the page under the
+  // finger does not jump...
   await userEvent.press(screen.getByLabelText(new RegExp(`^${fmtLongDay(day(5))}`)));
-  expect(flat(card().props.style).minHeight).toBe(300);
+  expect(flat(space().props.style).minHeight).toBe(300);
+  // ...but the bordered card is as tall as what it says (OTA 20 put the
+  // minimum on the card, and a quiet day drew a big empty box).
+  expect(flat(card().props.style).minHeight).toBeUndefined();
+  // And the card is inside the space, so the room is below it.
+  expect(within(space()).getByTestId("calendar-day-card")).toBeTruthy();
 });

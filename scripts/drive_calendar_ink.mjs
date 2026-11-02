@@ -103,11 +103,21 @@ try {
     busiest.click(); await wait(300);
     window.scrollTo(0, document.documentElement.scrollHeight); await wait(300);
     const before = window.scrollY;
+    const cardH = () => document.querySelector('[data-testid="calendar-day-card"]').offsetHeight;
+    const busyCard = cardH();
     calm.click(); await wait(300);
-    return { scrolls: before > 0, moved: window.scrollY - before };
+    const space = document.querySelector('[data-testid="calendar-day-space"]');
+    return { scrolls: before > 0, moved: window.scrollY - before,
+      cardShrank: cardH() < busyCard, spaceHeld: space.offsetHeight >= busyCard,
+      cardInSpace: space.contains(document.querySelector('[data-testid="calendar-day-card"]')) };
   });
   eq("the page is scrolled for this to mean anything", jump.scrolls, true);
   eq("busy day -> quiet day does not move the page", jump.moved, 0);
+  // THE CARD SIZES TO WHAT IT SAYS; the room is held below it. OTA 20
+  // held it in the card and a quiet day drew a big empty box.
+  eq("...and the quiet day's card is shorter than the busy one's", jump.cardShrank, true);
+  eq("...while the space it sits in held the busy height", jump.spaceHeld, true);
+  eq("...with the card inside that space", jump.cardInSpace, true);
 } finally {
   await app.close();
 }

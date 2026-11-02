@@ -38,10 +38,11 @@ import type { BudgetState, LedgerRow, TrackerCategory } from "../../src/engine/t
 // 4. A TAP BRINGS THE DAY CARD INTO VIEW, by just enough and only if it
 //    does not already fit — see lib/reveal.ts. The Ledger's list owns
 //    the scrolling, so it is handed in as `reveal`.
-// 5. THE CARD NEVER SHRINKS WITHIN A MONTH. Going from a busy day to an
+// 5. THE PAGE NEVER SHRINKS WITHIN A MONTH. Going from a busy day to an
 //    empty one made the content shorter, the list clamped its offset,
-//    and the whole page jumped up under the finger. So the card keeps
-//    the height of the tallest one shown this month, as a minimum.
+//    and the whole page jumped up under the finger. So the space the
+//    card sits in keeps the height of the tallest card shown this
+//    month, and the card itself is only as tall as its content.
 //    Paging months starts over: that re-lays out the grid anyway.
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -227,16 +228,23 @@ export default function CalendarView({
 
       <Text style={styles.legend}>{COPY.legend}</Text>
 
+      {/* THE SPACE KEEPS THE HEIGHT, NOT THE CARD (2026-11-02, OTA 21).
+          OTA 20 put the minimum on the card itself, and a quiet day
+          after a busy one drew a big empty bordered box, which looked
+          broken. Now the card is exactly as tall as what it says, and
+          this wrapper holds the page's length with invisible space
+          under it. The wrapper is a column, so the card is not
+          stretched to fill it. */}
       {detail && (
         <View
-          ref={detailRef}
-          style={[styles.detail, { minHeight: cardFloor }]}
-          testID="calendar-day-card"
+          style={{ minHeight: cardFloor }}
+          testID="calendar-day-space"
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height;
             if (h > cardFloor) setCardFloor(h);
           }}
         >
+        <View ref={detailRef} style={styles.detail} testID="calendar-day-card">
           <Text style={styles.detailHead}>{fmtLongDay(detail.date)}</Text>
 
           {/* THE HEADLINE, not a footnote. This replaced
@@ -276,6 +284,7 @@ export default function CalendarView({
               </Text>
             </Pressable>
           ))}
+        </View>
         </View>
       )}
     </ScrollView>

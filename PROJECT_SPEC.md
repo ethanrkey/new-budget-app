@@ -2258,6 +2258,25 @@ fifth tab never needs a migration.
   against the old component; the seventh is the shared label) and
   `scripts/drive_calendar_ink.mjs` (11 checks, web, in a browser).
 
+  **AMENDED 2026-11-02 (OTA 21), the owner's call after seeing OTA
+  20:** the minimum height moved OFF THE CARD and onto the space the
+  card sits in. On the card, a quiet day after a busy one drew a big
+  empty bordered box, which looked broken. Now the card is exactly as
+  tall as what it says, and a wrapper under it (`calendar-day-space`,
+  both clients) keeps the page's length with invisible space. Same
+  rule otherwise: the tallest this month, reset on a month change. The
+  web drive checks all three: the page did not move, the quiet card
+  is shorter than the busy one, and the space held the busy height.
+
+  **`scripts/drive_calendar.mjs` failed on the 1st to the 3rd of every
+  month**, found 2026-11-02. Its history checks need a logged day
+  before the as-of date in the month on screen. The fixture logs on
+  the 1st and dates the as-of two days back, so until the 4th there is
+  none. Now the history half runs on the newest month that has one
+  (this month from the 4th, last month before that) and pages back to
+  today's month afterward. The dimmed-day checks stay on today's
+  month, where they hold on any date.
+
   `scripts/measure_calendar.mjs` is the measurement, and it checks
   three months rather than one, because "it fits" is a claim about
   the worst case somebody will actually meet:

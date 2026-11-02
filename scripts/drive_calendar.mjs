@@ -89,11 +89,37 @@ try {
   }
   eq("the dimmed days are the ones before the as-of date with nothing logged",
     seen.dimmed.map((l) => l.split(", ").slice(0, 3).join(", ")), expectDim);
-  is("the fixture has a logged day in this month to check", expectLogged.length > 0);
+  // THE HISTORY CHECKS NEED A LOGGED DAY BEFORE THE AS-OF DATE, and on
+  // the 1st to the 3rd this month has none. The fixture logs on the
+  // 1st and dates the as-of two days back, so until the 4th the as-of
+  // is in last month or ON the 1st. The drive failed on 2026-11-02
+  // with nothing broken; the date had moved. So the history half runs
+  // on the newest month that has one: this month from the 4th on,
+  // last month before that. Last month always does, because its 1st
+  // is logged and is before any as-of date the fixture can produce.
+  const prevMonth = (() => {
+    const [y, m] = month.split("-").map(Number);
+    return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+  })();
+  const historyMonth = expectLogged.length ? month : prevMonth;
+  const historyLogged = [...loggedDates].filter((d) => d.slice(0, 7) === historyMonth && d < anchor)
+    .sort().map((d) => fmtLongDay(d));
+  is("the fixture has a logged day before the as-of date to check", historyLogged.length > 0);
   eq("...and a past day WITH a reading is not among them",
     expectLogged.filter((l) => seen.dimmed.some((d) => d.startsWith(l))).length, 0);
   eq("...every forecast day carries a balance",
     seen.withBalance, seen.cellCount - seen.dimmed.length - expectLogged.length);
+
+  const heading = () => app.page.evaluate(() =>
+    document.querySelector('button[aria-label="Previous month"]')?.nextElementSibling?.textContent ?? null);
+  const pageTo = async (label, key) => {
+    await app.page.evaluate((l) => document.querySelector(`button[aria-label="${l}"]`).click(), label);
+    await app.page.waitForFunction(
+      (want) => document.querySelector('button[aria-label="Previous month"]')?.nextElementSibling?.textContent === want,
+      { timeout: 5000 }, fmtMonthYear(key),
+    );
+  };
+  if (historyMonth !== month) await pageTo("Previous month", historyMonth);
 
   // REAL HISTORY, AND TAGGED AS SUCH. The past could be filled by
   // running the rules backwards; it would be fiction.
@@ -102,7 +128,7 @@ try {
       .find((x) => (x.getAttribute("aria-label") ?? "").startsWith(pretty));
     if (!b) throw new Error(`no cell for ${pretty}`);
     return { text: b.innerText.replace(/\s+/g, " ").trim(), label: b.getAttribute("aria-label") };
-  }, expectLogged[0]);
+  }, historyLogged[0]);
   is("a past logged day names its reading in the cell", /\$[\d,]+/.test(history.text));
   // THE CELL IS JUST THE NUMBER, like every other cell. A "logged"
   // tag under it shipped for one round and came back out.
@@ -117,7 +143,7 @@ try {
       .find((x) => (x.getAttribute("aria-label") ?? "").startsWith(pretty));
     b.click();
     return new Promise((r) => setTimeout(() => r(document.querySelector("main").innerText), 200));
-  }, expectLogged[0]);
+  }, historyLogged[0]);
   is("tapping a past logged day says Logged balance in the panel",
     panelAfterTap.includes(CALENDAR_COPY.loggedBalance));
   not("...and not Balance after", panelAfterTap.includes(CALENDAR_COPY.balanceAfter));
@@ -135,8 +161,13 @@ try {
   // A settle check has to be about rendering, not about the data.
   await app.page.waitForFunction(
     (pretty) => (document.querySelector("main")?.innerText ?? "").includes(pretty),
-    { timeout: 5000 }, expectLogged[0] && fmtLongDay(expectLogged[0]),
+    { timeout: 5000 }, historyLogged[0],
   );
+  // Back to today's month, so "Next month" below means next month.
+  if (historyMonth !== month) {
+    await pageTo("Next month", month);
+    eq("...and the drive is back on today's month", await heading(), fmtMonthYear(month));
+  }
 
   // ---- round two: color by direction, and the items in the cell ----
   //

@@ -270,12 +270,15 @@ function ariaFor(cell) {
   return parts.join(", ");
 }
 
-// THE CARD NEVER SHRINKS WITHIN A MONTH (2026-11-02, same as the
+// THE PAGE NEVER SHRINKS WITHIN A MONTH (2026-11-02, same as the
 // phone). Scrolled to the bottom of the page, going from a busy day to
 // a quiet one made the page shorter and the browser pulled everything
-// down under the pointer: measured 64px on the fixture. So the card
-// keeps the tallest height it has had as its minimum. `key={monthKey}`
-// above remounts it per month, which is what starts that over.
+// down under the pointer: measured 64px on the fixture. So the SPACE
+// the card sits in keeps the tallest height it has had, and the card
+// itself is only as tall as its content. The first version put the
+// minimum on the card, and a quiet day after a busy one drew a big
+// empty bordered box that looked broken. `key={monthKey}` above
+// remounts this per month, which is what starts it over.
 function DayDetail({ cell, anchor, catName, onEditItem }) {
   const box = useRef(null);
   const [floor, setFloor] = useState(0);
@@ -284,8 +287,8 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
     if (h > floor) setFloor(h);
   }, [cell, floor]);
   return (
-    <div ref={box} style={{ minHeight: floor || undefined }}
-      className="mt-1 border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-1.5">
+    <div ref={box} style={{ minHeight: floor || undefined }} className="mt-1" data-testid="calendar-day-space">
+    <div className="border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-1.5" data-testid="calendar-day-card">
       <h3 className="text-sm font-medium">{fmtLongDay(cell.date)}</h3>
 
       {/* THE HEADLINE, not a footnote. This replaced "net $X", which
@@ -334,6 +337,7 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
           ))}
         </ul>
       )}
+    </div>
     </div>
   );
 }
