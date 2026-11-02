@@ -690,6 +690,18 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 20, 2026-11-02, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group
+  `a91aed6d-0fbc-40a7-8384-c1b60d04a9e4`, iOS update `01a19e9a`,
+  commit `2e0e47c`. Published through `mobile/scripts/ota.mjs` after CI
+  passed on that commit.
+
+  The calendar's round three (see the Ledger section): the legend
+  under the grid, $0 in gray, a balance below zero in red, "Checking
+  balance after:", the day card scrolling just into view above the
+  tab bar on a tap, and a card that does not shrink within a month.
+
 - **OTA UPDATE 19, 2026-10-31, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group
