@@ -690,6 +690,17 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 21, 2026-11-02, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group
+  `43acb5ac-da37-451c-a25c-9140baedbc3c`, iOS update `01a19eb6`,
+  commit `2210f92`. Published through `mobile/scripts/ota.mjs` after CI
+  passed on that commit.
+
+  The day card sizes to its content again, and the space under it
+  holds the page's length instead (see the Ledger section's "AMENDED"
+  note). OTA 20's tall empty card on a quiet day is gone.
+
 - **OTA UPDATE 20, 2026-11-02, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group
