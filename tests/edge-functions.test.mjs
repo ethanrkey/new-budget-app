@@ -496,8 +496,11 @@ console.log("\n== a webhook is a backup, not the only way home ==");
   const web = readFileSync(new URL("../src/components/ConnectedAccount.jsx", import.meta.url), "utf8");
   is("the phone asks the moment the browser closes",
     connected.slice(connected.indexOf("openAuthSessionAsync(started.hostedUrl)")).includes("recoverLink("));
+  // Through `ask` since 2026-11-03, which is recover plus "is it still
+  // finishing?".
   is("...and again on foreground when it has no bank",
-    connected.includes("if (!connectionNow()) await recoverLink("));
+    connected.includes("if (!connectionNow()) { await ask(); return; }")
+    && connected.slice(connected.indexOf("const ask = useCallback"), connected.indexOf("const ask = useCallback") + 400).includes("recoverLink("));
   is("...and on a cold start, which neither of those covers",
     chrome.includes("!connectionNow()") && chrome.includes("recoverLink("));
   is("the web asks too, for a tab closed mid-exchange", web.includes("recoverLink(supabase)"));

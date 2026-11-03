@@ -11,12 +11,12 @@ import NativeSheet from "./NativeSheet";
 import { fmtDate, fmtInstant } from "../../src/shared/dates.ts";
 import {
   BETA_NOTE, CONNECT_CONSENT, CONNECT_REFUSED, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
-  PLAID_PORTAL_URL, RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
+  FINISHING, PLAID_PORTAL_URL, RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
 } from "../../src/content/connect.ts";
 import type { Connection } from "../../src/shared/connect.ts";
-import { canReconnect, canSeeToggle, shouldRestoreToggle } from "../../src/shared/connect.ts";
+import { FINISHING_POLL_MS, canReconnect, canSeeToggle, isFinishing, shouldRestoreToggle } from "../../src/shared/connect.ts";
 import {
-  disconnect as apiDisconnect, pullBalance, readConnection, recoverLink, startLink,
+  disconnect as apiDisconnect, pendingUntilNow, pullBalance, readConnection, recoverLink, startLink,
 } from "../../src/shared/plaidApi.ts";
 import { allowlistedNow, connectionNow, setConnection, useConnection } from "../lib/connection";
 
@@ -65,10 +65,52 @@ export default function Connected() {
     return row;
   }, []);
 
+  // A CONNECTION STILL BEING SAVED (2026-11-03). Whatever the last
+  // recover said, including the cold start's, which asks before this
+  // screen exists. See isFinishing.
+  const [pendingUntil, setPendingUntil] = useState<string | null>(pendingUntilNow);
+  const [, setTick] = useState(0);
+  const finishing = on && !connection && isFinishing(pendingUntil, Date.now());
+
+  // ASK, AND ACT ON THE ANSWER. Every recover on this screen goes
+  // through here, so each one also says whether to keep showing
+  // "Finishing your connection…". A bank that turns up is finished
+  // the same way openLink finishes one.
+  const ask = useCallback(async () => {
+    const found = await recoverLink(supabase as never);
+    if (!found.ok) { setPendingUntil(found.pendingUntil); return null; }
+    setPendingUntil(null);
+    let row = await refreshConnection();
+    if (row) {
+      // Fresh already (the exchange kept the balance it read), so this
+      // makes no Plaid call; it is the fallback for when it could not.
+      await pullBalance(supabase as never, "open");
+      row = await refreshConnection();
+      cameBackConnected.current = row;
+      await resyncState();
+      feel.success();
+    }
+    return row;
+  }, [refreshConnection, resyncState]);
+
   useEffect(() => {
     if (!on || !allowlisted) return;
-    void refreshConnection();
-  }, [on, allowlisted, refreshConnection]);
+    void (async () => {
+      const row = await refreshConnection();
+      // SETTINGS OPENING IS AN ASK, so it can say "Finishing…" from
+      // the first frame it has an answer rather than offering Connect.
+      if (!row) await ask();
+    })();
+  }, [on, allowlisted, refreshConnection, ask]);
+
+  // AND AGAIN EVERY SO OFTEN WHILE IT IS FINISHING AND THIS IS OPEN.
+  // The tick re-renders when the time runs out with nobody answering,
+  // so Connect comes back on its own.
+  useEffect(() => {
+    if (!finishing) return;
+    const id = setInterval(() => { setTick((n) => n + 1); void ask(); }, FINISHING_POLL_MS);
+    return () => clearInterval(id);
+  }, [finishing, ask]);
 
   // SET BY openLink WHEN HOSTED LINK CAME BACK WITH A LIVE BANK.
   //
@@ -114,13 +156,13 @@ export default function Connected() {
         // the Item is live at Plaid and this is the moment to find
         // it. It costs one function call and no Plaid call unless
         // there really is an unfinished session.
-        if (!connectionNow()) await recoverLink(supabase as never);
+        if (!connectionNow()) { await ask(); return; }
         await refreshConnection();
         await resyncState();
       })();
     });
     return () => { sub.remove(); };
-  }, [allowlisted, on, refreshConnection, resyncState]);
+  }, [allowlisted, on, refreshConnection, resyncState, ask]);
 
   // NOT ON THE LIST: one line saying the feature exists and is a small
   // beta, and nothing to press. Nothing until the allowlist answer is
@@ -255,7 +297,8 @@ export default function Connected() {
     // never synced, so the staleness check passes on its own and
     // this does not spend one of the four daily refreshes.
     setBusy("saving");
-    await recoverLink(supabase as never);
+    const found = await recoverLink(supabase as never);
+    if (!found.ok) setPendingUntil(found.pendingUntil);
     let row = await refreshConnection();
     if (row) {
       await pullBalance(supabase as never, "open");
@@ -300,7 +343,19 @@ export default function Connected() {
           />
         </View>
 
-        {on && !connection && (
+        {finishing && !busy && (
+          <View style={styles.waiting} accessibilityLiveRegion="polite">
+            <ActivityIndicator color={T.dim} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.waitingText}>{FINISHING.title}</Text>
+              <Text style={styles.rowSub}>{FINISHING.body}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* NO CONNECT WHILE ONE IS FINISHING: a second Link session is
+            a second Trial slot if both complete. */}
+        {on && !connection && !finishing && (
           <Pressable
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
             onPress={() => { feel.light(); setConsenting(true); }}

@@ -3781,6 +3781,61 @@ the signature check faked. It covers:
 Against the old function the first case fails: it never finds the
 Item.
 
+**THE SAME NIGHT, TWO FOLLOW-UPS (owner's calls):**
+
+**1. The double pull after recover.** `/accounts/balance/get` ran at
+22:34:46 (trigger recover) and again at 22:34:52 (trigger open). The
+first was the exchange's own read of the account, whose balance it
+threw away. The second was the client's pull-on-open, which then
+wrote the snapshot. Both are billed. **The exchange now keeps that
+balance:** it writes it as the first snapshot, through the same
+`writeBalance` as plaid-balance (moved to
+`_shared/balanceWrite.ts`), and marks the Item synced
+(`last_synced_at`, `time_zone`). So the open pull that follows finds
+it fresh, and `plaid_claim_pull` makes no call.
+- **Only with the caller's time zone.** The web's finish and recover
+  now send `timeZone`. A webhook has none, and a snapshot's date is
+  the forecast's anchor, so a webhook-finished connection leaves the
+  first balance to the client's pull, as before.
+- The client's "open" pull after connecting stays. It costs no Plaid
+  call when the exchange saved the balance, and it is the fallback
+  when it could not.
+
+**2. "Finishing your connection…" instead of "Connect your bank".**
+Showing Connect over an unfinished session is what invited the two
+retries. Now, while recover reports a session still open and under
+30 minutes old (`pending_until`, from the newest open session's
+`created_at`), Settings on both clients:
+- says FINISHING ("Finishing your connection…" and "You don't need to
+  connect again", in `src/content/connect.ts`);
+- draws no Connect button;
+- keeps asking: when Settings opens, when the app or tab comes back,
+  and every 20s while Settings is open (`FINISHING_POLL_MS`).
+
+When the time is up, or recover finds nothing open, Connect comes
+back. A session the user backed out of is closed by recover, so it
+does not hold Connect. A lost reply keeps the last answer rather than
+flipping to Connect. `pendingUntilNow()` carries the phone's
+cold-start answer to a Settings screen opened later.
+
+**Known cost, accepted:** a user who swipes the in-app browser away
+without exiting Plaid leaves a session with no exit recorded, so
+Connect stays hidden for up to 30 minutes. That is the price of never
+offering a second Link over a first that may still land.
+
+**Tests:**
+- `tests/plaid-exchange.test.mjs` is now 42 checks. Added: the
+  balance kept, one balance call, the Item synced; no snapshot
+  without a zone (webhook); `pending_until` for a young open session,
+  none past 30 minutes, none with nothing open, none after an exit.
+- `mobile/__tests__/connected.test.tsx`: five cases. Finishing hides
+  Connect; Connect with nothing unfinished; Connect after it runs
+  out; a foreground lands the bank; polling every 20s.
+- `scripts/drive_finishing.mjs` (6 checks, web, by hand): Finishing
+  and no Connect, a tab coming back landing the bank, and Connect
+  back once it runs out. The fixture gained `plaid.noItem` and
+  `plaid.recover`.
+
 ### The page scrolled behind every modal (2026-11-03, web)
 
 Owner's report: with Settings → Account open, the mouse wheel and the

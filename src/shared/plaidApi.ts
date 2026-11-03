@@ -163,7 +163,7 @@ export async function finishLink(sb: FunctionCaller, publicToken: string): Promi
   { ok: true } | { ok: false; code: string }
 > {
   return duringPlaidWrite(async () => {
-    const { data, error } = await sb.functions.invoke("plaid-exchange", { body: { public_token: publicToken } });
+    const { data, error } = await sb.functions.invoke("plaid-exchange", { body: { public_token: publicToken, timeZone: deviceTimeZone() } });
     if (error || !data) return { ok: false as const, code: "unreachable" };
     const d = data as { ok?: boolean; code?: string; connected?: boolean };
     return d.connected ? { ok: true as const } : { ok: false as const, code: d.code ?? "unknown" };
@@ -192,15 +192,27 @@ export async function finishLink(sb: FunctionCaller, publicToken: string): Promi
  * what comes back every time the webhook did arrive first.
  */
 export async function recoverLink(sb: FunctionCaller): Promise<
-  { ok: true } | { ok: false; code: string }
+  { ok: true } | { ok: false; code: string; pendingUntil: string | null }
 > {
   return duringPlaidWrite(async () => {
-    const { data, error } = await sb.functions.invoke("plaid-exchange", { body: { recover: true } });
-    if (error || !data) return { ok: false as const, code: "unreachable" };
-    const d = data as { ok?: boolean; code?: string; connected?: boolean };
-    return d.connected ? { ok: true as const } : { ok: false as const, code: d.code ?? "unknown" };
+    const { data, error } = await sb.functions.invoke("plaid-exchange", { body: { recover: true, timeZone: deviceTimeZone() } });
+    // A LOST ANSWER KEEPS WHAT WE KNEW. Unreachable is not "nothing is
+    // finishing", and flipping back to Connect on one dropped request
+    // is the exact invitation this exists to remove.
+    if (error || !data) return { ok: false as const, code: "unreachable", pendingUntil: lastPendingUntil };
+    const d = data as { ok?: boolean; code?: string; connected?: boolean; pending_until?: string };
+    lastPendingUntil = d.connected ? null : d.pending_until ?? null;
+    return d.connected ? { ok: true as const } : { ok: false as const, code: d.code ?? "unknown", pendingUntil: lastPendingUntil };
   });
 }
+
+/**
+ * What the last recover said about a connection still finishing, for a
+ * screen that opens after somebody else asked (the phone's cold start
+ * asks before Settings is ever drawn). See isFinishing.
+ */
+let lastPendingUntil: string | null = null;
+export const pendingUntilNow = (): string | null => lastPendingUntil;
 
 /**
  * The device's IANA timezone, for dating the snapshot.

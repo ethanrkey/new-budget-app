@@ -170,6 +170,16 @@ export const PLAID_PORTAL_URL = "https://my.plaid.com";
  * it was a fact about the switch the reader is looking at, which can
  * see for itself whether it is on.
  */
+/**
+ * In place of the Connect button while a connection is still being
+ * saved (see isFinishing in src/shared/connect.ts). It says not to
+ * connect again, because connecting again is what it exists to stop.
+ */
+export const FINISHING = {
+  title: "Finishing your connection…",
+  body: "Your bank is connected at Plaid and we're saving it here. This can take a few minutes. You don't need to connect again.",
+} as const;
+
 export const CONNECT_TOGGLE = "Connect your bank";
 export const CONNECT_TOGGLE_SUB =
   "When on, Key Budget can read your checking balance — and nothing else. "

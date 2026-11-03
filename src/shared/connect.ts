@@ -335,3 +335,23 @@ export function syncMoved(before: string | null | undefined, after: string | nul
   if (!before) return true;
   return Date.parse(after) > Date.parse(before);
 }
+
+/**
+ * STILL FINISHING A CONNECTION? (2026-11-03.)
+ *
+ * The night Capital One was lost, Settings said "Connect your bank"
+ * over a session that was still unfinished, and the tester tapped it
+ * twice more. So while the server says a Link session is still open
+ * and young (`pending_until` from recover), Settings shows
+ * FINISHING instead, keeps asking, and draws no Connect button.
+ * Once the time is up, or recover finds nothing open, Connect comes
+ * back.
+ */
+export function isFinishing(pendingUntil: string | null | undefined, now: number): boolean {
+  if (!pendingUntil) return false;
+  const t = Date.parse(pendingUntil);
+  return Number.isFinite(t) && t > now;
+}
+
+/** How often Settings asks again while a connection is finishing. */
+export const FINISHING_POLL_MS = 20_000;

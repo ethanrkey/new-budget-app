@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  BETA_NOTE, CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, PLAID_PORTAL_URL,
+  BETA_NOTE, CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, FINISHING, PLAID_PORTAL_URL,
   RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
 } from "../content/connect.ts";
-import { canReconnect, canSeeToggle, shouldRestoreToggle } from "../shared/connect.ts";
+import { FINISHING_POLL_MS, canReconnect, canSeeToggle, isFinishing, shouldRestoreToggle } from "../shared/connect.ts";
 import {
-  disconnect as apiDisconnect, isAllowlisted, pullBalance, readConnection, recoverLink,
+  disconnect as apiDisconnect, isAllowlisted, pendingUntilNow, pullBalance, readConnection, recoverLink,
   startLink, finishLink,
 } from "../shared/plaidApi.ts";
 import { fmtDate, fmtInstant } from "../shared/dates.ts";
@@ -64,6 +64,31 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     return row;
   }, [supabase]);
 
+  // A CONNECTION STILL BEING SAVED (2026-11-03, the phone's rule):
+  // while recover says a session is open and young, this says
+  // "Finishing your connection…", keeps asking, and offers no Connect.
+  // See isFinishing in shared/connect.ts.
+  const [pendingUntil, setPendingUntil] = useState(pendingUntilNow);
+  const [, setTick] = useState(0);
+  const finishing = on && !connection && isFinishing(pendingUntil, Date.now());
+  const ask = useCallback(async () => {
+    const found = await recoverLink(supabase);
+    if (!found.ok) { setPendingUntil(found.pendingUntil); return false; }
+    setPendingUntil(null);
+    await refresh();
+    // `true`: the server already pulled (or the exchange kept its read).
+    onChanged?.(true);
+    return true;
+  }, [refresh, supabase, onChanged]);
+  useEffect(() => {
+    if (!finishing) return;
+    const id = setInterval(() => { setTick((n) => n + 1); void ask(); }, FINISHING_POLL_MS);
+    // A tab coming back is the web's foreground.
+    const onVisible = () => { if (document.visibilityState === "visible") void ask(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
+  }, [finishing, ask]);
+
   useEffect(() => {
     if (!on || !allowlisted) { setConnection(null); return; }
     (async () => {
@@ -76,17 +101,14 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
       // Disconnect button to reach. Same call the phone makes; it
       // costs nothing when there is nothing unfinished.
       if (row) return;
-      const found = await recoverLink(supabase);
-      if (!found.ok) return;
-      await refresh();
-      // AND THE PAGE RE-READS ITS OWN NUMBERS. A recovered session
-      // pulls a balance server-side, so the bar is showing a figure
-      // from before the connection existed until something reloads
-      // the document. `true` because that pull already happened —
-      // App must not fire a second one.
-      onChanged?.(true);
+      // AND THE PAGE RE-READS ITS OWN NUMBERS (inside `ask`). A
+      // recovered session pulls a balance server-side, so the bar is
+      // showing a figure from before the connection existed until
+      // something reloads the document. `true` because that pull
+      // already happened — App must not fire a second one.
+      await ask();
     })();
-  }, [on, allowlisted, refresh, supabase, onChanged]);
+  }, [on, allowlisted, refresh, ask]);
 
   // THE SAME GUARD THE PHONE CARRIES, for the same reason and with
   // the same shape. Finishing a connection ends with App re-reading
@@ -267,7 +289,19 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
         </label>
       </div>
 
-      {on && !connection && (
+      {finishing && !busy && (
+        <div className="mt-3 flex items-start gap-2 text-sm" aria-live="polite">
+          <span className="mt-1 inline-block h-3 w-3 shrink-0 rounded-full border-2 border-gray-300 border-t-transparent animate-spin dark:border-gray-600 dark:border-t-transparent" />
+          <div>
+            <p className="font-medium">{FINISHING.title}</p>
+            <p className="text-xs text-gray-500">{FINISHING.body}</p>
+          </div>
+        </div>
+      )}
+
+      {/* NO CONNECT WHILE ONE IS FINISHING: a second Link session is a
+          second Trial slot if both complete. */}
+      {on && !connection && !finishing && (
         <button
           onClick={() => setConsenting(true)}
           disabled={!!busy}

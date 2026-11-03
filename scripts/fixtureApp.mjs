@@ -97,7 +97,11 @@ function fakeJwt(sub, exp) {
 /**
  * @param {{width?: number, height?: number, scale?: number, state?: object,
  *          plaid?: {institution?: string, mask?: string, available?: number,
- *                   lastSyncedAt?: string}}} opts
+ *                   lastSyncedAt?: string, noItem?: boolean, recover?: object}}} opts
+ *
+ * `noItem` and `recover` (read on every call, so a drive can change
+ * them between phases): no bank stored yet, and what plaid-exchange's
+ * recover answers. Recover requests are counted in `recovers`.
  *
  * `plaid` SERVES A CONNECTED ACCOUNT. Without it nothing about
  * connected checking is reachable in a drive, and the one class of
@@ -142,6 +146,7 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
   // harness this time.
   const today = todayISO();
   let syncedAt = plaid?.lastSyncedAt ?? now;
+  const recovers = { n: 0 };
   /** Every trigger the page asked for, in order, for the drive to read. */
   const calls = [];
   const rows = splitState(state ?? fixtureState()).map((e) => ({
@@ -190,6 +195,12 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
 
     if (plaid) {
       if (url.includes("/plaid_beta")) return send([{ user_id: userId }]);
+      if (url.includes("/functions/v1/plaid-exchange")) {
+        recovers.n += 1;
+        return send(plaid.recover ?? { ok: false, code: "NO_OPEN_SESSION" });
+      }
+      if (url.includes("/plaid_items") && plaid.noItem) return send([]);
+      if (url.includes("/plaid_accounts") && plaid.noItem) return send([]);
       if (url.includes("/plaid_items")) return send([{
         institution_name: plaid.institution ?? "First Platypus Bank",
         status: "ok", last_synced_at: syncedAt,
@@ -251,6 +262,8 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
     page,
     /** The plaid-balance triggers the page sent, in order. */
     calls,
+    /** How many times the page asked plaid-exchange to recover. */
+    recovers,
     async load(tab) {
       await page.goto(`${ORIGIN}/app`, { waitUntil: "networkidle0" });
       await page.waitForSelector("main", { timeout: 20_000 });

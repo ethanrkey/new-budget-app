@@ -45,6 +45,7 @@ import { adminClient, callerId, isAllowlisted, responder } from "../_shared/call
 import { preflight } from "../_shared/cors.ts";
 import { type PlaidJwk, verifyPlaidWebhook } from "../_shared/webhookVerify.ts";
 import { type LinkSessions, exitedWithNoItem, publicTokenOf } from "../_shared/linkResult.ts";
+import { writeBalance } from "../_shared/balanceWrite.ts";
 
 /**
  * Verification keys, by `kid`.
@@ -60,6 +61,11 @@ import { type LinkSessions, exitedWithNoItem, publicTokenOf } from "../_shared/l
  * pinned in memory until the isolate died.
  */
 const keyCache = new Map<string, PlaidJwk>();
+
+/** How long an unfinished session keeps Connect hidden. A public token
+ *  lives about thirty minutes, so past that there is nothing left to
+ *  finish. */
+const PENDING_MINUTES = 30;
 
 /**
  * Write down that a webhook ARRIVED, and what we decided about it.
@@ -97,7 +103,7 @@ async function noteInbound(admin: any, code: string, verdict: string, type = "")
 interface Exchanged { access_token: string; item_id: string }
 interface ItemGot { item?: { institution_id?: string } }
 interface Institution { institution?: { name?: string } }
-interface BalanceAccounts { accounts?: Array<{ account_id: string; name?: string; mask?: string; type?: string; subtype?: string }> }
+interface BalanceAccounts { accounts?: Array<{ account_id: string; name?: string; mask?: string; type?: string; subtype?: string; balances?: { available?: number | null; current?: number | null } }> }
 
 Deno.serve(async (req) => {
   // BEFORE THE METHOD CHECK, not after: a preflight is an OPTIONS
@@ -117,10 +123,16 @@ Deno.serve(async (req) => {
   try { raw = await req.text(); } catch { /* handled below */ }
   let payload: Record<string, unknown> = {};
   try { payload = JSON.parse(raw); } catch { /* handled below */ }
+  // A WEBHOOK NEVER HAS ONE, so a webhook-finished connection leaves
+  // the first balance to the client's pull. Only the user's own
+  // requests (the web's finish, and recover) carry it.
+  const timeZone = !payload.webhook_code && typeof payload.timeZone === "string" ? payload.timeZone : null;
 
   const admin = adminClient();
   let userId: string | null = null;
   let publicToken = "";
+  // Whether the balance read while connecting was saved as a snapshot.
+  let pulled = false;
 
   // THE SESSION IS CLAIMED, ATOMICALLY, ONLY ONCE THERE IS A TOKEN TO
   // EXCHANGE. ITEM_ADD_RESULT and SESSION_FINISHED arrive together, and
@@ -331,7 +343,7 @@ Deno.serve(async (req) => {
     // about the session that held the Item.
     const { data: opens } = await admin
       .from("plaid_link_sessions")
-      .select("link_token, env")
+      .select("link_token, env, created_at")
       .eq("user_id", userId)
       .is("used_at", null)
       .gt("expires_at", new Date().toISOString())
@@ -363,7 +375,23 @@ Deno.serve(async (req) => {
         lastCode = "NO_ITEM_IN_SESSION";
       }
     }
-    if (!found) return json(200, { ok: false, code: lastCode });
+    if (!found) {
+      // STILL FINISHING? (2026-11-03.) While a session is open and
+      // under PENDING_MINUTES old, the clients show "Finishing your
+      // connection…" and no Connect button, and keep asking. Showing
+      // "Connect your bank" over an unfinished session is what invited
+      // two retries the night Capital One was lost. Past that, or once
+      // every open session is closed, Connect comes back.
+      // Asked again rather than taken from `opens`: the loop above may
+      // have just closed some of them.
+      const { data: left } = await admin.from("plaid_link_sessions").select("created_at")
+        .eq("user_id", userId).is("used_at", null).gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false }).limit(1);
+      const createdMs = Date.parse(String(left?.[0]?.created_at ?? ""));
+      const until = Number.isFinite(createdMs) ? createdMs + PENDING_MINUTES * 60_000 : 0;
+      return json(200, { ok: false, code: lastCode,
+        ...(until > Date.now() ? { pending_until: new Date(until).toISOString() } : {}) });
+    }
     env = found.env ?? env;
     if (!await claim(found.link_token)) return json(200, { ok: false, code: "ALREADY_EXCHANGING" });
   } else {
@@ -482,6 +510,36 @@ Deno.serve(async (req) => {
       is_checking: true,
     }));
     if (rows.length) await admin.from("plaid_accounts").insert(rows);
+
+    // THE BALANCE THAT CALL ALREADY RETURNED IS KEPT (2026-11-03).
+    // /accounts/balance/get is a billed pull, and this function threw
+    // its balance away: the client's pull-on-open then made a second
+    // one seconds later (recover 22:34:46, open 22:34:52, for the
+    // Capital One rescue). So it is written here as the first
+    // snapshot, through the same writeBalance as plaid-balance, and
+    // the Item is marked synced, so the open pull that follows finds
+    // it fresh and makes no call.
+    //
+    // ONLY WITH THE CALLER'S TIME ZONE. A snapshot's date is the
+    // forecast's anchor, and a webhook carries no zone: a connection
+    // finished at 8 PM Eastern would be filed under tomorrow in UTC.
+    // Without one, the first balance is left to the client's pull, as
+    // before.
+    const first = (accounts.data.accounts ?? [])[0];
+    const available = first?.balances?.available ?? first?.balances?.current ?? null;
+    if (first && available !== null && timeZone) {
+      const at = new Date().toISOString();
+      await admin.from("plaid_accounts")
+        .update({ last_available: available, last_current: first.balances?.current ?? null, last_balance_at: at })
+        .eq("item_id", row.id).eq("plaid_account_id", first.account_id);
+      const written = await writeBalance(admin, userId!, { plaid_account_id: first.account_id }, available, timeZone, false);
+      if (written.ok) {
+        await admin.from("plaid_items")
+          .update({ status: "ok", last_error_code: null, last_synced_at: at, updated_at: at, time_zone: timeZone })
+          .eq("id", row.id);
+        pulled = true;
+      }
+    }
   }
 
   // THE SLOT LEDGER, which nothing ever deletes from.
@@ -512,5 +570,5 @@ Deno.serve(async (req) => {
     .update({ used_at: new Date().toISOString() })
     .eq("user_id", userId).is("used_at", null);
 
-  return json(200, { ok: true, connected: true, institution_name: institutionName });
+  return json(200, { ok: true, connected: true, institution_name: institutionName, synced: pulled });
 });

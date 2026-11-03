@@ -43,6 +43,9 @@ const mockServer = {
   noItem: false,
   invoked: 0,
   notListed: false,
+  // What plaid-exchange's recover answers, and how many times it was asked.
+  recover: { ok: false, code: "NO_OPEN_SESSION" } as Record<string, unknown>,
+  recovers: 0,
 };
 mockServer.onWrite = () => { mockServer.state = withBalance(NEW, todayISO(), "plaid"); };
 
@@ -66,6 +69,7 @@ jest.mock("../lib/supabase", () => {
       from: jest.fn(table),
       functions: {
         invoke: jest.fn(async (name: string, opts: { body: { trigger: string } }) => {
+          if (name === "plaid-exchange") { mockServer.recovers += 1; return { data: mockServer.recover, error: null }; }
           if (name !== "plaid-balance") return { data: {}, error: null };
           mockServer.invoked += 1;
           mockServer.pulls.push(opts.body.trigger);
@@ -131,6 +135,8 @@ beforeEach(() => {
   mockServer.noItem = false;
   mockServer.invoked = 0;
   mockServer.notListed = false;
+  mockServer.recover = { ok: false, code: "NO_OPEN_SESSION" };
+  mockServer.recovers = 0;
   connection.reset();
   plaidApi.forgetPullDeadline();
 });
@@ -256,5 +262,84 @@ describe("Settings, for an account not on the allowlist", () => {
     await mountSettings();
     expect(await screen.findByText("Connect your bank")).toBeTruthy();
     expect(screen.queryByText(NOTE)).toBeNull();
+  });
+});
+
+// 2026-11-03: Capital One finished at Plaid, Settings said "Connect your
+// bank" again over the unfinished session, and the tester tapped it
+// twice more. While a session is still being saved, Settings says so,
+// keeps asking, and offers nothing that starts a second Link.
+describe("Settings, while a connection is still finishing", () => {
+  const Connected = require("../components/Connected").default;
+  const CONNECT = "Connect your bank (Beta)";
+  const FINISHING = "Finishing your connection…";
+  const soon = () => new Date(Date.now() + 20 * 60_000).toISOString();
+  async function mountSettings() {
+    await render(
+      <StateProvider userId="u1">
+        <Chrome session={session}><Connected /></Chrome>
+      </StateProvider>
+    );
+  }
+
+  it("says it is finishing and hides Connect", async () => {
+    mockServer.noItem = true;
+    mockServer.recover = { ok: false, code: "ITEM_NOT_READY", pending_until: soon() };
+    await mountSettings();
+    expect(await screen.findByText(FINISHING)).toBeTruthy();
+    expect(screen.getByText(/You don't need to connect again/)).toBeTruthy();
+    expect(screen.queryByText(CONNECT)).toBeNull();
+  });
+
+  it("offers Connect when nothing is unfinished", async () => {
+    mockServer.noItem = true;
+    await mountSettings();
+    expect(await screen.findByText(CONNECT)).toBeTruthy();
+    expect(screen.queryByText(FINISHING)).toBeNull();
+  });
+
+  it("offers Connect again once the session has run out", async () => {
+    mockServer.noItem = true;
+    mockServer.recover = { ok: false, code: "ITEM_NOT_READY", pending_until: new Date(Date.now() - 1000).toISOString() };
+    await mountSettings();
+    expect(await screen.findByText(CONNECT)).toBeTruthy();
+    expect(screen.queryByText(FINISHING)).toBeNull();
+  });
+
+  it("coming back to the app asks again, and shows the bank when it lands", async () => {
+    mockServer.noItem = true;
+    mockServer.recover = { ok: false, code: "ITEM_NOT_READY", pending_until: soon() };
+    await mountSettings();
+    await screen.findByText(FINISHING);
+    const before = mockServer.recovers;
+    // Saved, server-side, while the phone was away.
+    mockServer.recover = { ok: true, connected: true, institution_name: "First Platypus", synced: true };
+    mockServer.noItem = false;
+    mockServer.next = "fresh";
+    await act(async () => { foreground(); });
+    expect(await screen.findByText("First Platypus ••0000")).toBeTruthy();
+    expect(mockServer.recovers).toBeGreaterThan(before);
+    expect(screen.queryByText(FINISHING)).toBeNull();
+    expect(screen.queryByText(CONNECT)).toBeNull();
+  });
+
+  it("keeps asking every 20 seconds while it is open", async () => {
+    // Only the interval is faked, from before it is set up; everything
+    // the render and findBy wait on stays real.
+    jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate", "queueMicrotask", "Date", "performance", "hrtime",
+      "setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame"] });
+    try {
+      mockServer.noItem = true;
+      mockServer.recover = { ok: false, code: "ITEM_NOT_READY", pending_until: soon() };
+      await mountSettings();
+      await screen.findByText(FINISHING);
+      const before = mockServer.recovers;
+      await act(async () => { jest.advanceTimersByTime(20_000); });
+      await act(async () => { jest.advanceTimersByTime(20_000); });
+      expect(mockServer.recovers - before).toBe(2);
+      expect(screen.getByText(FINISHING)).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

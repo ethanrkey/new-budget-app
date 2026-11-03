@@ -97,9 +97,10 @@ function makeDb(tables) {
       f === "eq" ? r[k] === v : f === "is" ? (r[k] ?? null) === v : f === "gt" ? String(r[k]) > String(v) : true);
     const run = () => {
       if (q.op === "insert") {
-        const r = { id: `id-${rows().length + 1}`, ...q.row };
-        rows().push(r);
-        return { data: [r], error: null };
+        const added = [q.row].flat().map((x) => ({ id: `id-${rows().length + 1}`, ...x }));
+        added.forEach((r, i) => { r.id = `id-${rows().length + 1 + i}`; });
+        rows().push(...added);
+        return { data: added, error: null };
       }
       let hit = rows().filter(match);
       if (q.op === "update") { hit.forEach((r) => Object.assign(r, q.patch)); return { data: hit, error: null }; }
@@ -123,7 +124,8 @@ function makeDb(tables) {
     };
     return api;
   };
-  return { tables, rpcs, from: query, rpc: async (fn, args) => { rpcs.push(fn); return { data: fn === "plaid_queue_removal" ? 1 : null, error: null, args }; } };
+  const db = { tables, rpcs, writes: [], from: query, rpc: async (fn, args) => { rpcs.push(fn); if (fn === "plaid_write_balance") db.writes.push(args); return { data: fn === "plaid_queue_removal" ? 1 : fn === "plaid_write_balance" ? "written" : null, error: null }; } };
+  return db;
 }
 
 const FUTURE = "2099-01-01T00:00:00Z";
@@ -141,7 +143,7 @@ function makePlaid(answers) {
     }
     if (endpoint === "/item/get") return { data: { item: { institution_id: "ins_capone" } } };
     if (endpoint === "/institutions/get_by_id") return { data: { institution: { name: "Capital One" } } };
-    if (endpoint === "/accounts/balance/get") return { data: { accounts: [{ account_id: "acc", name: "360 Checking", mask: "1234" }] } };
+    if (endpoint === "/accounts/balance/get") return { data: { accounts: [{ account_id: "acc", name: "360 Checking", mask: "1234", balances: { available: 812.4, current: 830 } }] } };
     return { data: {} };
   };
   return { calls, fn };
@@ -167,7 +169,8 @@ console.log("\n== recover, as on 2026-11-03: the Item is in the OLDEST open sess
     "lt-third": { link_sessions: [empty("22:24:15")] },
   });
   const r = await call({ recover: true }, { db, plaid });
-  eq("recover connects the bank", r.body, { ok: true, connected: true, institution_name: "Capital One" });
+  // No zone sent, so no snapshot: see the balance section below.
+  eq("recover connects the bank", r.body, { ok: true, connected: true, institution_name: "Capital One", synced: false });
   eq("...asking newest first, down to the one that has it",
     plaid.calls.filter((c) => c.startsWith("/link/token/get")),
     ["/link/token/get lt-third", "/link/token/get lt-second", "/link/token/get lt-first"]);
@@ -237,6 +240,58 @@ console.log("\n== a failed exchange gives the session back ==");
   const r = await call({ recover: true }, { db, plaid });
   eq("the exchange's own code comes back", r.body, { ok: false, code: "INVALID_PUBLIC_TOKEN" });
   eq("...and the session is open again, nothing stored", [usedOf(db, "lt-1"), (db.tables.plaid_items ?? []).length], [false, 0]);
+}
+
+console.log("\n== recover says how long a connection is still finishing ==");
+{
+  const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();
+  const db = makeDb({ plaid_link_sessions: [session("lt-1", ago(5))] });
+  const plaid = makePlaid({ "lt-1": { link_sessions: [empty("x")] } });
+  const r = await call({ recover: true }, { db, plaid });
+  const left = (Date.parse(r.body.pending_until) - Date.now()) / 60_000;
+  eq("a 5-minute-old open session: still finishing, for about 25 more minutes",
+    [r.body.code, left > 24 && left <= 25], ["ITEM_NOT_READY", true]);
+
+  const old = makeDb({ plaid_link_sessions: [session("lt-1", ago(31))] });
+  const r2 = await call({ recover: true }, { db: old, plaid });
+  eq("past 30 minutes it is not (Connect comes back)", [r2.body.code, "pending_until" in r2.body], ["ITEM_NOT_READY", false]);
+
+  const none = makeDb({ plaid_link_sessions: [] });
+  const r3 = await call({ recover: true }, { db: none, plaid });
+  eq("nothing open, nothing finishing", [r3.body.code, "pending_until" in r3.body], ["NO_OPEN_SESSION", false]);
+
+  const exitedDb = makeDb({ plaid_link_sessions: [session("lt-1", ago(2))] });
+  const r4 = await call({ recover: true }, { db: exitedDb, plaid: makePlaid({ "lt-1": { link_sessions: [exited("x")] } }) });
+  eq("a session the user backed out of is closed, so it is not finishing either",
+    [r4.body.code, "pending_until" in r4.body], ["NO_ITEM_IN_SESSION", false]);
+}
+
+console.log("\n== the balance read while connecting is kept (no second pull) ==");
+{
+  const db = makeDb({
+    plaid_link_sessions: [session("lt-1", "2026-11-03T22:20:00Z")],
+    budget_entities: [{ user_id: "u-poppy", entity_id: "e-chk", kind: "account", deleted_at: null, data: { id: "checking", kind: "checking" } }],
+  });
+  const plaid = makePlaid({ "lt-1": { link_sessions: [withItem("22:21", "pt-bal")] } });
+  const r = await call({ recover: true, timeZone: "America/New_York" }, { db, plaid });
+  eq("recover with the device's zone says it synced", [r.body.ok, r.body.synced], [true, true]);
+  eq("...one balance call, the one it needed anyway",
+    plaid.calls.filter((c) => c === "/accounts/balance/get").length, 1);
+  eq("...written as the first snapshot, available, on the user's own day",
+    db.writes.map((w) => [w.p_account_id, w.p_amount, w.p_date.length, w.p_force]), [["checking", 812.4, 10, false]]);
+  const item = db.tables.plaid_items[0];
+  eq("...and the Item is marked synced, so the open pull that follows finds it fresh",
+    [item.status, typeof item.last_synced_at, item.time_zone], ["ok", "string", "America/New_York"]);
+  eq("...with the account's numbers kept", [db.tables.plaid_accounts[0].last_available, db.tables.plaid_accounts[0].last_current], [812.4, 830]);
+
+  // A webhook carries no zone: the first balance is left to the client.
+  const db2 = makeDb({
+    plaid_link_sessions: [session("lt-1", "2026-11-03T22:20:00Z")],
+    budget_entities: [{ user_id: "u-poppy", entity_id: "e-chk", kind: "account", deleted_at: null, data: { id: "checking", kind: "checking" } }],
+  });
+  const w = await call({ webhook_type: "LINK", webhook_code: "ITEM_ADD_RESULT", link_token: "lt-1", timeZone: "Pacific/Auckland" }, { db: db2, plaid });
+  eq("a webhook-finished connection writes no snapshot (no zone to date it by)", [w.body.synced, db2.writes.length], [false, 0]);
+  eq("...and leaves the Item unsynced, so the client's pull still runs", db2.tables.plaid_items[0].last_synced_at ?? null, null);
 }
 
 console.log(`\n${failures ? `FAILED ${failures} of ${checks}` : `ALL PASS (${checks} checks)`}`);
