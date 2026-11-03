@@ -2326,6 +2326,40 @@ fifth tab never needs a migration.
   and nothing else does. Caught by the web drive, whose busiest day
   was today; pinned by a phone test that fails against OTA 21.
 
+  **AMENDED A THIRD TIME 2026-11-03 (OTA 23), the owner's call after
+  OTA 22: the space under the card is held ONLY WHILE THE PAGE
+  MOVES.** It kept the month's tallest height for good, so after the
+  glide you could scroll down into a big empty area under a short
+  card. Now a tap holds the space at the height it had just before
+  (so the page does not shrink under the finger, and the move up
+  still animates), and lets go once the scroll settles. The page then
+  ends just below the card. The card itself is still only as tall as
+  its content. Paging a month lets go too, and still never scrolls.
+
+  - **Settled**, web: `scrollend` where the browser has it, otherwise
+    (and as a backstop) scrollY unchanged for 150ms. Phone: the list
+    reached the target, or has not moved for 200ms (a finger took
+    over). Both cap at 1.5s, so the space is always let go. A tap that
+    needed no scroll lets go at once.
+  - **A newer tap supersedes an older one**, hold and all: the first
+    tap's scroll ending does not release the second's.
+  - **Letting go cannot move the page.** At the target the card's
+    bottom sits on the visible bottom, and what is under it is the
+    page's own padding: on the phone exactly the tab inset, on the web
+    `main`'s `pb-16` (64px), the same on every tab. So the page is
+    never past the new end.
+  - `revealCard` hands the calendar a `settled` callback:
+    `reveal(box, settled)`.
+  - **Tests:** `drive_calendar_ink.mjs` now has 22 checks. Midway
+    through the glide the space still holds the busy height. Once
+    settled it hugs the card, the page is still at the spot, and all
+    that is left to scroll is the page's own padding less the 16px
+    gap. Two of those checks fail on the OTA 22 code. On the phone
+    there are four jest tests: the hold at the tap, the release on
+    settled, a superseded tap not released by the first one settling,
+    and no hold without a list. The phone's settle timing itself can
+    only be seen on a device.
+
   `scripts/measure_calendar.mjs` is the measurement, and it checks
   three months rather than one, because "it fits" is a claim about
   the worst case somebody will actually meet:

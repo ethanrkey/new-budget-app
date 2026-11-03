@@ -124,11 +124,18 @@ try {
     calm.click();
     await wait(60);
     const midway = scrollY;
+    const space = () => document.querySelector('[data-testid="calendar-day-space"]');
+    const heldMidway = space().offsetHeight >= busy.h;
     await wait(900);
     const quiet = { y: scrollY, atSpot: atSpot(), h: card().offsetHeight };
-    const space = document.querySelector('[data-testid="calendar-day-space"]');
-    return { busy, midway, quiet, spaceHeld: space.offsetHeight >= busy.h,
-      cardInSpace: space.contains(card()) };
+    const root = document.documentElement;
+    return { busy, midway, quiet, spaceHeld: heldMidway,
+      collapsed: space().offsetHeight === card().offsetHeight,
+      // How far the page can still be scrolled down once it settled, and
+      // how much page there is under the card's bottom edge.
+      roomLeft: root.scrollHeight - innerHeight - scrollY,
+      underCard: root.scrollHeight - (scrollY + card().getBoundingClientRect().bottom),
+      cardInSpace: space().contains(card()) };
   }, GAP);
   eq("the busy day needed a scroll, so this means something", move.busy.y > 0, true);
   eq("...and the page went to the lowest spot that shows its whole card", move.busy.atSpot, true);
@@ -139,7 +146,18 @@ try {
   // THE CARD SIZES TO WHAT IT SAYS; the room is held below it. OTA 20
   // held it in the card and a quiet day drew a big empty box.
   eq("the quiet day's card is shorter than the busy one's", move.quiet.h < move.busy.h, true);
-  eq("...while the space it sits in held the busy height", move.spaceHeld, true);
+  eq("...while the page moved, the space it sits in held the busy height", move.spaceHeld, true);
+  // ...and once it settled, let it go (2026-11-03): no big empty area
+  // to scroll down into under a short card.
+  eq("once the page settles the space hugs the card", move.collapsed, true);
+  eq("...without moving the page (still at the spot)", move.quiet.atSpot, true);
+  // What is left under the card is the page's own bottom padding (main's
+  // pb-16 plus the panel's), the same on every tab, and nothing else:
+  // the space under the card adds nothing once collapsed.
+  eq("...so all that is under the card is the page's own padding (under 100px)",
+    move.underCard < 100, true);
+  eq("...and the page can scroll on only by that padding, less the 16px gap",
+    Math.abs(move.roomLeft - (move.underCard - GAP)) <= 1, true);
   eq("...with the card inside that space", move.cardInSpace, true);
 
   // Paging a month is not a tap on a day: the page stays where it is.

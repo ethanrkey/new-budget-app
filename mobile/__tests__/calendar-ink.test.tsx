@@ -6,8 +6,9 @@ import CalendarView from "../components/CalendarView";
 import { T } from "../lib/theme";
 
 // THE CALENDAR'S 2026-11-02 POLISH, mounted: the legend, $0 in gray,
-// an overdraft in red, the day card that does not shrink within a
-// month, and the tap that asks the list to bring the card into view.
+// an overdraft in red, the space under the day card that is held only
+// while the list moves, and the tap that asks the list to bring the
+// card into view.
 // The arithmetic behind each is in tests/calendar.test.mjs; the
 // scrolling itself (src/shared/reveal.ts) is asked questions there too.
 //
@@ -122,14 +123,14 @@ test("tapping the day already picked still asks, and paging a month after it doe
   expect(reveal).toHaveBeenCalledTimes(1);
 });
 
-test("the page never shrinks within a month, and the card is never padded", async () => {
+test("a tap holds the space while the list moves, and the card is never padded", async () => {
   await mount();
   const space = () => screen.getByTestId("calendar-day-space");
   const card = () => screen.getByTestId("calendar-day-card");
   // A busy day laid the space out 300pt tall...
   await act(async () => { fireEvent(space(), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 300 } } }); });
-  // ...so a quiet one keeps that much room, and the page under the
-  // finger does not jump...
+  // ...so a tap on a quiet one keeps that much room while the list
+  // moves, and the page under the finger does not jump...
   await userEvent.press(screen.getByLabelText(new RegExp(`^${fmtLongDay(day(5))}`)));
   expect(flat(space().props.style).minHeight).toBe(300);
   // ...but the bordered card is as tall as what it says (OTA 20 put the
@@ -137,4 +138,47 @@ test("the page never shrinks within a month, and the card is never padded", asyn
   expect(flat(card().props.style).minHeight).toBeUndefined();
   // And the card is inside the space, so the room is below it.
   expect(within(space()).getByTestId("calendar-day-card")).toBeTruthy();
+});
+
+const frame = () => act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
+
+test("once the list has settled the space is let go, so the page ends below the card", async () => {
+  // A list that has not settled yet: it keeps each callback.
+  const settles: Array<() => void> = [];
+  await mount(jest.fn((_box, settled) => { settles.push(settled); }));
+  const space = () => screen.getByTestId("calendar-day-space");
+  await act(async () => { fireEvent(space(), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 300 } } }); });
+  await userEvent.press(screen.getByLabelText(new RegExp(`^${fmtLongDay(day(5))}`)));
+  await frame();
+  expect(flat(space().props.style).minHeight).toBe(300);
+  // 2026-11-03: the space stayed after the glide, and the page could be
+  // scrolled down into a big empty area under a short card.
+  await act(async () => { settles.pop()!(); });
+  expect(flat(space().props.style).minHeight).toBe(0);
+});
+
+test("a tap that superseded another is not let go by the first one settling", async () => {
+  const settles: Array<() => void> = [];
+  await mount(jest.fn((_box, settled) => { settles.push(settled); }));
+  const space = () => screen.getByTestId("calendar-day-space");
+  await act(async () => { fireEvent(space(), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 300 } } }); });
+  await userEvent.press(screen.getByLabelText(new RegExp(`^${fmtLongDay(day(5))}`)));
+  await frame();
+  await userEvent.press(screen.getByLabelText(new RegExp(`^${fmtLongDay(day(6))}`)));
+  await frame();
+  expect(settles).toHaveLength(2);
+  // The first tap's scroll ending says nothing about the second's.
+  await act(async () => { settles[0](); });
+  expect(flat(space().props.style).minHeight).toBe(300);
+  await act(async () => { settles[1](); });
+  expect(flat(space().props.style).minHeight).toBe(0);
+});
+
+test("with no list to scroll, nothing is held", async () => {
+  await render(<CalendarView state={state} rows={rows} categories={[]} />);
+  const space = () => screen.getByTestId("calendar-day-space");
+  await act(async () => { fireEvent(space(), "layout", { nativeEvent: { layout: { x: 0, y: 0, width: 375, height: 300 } } }); });
+  await userEvent.press(screen.getByLabelText(new RegExp(`^${fmtLongDay(day(5))}`)));
+  await frame();
+  expect(flat(space().props.style).minHeight).toBe(0);
 });

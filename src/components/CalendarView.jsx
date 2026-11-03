@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { categoryLabelOf, todayISO, primaryAccount, ledgerHorizonOf } from "../engine/model.ts";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, cellAmountFull, netAmountFull,
@@ -87,16 +87,31 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
   // changes nothing in `selected`, so an effect keyed on it never ran
   // and a flag stayed armed, to fire on the next month change instead.
   const cardRef = useRef(null);
+  const spaceRef = useRef(null);
   const [taps, setTaps] = useState(0);
+  // THE SPACE IS HELD ONLY WHILE THE PAGE MOVES (2026-11-03). A click
+  // holds the space under the card at the height it had a moment ago,
+  // so a shorter card does not pull the page in under the pointer and
+  // the move back up can glide. Once the scroll settles the hold is let
+  // go and the page ends just below the card. It used to keep the
+  // month's tallest height for good, which left a big empty area to
+  // scroll down into under a short card.
+  const [hold, setHold] = useState(0);
+  const click = (date) => {
+    setHold(spaceRef.current?.offsetHeight ?? 0);
+    setSelected(date);
+    setTaps((n) => n + 1);
+  };
   useEffect(() => {
     if (taps === 0) return;
     const card = cardRef.current?.getBoundingClientRect();
-    if (!card) return;
+    if (!card) { setHold(0); return; }
     const from = window.scrollY;
     const to = revealTarget(from, card, { top: 0, bottom: window.innerHeight - REVEAL_GAP });
-    if (Math.abs(to - from) >= 1) window.scrollTo({ top: to, behavior: "smooth" });
+    if (Math.abs(to - from) < 1) { setHold(0); return; }
+    window.scrollTo({ top: to, behavior: "smooth" });
+    return whenScrollSettles(() => setHold(0));
   }, [taps]);
-
   const month = useMemo(
     () => buildCalendarMonth({
       key: monthKey, rows: ledger.rows, startBalance: account.balance,
@@ -126,6 +141,7 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
   function goMonth(n) {
     const next = addMonthKey(monthKey, n);
     setMonthKey(next);
+    setHold(0);
     // Follow the month rather than clearing: an empty panel under a
     // grid you have just paged into is a worse answer than the 1st's.
     setSelected(`${next}-01`);
@@ -169,7 +185,7 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
           return (
             <button
               key={cell.date}
-              onClick={() => { setSelected(cell.date); setTaps((n) => n + 1); }}
+              onClick={() => click(cell.date)}
               aria-label={ariaFor(cell)}
               aria-current={cell.isToday ? "date" : undefined}
               // FLEX-COL AND justify-start, which is the actual fix for
@@ -262,6 +278,8 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
         <DayDetail
           key={monthKey}
           cardRef={cardRef}
+          spaceRef={spaceRef}
+          hold={hold}
           cell={selectedDay}
           anchor={anchor}
           catName={catName}
@@ -292,24 +310,17 @@ function ariaFor(cell) {
   return parts.join(", ");
 }
 
-// THE PAGE NEVER SHRINKS WITHIN A MONTH (2026-11-02, same as the
-// phone). Scrolled to the bottom of the page, going from a busy day to
-// a quiet one made the page shorter and the browser pulled everything
-// down under the pointer: measured 64px on the fixture. So the SPACE
-// the card sits in keeps the tallest height it has had, and the card
-// itself is only as tall as its content. The first version put the
-// minimum on the card, and a quiet day after a busy one drew a big
-// empty bordered box that looked broken. `key={monthKey}` above
-// remounts this per month, which is what starts it over.
-function DayDetail({ cell, anchor, catName, onEditItem, cardRef }) {
-  const box = useRef(null);
-  const [floor, setFloor] = useState(0);
-  useLayoutEffect(() => {
-    const h = box.current?.offsetHeight ?? 0;
-    if (h > floor) setFloor(h);
-  }, [cell, floor]);
+// THE SPACE THE CARD SITS IN. Its minimum height is `hold`, which the
+// calendar sets on a click and clears once the scroll settles (see
+// `hold` above). Scrolled to the bottom of the page, going from a busy
+// day to a quiet one made the page shorter and the browser pulled
+// everything down under the pointer (64px on the fixture); the hold is
+// what stops that, but only for as long as it is needed. The card
+// itself is only ever as tall as its content: OTA 20 put the minimum
+// on the card, and a quiet day drew a big empty bordered box.
+function DayDetail({ cell, anchor, catName, onEditItem, cardRef, spaceRef, hold }) {
   return (
-    <div ref={box} style={{ minHeight: floor || undefined }} className="mt-1" data-testid="calendar-day-space">
+    <div ref={spaceRef} style={{ minHeight: hold || undefined }} className="mt-1" data-testid="calendar-day-space">
     <div ref={cardRef} className="border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-1.5" data-testid="calendar-day-card">
       <h3 className="text-sm font-medium">{fmtLongDay(cell.date)}</h3>
 
@@ -367,6 +378,37 @@ function DayDetail({ cell, anchor, catName, onEditItem, cardRef }) {
 // Room left between the card and the bottom of the window, like the
 // phone's gap above its tab bar.
 const REVEAL_GAP = 16;
+
+/**
+ * Calls `done` once the window has stopped scrolling. `scrollend`
+ * where the browser has it (Chrome, Firefox); otherwise, and as a
+ * backstop, when scrollY has not changed for 150ms. Never later than
+ * 1.5s, so the space is always let go. Returns a cancel.
+ */
+function whenScrollSettles(done) {
+  let finished = false, last = window.scrollY, still = 0, raf = 0;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    cancel();
+    done();
+  };
+  const tick = (t) => {
+    if (window.scrollY !== last) { last = window.scrollY; still = t; }
+    else if (!still) still = t;
+    else if (t - still >= 150) return finish();
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  const cap = setTimeout(finish, 1500);
+  window.addEventListener("scrollend", finish);
+  function cancel() {
+    cancelAnimationFrame(raf);
+    clearTimeout(cap);
+    window.removeEventListener("scrollend", finish);
+  }
+  return () => { finished = true; cancel(); };
+}
 
 // Direction's ink. Zero is the same gray as the panel's quiet text.
 const TONE_INK = { in: "text-income", out: "text-expense", zero: "text-gray-400" };

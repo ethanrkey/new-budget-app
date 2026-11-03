@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert, Platform, Pressable, RefreshControl, SectionList, StyleSheet, Text, View,
 } from "react-native";
@@ -50,16 +50,37 @@ export default function LedgerScreen() {
   const wrapRef = useRef<View>(null);
   const calListRef = useRef<SectionList<number>>(null);
   const calOffset = useRef(0);
-  const revealCard = useCallback((card: View) => {
+  const calMoved = useRef(0);
+  // THE SCROLL SETTLING (2026-11-03): the calendar holds the space under
+  // its card while the list moves and lets it go when told it stopped.
+  // Stopped is: the list reached the target, or it has not moved for
+  // 200ms (a finger took over, or iOS stopped short). Never later than
+  // 1.5s, so the space is always let go.
+  const settle = useRef<ReturnType<typeof setInterval> | null>(null);
+  const revealCard = useCallback((card: View, settled: () => void) => {
+    // A newer tap's watch replaces the old one; that tap's hold is
+    // already superseded on the calendar's side.
+    if (settle.current) clearInterval(settle.current);
     wrapRef.current?.measureInWindow((_x, wy, _w, wh) => {
       card.measureInWindow((_cx, cy, _cw, ch) => {
         const from = calOffset.current;
         const to = revealTarget(from, { top: cy, bottom: cy + ch }, { top: wy, bottom: wy + wh - tabInset });
-        if (Math.abs(to - from) < 1) return;
+        if (Math.abs(to - from) < 1) { settled(); return; }
+        calMoved.current = Date.now();
         calListRef.current?.getScrollResponder()?.scrollTo({ y: to, animated: true });
+        const started = Date.now();
+        const timer = setInterval(() => {
+          const now = Date.now();
+          if (Math.abs(calOffset.current - to) >= 1 && now - calMoved.current < 200 && now - started < 1500) return;
+          clearInterval(timer);
+          if (settle.current === timer) settle.current = null;
+          settled();
+        }, 50);
+        settle.current = timer;
       });
     });
   }, [tabInset]);
+  useEffect(() => () => { if (settle.current) clearInterval(settle.current); }, []);
   const [horizon, setHorizon] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [calendar, setCalendar] = useState(false);
@@ -263,7 +284,7 @@ export default function LedgerScreen() {
       {calendar ? (
         <SectionList
           ref={calListRef}
-          onScroll={(e) => { calOffset.current = e.nativeEvent.contentOffset.y; }}
+          onScroll={(e) => { calOffset.current = e.nativeEvent.contentOffset.y; calMoved.current = Date.now(); }}
           scrollEventThrottle={16}
           sections={[{ title: "", data: [0] }]}
           keyExtractor={() => "cal"}

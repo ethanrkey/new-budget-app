@@ -41,12 +41,16 @@ import type { BudgetState, LedgerRow, TrackerCategory } from "../../src/engine/t
 //    src/shared/reveal.ts. The Ledger's list owns the scrolling, so it
 //    is handed in as `reveal`. The space under the card (5) is what
 //    lets a move back UP animate instead of snapping.
-// 5. THE PAGE NEVER SHRINKS WITHIN A MONTH. Going from a busy day to an
-//    empty one made the content shorter, the list clamped its offset,
-//    and the whole page jumped up under the finger. So the space the
-//    card sits in keeps the height of the tallest card shown this
-//    month, and the card itself is only as tall as its content.
-//    Paging months starts over: that re-lays out the grid anyway.
+// 5. THE PAGE DOES NOT SHRINK UNDER THE FINGER. Going from a busy day to
+//    an empty one made the content shorter, the list clamped its offset,
+//    and the whole page jumped up. So a tap holds the space the card
+//    sits in at the height it had just before, and the card itself is
+//    only as tall as its content. THE HOLD LASTS ONLY WHILE THE PAGE
+//    MOVES (2026-11-03): `reveal` calls back once the scroll settles and
+//    the space is let go, so the page ends just below the card. It used
+//    to keep the month's tallest height for good, which left a big empty
+//    area to scroll down into under a short card. Paging a month lets
+//    go too.
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -57,8 +61,10 @@ export default function CalendarView({
   rows: LedgerRow[];
   categories: TrackerCategory[];
   onPick?: (id: string) => void;
-  /** Scroll the enclosing list so this box is fully visible. */
-  reveal?: (box: View) => void;
+  /** Scroll the enclosing list so this box is fully visible, and call
+   *  `settled` once the list has stopped moving (at once if it did not
+   *  need to). */
+  reveal?: (box: View, settled: () => void) => void;
 }) {
   const { width } = useWindowDimensions();
   const account = state.accounts[0]!;
@@ -102,17 +108,28 @@ export default function CalendarView({
   // change instead.
   const [taps, setTaps] = useState(0);
   const [cardFloor, setCardFloor] = useState(0);
+  const spaceHeight = useRef(0);
   useEffect(() => { setCardFloor(0); }, [monthKey]);
   useEffect(() => {
     if (taps === 0) return;
+    // A later tap supersedes this one, and its own hold with it.
+    let live = true;
+    const release = () => { if (live) setCardFloor(0); };
     // One frame, so the new card has been laid out before it is measured.
-    const id = requestAnimationFrame(() => { if (detailRef.current) reveal?.(detailRef.current); });
-    return () => cancelAnimationFrame(id);
+    const id = requestAnimationFrame(() => {
+      if (detailRef.current && reveal) reveal(detailRef.current, release);
+      else release();
+    });
+    return () => { live = false; cancelAnimationFrame(id); };
     // `reveal` is left out on purpose: a new function from the parent
     // is not a tap.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taps]);
-  const pick = (date: string) => { setPicked(date); setTaps((n) => n + 1); };
+  const pick = (date: string) => {
+    setCardFloor(spaceHeight.current);
+    setPicked(date);
+    setTaps((n) => n + 1);
+  };
 
   const month = useMemo(
     () => buildCalendarMonth({
@@ -247,10 +264,7 @@ export default function CalendarView({
         <View
           style={{ minHeight: cardFloor }}
           testID="calendar-day-space"
-          onLayout={(e) => {
-            const h = e.nativeEvent.layout.height;
-            if (h > cardFloor) setCardFloor(h);
-          }}
+          onLayout={(e) => { spaceHeight.current = e.nativeEvent.layout.height; }}
         >
         <View ref={detailRef} style={styles.detail} testID="calendar-day-card">
           <Text style={styles.detailHead}>{fmtLongDay(detail.date)}</Text>
