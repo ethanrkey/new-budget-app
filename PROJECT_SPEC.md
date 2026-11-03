@@ -3715,6 +3715,72 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
+### Capital One, lost after Plaid and rescued with minutes left (2026-11-03, production)
+
+**What happened.** A tester (iOS build 13, OTA 23) connected Capital
+One over OAuth through Hosted Link at about 22:20 UTC and finished
+every Plaid step. Back in Settings the toggle was on and the screen
+said "Connect your bank" again, even after a full restart. She tapped
+it twice more (sessions at 22:22:42 and 22:24:10, both abandoned
+before the phone-number step). `plaid_items` was empty and there was
+no `/item/public_token/exchange` anywhere in `plaid_api_log`. Recover
+had run four times, answered ok, and exchanged nothing.
+
+**Three defects, all in `plaid-exchange`:**
+
+1. **Recover asked about the user's NEWEST open session only.** Each
+   retry became the newest, so recover asked about an empty one,
+   closed it, and never asked about the 22:20 session that held the
+   Item. Those are the four `/link/token/get` rows.
+2. **Only `link_sessions[0]` of Plaid's answer was read.** An OAuth
+   bank sends the user away to the bank and back, so one link token
+   can carry more than one session, and the Item need not be in the
+   first.
+3. **Any empty answer closed the session for good**, in both the
+   webhook and the recover paths. An answer read before Plaid had
+   written the result was final. This is the likeliest reason the
+   ITEM_ADD_RESULT webhook did not save it either.
+
+**Rescued, without a second Link or a second slot.** The fix was
+deployed as v15 at 22:33 (`--no-verify-jwt`, as always for this
+function). The owner reopened only the 22:20 session in SQL, and the
+tester brought the app back to the foreground. Recover found the Item
+and exchanged it at 22:34:42, about 16 minutes before the public
+token expired. Capital One, status ok, balance pulled. **One slot
+spent, which is the correct number.**
+
+**The fix (v15):**
+- **Recover asks every open, unexpired session, newest first** (up
+  to five), and exchanges the first that has an Item.
+- **`_shared/linkResult.ts` reads the whole answer:** every session
+  entry, every `item_add_results` entry, and the older
+  `on_success.public_token`.
+- **A session closes without an Item only when Plaid says the user
+  exited and no entry has one.** Anything else is "not yet" and stays
+  open: recover answers `ITEM_NOT_READY`, and the webhook leaves it
+  for recover.
+- **The session is claimed atomically** (`used_at` set where it was
+  null) only once there is a token to exchange, so ITEM_ADD_RESULT,
+  SESSION_FINISHED and recover cannot all exchange it. If the
+  exchange itself fails the claim is released, so the session stays
+  recoverable until its link token expires.
+
+**Tests:** `tests/plaid-exchange.test.mjs` (in `npm test`, 31 checks)
+bundles the deployed `index.ts` unchanged and runs real requests
+through it, with only the database, Plaid's HTTP call, the caller and
+the signature check faked. It covers:
+- tonight exactly: three open sessions, the Item in the oldest, and
+  the token in its second entry;
+- an empty early answer (webhook, SESSION_FINISHED and recover) not
+  closing the session, and the next recover connecting;
+- an exit still closing it;
+- the webhook path finding a token in a later entry;
+- the webhook and recover exchanging only once between them;
+- a failed exchange giving the session back.
+
+Against the old function the first case fails: it never finds the
+Item.
+
 ### The page scrolled behind every modal (2026-11-03, web)
 
 Owner's report: with Settings → Account open, the mouse wheel and the

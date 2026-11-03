@@ -44,6 +44,7 @@ import { PLAID_ENDPOINTS, callPlaid, defaultEnv, readConfig } from "../_shared/p
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
 import { preflight } from "../_shared/cors.ts";
 import { type PlaidJwk, verifyPlaidWebhook } from "../_shared/webhookVerify.ts";
+import { type LinkSessions, exitedWithNoItem, publicTokenOf } from "../_shared/linkResult.ts";
 
 /**
  * Verification keys, by `kid`.
@@ -94,7 +95,6 @@ async function noteInbound(admin: any, code: string, verdict: string, type = "")
 }
 
 interface Exchanged { access_token: string; item_id: string }
-interface LinkSession { link_sessions?: Array<{ results?: { item_add_results?: Array<{ public_token?: string }> } }> }
 interface ItemGot { item?: { institution_id?: string } }
 interface Institution { institution?: { name?: string } }
 interface BalanceAccounts { accounts?: Array<{ account_id: string; name?: string; mask?: string; type?: string; subtype?: string }> }
@@ -121,6 +121,27 @@ Deno.serve(async (req) => {
   const admin = adminClient();
   let userId: string | null = null;
   let publicToken = "";
+
+  // THE SESSION IS CLAIMED, ATOMICALLY, ONLY ONCE THERE IS A TOKEN TO
+  // EXCHANGE. ITEM_ADD_RESULT and SESSION_FINISHED arrive together, and
+  // the client's recover can land beside them: exactly one of them gets
+  // the row (used_at was null) and exchanges; the rest stand down. If
+  // the exchange itself fails, the claim is released so the session is
+  // still recoverable. Before 2026-11-03 the session was marked used the
+  // moment /link/token/get answered, token or not.
+  let claimed: string | null = null;
+  const claim = async (linkToken: string) => {
+    const { data } = await admin.from("plaid_link_sessions")
+      .update({ used_at: new Date().toISOString() })
+      .eq("link_token", linkToken).is("used_at", null)
+      .select("link_token");
+    if (!data?.length) return false;
+    claimed = linkToken;
+    return true;
+  };
+  const release = async () => {
+    if (claimed) await admin.from("plaid_link_sessions").update({ used_at: null }).eq("link_token", claimed);
+  };
   let trigger = "connect";
   // THE ENVIRONMENT THIS SESSION WAS MINTED IN, filled in by
   // whichever branch below finds the session. An access token works
@@ -249,18 +270,26 @@ Deno.serve(async (req) => {
 
     // THE ANSWER COMES FROM PLAID, NOT FROM THE REQUEST. This is the
     // line the paragraph at the top of the file is about.
-    const got = await callPlaid<LinkSession>(vconf.config, PLAID_ENDPOINTS.linkTokenGet,
+    const got = await callPlaid<LinkSessions>(vconf.config, PLAID_ENDPOINTS.linkTokenGet,
       { link_token: linkToken }, { admin, userId, trigger });
     if ("error" in got) return json(200, { ignored: "link/token/get failed", code: got.error.code });
 
-    publicToken = got.data.link_sessions?.[0]?.results?.item_add_results?.[0]?.public_token ?? "";
-    // A session can finish without an Item — the user backed out. That
-    // is a completed session, not a failure, and nothing is stored.
+    // EVERY SESSION, NOT THE FIRST (2026-11-03, Capital One over
+    // OAuth): see _shared/linkResult.ts.
+    publicToken = publicTokenOf(got.data);
     if (!publicToken) {
-      await admin.from("plaid_link_sessions").update({ used_at: new Date().toISOString() }).eq("link_token", linkToken);
-      return json(200, { ignored: "session finished with no item" });
+      // A session can finish without an Item: the user backed out.
+      // That, and ONLY that, closes it. An ITEM_ADD_RESULT with no
+      // token in the answer yet is "not yet": closing on it is what
+      // stranded the Capital One Item, because a closed session is one
+      // `recover` cannot find.
+      if (payload.webhook_code === "SESSION_FINISHED" && exitedWithNoItem(got.data)) {
+        await admin.from("plaid_link_sessions").update({ used_at: new Date().toISOString() }).eq("link_token", linkToken);
+        return json(200, { ignored: "session finished with no item" });
+      }
+      return json(200, { ignored: "no public_token yet; left open for recover" });
     }
-    await admin.from("plaid_link_sessions").update({ used_at: new Date().toISOString() }).eq("link_token", linkToken);
+    if (!await claim(linkToken)) return json(200, { ignored: "already being exchanged" });
   } else if (payload.recover === true) {
     // ---- FINISH A SESSION THE WEBHOOK NEVER FINISHED ----
     //
@@ -294,36 +323,49 @@ Deno.serve(async (req) => {
     if (!userId) return json(401, { error: "not signed in" });
     if (!await isAllowlisted(admin, userId)) return json(403, { error: "not available" });
 
-    const { data: open } = await admin
+    // EVERY OPEN SESSION, NEWEST FIRST — not just the newest
+    // (2026-11-03, production). The user finished Capital One in her
+    // first session, came back to "Connect your bank", and tapped
+    // Connect twice more. Each new session became the newest, recover
+    // asked about THAT one, found nothing, closed it, and never asked
+    // about the session that held the Item.
+    const { data: opens } = await admin
       .from("plaid_link_sessions")
       .select("link_token, env")
       .eq("user_id", userId)
       .is("used_at", null)
       .gt("expires_at", new Date().toISOString())
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(5);
     // Nothing unfinished is the ordinary answer, not an error: it is
     // what the client sees every time the webhook DID arrive first.
-    if (!open) return json(200, { ok: false, code: "NO_OPEN_SESSION" });
-    env = open.env ?? env;
+    if (!opens?.length) return json(200, { ok: false, code: "NO_OPEN_SESSION" });
 
-    const rconf = readConfig(env);
-    if ("missing" in rconf) {
-      console.error("[plaid-exchange] missing secrets:", rconf.missing.join(", "));
-      return json(500, { error: `not configured: ${rconf.missing.join(", ")}` });
+    let found: { link_token: string; env: string | null } | null = null;
+    let lastCode = "ITEM_NOT_READY";
+    for (const open of opens) {
+      const oenv = open.env ?? env;
+      const rconf = readConfig(oenv);
+      if ("missing" in rconf) {
+        console.error("[plaid-exchange] missing secrets:", rconf.missing.join(", "));
+        return json(500, { error: `not configured: ${rconf.missing.join(", ")}` });
+      }
+      const got = await callPlaid<LinkSessions>(rconf.config, PLAID_ENDPOINTS.linkTokenGet,
+        { link_token: open.link_token }, { admin, userId, trigger });
+      if ("error" in got) { lastCode = got.error.code; continue; }
+      const token = publicTokenOf(got.data);
+      if (token) { publicToken = token; found = open; break; }
+      // The user backed out of this one: close it, so it stops being
+      // asked about. Anything else is "not yet" and stays open.
+      if (exitedWithNoItem(got.data)) {
+        await admin.from("plaid_link_sessions").update({ used_at: new Date().toISOString() })
+          .eq("link_token", open.link_token);
+        lastCode = "NO_ITEM_IN_SESSION";
+      }
     }
-    const got = await callPlaid<LinkSession>(rconf.config, PLAID_ENDPOINTS.linkTokenGet,
-      { link_token: open.link_token }, { admin, userId, trigger });
-    if ("error" in got) return json(200, { ok: false, code: got.error.code });
-
-    publicToken = got.data.link_sessions?.[0]?.results?.item_add_results?.[0]?.public_token ?? "";
-    await admin.from("plaid_link_sessions").update({ used_at: new Date().toISOString() })
-      .eq("link_token", open.link_token);
-    // A session that finished with no Item — the user backed out.
-    // Closed above either way, so the Trial-slot reservation in
-    // plaid-link-token stops holding Connect shut.
-    if (!publicToken) return json(200, { ok: false, code: "NO_ITEM_IN_SESSION" });
+    if (!found) return json(200, { ok: false, code: lastCode });
+    env = found.env ?? env;
+    if (!await claim(found.link_token)) return json(200, { ok: false, code: "ALREADY_EXCHANGING" });
   } else {
     // Every other webhook Plaid sends. Acknowledged and dropped: an
     // unhandled webhook that 400s gets retried for days.
@@ -363,7 +405,12 @@ Deno.serve(async (req) => {
   // exploded" with the actual Plaid code buried. This is a request
   // that was understood and did not work, and the client needs the
   // code more than it needs the status.
-  if ("error" in exchanged) return json(200, { ok: false, code: exchanged.error.code });
+  if ("error" in exchanged) {
+    // Nothing was created, so the session goes back to open and the
+    // next ask can try again (bounded by the link token's expiry).
+    await release();
+    return json(200, { ok: false, code: exchanged.error.code });
+  }
 
   const { access_token, item_id } = exchanged.data;
 
