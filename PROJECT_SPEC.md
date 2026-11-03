@@ -690,6 +690,19 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 24, 2026-11-03, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group
+  `b40bc134-a288-46ae-a0c5-9b24283b9c33`, iOS update `01a1a3c6`,
+  commit `3efe8d9`. Published through `mobile/scripts/ota.mjs` after
+  CI passed on that commit.
+
+  Settings says "Finishing your connection…" and hides Connect while
+  a bank is still being saved, and recover sends the device's time
+  zone (see "Capital One, lost after Plaid and rescued with minutes
+  left"). Both need plaid-exchange v16 on the server; against v15 the
+  phone behaves exactly as OTA 23 did.
+
 - **OTA UPDATE 23, 2026-11-03, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group `758f9526-33f9-429b-8e38-f809dfcb6f69`, iOS update
