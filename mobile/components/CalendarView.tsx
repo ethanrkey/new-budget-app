@@ -35,9 +35,12 @@ import type { BudgetState, LedgerRow, TrackerCategory } from "../../src/engine/t
 // below zero is red and zero is gray, on both clients — see
 // isOverdrawn and netTone in engine/calendar.ts (2026-11-02).
 //
-// 4. A TAP BRINGS THE DAY CARD INTO VIEW, by just enough and only if it
-//    does not already fit — see lib/reveal.ts. The Ledger's list owns
-//    the scrolling, so it is handed in as `reveal`.
+// 4. A TAP MOVES THE PAGE TO THE BEST SPOT FOR THAT DAY'S CARD, up or
+//    down: the lowest position that shows all of it above the tab bar,
+//    zero if it fits with the calendar at the top. See
+//    src/shared/reveal.ts. The Ledger's list owns the scrolling, so it
+//    is handed in as `reveal`. The space under the card (5) is what
+//    lets a move back UP animate instead of snapping.
 // 5. THE PAGE NEVER SHRINKS WITHIN A MONTH. Going from a busy day to an
 //    empty one made the content shorter, the list clamped its offset,
 //    and the whole page jumped up under the finger. So the space the
@@ -93,18 +96,23 @@ export default function CalendarView({
   const [picked, setPicked] = useState<string>(today);
   const detailRef = useRef<View>(null);
   // Only a TAP reveals. Opening the tab, or paging a month, must not
-  // scroll anything on its own.
-  const revealNext = useRef(false);
+  // scroll anything on its own. A TAP COUNTER, not a flag: tapping the
+  // day already picked changes nothing in `picked`, so an effect keyed
+  // on it never ran and a flag stayed armed, to fire on the next month
+  // change instead.
+  const [taps, setTaps] = useState(0);
   const [cardFloor, setCardFloor] = useState(0);
   useEffect(() => { setCardFloor(0); }, [monthKey]);
   useEffect(() => {
-    if (!revealNext.current) return;
-    revealNext.current = false;
+    if (taps === 0) return;
     // One frame, so the new card has been laid out before it is measured.
     const id = requestAnimationFrame(() => { if (detailRef.current) reveal?.(detailRef.current); });
     return () => cancelAnimationFrame(id);
-  }, [picked, reveal]);
-  const pick = (date: string) => { revealNext.current = true; setPicked(date); };
+    // `reveal` is left out on purpose: a new function from the parent
+    // is not a tap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taps]);
+  const pick = (date: string) => { setPicked(date); setTaps((n) => n + 1); };
 
   const month = useMemo(
     () => buildCalendarMonth({

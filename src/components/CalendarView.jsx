@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { categoryLabelOf, todayISO, primaryAccount, ledgerHorizonOf } from "../engine/model.ts";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, cellAmountFull, netAmountFull,
@@ -6,6 +6,7 @@ import {
 } from "../engine/calendar.ts";
 import { CALENDAR_COPY as COPY } from "../content/calendar.ts";
 import { fmtDate, fmtLongDay, fmtMonthYear } from "../shared/dates.ts";
+import { revealTarget } from "../shared/reveal.ts";
 
 // ---- The Ledger's month-grid rendering ----
 //
@@ -75,6 +76,26 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
   // navigate before it told you anything.
   const [monthKey, setMonthKey] = useState(today.slice(0, 7));
   const [selected, setSelected] = useState(today);
+  // A CLICKED DAY MOVES THE PAGE TO THE BEST SPOT FOR ITS CARD, up or
+  // down (2026-11-02, the phone's rule): the lowest scroll position that
+  // shows the whole card, zero if it fits at the top. See
+  // src/shared/reveal.ts. Only a click: opening the tab and paging a
+  // month never scroll. The space under the card is what lets the move
+  // back up glide rather than snap.
+  //
+  // A TAP COUNTER, not a flag: clicking the day that is already selected
+  // changes nothing in `selected`, so an effect keyed on it never ran
+  // and a flag stayed armed, to fire on the next month change instead.
+  const cardRef = useRef(null);
+  const [taps, setTaps] = useState(0);
+  useEffect(() => {
+    if (taps === 0) return;
+    const card = cardRef.current?.getBoundingClientRect();
+    if (!card) return;
+    const from = window.scrollY;
+    const to = revealTarget(from, card, { top: 0, bottom: window.innerHeight - REVEAL_GAP });
+    if (Math.abs(to - from) >= 1) window.scrollTo({ top: to, behavior: "smooth" });
+  }, [taps]);
 
   const month = useMemo(
     () => buildCalendarMonth({
@@ -148,7 +169,7 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
           return (
             <button
               key={cell.date}
-              onClick={() => setSelected(cell.date)}
+              onClick={() => { setSelected(cell.date); setTaps((n) => n + 1); }}
               aria-label={ariaFor(cell)}
               aria-current={cell.isToday ? "date" : undefined}
               // FLEX-COL AND justify-start, which is the actual fix for
@@ -240,6 +261,7 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
       {selectedDay && (
         <DayDetail
           key={monthKey}
+          cardRef={cardRef}
           cell={selectedDay}
           anchor={anchor}
           catName={catName}
@@ -279,7 +301,7 @@ function ariaFor(cell) {
 // minimum on the card, and a quiet day after a busy one drew a big
 // empty bordered box that looked broken. `key={monthKey}` above
 // remounts this per month, which is what starts it over.
-function DayDetail({ cell, anchor, catName, onEditItem }) {
+function DayDetail({ cell, anchor, catName, onEditItem, cardRef }) {
   const box = useRef(null);
   const [floor, setFloor] = useState(0);
   useLayoutEffect(() => {
@@ -288,7 +310,7 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
   }, [cell, floor]);
   return (
     <div ref={box} style={{ minHeight: floor || undefined }} className="mt-1" data-testid="calendar-day-space">
-    <div className="border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-1.5" data-testid="calendar-day-card">
+    <div ref={cardRef} className="border border-gray-200 dark:border-gray-800 rounded-xl px-3 py-1.5" data-testid="calendar-day-card">
       <h3 className="text-sm font-medium">{fmtLongDay(cell.date)}</h3>
 
       {/* THE HEADLINE, not a footnote. This replaced "net $X", which
@@ -341,6 +363,10 @@ function DayDetail({ cell, anchor, catName, onEditItem }) {
     </div>
   );
 }
+
+// Room left between the card and the bottom of the window, like the
+// phone's gap above its tab bar.
+const REVEAL_GAP = 16;
 
 // Direction's ink. Zero is the same gray as the panel's quiet text.
 const TONE_INK = { in: "text-income", out: "text-expense", zero: "text-gray-400" };

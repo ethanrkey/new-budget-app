@@ -14,7 +14,7 @@ import TransactionSheet, { type SheetMode } from "../../components/TransactionSh
 import FirstRun from "../../components/FirstRun";
 import { T, money } from "../../lib/theme";
 import { useTabScrollInset } from "../../lib/tabInset";
-import { revealDelta } from "../../lib/reveal";
+import { revealTarget } from "../../../src/shared/reveal.ts";
 import { computeLedger, groupByMonth, computeSpendingByCategory } from "../../../src/engine/compute.ts";
 import { ledgerHorizonOf } from "../../../src/engine/model.ts";
 import { showFirstRun } from "../../lib/firstRun";
@@ -42,19 +42,21 @@ export default function LedgerScreen() {
   // glass at full scroll. See lib/tabInset.ts.
   const tabInset = useTabScrollInset();
   // THE CALENDAR'S REVEAL (2026-11-02). The list is what scrolls, so the
-  // list is what moves when a tapped day's card would sit under the tab
-  // bar. The visible area is this screen's box minus `tabInset` (the
-  // bar, the home indicator and the same gap the content keeps), and
-  // the move is exactly the overflow: see lib/reveal.ts.
+  // list is what moves when a day is tapped. The visible area is this
+  // screen's box minus `tabInset` (the bar, the home indicator and the
+  // same gap the content keeps), and the list goes to the lowest
+  // position that shows the whole card, up or down: see
+  // src/shared/reveal.ts.
   const wrapRef = useRef<View>(null);
   const calListRef = useRef<SectionList<number>>(null);
   const calOffset = useRef(0);
   const revealCard = useCallback((card: View) => {
     wrapRef.current?.measureInWindow((_x, wy, _w, wh) => {
       card.measureInWindow((_cx, cy, _cw, ch) => {
-        const delta = revealDelta({ top: cy, bottom: cy + ch }, { top: wy, bottom: wy + wh - tabInset });
-        if (Math.abs(delta) < 1) return;
-        calListRef.current?.getScrollResponder()?.scrollTo({ y: Math.max(0, calOffset.current + delta), animated: true });
+        const from = calOffset.current;
+        const to = revealTarget(from, { top: cy, bottom: cy + ch }, { top: wy, bottom: wy + wh - tabInset });
+        if (Math.abs(to - from) < 1) return;
+        calListRef.current?.getScrollResponder()?.scrollTo({ y: to, animated: true });
       });
     });
   }, [tabInset]);

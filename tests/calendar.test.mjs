@@ -21,7 +21,7 @@ import {
   cellAmountCompact, cellAmountFull, netAmountCompact, netAmountFull,
   netTone, rowTone, rowSign, isOverdrawn,
 } from "../src/engine/calendar.ts";
-import { revealDelta } from "../mobile/lib/reveal.ts";
+import { revealTarget } from "../src/shared/reveal.ts";
 import { CALENDAR_COPY } from "../src/content/calendar.ts";
 
 let failures = 0, checks = 0;
@@ -431,15 +431,29 @@ console.log("\n== which ink ==");
   eq("the day card's label", CALENDAR_COPY.balanceAfter, "Checking balance after:");
 }
 
-// ---- 2026-11-02: a tapped day's card, brought into view -------------
+// ---- 2026-11-02: where a tapped day's card puts the page -------------
+// The lowest scroll position at which the whole card is visible, either
+// direction, zero if it fits with the page at the top (OTA 22).
 console.log("\n== reveal the day card ==");
 {
   const view = { top: 100, bottom: 700 };
-  eq("a card that fits does not move", revealDelta({ top: 400, bottom: 650 }, view), 0);
-  eq("...nor one that touches the bottom exactly", revealDelta({ top: 400, bottom: 700 }, view), 0);
-  eq("a card under the tab bar scrolls down by exactly the overflow", revealDelta({ top: 600, bottom: 820 }, view), 120);
-  eq("a card above the view scrolls up to its top", revealDelta({ top: 60, bottom: 300 }, view), -40);
-  eq("a card taller than the view brings its TOP in, not its bottom", revealDelta({ top: 500, bottom: 1300 }, view), 400);
+  eq("a card already at the lowest spot does not move",
+    revealTarget(300, { top: 450, bottom: 700 }, view), 300);
+  eq("a card under the tab bar scrolls down by exactly the overflow",
+    revealTarget(0, { top: 600, bottom: 820 }, view), 120);
+  // THE NEW HALF: busy day -> short day. Scrolled down 250 for the busy
+  // card, the short one ends at 520, well above the bar, so the page
+  // glides back up by 180 to the lowest spot that still shows it.
+  eq("a short card after a busy one glides the page back UP",
+    revealTarget(250, { top: 400, bottom: 520 }, view), 70);
+  eq("...all the way to the top if it fits with the calendar there",
+    revealTarget(250, { top: 400, bottom: 450 }, view), 0);
+  eq("...and never past the top", revealTarget(10, { top: 200, bottom: 300 }, view), 0);
+  eq("a card already visible but with room below still moves up to its spot",
+    revealTarget(120, { top: 300, bottom: 600 }, view), 20);
+  eq("a card taller than the view brings its TOP in, not its bottom",
+    revealTarget(0, { top: 500, bottom: 1300 }, view), 400);
+  eq("...from either side", revealTarget(900, { top: -200, bottom: 600 }, view), 600);
 }
 
 if (checks < 20) {

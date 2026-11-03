@@ -2288,6 +2288,31 @@ fifth tab never needs a migration.
   today's month afterward. The dimmed-day checks stay on today's
   month, where they hold on any date.
 
+  **AMENDED AGAIN 2026-11-02 (OTA 22), the owner's call after OTA 21:
+  a tap moves the page to the best spot for the day's card, EITHER
+  WAY.** Item 4 above only ever scrolled down, by the overflow, so
+  going from a busy day to a short one left you scrolled down past a
+  calendar that no longer needed it. The target now is the lowest
+  scroll position at which the whole card is visible above the tab
+  bar, zero if it fits with the calendar at the top, and a card taller
+  than the view still aligns its top (`revealTarget`, moved to
+  `src/shared/reveal.ts` because the web uses it too). The space under
+  the card stays: it is what lets the move back up animate instead of
+  snapping. Opening the tab and changing month still never scroll.
+
+  **The web got it as well**, since it had the same leftover scroll
+  once the space under the card existed: a click scrolls the window
+  smoothly to the same target, with a 16px gap at the bottom like the
+  phone's gap above its bar.
+
+  **A bug found on the way, on both clients:** the reveal was armed by
+  a flag and fired by an effect keyed on the picked day. Tapping the
+  day ALREADY picked changed nothing, so the effect never ran and the
+  flag stayed armed, to fire on the next month change, which must
+  never scroll. Both now count taps instead, so every tap fires once
+  and nothing else does. Caught by the web drive, whose busiest day
+  was today; pinned by a phone test that fails against OTA 21.
+
   `scripts/measure_calendar.mjs` is the measurement, and it checks
   three months rather than one, because "it fits" is a claim about
   the worst case somebody will actually meet:

@@ -9,7 +9,7 @@ import { T } from "../lib/theme";
 // an overdraft in red, the day card that does not shrink within a
 // month, and the tap that asks the list to bring the card into view.
 // The arithmetic behind each is in tests/calendar.test.mjs; the
-// scrolling itself (lib/reveal.ts) is asked questions there too.
+// scrolling itself (src/shared/reveal.ts) is asked questions there too.
 //
 // Pinned clock, same reasoning as calendar.test.tsx: every fixture day
 // below has to sit in the month the calendar opens on.
@@ -106,6 +106,20 @@ test("a tap asks the list to bring the card into view; opening does not", async 
   expect(reveal).toHaveBeenCalledTimes(1);
   // The card itself, so the list can measure it.
   expect(reveal.mock.calls[0][0]).toBeTruthy();
+});
+
+test("tapping the day already picked still asks, and paging a month after it does not", async () => {
+  const reveal = await mount();
+  const frame = () => act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
+  // Today opens picked. Tapping it changes nothing in the state, which
+  // is exactly the tap a flag-based version lost.
+  await userEvent.press(screen.getByLabelText(new RegExp(`^${fmtLongDay(TODAY)}`)));
+  await frame();
+  expect(reveal).toHaveBeenCalledTimes(1);
+  // ...and a lost tap used to stay armed and fire HERE, on paging.
+  await userEvent.press(screen.getByLabelText("Next month"));
+  await frame();
+  expect(reveal).toHaveBeenCalledTimes(1);
 });
 
 test("the page never shrinks within a month, and the card is never padded", async () => {

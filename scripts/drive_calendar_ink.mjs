@@ -6,7 +6,8 @@
 // scroll positions: the legend under the grid, the new label, $0 in
 // gray (a $0 occurrence and a day that nets to nothing), a projected
 // overdraft in red, and the day card that no longer shrinks under the
-// pointer when you go from a busy day to a quiet one.
+// pointer when you go from a busy day to a quiet one, and a click
+// moving the page to the best spot for the day's card (OTA 22).
 //
 // Not in `npm test`: it starts Vite and Chrome.
 import { openFixtureApp } from "./fixtureApp.mjs";
@@ -93,31 +94,58 @@ try {
   eq("the card says Checking balance after:", card.label, true);
   eq("...and its $0 row is '$0.00' in gray, no minus", card.row, ["$0.00", true]);
 
-  // NO JUMP. Scrolled to the bottom, a busy day then a quiet one.
-  const jump = await app.page.evaluate(async () => {
+  // THE PAGE GOES TO THE BEST SPOT FOR THE CARD, either way (OTA 22):
+  // the lowest scroll position at which all of it is in the window,
+  // zero if it fits at the top. A busy day scrolls down to it; a short
+  // day after it glides back UP rather than leaving you scrolled past a
+  // calendar that no longer needs it.
+  const GAP = 16;
+  const move = await app.page.evaluate(async (GAP) => {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const count = (b) => Number(b.getAttribute("aria-label").match(/(\d+) transactions?/)?.[1] ?? 0);
     const days = [...document.querySelectorAll("button[aria-label]")].filter((b) => /balance after/i.test(b.getAttribute("aria-label")));
     const busiest = days.reduce((a, b) => (count(b) > count(a) ? b : a));
     const calm = days.find((b) => count(b) === 0);
-    busiest.click(); await wait(300);
-    window.scrollTo(0, document.documentElement.scrollHeight); await wait(300);
-    const before = window.scrollY;
-    const cardH = () => document.querySelector('[data-testid="calendar-day-card"]').offsetHeight;
-    const busyCard = cardH();
-    calm.click(); await wait(300);
+    const card = () => document.querySelector('[data-testid="calendar-day-card"]');
+    // At the lowest spot: the whole card is in the window, and either the
+    // page is at the top or the card's bottom sits on the line.
+    const atSpot = () => {
+      const r = card().getBoundingClientRect(), line = innerHeight - GAP;
+      return r.top >= 0 && r.bottom <= line + 1 && (scrollY === 0 || Math.abs(r.bottom - line) <= 1);
+    };
+    window.scrollTo(0, 0); await wait(100);
+    busiest.click(); await wait(900);
+    const busy = { y: scrollY, atSpot: atSpot(), h: card().offsetHeight };
+    calm.click();
+    await wait(60);
+    const midway = scrollY;
+    await wait(900);
+    const quiet = { y: scrollY, atSpot: atSpot(), h: card().offsetHeight };
     const space = document.querySelector('[data-testid="calendar-day-space"]');
-    return { scrolls: before > 0, moved: window.scrollY - before,
-      cardShrank: cardH() < busyCard, spaceHeld: space.offsetHeight >= busyCard,
-      cardInSpace: space.contains(document.querySelector('[data-testid="calendar-day-card"]')) };
-  });
-  eq("the page is scrolled for this to mean anything", jump.scrolls, true);
-  eq("busy day -> quiet day does not move the page", jump.moved, 0);
+    return { busy, midway, quiet, spaceHeld: space.offsetHeight >= busy.h,
+      cardInSpace: space.contains(card()) };
+  }, GAP);
+  eq("the busy day needed a scroll, so this means something", move.busy.y > 0, true);
+  eq("...and the page went to the lowest spot that shows its whole card", move.busy.atSpot, true);
+  eq("a short day after it moves the page back UP", move.quiet.y < move.busy.y, true);
+  eq("...to the lowest spot that shows its card (zero if it fits)", move.quiet.atSpot, true);
+  eq("...gliding, not snapping: it was partway there 60ms in",
+    move.midway < move.busy.y && move.midway > move.quiet.y, true);
   // THE CARD SIZES TO WHAT IT SAYS; the room is held below it. OTA 20
   // held it in the card and a quiet day drew a big empty box.
-  eq("...and the quiet day's card is shorter than the busy one's", jump.cardShrank, true);
-  eq("...while the space it sits in held the busy height", jump.spaceHeld, true);
-  eq("...with the card inside that space", jump.cardInSpace, true);
+  eq("the quiet day's card is shorter than the busy one's", move.quiet.h < move.busy.h, true);
+  eq("...while the space it sits in held the busy height", move.spaceHeld, true);
+  eq("...with the card inside that space", move.cardInSpace, true);
+
+  // Paging a month is not a tap on a day: the page stays where it is.
+  const paged = await app.page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    window.scrollTo(0, 120); await wait(100);
+    const before = scrollY;
+    document.querySelector('[aria-label="Next month"]').click(); await wait(600);
+    return { before, after: scrollY };
+  });
+  eq("changing month does not scroll", paged.after, paged.before);
 } finally {
   await app.close();
 }
