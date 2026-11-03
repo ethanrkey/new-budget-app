@@ -690,6 +690,17 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 22, 2026-11-02, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group
+  `0c1d97c7-2db4-4fdb-a691-abfa02d343b6`, iOS update `01a19ec4`,
+  commit `8225900`. Published through `mobile/scripts/ota.mjs` after CI
+  passed on that commit.
+
+  A tapped day moves the page to the best spot for its card, up or
+  down, and tapping the day already picked works (see the Ledger
+  section's "AMENDED AGAIN" note).
+
 - **OTA UPDATE 21, 2026-11-02, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group
