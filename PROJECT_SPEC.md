@@ -690,6 +690,17 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 23, 2026-11-03, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group `758f9526-33f9-429b-8e38-f809dfcb6f69`, iOS update
+  `01a1a2ed`, commit `05831e9`. Published through
+  `mobile/scripts/ota.mjs` after CI passed on that commit.
+
+  The space under the day card is held only while the page moves, then
+  collapses so the page ends just below the card (see the Ledger
+  section's "AMENDED A THIRD TIME" note). Nothing else for the
+  phone: the modal scroll lock of the same day is web only.
+
 - **OTA UPDATE 22, 2026-11-02, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group
