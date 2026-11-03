@@ -13,6 +13,7 @@ import { fmtDate, fmtDay } from "../shared/dates.ts";
 import { blankContributionRow, contributionRuleFor } from "../engine/setup.ts";
 import { SETUP_COPY as COPY, CADENCE_OPTIONS, CONTRIBUTION_PROMPT as PROMPT } from "../content/setup.ts";
 import { LOG_BALANCE_TITLE, DATE_LABEL } from "../content/logBalance.ts";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -214,7 +215,7 @@ function ContributionPrompt({ category, onSchedule, onClose }) {
   const field = "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm";
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4">
+    <ModalBackdrop className="bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-800 space-y-3">
         <h2 className="text-lg font-semibold">{PROMPT.title(category.name)}</h2>
         <p className="text-sm text-gray-500">{isDebt ? PROMPT.debtSub : PROMPT.sub}</p>
@@ -260,7 +261,7 @@ function ContributionPrompt({ category, onSchedule, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

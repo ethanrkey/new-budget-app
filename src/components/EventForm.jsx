@@ -5,6 +5,7 @@ import { useSubmitOnce } from "../useSubmitOnce.js";
 import { fmtDate } from "../shared/dates.ts";
 import { WHY_NOT } from "../content/logBalance.ts";
 import { OCCURRENCE_EDIT } from "../content/transaction.ts";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 const money = (n) =>
   (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -136,7 +137,7 @@ export default function EventForm({
   const label = "block text-xs font-medium text-gray-500 mb-1";
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onCancel}>
+    <ModalBackdrop className="bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onCancel}>
       <div
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
@@ -359,6 +360,6 @@ export default function EventForm({
           </div>
         )}
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

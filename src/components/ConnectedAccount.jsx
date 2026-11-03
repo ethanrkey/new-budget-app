@@ -9,6 +9,7 @@ import {
   startLink, finishLink,
 } from "../shared/plaidApi.ts";
 import { fmtDate, fmtInstant } from "../shared/dates.ts";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // Connected checking, on the web. The Settings → Account half: the
 // toggle, the bank, and the way out. The phone's twin is
@@ -377,7 +378,7 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
 // decides nothing.
 function ConsentDialog({ onCancel, onContinue }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-3" onClick={onCancel}>
+    <ModalBackdrop className="bg-black/50 flex items-center justify-center z-[60] p-3" onClick={onCancel}>
       <div
         className="bg-white dark:bg-gray-900 rounded-2xl p-5 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
@@ -424,6 +425,6 @@ function ConsentDialog({ onCancel, onContinue }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

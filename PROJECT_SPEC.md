@@ -1175,6 +1175,8 @@ written here in the same sitting** — there is no other record of it.
   opening an existing item blanked the app in production.)
   (`scripts/drive_delete.mjs`, 17 checks, 2026-10-29: every Ledger
   delete asks first.)
+  (`scripts/drive_modal_lock.mjs`, 25 checks, 2026-11-03: no modal
+  lets the page behind it scroll.)
 
 - **1.0.0 (13), 2026-10-16** — a device pass on build 12. Six items.
   Build 12 confirmed good on a device: still signed in after the
@@ -3667,6 +3669,83 @@ Disconnect → `plaid_items`, `plaid_tokens` and every `plaid_%` Vault
 secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
+
+### The page scrolled behind every modal (2026-11-03, web)
+
+Owner's report: with Settings → Account open, the mouse wheel and the
+trackpad scrolled the page behind the modal. It was every modal, not
+just that one: none of the web's sixteen `fixed inset-0` scrims (in 17
+files: Settings, Account, the event form, Update balance, the confirm
+dialog, the setup modals, ConnectedAccount's confirm, Wipe and Delete,
+the error boundary's dialog, the tour's scrim, ...) locked anything.
+
+**FIXED ONCE, IN ONE PLACE.** Every scrim is now `<ModalBackdrop>`
+(`src/components/ModalBackdrop.jsx`), which takes the old div's
+classes and adds `fixed inset-0` itself. The lock is
+`src/shared/scrollLock.js`:
+
+- `overflow: hidden` on `<html>` while any modal is open: wheel,
+  trackpad, keyboard and (iOS 16+) touch all stop, and the page keeps
+  its position.
+- **Counted, not on/off.** A confirm stacked on Settings (Wipe all
+  data) is two backdrops; closing the top one leaves the page locked.
+  The first lock saves the page's state, the last unlock restores it.
+  Settings → Account swaps one modal for another in a single render,
+  which unlocks and relocks in the same frame, invisibly.
+- **No layout shift:** the scrollbar's width (`innerWidth −
+  clientWidth`) is paid back as padding on `<body>`. Zero on overlay
+  scrollbars, so nothing is added there.
+- **Exact restore:** on the last close, the inline styles we replaced
+  are put back and the page is `scrollTo`'d to where it was, with
+  `behavior: "instant"`, in case focus or a resize nudged it.
+- A layout effect, so the lock lands before the modal's first paint.
+
+The modal's own side is two `:where([data-modal])` rules in
+`src/index.css`, zero specificity so a panel's own classes win: any
+panel is at most the window's height and scrolls itself (most already
+said `max-h-[90vh] overflow-y-auto`; Confirm, Update balance, Wipe,
+ConnectedAccount's confirm, the error dialog and the contribution
+prompt did not, so on a short window their bottom used to be cut off),
+and `overscroll-behavior: contain`, so reaching a panel's end does not
+pass the rest of the gesture on to anything behind it.
+
+**THE TOUR'S SCRIM LOCKS TOO.** It is a full-window `fixed inset-0`
+with a background like the rest, and scrolling under a dimmed page
+reads as broken. Its stops change tabs; none of them scroll. If a stop
+ever needs the user to scroll, its scrim stops being a ModalBackdrop
+and the gate below has to be told why.
+
+**SO A NEW MODAL CANNOT FORGET:** `tests/modal-lock.test.mjs` (in `npm
+test`, 14 checks) fails on any `fixed inset-0` with a `bg-` class
+outside ModalBackdrop.jsx. The only bare `fixed inset-0` left are the
+invisible click-away layers under three dropdowns (ExportMenu,
+AccountStrip, the Ledger's column menu). Those are not modals, and the
+page keeps scrolling under an open menu. The same suite drives the
+lock's count against a stand-in document: stacked modals, the gutter,
+the restore, a stray extra close.
+
+**In a browser:** `scripts/drive_modal_lock.mjs` (25 checks, by hand)
+scrolls the Ledger to 300px, opens Settings in a 520px-tall window,
+and wheels over the scrim and the panel. Settings scrolls to its end
+and past it while the page stays at 300; PageDown and End don't move
+it either. Then Wipe all data on top, wheel, Cancel: still locked.
+Then Settings → Account (the report), wheel, close: back at exactly
+300, no padding left, and the wheel scrolls the page again. The page
+shows a real 15px scrollbar, and `main` does not move sideways when
+it goes. (`openFixtureApp` gained `scrollbars: true`: Puppeteer passes
+`--hide-scrollbars` by default, which would make that check pass for
+nothing.) **With the lock switched off, 12 of the 25 fail.**
+
+`drive_calendar_ink.mjs` failed 3 checks on 2026-11-03, for a reason
+unrelated to this change. The $0 row was put on "today", which that
+day also had a fixture bill. Its "first free day" was tomorrow, which
+is where the drive puts the Tuition overdraft. It now finds two free
+days, two or more days out, in one month. All 18 pass. Every other
+drive passed unchanged.
+
+Web only; no OTA. The phone's modals are React Native `<Modal>`s
+and sheets, presented over the screen by iOS, so nothing behind them
+gets the gesture.
 
 ### The full mutation run crashed the Mac twice (2026-10-30/31)
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // Deliberately NOT near the header icon buttons — this is the single most
 // destructive action in the app, so it lives as small, muted text in the
@@ -22,7 +23,7 @@ export default function WipeData({ onWipe }) {
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={() => setOpen(false)}>
+        <ModalBackdrop className="bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={() => setOpen(false)}>
           <div
             className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-xl border border-gray-200 dark:border-gray-800"
             onClick={(e) => e.stopPropagation()}
@@ -54,7 +55,7 @@ export default function WipeData({ onWipe }) {
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       )}
     </>
   );

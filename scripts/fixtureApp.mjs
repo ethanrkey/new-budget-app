@@ -115,7 +115,7 @@ function fakeJwt(sub, exp) {
  * budget_entities. So a page that fails to re-read fails this
  * drive, which is the whole point.
  */
-export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, state, plaid } = {}) {
+export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, state, plaid, scrollbars = false } = {}) {
   const SUPABASE = supabaseUrl();
   const ref = new URL(SUPABASE).hostname.split(".")[0];
   const userId = "00000000-0000-4000-8000-000000000001";
@@ -161,7 +161,14 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
   // close() — which is exactly when a leak is least likely to be
   // noticed and most likely to break the next run.
   process.once("exit", stopVite);
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: "shell" });
+  // `scrollbars: true` keeps the page's scrollbar taking room, as on
+  // Windows or a Mac set to "always". Puppeteer passes --hide-scrollbars
+  // by default, which makes any "did the page shift" check vacuous
+  // (scripts/drive_modal_lock.mjs).
+  const browser = await puppeteer.launch({
+    executablePath: CHROME, headless: "shell",
+    ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
+  });
   await waitForServer(ORIGIN);
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: scale });

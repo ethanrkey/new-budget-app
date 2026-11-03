@@ -12,6 +12,7 @@ import {
   DAY_OPTIONS,
 } from "../content/setup.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // The questions. The WORDS are in src/content/setup.ts and the LOGIC is
 // in src/engine/setup.ts, both shared with the phone's flow — what is
@@ -175,7 +176,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
     // No backdrop-click dismiss, deliberately — the only ways out are an
     // explicit button, so a stray click can't leave hasSeenOnboarding unset
     // and pop this right back up on the next unrelated state change.
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4">
+    <ModalBackdrop className="bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4">
       <div ref={box} className="bg-white dark:bg-gray-900 rounded-2xl p-5 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800">
         {step !== "done" && (
           <div className="flex items-center justify-between mb-4">
@@ -596,7 +597,7 @@ export default function Onboarding({ initialBalance, onComplete }) {
           </div>
         )}
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

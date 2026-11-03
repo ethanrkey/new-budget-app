@@ -53,3 +53,23 @@ body {
   -ms-overflow-style: none;      /* old Edge */
 }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* MODALS (src/components/ModalBackdrop.jsx, which sets data-modal).
+   The page behind is locked there; these two rules are the modal's own
+   side of it, and both are :where() so a panel's own Tailwind classes
+   always win.
+   1. A panel is never taller than the window. Most already say
+      max-h-[90vh] overflow-y-auto; the short ones (Confirm, the update-
+      balance form, ...) did not, so on a short window their bottom was
+      cut off with nothing to scroll. Now any panel scrolls inside the
+      scrim instead.
+   2. A panel that scrolls keeps its scroll: reaching the end does not
+      hand the rest of the gesture on to anything behind it. */
+:where([data-modal]) > :where(*) {
+  max-height: 100%;
+  overflow-y: auto;
+}
+:where([data-modal]),
+:where([data-modal]) :where(*) {
+  overscroll-behavior: contain;
+}

@@ -32,4 +32,5 @@ export const SUITES = [
   "tests/connect.test.mjs",
   "tests/edge-functions.test.mjs",
   "tests/web-forms.test.mjs",
+  "tests/modal-lock.test.mjs",
 ];

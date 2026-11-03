@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // A destructive question, asked once, in a real dialog (2026-10-29).
 //
@@ -20,8 +21,8 @@ export default function ConfirmDialog({ title, body, confirmLabel, cancelLabel, 
   }, [onCancel]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+    <ModalBackdrop
+      className="z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <div
@@ -49,6 +50,6 @@ export default function ConfirmDialog({ title, body, confirmLabel, cancelLabel, 
           </button>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

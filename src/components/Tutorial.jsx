@@ -3,6 +3,7 @@ import { ACCOUNT_HUES, LOAN_COLOR, SPENDING_COLOR, NEUTRAL_CHART } from "../engi
 import { getDeviceTheme } from "../theme.js";
 // The words live in one place and neither client owns them.
 import { ABOUT_SECTIONS as SECTIONS } from "../content/about.ts";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // The full feature walkthrough — everything the app can do, in the order you'd
 // actually meet it. Quick Setup gets you a working budget in two minutes; this
@@ -18,7 +19,7 @@ export default function Tutorial({ onClose, onStartTour }) {
   const index = SECTIONS.indexOf(section);
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-0 sm:p-4" onClick={onClose}>
+    <ModalBackdrop className="bg-black/40 flex items-center justify-center z-50 p-0 sm:p-4" onClick={onClose}>
       <div
         className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 sm:rounded-2xl w-full h-full sm:h-auto sm:max-h-[88vh] sm:max-w-4xl flex flex-col shadow-xl border border-gray-200 dark:border-gray-800 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -111,7 +112,7 @@ export default function Tutorial({ onClose, onStartTour }) {
           </div>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

@@ -30,16 +30,21 @@ const plus = (n) => {
   const d = new Date(`${today}T12:00:00`); d.setDate(d.getDate() + n);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
-// A FUTURE DAY THIS MONTH WITH NOTHING ON IT, found from the fixture's
-// own ledger, so the wash pair below nets to exactly zero whatever the
-// date. (A fixed offset landed on the weekly groceries.) Falls back to
-// next month's grid if this month has none left.
+// TWO FUTURE DAYS IN ONE MONTH WITH NOTHING ON THEM, found from the
+// fixture's own ledger: one for the $0 row and one for the wash pair,
+// so each cell holds only what is being checked, whatever the date.
+// (A fixed offset landed on the weekly groceries; on 2026-11-03 the $0
+// row shared today with a fixture bill, and the first free day was
+// tomorrow, which is where the Tuition below goes.) Both from two days
+// out, in the first month that has two.
 const busy = new Set(computeLedger(st, ledgerHorizonOf(st)).rows.map((r) => r.date));
-let q = 1; while (busy.has(plus(q))) q++;
-const quiet = plus(q);
+const free = [];
+for (let n = 2; free.length < 60 && n < 120; n++) if (!busy.has(plus(n))) free.push(plus(n));
+const month = free.map((d) => d.slice(0, 7)).find((m, i, all) => all.indexOf(m) !== all.lastIndexOf(m));
+const [zeroDay, quiet] = free.filter((d) => d.startsWith(month));
 const acct = st.accounts[0].id;
 st.oneoffs = [...(st.oneoffs ?? []),
-  { id: "o-zero", name: "Skipped service", amount: 0, category: "bill", date: today, accountId: acct },
+  { id: "o-zero", name: "Skipped service", amount: 0, category: "bill", date: zeroDay, accountId: acct },
   { id: "o-in", name: "Wash in", amount: 500, category: "income", date: quiet, accountId: acct },
   { id: "o-out", name: "Wash out", amount: 500, category: "bill", date: quiet, accountId: acct },
   // Big enough to take the projection below zero from here on.
@@ -82,9 +87,9 @@ try {
   eq("every balance below zero is red", seen.negativesRed, true);
   eq("...and no balance above it is", seen.positivesInk, true);
 
-  // The day card, on today (which carries the $0 row).
+  // The day card, on the day that carries the $0 row.
   const card = await app.page.evaluate(() => {
-    [...document.querySelectorAll("button[aria-label]")].find((b) => /, today,/.test(b.getAttribute("aria-label")))?.click();
+    [...document.querySelectorAll("button[aria-label]")].find((b) => b.innerText.includes("Skipped service"))?.click();
     return new Promise((r) => setTimeout(() => {
       const main = document.querySelector("main");
       const row = [...main.querySelectorAll("ul.space-y-1 button")].find((b) => b.textContent.includes("Skipped service"))?.lastElementChild;

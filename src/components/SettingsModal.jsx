@@ -1,5 +1,6 @@
 import WipeData from "./WipeData.jsx";
 import DeleteAccount from "./DeleteAccount.jsx";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // Everything that used to be scattered across the header and the old
 // check-in bar, in one place: appearance, category management, setup,
@@ -35,7 +36,7 @@ export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories,
   const btn = "text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition";
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
+    <ModalBackdrop className="bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
       <div
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
@@ -142,6 +143,6 @@ export default function SettingsModal({ isDark, onToggleTheme, onOpenCategories,
           )}
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

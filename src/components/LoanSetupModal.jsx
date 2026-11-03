@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { todayISO } from "../engine/model.ts";
 import { useSubmitOnce } from "../useSubmitOnce.js";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // Set up (or edit the terms of) a loan — which is a debt-kind category, so
 // this is deliberately NOT the transaction editor. Setting up a loan never
@@ -42,7 +43,7 @@ export default function LoanSetupModal({ initial, presetName, taggedCount = 0, o
   const label = "block text-xs font-medium text-gray-500 mb-1";
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
+    <ModalBackdrop className="bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
       <div
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
@@ -133,6 +134,6 @@ export default function LoanSetupModal({ initial, presetName, taggedCount = 0, o
           </div>
         )}
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

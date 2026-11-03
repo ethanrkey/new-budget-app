@@ -6,6 +6,7 @@ import { isPlausibleBackup, countSnapshots, countMonthlyActuals } from "../engin
 import { downloadFile } from "../downloadFile.js";
 import { todayISO, primaryAccount } from "../engine/model.ts";
 import { fmtDate } from "../shared/dates.ts";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 const money = (n) =>
   Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -105,7 +106,7 @@ export default function ImportCSV({ onImport, onRestoreBackup, onClose, trackerC
   const totalItems = parsed ? parsed.recurring.length + parsed.oneoffs.length : 0;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
+    <ModalBackdrop className="bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
       <div
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
@@ -236,6 +237,6 @@ export default function ImportCSV({ onImport, onRestoreBackup, onClose, trackerC
           </>
         )}
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

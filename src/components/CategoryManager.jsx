@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // Create / rename / reorder / delete a user's own savings/debt/
 // investment categories. These replace the old hardcoded Roth/Saved/
@@ -28,7 +29,7 @@ export default function CategoryManager({ categories, onAdd, onUpdate, onDelete,
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
+    <ModalBackdrop className="bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
       <div
         className="bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl border border-gray-200 dark:border-gray-800"
         onClick={(e) => e.stopPropagation()}
@@ -144,7 +145,7 @@ export default function CategoryManager({ categories, onAdd, onUpdate, onDelete,
           </div>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

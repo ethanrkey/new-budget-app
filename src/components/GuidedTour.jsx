@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { TOUR_STOPS as STOPS } from "../content/tour.ts";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // A walkthrough, as distinct from the reference page About replaced.
 //
@@ -63,7 +64,7 @@ export default function GuidedTour({ onGoToTab, landingTab, onClose }) {
           read. Dimming everything else answers the second question so
           they only have to deal with the first. Still shows the tab
           underneath, because the point is to point AT something. */}
-      <div className="fixed inset-0 bg-black/55 z-40" onClick={leave} aria-hidden="true" />
+      <ModalBackdrop className="bg-black/55 z-40" onClick={leave} aria-hidden="true" />
 
       <div className="fixed inset-x-0 bottom-0 z-50 p-3 sm:p-6">
         <div className="w-full mx-auto max-w-lg rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-2xl p-5">

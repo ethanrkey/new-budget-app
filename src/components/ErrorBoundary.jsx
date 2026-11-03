@@ -1,4 +1,5 @@
 import { Component } from "react";
+import ModalBackdrop from "./ModalBackdrop.jsx";
 
 // ONE COMPONENT THAT THROWS MUST NEVER BLANK THE WHOLE APP.
 //
@@ -30,7 +31,7 @@ export default class ErrorBoundary extends Component {
     const { onClose } = this.props;
     if (onClose) {
       return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="alertdialog" aria-label="Something went wrong">
+        <ModalBackdrop className="z-50 flex items-center justify-center bg-black/40 p-4" role="alertdialog" aria-label="Something went wrong">
           <div className="w-full max-w-sm rounded-xl bg-white dark:bg-gray-900 p-5 text-sm text-gray-700 dark:text-gray-300 shadow-xl">
             <p className="font-medium text-gray-900 dark:text-gray-100">Something went wrong opening this.</p>
             <p className="mt-2">Nothing was saved or changed. Close it and the rest of the app is as you left it.</p>
@@ -41,7 +42,7 @@ export default class ErrorBoundary extends Component {
               Close
             </button>
           </div>
-        </div>
+        </ModalBackdrop>
       );
     }
     return (
