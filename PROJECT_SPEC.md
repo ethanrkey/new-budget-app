@@ -3881,7 +3881,7 @@ component fails the "still finishing" check.
 
 ### Plaid never opened, and Settings said it was finishing (2026-11-03, sandbox, the owner's phone)
 
-**What happened.** The owner (ethanrkey23@gmail.com, sandbox allowlist,
+**What happened.** The owner (his own sandbox test account, sandbox allowlist,
 iOS build 13, OTA 24) tested an OAuth bank. He tapped Connect once and
 then Continue. Settings showed "Opening your bank…" with a spinner, and
 nothing else ever appeared: no browser, no Plaid. After he left and
