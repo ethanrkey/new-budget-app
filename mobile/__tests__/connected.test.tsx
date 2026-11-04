@@ -74,6 +74,8 @@ const mockServer = {
   // What plaid-exchange's recover answers, and how many times it was asked.
   recover: { ok: false, code: "NO_OPEN_SESSION" } as Record<string, unknown>,
   recovers: 0,
+  minted: 0,
+  linkToken: null as unknown,
 };
 mockServer.onWrite = () => { mockServer.state = withBalance(NEW, todayISO(), "plaid"); };
 
