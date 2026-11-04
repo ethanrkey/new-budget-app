@@ -691,8 +691,11 @@ written here in the same sitting** — there is no other record of it.
 **App Store Connect / TestFlight**
 
 - **OTA UPDATE 25, 2026-11-03, on build 13's runtime
-  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Group and update IDs
-  are recorded in the commit after this one.
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
+  before publishing; unchanged. Update group
+  `edd61835-6c6c-465e-b3dc-296d4040f79b`, iOS update `01a1a4ef`,
+  commit `933ec0e`. Published through `mobile/scripts/ota.mjs` (run
+  from `mobile/`) after CI passed on that commit.
 
   Connect waits for the consent sheet to close before opening Plaid,
   stops after 10 seconds with "Plaid didn't open" and Try again, and
