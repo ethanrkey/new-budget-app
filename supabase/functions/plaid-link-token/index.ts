@@ -21,6 +21,8 @@ import {
 } from "../_shared/plaid.ts";
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
 import { preflight } from "../_shared/cors.ts";
+import { type LinkSessions, hasEvidence } from "../_shared/linkResult.ts";
+import { reportedAt } from "../_shared/linkSessions.ts";
 
 interface LinkTokenCreated { link_token: string; hosted_link_url?: string; expiration: string }
 
@@ -146,13 +148,31 @@ Deno.serve(async (req) => {
   // reserves the slot for ten minutes. Short on purpose: a user who
   // abandons Link should not be locked out of the feature for the
   // four hours a Plaid link token lives.
+  //
+  // ONLY A SESSION WITH EVIDENCE HOLDS IT (2026-11-03, sandbox, the
+  // owner's phone). Plaid never opened, the session row sat unused, and
+  // for ten minutes Connect could only answer ALREADY_STARTING. An open
+  // session counts only if Plaid has a result for it or announced an
+  // Item (hasEvidence); otherwise it is an abandoned attempt and a new
+  // one may start. The abandoned one is NOT closed: recover still asks
+  // about every open session, so if it lands after all it is found.
   const reserveFrom = new Date(Date.now() - 10 * 60_000).toISOString();
   const { data: inFlight } = await admin
-    .from("plaid_link_sessions").select("link_token")
+    .from("plaid_link_sessions").select("link_token, env")
     .eq("user_id", userId).is("used_at", null)
     .gt("created_at", reserveFrom)
-    .maybeSingle();
-  if (inFlight) return json(200, { ok: false, code: "ALREADY_STARTING" });
+    .limit(5);
+  if (inFlight?.length) {
+    const reported = await reportedAt(admin, inFlight.map((r: { link_token: string }) => r.link_token));
+    for (const open of inFlight as Array<{ link_token: string; env: string | null }>) {
+      if (reported.has(open.link_token)) return json(200, { ok: false, code: "ALREADY_STARTING" });
+      const oconf = readConfig(open.env ?? env);
+      if ("missing" in oconf) continue;
+      const got = await callPlaid<LinkSessions>(oconf.config, PLAID_ENDPOINTS.linkTokenGet,
+        { link_token: open.link_token }, { admin, userId, trigger: "connect" });
+      if (!("error" in got) && hasEvidence(got.data, null)) return json(200, { ok: false, code: "ALREADY_STARTING" });
+    }
+  }
 
   const created = await callPlaid<LinkTokenCreated>(conf.config, PLAID_ENDPOINTS.linkTokenCreate, {
     user: { client_user_id: userId },

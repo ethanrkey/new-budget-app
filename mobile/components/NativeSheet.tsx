@@ -43,7 +43,7 @@ import { T } from "../lib/theme";
 // handles that tap and routes it through the same two delegate
 // methods.
 export default function NativeSheet({
-  visible, onClose, swipeToClose, children,
+  visible, onClose, swipeToClose, onDismissed, children,
 }: {
   visible: boolean;
   /** The one door: Cancel, the swipe, the dim area and hardware back. */
@@ -55,6 +55,12 @@ export default function NativeSheet({
    * swipe and reports the attempt, and `onClose` does the asking.
    */
   swipeToClose: boolean;
+  /**
+   * Once the sheet has finished sliding away (iOS's onDismiss). Anything
+   * that presents over the app next (Plaid's browser) waits for this:
+   * presented mid-dismissal, it can silently never appear.
+   */
+  onDismissed?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -65,6 +71,7 @@ export default function NativeSheet({
       animationType="slide"
       allowSwipeDismissal={swipeToClose}
       onRequestClose={onClose}
+      onDismiss={onDismissed}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BETA_NOTE, CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, FINISHING, PLAID_PORTAL_URL,
-  RECONNECT, SAVE_SLOW, TOGGLE_OFF_CONFIRM, connectRefusedText, saveFailedText,
+  OPENING, RECONNECT, SAVE_SLOW, TOGGLE_OFF_CONFIRM, connectRefusedText, saveFailedText,
 } from "../content/connect.ts";
 import { FINISHING_POLL_MS, canReconnect, canSeeToggle, isFinishing, shouldRestoreToggle } from "../shared/connect.ts";
 import {
@@ -391,7 +391,7 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
         <div className="mt-3" aria-live="polite">
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-300 border-t-transparent animate-spin dark:border-gray-600 dark:border-t-transparent" />
-            {busy === "connecting" ? "Opening your bank…"
+            {busy === "connecting" ? OPENING
               : busy === "reconnecting" ? RECONNECT.busy
               : busy === "saving" ? "Saving the connection…"
               : "Disconnecting…"}

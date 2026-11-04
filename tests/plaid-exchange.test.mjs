@@ -94,7 +94,8 @@ function makeDb(tables) {
     const q = { op: "select", filters: [], patch: null, row: null, order: null, limit: Infinity };
     const rows = () => tables[name] ?? (tables[name] = []);
     const match = (r) => q.filters.every(([k, f, v]) =>
-      f === "eq" ? r[k] === v : f === "is" ? (r[k] ?? null) === v : f === "gt" ? String(r[k]) > String(v) : true);
+      f === "eq" ? r[k] === v : f === "is" ? (r[k] ?? null) === v : f === "gt" ? String(r[k]) > String(v)
+        : f === "in" ? v.includes(r[k]) : true);
     const run = () => {
       if (q.op === "insert") {
         const added = [q.row].flat().map((x) => ({ id: `id-${rows().length + 1}`, ...x }));
@@ -113,6 +114,7 @@ function makeDb(tables) {
       eq(k, v) { q.filters.push([k, "eq", v]); return api; },
       is(k, v) { q.filters.push([k, "is", v]); return api; },
       gt(k, v) { q.filters.push([k, "gt", v]); return api; },
+      in(k, v) { q.filters.push([k, "in", v]); return api; },
       order(k, o) { q.order = { k, asc: o?.ascending !== false }; return api; },
       limit(n) { q.limit = n; return api; },
       update(p) { q.op = "update"; q.patch = p; return api; },
@@ -193,7 +195,8 @@ console.log("\n== an empty early answer does not close the session ==");
   const sf = await call({ webhook_type: "LINK", webhook_code: "SESSION_FINISHED", link_token: "lt-1" }, { db, plaid });
   eq("SESSION_FINISHED with an empty, unexited answer leaves it open too", [sf.body.ignored, usedOf(db, "lt-1")], ["no public_token yet; left open for recover", false]);
   const r1 = await call({ recover: true }, { db, plaid });
-  eq("an early recover says not ready", r1.body, { ok: false, code: "ITEM_NOT_READY" });
+  eq("an early recover says not ready (the webhook was evidence)", r1.body, { ok: false, code: "ITEM_NOT_READY" });
+  eq("...because ITEM_ADD_RESULT was written down", !!db.tables.plaid_link_sessions[0].item_reported_at, true);
   eq("...and leaves it open (this used to close it for good)", usedOf(db, "lt-1"), false);
   // A minute later the result is there.
   answers["lt-1"] = { link_sessions: [withItem("22:21:10", "pt-late")] };
@@ -243,13 +246,15 @@ console.log("\n== a failed exchange gives the session back ==");
 }
 
 console.log("\n== recover says how long a connection is still finishing ==");
+const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();
+const completed = (at) => ({ link_session_id: `s-${at}`, started_at: at, finished_at: at, results: { item_add_results: [] } });
 {
-  const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();
+  // EVIDENCE: Plaid says the session completed; its result is not written yet.
   const db = makeDb({ plaid_link_sessions: [session("lt-1", ago(5))] });
-  const plaid = makePlaid({ "lt-1": { link_sessions: [empty("x")] } });
+  const plaid = makePlaid({ "lt-1": { link_sessions: [completed("x")] } });
   const r = await call({ recover: true }, { db, plaid });
   const left = (Date.parse(r.body.pending_until) - Date.now()) / 60_000;
-  eq("a 5-minute-old open session: still finishing, for about 25 more minutes",
+  eq("a session Plaid completed, 5 minutes old: finishing, for about 25 more minutes",
     [r.body.code, left > 24 && left <= 25], ["ITEM_NOT_READY", true]);
 
   const old = makeDb({ plaid_link_sessions: [session("lt-1", ago(31))] });
@@ -264,6 +269,49 @@ console.log("\n== recover says how long a connection is still finishing ==");
   const r4 = await call({ recover: true }, { db: exitedDb, plaid: makePlaid({ "lt-1": { link_sessions: [exited("x")] } }) });
   eq("a session the user backed out of is closed, so it is not finishing either",
     [r4.body.code, "pending_until" in r4.body], ["NO_ITEM_IN_SESSION", false]);
+}
+
+console.log("\n== 2026-11-03, sandbox: Plaid never opened. No evidence, no Finishing ==");
+{
+  // The row is written when the token is minted. Plaid has nothing for it.
+  const db = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });
+  const r = await call({ recover: true }, { db, plaid: makePlaid({ "lt-1": { link_sessions: [] } }) });
+  eq("an open session Plaid has nothing for is NOT finishing", [r.body.code, "pending_until" in r.body], ["NO_RESULT", false]);
+  eq("...and it stays open, in case it lands after all", usedOf(db, "lt-1"), false);
+
+  const started = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });
+  const r2 = await call({ recover: true }, { db: started, plaid: makePlaid({ "lt-1": { link_sessions: [empty("x")] } }) });
+  eq("...nor is one Plaid opened but nothing finished in", [r2.body.code, "pending_until" in r2.body], ["NO_RESULT", false]);
+
+  // An ITEM_ADD_RESULT that arrived is evidence even with no token yet.
+  const reported = makeDb({ plaid_link_sessions: [{ ...session("lt-1", ago(1)), item_reported_at: ago(0) }] });
+  const r3 = await call({ recover: true }, { db: reported, plaid: makePlaid({ "lt-1": { link_sessions: [] } }) });
+  eq("an ITEM_ADD_RESULT webhook is evidence: finishing", [r3.body.code, "pending_until" in r3.body], ["ITEM_NOT_READY", true]);
+
+  // A public token is evidence even when the exchange fails.
+  const failed = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });
+  const r4 = await call({ recover: true }, { db: failed, plaid: makePlaid({ "lt-1": { link_sessions: [withItem("x", "pt-expired")] } }) });
+  eq("a public token whose exchange failed: finishing (recover retries it)",
+    [r4.body.code, "pending_until" in r4.body], ["INVALID_PUBLIC_TOKEN", true]);
+
+  // An abandoned session beside one with evidence: the evidence one decides.
+  const mixed = makeDb({ plaid_link_sessions: [session("lt-new", ago(1)), session("lt-old", ago(10))] });
+  const r5 = await call({ recover: true }, { db: mixed, plaid: makePlaid({ "lt-new": { link_sessions: [] }, "lt-old": { link_sessions: [completed("x")] } }) });
+  const left = (Date.parse(r5.body.pending_until) - Date.now()) / 60_000;
+  eq("pending_until runs from the session WITH evidence, not the newest", left > 19 && left <= 20, true);
+
+  // A database without the new column still recovers.
+  const noColumn = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });
+  const realFrom = noColumn.from;
+  noColumn.from = (name) => {
+    const q = realFrom(name);
+    const sel = q.select;
+    q.select = (cols) => (String(cols).includes("item_reported_at")
+      ? { in: async () => ({ data: null, error: { message: "column does not exist" } }) } : sel(cols));
+    return q;
+  };
+  const r6 = await call({ recover: true }, { db: noColumn, plaid: makePlaid({ "lt-1": { link_sessions: [withItem("x", "pt-nocol")] } }) });
+  eq("without the item_reported_at column, recover still connects", r6.body.ok, true);
 }
 
 console.log("\n== the balance read while connecting is kept (no second pull) ==");
@@ -292,6 +340,65 @@ console.log("\n== the balance read while connecting is kept (no second pull) =="
   const w = await call({ webhook_type: "LINK", webhook_code: "ITEM_ADD_RESULT", link_token: "lt-1", timeZone: "Pacific/Auckland" }, { db: db2, plaid });
   eq("a webhook-finished connection writes no snapshot (no zone to date it by)", [w.body.synced, db2.writes.length], [false, 0]);
   eq("...and leaves the Item unsynced, so the client's pull still runs", db2.tables.plaid_items[0].last_synced_at ?? null, null);
+}
+
+// ---- plaid-link-token: what holds the Connect slot -------------------
+//
+// 2026-11-03, sandbox, the owner's phone: Plaid never opened, the
+// unused session row reserved the slot for ten minutes, and Connect
+// could only answer ALREADY_STARTING. Only a session with evidence
+// holds it now. The same fakes, the real handler.
+console.log("\n== plaid-link-token: an abandoned session does not hold Connect ==");
+const LT_FAKES = FAKES + `
+export const PRODUCTS = ["auth"];
+export const ACCOUNT_FILTERS = {};
+export const betaIsFull = () => false;
+export const cooldownUntil = () => null;
+`;
+const ltOut = await build({
+  entryPoints: [new URL("../supabase/functions/plaid-link-token/index.ts", import.meta.url).pathname],
+  bundle: true, write: false, format: "esm", platform: "neutral", logLevel: "silent",
+  plugins: [{
+    name: "fakes",
+    setup(b) {
+      b.onResolve({ filter: /_shared\/(caller|plaid|webhookVerify)\.ts$/ }, () => ({ path: "fakes", namespace: "fakes" }));
+      b.onLoad({ filter: /.*/, namespace: "fakes" }, () => ({ contents: LT_FAKES.replace('linkTokenGet: "/link/token/get",', 'linkTokenGet: "/link/token/get", linkTokenCreate: "/link/token/create",'), loader: "js" }));
+    },
+  }],
+});
+const exchangeHandler = handler;
+const ltFile = new URL("link-token.mjs", cache);
+writeFileSync(ltFile, ltOut.outputFiles[0].text);
+await import(ltFile.href);
+const linkTokenHandler = handler;
+handler = exchangeHandler;
+async function mint(db, answers) {
+  const plaid = makePlaid(answers);
+  const base = plaid.fn;
+  plaid.fn = async (c, endpoint, body) => (endpoint === "/link/token/create"
+    ? { data: { link_token: "lt-new", hosted_link_url: "https://hosted.plaid.com/x", expiration: FUTURE } }
+    : base(c, endpoint, body));
+  globalThis.__db = db; globalThis.__plaid = plaid.fn; globalThis.__caller = "u-poppy";
+  const res = await linkTokenHandler(new Request("https://x/plaid-link-token", { method: "POST", body: JSON.stringify({ hosted: true }) }));
+  return (await res.json());
+}
+{
+  const fresh = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });
+  const r = await mint(fresh, { "lt-1": { link_sessions: [] } });
+  eq("a session Plaid never opened does not block a new Connect", [r.ok, r.hosted_link_url], [true, "https://hosted.plaid.com/x"]);
+  eq("...and the old one is left open for recover", usedOf(fresh, "lt-1"), false);
+
+  const done = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });
+  eq("a session Plaid completed still holds it",
+    (await mint(done, { "lt-1": { link_sessions: [completed("x")] } })).code, "ALREADY_STARTING");
+
+  const token = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });
+  eq("...so does one with a public token",
+    (await mint(token, { "lt-1": { link_sessions: [withItem("x", "pt")] } })).code, "ALREADY_STARTING");
+
+  const reported = makeDb({ plaid_link_sessions: [{ ...session("lt-1", ago(1)), item_reported_at: ago(0) }] });
+  eq("...and one an ITEM_ADD_RESULT webhook announced",
+    (await mint(reported, { "lt-1": { link_sessions: [] } })).code, "ALREADY_STARTING");
 }
 
 console.log(`\n${failures ? `FAILED ${failures} of ${checks}` : `ALL PASS (${checks} checks)`}`);

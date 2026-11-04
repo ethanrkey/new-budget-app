@@ -304,6 +304,13 @@ revoke all on table plaid_link_sessions from anon, authenticated;
 create index if not exists plaid_link_sessions_open
   on plaid_link_sessions (expires_at) where used_at is null;
 
+-- WHEN PLAID SAID AN ITEM WAS ADDED in this session (2026-11-03). Set by
+-- plaid-exchange on a verified ITEM_ADD_RESULT webhook. It is one of
+-- the three kinds of evidence that a connection is really finishing;
+-- an open session without any of them is an abandoned attempt and does
+-- not hide Connect. See hasEvidence in functions/_shared/linkResult.ts.
+alter table plaid_link_sessions add column if not exists item_reported_at timestamptz;
+
 -- ---------------------------------------------------------------------------
 -- 3. THE ACCESS TOKEN. ENCRYPTED AT REST, and RLS on with NO POLICIES.
 --

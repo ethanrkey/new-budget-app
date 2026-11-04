@@ -690,6 +690,17 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 25, 2026-11-03, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Group and update IDs
+  are recorded in the commit after this one.
+
+  Connect waits for the consent sheet to close before opening Plaid,
+  stops after 10 seconds with "Plaid didn't open" and Try again, and
+  says "Opening Plaid…" (see "Plaid never opened, and Settings said it
+  was finishing"). The rule that Finishing needs evidence is
+  server-side, in plaid-exchange and plaid-link-token, plus the
+  `item_reported_at` column.
+
 - **OTA UPDATE 24, 2026-11-03, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group
@@ -3867,6 +3878,112 @@ component fails the "still finishing" check.
   and no Connect, a tab coming back landing the bank, and Connect
   back once it runs out. The fixture gained `plaid.noItem` and
   `plaid.recover`.
+
+### Plaid never opened, and Settings said it was finishing (2026-11-03, sandbox, the owner's phone)
+
+**What happened.** The owner (ethanrkey23@gmail.com, sandbox allowlist,
+iOS build 13, OTA 24) tested an OAuth bank. He tapped Connect once and
+then Continue. Settings showed "Opening your bank…" with a spinner, and
+nothing else ever appeared: no browser, no Plaid. After he left and
+reopened Settings, it said "Finishing your connection… Your bank is
+connected at Plaid", with Connect hidden. That was false.
+
+**Why it hung (diagnosed from the code; the session row and the API
+log were not readable from the repo).**
+- plaid-link-token writes the `plaid_link_sessions` row before it
+  returns the URL. Since a row existed, the token was minted and the
+  phone reached `WebBrowser.openAuthSessionAsync`.
+- Continue closes the consent sheet (a UIKit page sheet) and starts
+  Link in the same tap. Sandbox mints a token quickly, so Plaid's
+  browser was presented while the sheet was still sliding away.
+  ASWebAuthenticationSession anchors to the key window. Presented
+  mid-dismissal, it can show nothing, and its completion never fires.
+- `openLink` had no try/catch and no time limit. A browser call that
+  never returns, or throws "already open", left the spinner up for good.
+
+**Fixes (phone):**
+- `openLink` waits for the sheet's `onDismiss` before presenting the
+  browser. `NativeSheet` gained `onDismissed`, with an 800ms fallback.
+  The wait runs alongside the token request.
+- Any auth session left hanging by an earlier attempt is dismissed
+  first, so iOS does not refuse the new one.
+- **10 seconds at most** (`LINK_OPEN_TIMEOUT_MS`). If the browser has
+  not come back by then, the spinner stops and Settings says "Plaid
+  didn't open. Nothing was connected." with **Try again** (`DIDNT_OPEN`).
+  The watchdog never closes a browser that might be up: if Plaid is in
+  front, the message is drawn behind it, and the flow carries on when
+  the browser returns. A throw from the browser shows the same message
+  at once. A newer attempt makes an older one's late answers stale
+  (`attempt` ref), so a token minted after giving up opens nothing.
+- A reconnect that does not open gets an alert instead, because there
+  is no Connect row to put the message in.
+
+**Wording:** "Opening your bank…" is now "Opening Plaid…" (`OPENING`,
+in `src/content/connect.ts`). It is Plaid that opens; the bank comes
+later, inside Plaid. The reconnect label and the web's label use it too.
+
+**"Finishing" now needs evidence (server, plaid-exchange).** It
+replaces "any open session under 30 minutes old" with real evidence
+that the bank connected (`hasEvidence`, `_shared/linkResult.ts`):
+- Plaid's /link/token/get has a public token for the session; or
+- Plaid says the session completed (`finished_at`, no exit); or
+- an ITEM_ADD_RESULT webhook arrived for it. The verified webhook now
+  sets `plaid_link_sessions.item_reported_at`, a new column in
+  `supabase/plaid.sql`.
+
+`pending_until` runs from the newest session with evidence. A public
+token whose exchange failed also counts, as does ALREADY_EXCHANGING,
+since recover retries both. An open session with none of these answers
+`NO_RESULT`: Connect shows right away. The session stays open, so
+recover still finds it if it lands after all.
+
+`item_reported_at` is read apart from the other columns
+(`_shared/linkSessions.ts`). A database without the new column loses
+only that one kind of evidence, and recover keeps working.
+
+**The 10-minute reservation (plaid-link-token).** An unfinished session
+used to reserve Connect for ten minutes (ALREADY_STARTING), so after
+the hang even a working Connect would have been refused. Now only an
+in-flight session with evidence holds it, which is checked through
+/link/token/get. The abandoned session is not closed. The phone treats
+an ALREADY_STARTING answer as "finishing": it asks recover rather than
+showing "Couldn't start".
+
+**Cost, accepted:** a second Connect in another tab, while a first
+Plaid is open in which nothing has finished yet, now mints a second
+token. If both finish, the safety net removes the second Item, but on
+production that is a spent slot. It needs two tabs on the web; the
+phone's browser is modal.
+
+**Clearing the stuck state.** Once the new plaid-exchange is deployed,
+the owner's session has no evidence, so Finishing goes away by itself.
+To close it now: in SQL, set `used_at = now()` on his open
+`plaid_link_sessions` rows. It is sandbox, and Plaid never opened, so
+nothing can be lost.
+
+**Tests:**
+- `tests/plaid-exchange.test.mjs` is now 55 checks:
+  - no evidence: no Finishing, and the session stays open;
+  - opened but nothing finished: no Finishing;
+  - each kind of evidence counts: a webhook, a completed session, a
+    public token whose exchange failed;
+  - `pending_until` runs from the evidence session;
+  - with no `item_reported_at` column, recover still connects;
+  - the real plaid-link-token handler: an abandoned session does not
+    hold Connect, while a completed one, a public token and an
+    announced Item each do.
+
+  The old functions fail 6 of these.
+- `mobile/__tests__/connected.test.tsx`, six cases:
+  - "Opening Plaid…";
+  - the browser waits for the sheet;
+  - the timeout gives Try again, and Try again opens it again;
+  - Try again ends a hung browser;
+  - a browser that throws says so at once;
+  - NO_RESULT shows Connect.
+
+  The old component fails 5 of them. The browser and the timeout are
+  mocked (1.5s in the test).
 
 ### The page scrolled behind every modal (2026-11-03, web)
 

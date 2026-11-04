@@ -44,7 +44,8 @@ import { PLAID_ENDPOINTS, callPlaid, defaultEnv, readConfig } from "../_shared/p
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
 import { preflight } from "../_shared/cors.ts";
 import { type PlaidJwk, verifyPlaidWebhook } from "../_shared/webhookVerify.ts";
-import { type LinkSessions, exitedWithNoItem, publicTokenOf } from "../_shared/linkResult.ts";
+import { type LinkSessions, exitedWithNoItem, hasEvidence, publicTokenOf } from "../_shared/linkResult.ts";
+import { noteItemReported, reportedAt } from "../_shared/linkSessions.ts";
 import { writeBalance } from "../_shared/balanceWrite.ts";
 
 /**
@@ -66,6 +67,11 @@ const keyCache = new Map<string, PlaidJwk>();
  *  lives about thirty minutes, so past that there is nothing left to
  *  finish. */
 const PENDING_MINUTES = 30;
+/** `pending_until` for a session with evidence created at `createdMs`, if still in the future. */
+function pendingFrom(createdMs: number): { pending_until?: string } {
+  const until = Number.isFinite(createdMs) && createdMs > 0 ? createdMs + PENDING_MINUTES * 60_000 : 0;
+  return until > Date.now() ? { pending_until: new Date(until).toISOString() } : {};
+}
 
 /**
  * Write down that a webhook ARRIVED, and what we decided about it.
@@ -131,6 +137,8 @@ Deno.serve(async (req) => {
   const admin = adminClient();
   let userId: string | null = null;
   let publicToken = "";
+  // When the session being exchanged was minted, for `pending_until` on a failure. Recover only.
+  let pendingSince = 0;
   // Whether the balance read while connecting was saved as a snapshot.
   let pulled = false;
 
@@ -279,6 +287,10 @@ Deno.serve(async (req) => {
       return json(401, { error: "unverified", reason: verified.reason });
     }
     await noteInbound(admin, String(payload.webhook_code), "verified", String(payload.webhook_type ?? ""));
+    // EVIDENCE, KEPT BEFORE ANYTHING CAN FAIL. Plaid has said an Item
+    // was added in this session; even if /link/token/get has nothing
+    // yet, Settings may now say "Finishing your connection…".
+    if (payload.webhook_code === "ITEM_ADD_RESULT") await noteItemReported(admin, linkToken);
 
     // THE ANSWER COMES FROM PLAID, NOT FROM THE REQUEST. This is the
     // line the paragraph at the top of the file is about.
@@ -353,8 +365,17 @@ Deno.serve(async (req) => {
     // what the client sees every time the webhook DID arrive first.
     if (!opens?.length) return json(200, { ok: false, code: "NO_OPEN_SESSION" });
 
-    let found: { link_token: string; env: string | null } | null = null;
-    let lastCode = "ITEM_NOT_READY";
+    let found: { link_token: string; env: string | null; created_at: string } | null = null;
+    // NO_RESULT: open, but Plaid has nothing for it and never said it
+    // added an Item. An abandoned attempt, not a finishing one.
+    let lastCode = "NO_RESULT";
+    // ONLY SESSIONS WITH EVIDENCE count as finishing (see hasEvidence).
+    const reported = await reportedAt(admin, opens.map((o) => o.link_token));
+    let newestEvidence = 0;
+    const evidence = (open: { link_token: string; created_at: string }) => {
+      const t = Date.parse(String(open.created_at));
+      if (Number.isFinite(t) && t > newestEvidence) newestEvidence = t;
+    };
     for (const open of opens) {
       const oenv = open.env ?? env;
       const rconf = readConfig(oenv);
@@ -364,9 +385,14 @@ Deno.serve(async (req) => {
       }
       const got = await callPlaid<LinkSessions>(rconf.config, PLAID_ENDPOINTS.linkTokenGet,
         { link_token: open.link_token }, { admin, userId, trigger });
-      if ("error" in got) { lastCode = got.error.code; continue; }
+      if ("error" in got) {
+        lastCode = got.error.code;
+        if (reported.has(open.link_token)) evidence(open);
+        continue;
+      }
       const token = publicTokenOf(got.data);
       if (token) { publicToken = token; found = open; break; }
+      if (hasEvidence(got.data, reported.get(open.link_token))) { evidence(open); lastCode = "ITEM_NOT_READY"; continue; }
       // The user backed out of this one: close it, so it stops being
       // asked about. Anything else is "not yet" and stays open.
       if (exitedWithNoItem(got.data)) {
@@ -376,24 +402,25 @@ Deno.serve(async (req) => {
       }
     }
     if (!found) {
-      // STILL FINISHING? (2026-11-03.) While a session is open and
-      // under PENDING_MINUTES old, the clients show "Finishing your
-      // connection…" and no Connect button, and keep asking. Showing
-      // "Connect your bank" over an unfinished session is what invited
-      // two retries the night Capital One was lost. Past that, or once
-      // every open session is closed, Connect comes back.
-      // Asked again rather than taken from `opens`: the loop above may
-      // have just closed some of them.
-      const { data: left } = await admin.from("plaid_link_sessions").select("created_at")
-        .eq("user_id", userId).is("used_at", null).gt("expires_at", new Date().toISOString())
-        .order("created_at", { ascending: false }).limit(1);
-      const createdMs = Date.parse(String(left?.[0]?.created_at ?? ""));
-      const until = Number.isFinite(createdMs) ? createdMs + PENDING_MINUTES * 60_000 : 0;
-      return json(200, { ok: false, code: lastCode,
-        ...(until > Date.now() ? { pending_until: new Date(until).toISOString() } : {}) });
+      // STILL FINISHING? (2026-11-03.) While a session WITH EVIDENCE
+      // is open and under PENDING_MINUTES old, the clients show
+      // "Finishing your connection…" and no Connect button, and keep
+      // asking. Showing "Connect your bank" over an unfinished session
+      // is what invited two retries the night Capital One was lost.
+      //
+      // AMENDED THE SAME DAY: evidence, not age. Any open session used
+      // to count, and on the owner's phone Plaid never opened at all
+      // yet Settings said "Your bank is connected at Plaid". An open
+      // session with no result is an abandoned attempt; it stays open
+      // (recover keeps asking about it, in case it lands after all)
+      // but it does not hide Connect.
+      return json(200, { ok: false, code: lastCode, ...pendingFrom(newestEvidence) });
     }
     env = found.env ?? env;
-    if (!await claim(found.link_token)) return json(200, { ok: false, code: "ALREADY_EXCHANGING" });
+    pendingSince = Date.parse(String(found.created_at));
+    if (!await claim(found.link_token)) {
+      return json(200, { ok: false, code: "ALREADY_EXCHANGING", ...pendingFrom(pendingSince) });
+    }
   } else {
     // Every other webhook Plaid sends. Acknowledged and dropped: an
     // unhandled webhook that 400s gets retried for days.
@@ -437,7 +464,9 @@ Deno.serve(async (req) => {
     // Nothing was created, so the session goes back to open and the
     // next ask can try again (bounded by the link token's expiry).
     await release();
-    return json(200, { ok: false, code: exchanged.error.code });
+    // A public token is evidence: recover will retry it, so a client
+    // that asked shows "Finishing" rather than Connect.
+    return json(200, { ok: false, code: exchanged.error.code, ...pendingFrom(pendingSince) });
   }
 
   const { access_token, item_id } = exchanged.data;

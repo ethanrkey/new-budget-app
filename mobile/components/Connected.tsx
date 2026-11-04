@@ -11,10 +11,12 @@ import NativeSheet from "./NativeSheet";
 import { fmtDate, fmtInstant } from "../../src/shared/dates.ts";
 import {
   BETA_NOTE, CONNECT_CONSENT, CONNECT_REFUSED, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
-  FINISHING, PLAID_PORTAL_URL, RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
+  DIDNT_OPEN, FINISHING, OPENING, PLAID_PORTAL_URL, RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
 } from "../../src/content/connect.ts";
 import type { Connection } from "../../src/shared/connect.ts";
-import { FINISHING_POLL_MS, canReconnect, canSeeToggle, isFinishing, shouldRestoreToggle } from "../../src/shared/connect.ts";
+import {
+  FINISHING_POLL_MS, LINK_OPEN_TIMEOUT_MS, canReconnect, canSeeToggle, isFinishing, shouldRestoreToggle,
+} from "../../src/shared/connect.ts";
 import {
   disconnect as apiDisconnect, pendingUntilNow, pullBalance, readConnection, recoverLink, startLink,
 } from "../../src/shared/plaidApi.ts";
@@ -58,6 +60,14 @@ export default function Connected() {
   const { connection, allowlisted, loaded } = useConnection();
   const [consenting, setConsenting] = useState(false);
   const [busy, setBusy] = useState<null | "connecting" | "reconnecting" | "saving" | "disconnecting">(null);
+  // PLAID DIDN'T OPEN (2026-11-03). Set when LINK_OPEN_TIMEOUT_MS passes
+  // and the browser has not come back; shown with Try again.
+  const [didntOpen, setDidntOpen] = useState(false);
+  // Which Connect this is. A newer one (Try again) makes an older one's
+  // late answers stale, and a stale attempt does nothing.
+  const attempt = useRef(0);
+  // Resolved by the consent sheet's onDismiss. See waitForSheet.
+  const sheetGone = useRef<(() => void) | null>(null);
 
   const refreshConnection = useCallback(async () => {
     const row = await readConnection(supabase as never);
@@ -234,12 +244,51 @@ export default function Connected() {
    * Items for the same account count as two — so the repair path has
    * to be update mode or it quietly costs a slot out of ten.
    */
-  async function openLink(update = false) {
+  async function openLink(update = false, fromSheet = false) {
+    // WAIT FOR THE CONSENT SHEET TO BE GONE (2026-11-03, sandbox, the
+    // owner's phone). Continue closed the sheet and started Link at
+    // once; sandbox mints its token fast enough that Plaid's browser
+    // was presented while the page sheet was still sliding away, and
+    // iOS showed nothing. The browser call then never returned and
+    // "Opening your bank…" spun forever. Started together with the
+    // token, so it costs nothing when the token is the slower half.
+    const sheetClosed = fromSheet ? waitForSheet() : Promise.resolve();
     setConsenting(false);
+    setDidntOpen(false);
     setBusy(update ? "reconnecting" : "connecting");
-    const started = await startLink(supabase as never, true, update);
-    if ("error" in started || !started.hostedUrl) {
+    const my = ++attempt.current;
+    const stale = () => attempt.current !== my;
+    // A browser session left hanging by an earlier attempt would make
+    // this one throw "already open". Nothing is lost: it never showed.
+    try { WebBrowser.dismissAuthSession(); } catch { /* none open */ }
+
+    // NO MORE THAN LINK_OPEN_TIMEOUT_MS OF SPINNER. If the browser has
+    // not come back by then, stop and say so with Try again. It does
+    // NOT close a browser that may be up: if Plaid is in front, this is
+    // drawn behind it, and the flow below carries on when it returns.
+    let browserUp = false;
+    let gaveUp = false;
+    const watchdog = setTimeout(() => {
+      if (stale()) return;
+      gaveUp = true;
+      // Still minting: that attempt is over, so a late token opens nothing.
+      if (!browserUp) attempt.current++;
       setBusy(null);
+      feel.failure();
+      // A repair has a bank on screen and no Connect row to put this in.
+      if (update) Alert.alert(DIDNT_OPEN.title, DIDNT_OPEN.body);
+      else setDidntOpen(true);
+    }, LINK_OPEN_TIMEOUT_MS);
+    const done = () => clearTimeout(watchdog);
+
+    const [started] = await Promise.all([startLink(supabase as never, true, update), sheetClosed]);
+    if (stale()) return;
+    if ("error" in started || !started.hostedUrl) {
+      done();
+      setBusy(null);
+      // A SESSION WITH EVIDENCE IS HOLDING THE SLOT: it is finishing,
+      // so say that rather than "couldn't start".
+      if (!update && "error" in started && started.error === "ALREADY_STARTING") { await ask(); return; }
       feel.failure();
       if (update) { Alert.alert("Couldn't reconnect", RECONNECT.failed); return; }
       // THE TWO GUARDRAILS ARE NOT ERRORS and must not read as
@@ -255,8 +304,24 @@ export default function Connected() {
       return;
     }
 
+    // The browser. A throw (iOS refused to start it) is "didn't open".
+    browserUp = true;
+    let opened = true;
+    try { await WebBrowser.openAuthSessionAsync(started.hostedUrl); } catch { opened = false; }
+    done();
+    if (stale()) return;
+    if (!opened) {
+      setBusy(null);
+      if (gaveUp) return;
+      feel.failure();
+      if (update) Alert.alert(DIDNT_OPEN.title, DIDNT_OPEN.body);
+      else setDidntOpen(true);
+      return;
+    }
+    // Back from Plaid, after the watchdog spoke: it did open after all.
+    setDidntOpen(false);
+
     if (update) {
-      await WebBrowser.openAuthSessionAsync(started.hostedUrl);
       // NOTHING IS EXCHANGED and no webhook matters here: update mode
       // produces no new Item, and the browser closing tells us
       // nothing either way. A PULL THAT WORKS is the only proof the
@@ -274,7 +339,6 @@ export default function Connected() {
     }
     // The browser closing tells us nothing — Hosted Link reports its
     // result to the server, not to us.
-    await WebBrowser.openAuthSessionAsync(started.hostedUrl);
 
     // SO WE ASK PLAID OURSELVES RATHER THAN WAIT TO BE TOLD.
     //
@@ -317,6 +381,14 @@ export default function Connected() {
     if (row) feel.success();
   }
 
+  /** Resolves once the consent sheet has slid away, or after 800ms if iOS never says. */
+  function waitForSheet(): Promise<void> {
+    return new Promise((resolve) => {
+      const fallback = setTimeout(() => { sheetGone.current = null; resolve(); }, 800);
+      sheetGone.current = () => { clearTimeout(fallback); sheetGone.current = null; resolve(); };
+    });
+  }
+
   // LOCAL DATE AND LOCAL TIME, from the instant. It used to slice
   // the UTC date off the string and pair it with a local clock.
   const lastSync = connection?.lastSyncedAt ? fmtInstant(connection.lastSyncedAt) : "never";
@@ -353,9 +425,24 @@ export default function Connected() {
           </View>
         )}
 
+        {didntOpen && !busy && !connection && (
+          <View style={styles.waiting} accessibilityLiveRegion="polite">
+            <View style={{ flex: 1 }}>
+              <Text style={styles.waitingText}>{DIDNT_OPEN.title}</Text>
+              <Text style={styles.rowSub}>{DIDNT_OPEN.body}</Text>
+              <Pressable
+                onPress={() => { feel.light(); void openLink(false); }}
+                accessibilityRole="button" accessibilityLabel={DIDNT_OPEN.action}
+              >
+                <Text style={styles.link}>{DIDNT_OPEN.action}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         {/* NO CONNECT WHILE ONE IS FINISHING: a second Link session is
             a second Trial slot if both complete. */}
-        {on && !connection && !finishing && (
+        {on && !connection && !finishing && !didntOpen && (
           <Pressable
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
             onPress={() => { feel.light(); setConsenting(true); }}
@@ -438,7 +525,7 @@ export default function Connected() {
           <View style={styles.waiting}>
             <ActivityIndicator color={T.dim} />
             <Text style={styles.waitingText}>
-              {busy === "connecting" ? "Opening your bank…"
+              {busy === "connecting" ? OPENING
                 : busy === "reconnecting" ? RECONNECT.busy
                 : busy === "saving" ? "Saving the connection…"
                 : "Disconnecting…"}
@@ -450,7 +537,8 @@ export default function Connected() {
       <ConsentSheet
         open={consenting}
         onCancel={() => { feel.selection(); setConsenting(false); }}
-        onContinue={() => { void openLink(false); }}
+        onContinue={() => { void openLink(false, true); }}
+        onDismissed={() => sheetGone.current?.()}
       />
     </>
   );
@@ -460,14 +548,14 @@ export default function Connected() {
 // moment earlier. Every word of it is in src/content/connect.ts,
 // where there is a test that writes the sentences out rather than
 // reading them back — this file draws them and decides nothing.
-function ConsentSheet({ open, onCancel, onContinue }: {
-  open: boolean; onCancel: () => void; onContinue: () => void;
+function ConsentSheet({ open, onCancel, onContinue, onDismissed }: {
+  open: boolean; onCancel: () => void; onContinue: () => void; onDismissed: () => void;
 }) {
   // NOT SWIPE-DISMISSIBLE. A consent screen is a decision, and "Not
   // now" is a complete answer that has to be given rather than slid
   // past — the same rule SaveFailure and UnsavedNotice follow.
   return (
-    <NativeSheet visible={open} onClose={onCancel} swipeToClose={false}>
+    <NativeSheet visible={open} onClose={onCancel} swipeToClose={false} onDismissed={onDismissed}>
       <View style={styles.sheet}>
         <Text style={styles.sheetTitle}>{CONNECT_CONSENT.title}</Text>
         {CONNECT_CONSENT.bullets.map((b) => (

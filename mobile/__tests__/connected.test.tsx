@@ -28,6 +28,34 @@ const withBalance = (amount: number, date: string, source: "manual" | "plaid") =
   };
 };
 
+// PLAID'S BROWSER, which can hang (iOS presented nothing and the call
+// never returned: 2026-11-03), throw (iOS refused to start it), or
+// come back. `dismissAuthSession` ends a hanging one, as on iOS.
+const mockBrowser = {
+  mode: "hang" as "hang" | "throw" | "back",
+  opened: [] as string[],
+  dismissed: 0,
+  pending: null as null | ((r: { type: string }) => void),
+};
+jest.mock("expo-web-browser", () => ({
+  openAuthSessionAsync: jest.fn((url: string) => {
+    mockBrowser.opened.push(url);
+    if (mockBrowser.mode === "throw") return Promise.reject(new Error("failed to start"));
+    if (mockBrowser.mode === "back") return Promise.resolve({ type: "cancel" });
+    return new Promise((resolve) => { mockBrowser.pending = resolve; });
+  }),
+  dismissAuthSession: jest.fn(() => {
+    mockBrowser.dismissed += 1;
+    const p = mockBrowser.pending; mockBrowser.pending = null; p?.({ type: "dismiss" });
+  }),
+}));
+// Ten seconds of waiting is the product; 1.5 is the test (longer than
+// the sheet's 800ms fallback, so the browser has been asked by then).
+jest.mock("../../src/shared/connect.ts", () => ({
+  ...jest.requireActual("../../src/shared/connect.ts"),
+  LINK_OPEN_TIMEOUT_MS: 1500,
+}));
+
 // `mock` prefix: jest allows a module factory to reference it.
 const mockServer = {
   state: withBalance(OLD, "2026-10-27", "manual") as unknown,
@@ -70,6 +98,7 @@ jest.mock("../lib/supabase", () => {
       functions: {
         invoke: jest.fn(async (name: string, opts: { body: { trigger: string } }) => {
           if (name === "plaid-exchange") { mockServer.recovers += 1; return { data: mockServer.recover, error: null }; }
+          if (name === "plaid-link-token") { mockServer.minted += 1; return { data: mockServer.linkToken, error: null }; }
           if (name !== "plaid-balance") return { data: {}, error: null };
           mockServer.invoked += 1;
           mockServer.pulls.push(opts.body.trigger);
@@ -137,6 +166,11 @@ beforeEach(() => {
   mockServer.notListed = false;
   mockServer.recover = { ok: false, code: "NO_OPEN_SESSION" };
   mockServer.recovers = 0;
+  mockServer.minted = 0;
+  mockServer.linkToken = { ok: true, link_token: "lt-1", hosted_link_url: "https://hosted.plaid.com/lt-1" };
+  mockBrowser.mode = "hang";
+  mockBrowser.opened = [];
+  mockBrowser.dismissed = 0;
   connection.reset();
   plaidApi.forgetPullDeadline();
 });
@@ -341,5 +375,101 @@ describe("Settings, while a connection is still finishing", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe("Connect, when Plaid does not open (2026-11-03, sandbox)", () => {
+  const Connected = require("../components/Connected").default;
+  const CONNECT = "Connect your bank (Beta)";
+  async function mountSettings() {
+    await render(
+      <StateProvider userId="u1">
+        <Chrome session={session}><Connected /></Chrome>
+      </StateProvider>
+    );
+  }
+  // Returns the sheet's onDismiss, taken while it is still mounted: in
+  // a test nothing calls it, so the 800ms fallback stands in unless a
+  // test calls it itself.
+  async function tapConnect(): Promise<() => void> {
+    const { fireEvent } = require("@testing-library/react-native");
+    fireEvent.press(await screen.findByText(CONNECT));
+    const cont = await screen.findByText("Continue");
+    const sheet = screen.getAllByTestId("native-sheet", { includeHiddenElements: true }).find((n) => n.props.onDismiss);
+    fireEvent.press(cont);
+    return () => sheet?.props.onDismiss();
+  }
+
+  it("says Opening Plaid…, not Opening your bank…", async () => {
+    mockServer.noItem = true;
+    await mountSettings();
+    await tapConnect();
+    expect(await screen.findByText("Opening Plaid…")).toBeTruthy();
+    expect(screen.queryByText("Opening your bank…")).toBeNull();
+  });
+
+  it("opens the browser only once the consent sheet has slid away", async () => {
+    mockServer.noItem = true;
+    await mountSettings();
+    const dismissed = await tapConnect();
+    await waitFor(() => expect(mockServer.minted).toBe(1));
+    // Token in hand, sheet still dismissing: nothing is presented yet.
+    expect(mockBrowser.opened).toEqual([]);
+    await act(async () => { dismissed(); });
+    await waitFor(() => expect(mockBrowser.opened).toEqual(["https://hosted.plaid.com/lt-1"]));
+  });
+
+  it("stops the spinner after the timeout and offers Try again, which opens it again", async () => {
+    mockServer.noItem = true;
+    await mountSettings();
+    await tapConnect();
+    // The browser call never returns, as on the owner's phone.
+    expect(await screen.findByText("Plaid didn't open.", {}, { timeout: 3000 })).toBeTruthy();
+    expect(screen.queryByText("Opening Plaid…")).toBeNull();
+    expect(screen.queryByText(CONNECT)).toBeNull();
+    const { fireEvent } = require("@testing-library/react-native");
+    mockBrowser.mode = "back";
+    const dismissedBefore = mockBrowser.dismissed;
+    const openedBefore = mockBrowser.opened.length;
+    await act(async () => { fireEvent.press(screen.getByText("Try again")); });
+    // Any hanging session is ended first, so iOS does not refuse the new one.
+    await waitFor(() => expect(mockBrowser.opened.length).toBe(openedBefore + 1));
+    expect(mockBrowser.dismissed).toBeGreaterThan(dismissedBefore);
+    expect(mockServer.minted).toBe(2);
+    await waitFor(() => expect(screen.queryByText("Plaid didn't open.")).toBeNull());
+  });
+
+  it("a browser that was asked to open and hung is ended by Try again", async () => {
+    mockServer.noItem = true;
+    await mountSettings();
+    await tapConnect();
+    await waitFor(() => expect(mockBrowser.opened.length).toBe(1), { timeout: 3000 });
+    expect(await screen.findByText("Plaid didn't open.", {}, { timeout: 3000 })).toBeTruthy();
+    const { fireEvent } = require("@testing-library/react-native");
+    mockBrowser.mode = "back";
+    await act(async () => { fireEvent.press(screen.getByText("Try again")); });
+    await waitFor(() => expect(mockBrowser.opened.length).toBe(2));
+    // The old one was dismissed and stood down: one recover from Try
+    // again's return, none from the stale attempt's.
+    expect(mockBrowser.pending).toBeNull();
+    await waitFor(() => expect(screen.queryByText("Plaid didn't open.")).toBeNull());
+  });
+
+  it("a browser that refuses to start says so at once", async () => {
+    mockServer.noItem = true;
+    mockBrowser.mode = "throw";
+    await mountSettings();
+    await tapConnect();
+    expect(await screen.findByText("Plaid didn't open.")).toBeTruthy();
+    expect(screen.getByText(/Nothing was connected/)).toBeTruthy();
+  });
+
+  it("an open session with no result is not Finishing: Connect shows right away", async () => {
+    mockServer.noItem = true;
+    // What the server now answers for a session Plaid has nothing for.
+    mockServer.recover = { ok: false, code: "NO_RESULT" };
+    await mountSettings();
+    expect(await screen.findByText(CONNECT)).toBeTruthy();
+    expect(screen.queryByText("Finishing your connection…")).toBeNull();
   });
 });

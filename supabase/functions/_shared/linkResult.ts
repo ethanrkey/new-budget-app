@@ -55,3 +55,30 @@ export function exitedWithNoItem(data: LinkSessions | null | undefined): boolean
   if (!sessions.length || publicTokenOf(data)) return false;
   return sessions.some((s) => s.exit != null || s.on_exit != null);
 }
+
+/**
+ * Did Plaid finish this session successfully, even if its results are
+ * not written yet? A session with `finished_at` and no exit is one the
+ * user completed.
+ */
+export function completedAtPlaid(data: LinkSessions | null | undefined): boolean {
+  return (data?.link_sessions ?? []).some((s) => !!s.finished_at && s.exit == null && s.on_exit == null);
+}
+
+/**
+ * REAL EVIDENCE THE BANK CONNECTED (2026-11-03, sandbox, the owner's
+ * phone). "Finishing your connection…" used to show for ANY open session
+ * under 30 minutes old, and Plaid had never even opened: the session
+ * row is written when the link token is minted, before anything is
+ * shown. So only these count:
+ *
+ *   - Plaid's /link/token/get has a public token for it, or
+ *   - Plaid says the session completed (finished, no exit), or
+ *   - an ITEM_ADD_RESULT webhook arrived for it (`item_reported_at`).
+ *
+ * An open session with none of these is an abandoned attempt: Settings
+ * offers Connect again, and plaid-link-token does not hold the slot.
+ */
+export function hasEvidence(data: LinkSessions | null | undefined, itemReportedAt: string | null | undefined): boolean {
+  return !!itemReportedAt || !!publicTokenOf(data) || completedAtPlaid(data);
+}

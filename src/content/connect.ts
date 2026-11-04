@@ -107,11 +107,27 @@ export const DISCONNECT_NOTE =
  * The user is told the balance is stale rather than wrong: every
  * figure already in their history was true when it was pulled.
  */
+/**
+ * WHILE LINK IS STARTING. It is Plaid that opens, not the bank, and the
+ * bank comes later, inside Plaid (2026-11-03, owner's wording).
+ */
+export const OPENING = "Opening Plaid…";
+
+/**
+ * Plaid did not open within LINK_OPEN_TIMEOUT_MS (phone). Nothing was
+ * connected: the session has no result, so it does not hide Connect.
+ */
+export const DIDNT_OPEN = {
+  title: "Plaid didn't open.",
+  body: "Nothing was connected. Try again, and if it keeps happening, close and reopen the app.",
+  action: "Try again",
+} as const;
+
 export const RECONNECT = {
   action: "Reconnect your bank",
   /** On the Settings notice, and in the sheet behind the pill. */
   why: "Your bank needs you to sign in again. Balances have stopped updating until you do. Everything you have already logged is unaffected.",
-  busy: "Opening your bank…",
+  busy: OPENING,
   failed: "Couldn't reopen your bank. Nothing changed — try again in a moment.",
   /** After update mode, when the pull still comes back refused. */
   stillBroken: "Your bank still needs you to sign in. Nothing changed.",

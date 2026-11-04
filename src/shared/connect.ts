@@ -353,5 +353,11 @@ export function isFinishing(pendingUntil: string | null | undefined, now: number
   return Number.isFinite(t) && t > now;
 }
 
+/**
+ * How long the phone waits for Plaid to appear after Connect before it
+ * stops the spinner and offers Try again (2026-11-03: it hung forever).
+ */
+export const LINK_OPEN_TIMEOUT_MS = 10_000;
+
 /** How often Settings asks again while a connection is finishing. */
 export const FINISHING_POLL_MS = 20_000;
