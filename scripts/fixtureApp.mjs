@@ -97,11 +97,15 @@ function fakeJwt(sub, exp) {
 /**
  * @param {{width?: number, height?: number, scale?: number, state?: object,
  *          plaid?: {institution?: string, mask?: string, available?: number,
- *                   lastSyncedAt?: string, noItem?: boolean, recover?: object}}} opts
+ *                   lastSyncedAt?: string, noItem?: boolean, recover?: object,
+ *                   exchange?: object}}} opts
  *
  * `noItem` and `recover` (read on every call, so a drive can change
  * them between phases): no bank stored yet, and what plaid-exchange's
  * recover answers. Recover requests are counted in `recovers`.
+ * `exchange` is what plaid-exchange answers a web `public_token`
+ * (default: connected), and plaid-link-token hands out a fixture
+ * token, so a drive with a stubbed `window.Plaid` can run Connect.
  *
  * `plaid` SERVES A CONNECTED ACCOUNT. Without it nothing about
  * connected checking is reachable in a drive, and the one class of
@@ -195,6 +199,10 @@ export async function openFixtureApp({ width = 1100, height = 1000, scale = 2, s
 
     if (plaid) {
       if (url.includes("/plaid_beta")) return send([{ user_id: userId }]);
+      if (url.includes("/functions/v1/plaid-link-token")) return send({ ok: true, link_token: "link-fixture" });
+      if (url.includes("/functions/v1/plaid-exchange") && JSON.parse(req.postData() || "{}").public_token) {
+        return send(plaid.exchange ?? { ok: true, connected: true });
+      }
       if (url.includes("/functions/v1/plaid-exchange")) {
         recovers.n += 1;
         return send(plaid.recover ?? { ok: false, code: "NO_OPEN_SESSION" });

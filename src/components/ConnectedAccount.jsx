@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BETA_NOTE, CONNECT_CONSENT, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE, FINISHING, PLAID_PORTAL_URL,
-  RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
+  RECONNECT, SAVE_SLOW, TOGGLE_OFF_CONFIRM, connectRefusedText, saveFailedText,
 } from "../content/connect.ts";
 import { FINISHING_POLL_MS, canReconnect, canSeeToggle, isFinishing, shouldRestoreToggle } from "../shared/connect.ts";
 import {
@@ -71,6 +71,11 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
   const [pendingUntil, setPendingUntil] = useState(pendingUntilNow);
   const [, setTick] = useState(0);
   const finishing = on && !connection && isFinishing(pendingUntil, Date.now());
+  // The code of a save that failed after Plaid finished. Its message
+  // is chosen when drawn: SAVE_SLOW while finishing, saveFailedText
+  // once the session has run out with nothing found.
+  const [saveFailed, setSaveFailed] = useState(null);
+  const failedSay = saveFailed && !connection ? (finishing ? SAVE_SLOW : saveFailedText(saveFailed)) : null;
   const ask = useCallback(async () => {
     const found = await recoverLink(supabase);
     if (!found.ok) { setPendingUntil(found.pendingUntil); return false; }
@@ -181,6 +186,7 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
     // spinner below meant opening Link said "Disconnecting…".
     setBusy(update ? "reconnecting" : "connecting");
     setSaid(null);
+    setSaveFailed(null);
     let Plaid;
     try { Plaid = await loadLinkScript(); }
     catch { setBusy(null); setSaid("Couldn't load the connection window. Try again in a moment."); return; }
@@ -235,7 +241,15 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
           // and the people who see it are people the owner knows; a
           // bare "try again" cost one round trip through the browser
           // console and the function logs to learn one word.
-          setSaid(`Your bank connected, but we couldn't finish saving it (${done.code}). Nothing was kept — try again.`);
+          //
+          // NOT "TRY AGAIN" WHILE IT IS FINISHING (2026-11-03). A
+          // failed save leaves the session open, and the server keeps
+          // trying it; telling the user to connect again under
+          // "Finishing your connection…" is how a second slot gets
+          // spent. Ask straight away: the save may already have
+          // landed, and the answer says whether it is still finishing.
+          if (await ask()) return;
+          setSaveFailed(done.code);
           return;
         }
         // PULL STRAIGHT AWAY. Connecting and then seeing nothing
@@ -396,6 +410,12 @@ export default function ConnectedAccount({ supabase, settings, onSetSettings, on
       {said && (
         <p className={`mt-2 text-xs ${said === RECONNECT.fixed ? "text-gray-500" : "text-red-600 dark:text-red-400"}`}>
           {said}
+        </p>
+      )}
+      {/* Gray while it is still finishing: nothing is wrong yet. */}
+      {failedSay && (
+        <p className={`mt-2 text-xs ${failedSay === SAVE_SLOW ? "text-gray-500" : "text-red-600 dark:text-red-400"}`}>
+          {failedSay}
         </p>
       )}
 

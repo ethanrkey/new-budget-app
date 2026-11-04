@@ -180,6 +180,17 @@ export const FINISHING = {
   body: "Your bank is connected at Plaid and we're saving it here. This can take a few minutes. You don't need to connect again.",
 } as const;
 
+/**
+ * A save that failed after Plaid finished (web). While the session is
+ * still finishing it is SLOW, not failed: the server keeps trying it,
+ * and "try again" would start a second Link. Only once the session has
+ * run out with nothing found does the user hear "try again".
+ */
+export const SAVE_SLOW =
+  "Your bank connected, but saving it is taking longer than usual. We're still finishing it, you don't need to connect again.";
+export const saveFailedText = (code: string): string =>
+  `Your bank connected, but we couldn't finish saving it (${code}). Nothing was kept — try again.`;
+
 export const CONNECT_TOGGLE = "Connect your bank";
 export const CONNECT_TOGGLE_SUB =
   "When on, Key Budget can read your checking balance — and nothing else. "

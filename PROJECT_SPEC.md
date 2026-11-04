@@ -3836,6 +3836,25 @@ without exiting Plaid leaves a session with no exit recorded, so
 Connect stays hidden for up to 30 minutes. That is the price of never
 offering a second Link over a first that may still land.
 
+**A failed web save no longer says "try again" while it is finishing
+(amended, same day).** When `finishLink` failed after Plaid finished,
+the web said "...couldn't finish saving it (CODE). Nothing was kept —
+try again." directly under "Finishing your connection…", since the
+failed save leaves the session open for recover. Now the failure asks
+recover at once (the save may already have landed) and keeps only the
+code. The line is chosen when drawn:
+- while finishing: SAVE_SLOW, in gray: "Your bank connected, but
+  saving it is taking longer than usual. We're still finishing it,
+  you don't need to connect again.";
+- once the session has run out with nothing found:
+  `saveFailedText(code)`, the old red "try again" line, beside Connect.
+
+Both are in `src/content/connect.ts`. Web only: the phone never calls
+`finishLink`. `drive_finishing.mjs` gained both cases (8 checks), with
+a stubbed `window.Plaid`; the fixture now answers plaid-link-token
+and a web `public_token` exchange (`plaid.exchange`). The old
+component fails the "still finishing" check.
+
 **Tests:**
 - `tests/plaid-exchange.test.mjs` is now 42 checks. Added: the
   balance kept, one balance call, the Item synced; no snapshot

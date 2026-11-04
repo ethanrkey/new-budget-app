@@ -86,5 +86,39 @@ try {
   }
 }
 
+// A SAVE THAT FAILS AFTER PLAID FINISHED (web). While the session is
+// still finishing, the message must not say "try again": that is a
+// second Link and a second slot. Once it has run out, it may.
+const SLOW = "saving it is taking longer than usual";
+async function connectAndFail(page) {
+  // Link itself is stubbed: it "finishes" at once with a public token.
+  await page.evaluate(() => {
+    window.Plaid = { create: (o) => ({ open: () => setTimeout(() => o.onSuccess("public-fixture"), 50) }) };
+  });
+  await page.evaluate((C) => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === C).click(), CONNECT);
+  await wait(300);
+  await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Continue").click());
+  await wait(1500);
+  return page.evaluate(() => document.body.innerText);
+}
+for (const [label, recover, want] of [
+  ["still finishing", { ok: false, code: "ITEM_NOT_READY", pending_until: soon() }, { slow: true, tryAgain: false, finishing: true, connect: false }],
+  ["run out", { ok: false, code: "NO_OPEN_SESSION" }, { slow: false, tryAgain: true, finishing: false, connect: true }],
+]) {
+  const p = { noItem: true, recover: { ok: false, code: "NO_OPEN_SESSION" }, exchange: { ok: false, code: "EXCHANGE_FAILED" } };
+  const a = await openFixtureApp({ state, plaid: p });
+  try {
+    await a.load();
+    await openAccount(a.page);
+    p.recover = recover;
+    const text = await connectAndFail(a.page);
+    const s = await seen(a.page);
+    eq(`a failed save, ${label}: slow / try again / Finishing / Connect`,
+      { slow: text.includes(SLOW), tryAgain: text.includes("try again"), finishing: s.finishing, connect: s.connect }, want);
+  } finally {
+    await a.close();
+  }
+}
+
 console.log(`\n${failures ? `FAILED ${failures} of ${checks}` : `ALL PASS (${checks} checks)`}`);
 process.exit(failures ? 1 : 0);
