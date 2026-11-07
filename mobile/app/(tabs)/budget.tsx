@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useRef } from "react";
+import { Animated, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useBudget } from "../../components/StateProvider";
 import { T, money } from "../../lib/theme";
 import { useTabScrollInset } from "../../lib/tabInset";
@@ -22,6 +22,17 @@ import type { BudgetColumn } from "../../../src/engine/types.ts";
 // web got this free from table layout. Get it wrong and the labels drift
 // out of line with their numbers — which is why the heights live in one
 // place and not in two stylesheets.
+//
+// THE MONTH ROW IS FROZEN TOO (2026-11-07, the owner's call), like a
+// spreadsheet's top row. It is the outer scroller's sticky header
+// (stickyHeaderIndices), so it stays at the top, under the checking pill
+// in the chrome, while the rows scroll up under it. It sits OUTSIDE the
+// horizontal scroller, so it has to be told how far the months have
+// moved. The body's horizontal scroll drives one Animated.Value on the
+// NATIVE driver, and the header's month labels are translated by minus
+// that. They move in the same frame as the columns, so a label can never
+// sit over the wrong month. MONTH, the corner, moves in neither
+// direction.
 const ROW_H = 34;
 const SECTION_H = 28;
 const LABEL_W = 150;
@@ -44,6 +55,14 @@ export default function BudgetScreen() {
   // the last row and the one the screen exists for — was the row
   // under the bar. See lib/tabInset.ts.
   const tabInset = useTabScrollInset();
+  // How far the months are scrolled sideways, read natively; see the
+  // note at the top.
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const onMonthsScroll = useMemo(
+    () => Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true }),
+    [scrollX],
+  );
+  const headShift = useMemo(() => Animated.multiply(scrollX, -1), [scrollX]);
   // THE BUDGET IS READ-ONLY ON THE PHONE, decided 2026-10-13 after
   // fat-fingering into the transaction editor while scrolling.
   //
@@ -117,6 +136,9 @@ export default function BudgetScreen() {
       style={styles.wrap}
       contentContainerStyle={{ paddingBottom: tabInset }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
+      // Child 1 is the month row. The hint above it scrolls away.
+      stickyHeaderIndices={[1]}
+      testID="budget-scroll"
     >
       {/* Said once, and now it says the opposite of what it used to.
           A screen that is read-only has to admit it, or the first
@@ -124,12 +146,28 @@ export default function BudgetScreen() {
           broken. */}
       <Text style={styles.hint}>A view of the plan. Edit anything on the Ledger.</Text>
 
+      {/* THE FROZEN MONTH ROW. Opaque, so rows scrolling up pass under it. */}
+      <View style={styles.headRow} testID="budget-head">
+        <View style={[styles.cell, styles.headCell, { width: LABEL_W, alignItems: "flex-start" }]}>
+          <Text style={styles.headText}>MONTH</Text>
+        </View>
+        <View style={styles.headClip}>
+          <Animated.View
+            testID="budget-head-months"
+            style={{ flexDirection: "row", transform: [{ translateX: headShift }] }}
+          >
+            {columns.map((c) => (
+              <View key={c.key} style={[styles.cell, styles.headCell, { width: COL_W }]}>
+                <Text style={styles.headText}>{c.label}</Text>
+              </View>
+            ))}
+          </Animated.View>
+        </View>
+      </View>
+
       <View style={styles.sheet}>
         {/* (a) the pinned column */}
         <View style={{ width: LABEL_W }}>
-          <View style={[styles.cell, styles.headCell, { width: LABEL_W, alignItems: "flex-start" }]}>
-            <Text style={styles.headText}>MONTH</Text>
-          </View>
           {rows.map((r, i) =>
             "section" in r ? (
               <View key={`s${i}`} style={[styles.section, { width: LABEL_W }]}>
@@ -157,13 +195,14 @@ export default function BudgetScreen() {
         </View>
 
         {/* (b) the months, the only thing that scrolls sideways */}
-        <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.monthsPad}>
+        <Animated.ScrollView
+          horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.monthsPad}
+          onScroll={onMonthsScroll} scrollEventThrottle={16}
+          testID="budget-months"
+        >
           <View style={{ flexDirection: "row" }}>
             {columns.map((c) => (
               <View key={c.key} style={{ width: COL_W }}>
-                <View style={[styles.cell, styles.headCell, { width: COL_W }]}>
-                  <Text style={styles.headText}>{c.label}</Text>
-                </View>
                 {rows.map((r, i) =>
                   "section" in r ? (
                     <View key={`s${i}`} style={[styles.section, { width: COL_W }]} />
@@ -204,7 +243,7 @@ export default function BudgetScreen() {
               </View>
             ))}
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
       </View>
       <Text style={styles.foot}>Swipe the months sideways. The row names stay put.</Text>
     </ScrollView>
@@ -215,6 +254,11 @@ export default function BudgetScreen() {
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: T.bg },
   sheet: { flexDirection: "row", paddingLeft: 12 },
+  // The same left inset as the sheet, so MONTH sits over the labels and
+  // each month over its column. Its own background, or the rows would
+  // show through it as they scroll under.
+  headRow: { flexDirection: "row", paddingLeft: 12, backgroundColor: T.bg },
+  headClip: { flex: 1, overflow: "hidden" },
   monthsPad: { paddingRight: 12 },
   cell: {
     height: ROW_H, justifyContent: "center", alignItems: "flex-end", paddingHorizontal: 8,

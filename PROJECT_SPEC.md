@@ -690,6 +690,13 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 27, 2026-11-07, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
+  `0b9c5e7e-b09e-461e-8f84-bbea6d5027e3`, iOS update `01a1b7f3`,
+  commit `99b5edc`. Published through `mobile/scripts/ota.mjs`, run
+  from `mobile/`, after CI passed on that commit. The calendar legend
+  is white.
+
 - **OTA UPDATE 26, 2026-11-07, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. The fingerprint was
   checked before publishing and had not changed. Update group
@@ -2604,6 +2611,26 @@ fifth tab never needs a migration.
   Reorder rows by arrows or drag (never across a section/cluster). Its own
   horizon slider, still the full 36 months — a monthly grid two years out is
   genuinely useful where a transaction list is not.
+
+  **THE MONTH ROW IS FROZEN (2026-11-07, the owner's call, both
+  clients).** Scrolling down keeps MONTH / Nov 2026 / … at the top, and
+  scrolling sideways keeps each label over its own column. A sticky cell
+  sticks to its nearest scroller, and the table's `overflow-x-auto` box
+  is one in both directions. So `top-0` could only ever mean the top of
+  that box, and the header used to scroll off with the page. The box is
+  now `overflow-auto max-h-[calc(100dvh-2rem)]`: the rows scroll inside
+  it, like a spreadsheet's frozen pane. Once the table reaches its end,
+  the wheel carries on to the page.
+  - Each header cell is `sticky top-0`, opaque, and z-20.
+  - MONTH is pinned both ways, at z-30.
+  - The row's 2px rule is a `before:` pseudo-element on each cell: a
+    border on the `<tr>` stays behind when the cells stick, and Chrome
+    paints no box-shadow here (point 3 below).
+
+  `scripts/drive_budget_head.mjs` (10 checks, Chrome) scrolls the box to
+  its end both ways. It checks that every header cell stays at the box's
+  top, over the rows, that each month label stays over its column, and
+  that MONTH stays in the corner. The old table fails 3 of them.
 
   The grid scrolls horizontally with the month column pinned (`STICKY_COL`),
   and three separate things had to be true for that to work (2026-09-29; all
@@ -6934,6 +6961,25 @@ Further out:
     and lives in exactly one place — table layout gave the web that for
     free, and getting it wrong drifts labels out of line with their
     numbers.
+
+    **The month row is frozen too (2026-11-07, the owner's call; see
+    the Budget entry in section 4 for the web).** It is the outer
+    scroller's sticky header (`stickyHeaderIndices={[1]}`; the hint above
+    it scrolls away). It stays at the top, under the checking pill, while
+    the rows scroll up under it. It lives outside the horizontal scroller,
+    so it does need syncing. The body's `onScroll` drives one
+    `Animated.Value` on the NATIVE driver, and the month labels are
+    translated by minus it, so they move in the same frame as the columns.
+    MONTH, the corner, moves in neither direction. Tests:
+    `mobile/__tests__/budget.test.tsx` checks:
+    - the row is the sticky child, opaque, and holds MONTH and every
+      month label, with none of them left in the body;
+    - a sideways scroll of 216 moves the labels by -216, and back to 0
+      returns them.
+
+    jest does not run the native driver, so that one test runs the same
+    event on the JS driver, and asserts that the app asks for the native
+    one. Both tests fail on the old screen. Not checked on a device.
   - **Charts are hand-rolled on `react-native-svg`**, not a chart library.
     The shapes are a donut, a sparkline and a horizontal bar;
     victory-native XL wants Skia and a lot of surface area, gifted-charts

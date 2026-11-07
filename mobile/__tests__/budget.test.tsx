@@ -128,3 +128,69 @@ test("a one-off and a bill sharing a name print their own figures", async () => 
   // plus the one-off and nothing else.
   expect(screen.getAllByText("$1,825.00")).toHaveLength(1);
 });
+
+// 2026-11-07: THE MONTH ROW IS FROZEN, like a spreadsheet's top row, and
+// it follows the months sideways so each label stays over its column.
+test("the month row is pinned at the top, outside the scrolling body", async () => {
+  await mount();
+  const outer = screen.getByTestId("budget-scroll");
+  const head = screen.getByTestId("budget-head");
+  // The sticky child is the month row itself.
+  expect(outer.props.stickyHeaderIndices).toEqual([1]);
+  const { within } = require("@testing-library/react-native");
+  // ...and child 1 of the content is the month row; child 0 is the hint.
+  // Walked up from the row to the level where the hint is its sibling.
+  type Node = { parent: Node | null; children: (Node | string)[] };
+  const HINT = "A view of the plan. Edit anything on the Ledger.";
+  const hasHint = (n: Node | string): boolean =>
+    typeof n === "string" ? n === HINT : n.children.some(hasHint);
+  let n = head as unknown as Node;
+  while (n.parent && !n.parent.children.some(hasHint)) n = n.parent;
+  const siblings = n.parent!.children;
+  expect(siblings.indexOf(n)).toBe(1);
+  expect(hasHint(siblings[0]!)).toBe(true);
+  // Opaque, so rows scrolling up pass under it rather than through it.
+  expect(styleOf(head).backgroundColor).toBe(T.bg);
+  // MONTH and every month label are in it, and none in the body.
+  const months = screen.getByTestId("budget-months");
+  expect(screen.getAllByText("MONTH")).toHaveLength(1);
+  expect(within(head).getByText("MONTH")).toBeOnTheScreen();
+  expect(within(months).queryByTestId("budget-head")).toBeNull();
+  const headMonths = screen.getByTestId("budget-head-months");
+  const labels = within(headMonths).getAllByText(/^[A-Z][a-z]{2} \d{4}$/);
+  expect(labels.length).toBeGreaterThan(1);
+  for (const l of labels) expect(within(months).queryByText(l.props.children)).toBeNull();
+});
+
+test("the month labels move sideways with the columns, and MONTH does not", async () => {
+  // THE APP DRIVES THIS ON THE NATIVE DRIVER, which jest does not run:
+  // there the scroll never comes back to JS. So here alone the same event
+  // runs on the JS driver. The mapping under test (which value, which
+  // axis, which sign) is the app's own.
+  const { Animated } = require("react-native");
+  const real = Animated.event;
+  const spy = jest.spyOn(Animated, "event").mockImplementation(
+    (...args: unknown[]) => real(args[0] as never, { ...(args[1] as object), useNativeDriver: false }));
+  await mount();
+  expect(spy).toHaveBeenCalledWith(
+    [{ nativeEvent: { contentOffset: { x: expect.anything() } } }], { useNativeDriver: true });
+  const { fireEvent } = require("@testing-library/react-native");
+  const { StyleSheet } = require("react-native");
+  const shift = () => {
+    const t = StyleSheet.flatten(screen.getByTestId("budget-head-months").props.style).transform;
+    return t?.[0]?.translateX;
+  };
+  // The body's horizontal scroller reports its offset to the header.
+  const months = screen.getByTestId("budget-months");
+  expect(typeof months.props.onScroll).toBe("function");
+  expect(months.props.scrollEventThrottle).toBe(16);
+  expect(shift() + 0).toBe(0);
+  await fireEvent.scroll(months, { nativeEvent: { contentOffset: { x: 216, y: 0 } } });
+  expect(shift()).toBe(-216);
+  await fireEvent.scroll(months, { nativeEvent: { contentOffset: { x: 0, y: 0 } } });
+  expect(shift() + 0).toBe(0);
+  // MONTH is outside the moving row.
+  const { within } = require("@testing-library/react-native");
+  expect(within(screen.getByTestId("budget-head-months")).queryByText("MONTH")).toBeNull();
+  spy.mockRestore();
+});
