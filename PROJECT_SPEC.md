@@ -690,12 +690,21 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 29, 2026-11-07, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
+  `9781f4d5-2f52-492f-92e2-0707e432401d`, iOS update `01a1b810`,
+  commit `29eaa4e`. Published through `mobile/scripts/ota.mjs`, run
+  from `mobile/`, after CI passed on that commit. The Budget month row
+  is one row again and still pinned, after OTA 28 broke it. See the
+  phone Budget note in the parity section.
+
 - **OTA UPDATE 28, 2026-11-07, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
   `5058d002-9fae-4f09-afb1-86dabac5f843`, iOS update `01a1b7f9`,
   commit `5b4fb74`. Published through `mobile/scripts/ota.mjs`, run
   from `mobile/`, after CI passed on that commit. The Budget's month
-  row stays pinned when scrolling.
+  row stays pinned when scrolling. It shipped broken on iOS; OTA 29
+  fixed it.
 
 - **OTA UPDATE 27, 2026-11-07, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
