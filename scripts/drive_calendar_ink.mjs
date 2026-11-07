@@ -70,6 +70,12 @@ try {
     const neg = cells.map((b) => [...b.querySelectorAll("span.tabular-nums")][0]).filter((s) => s?.textContent.startsWith("-$"));
     return {
       legend: main.innerText.includes("Checking balance at end of day · future days are projected"),
+      legendInk: (() => {
+        const p = [...main.querySelectorAll("p")].find((x) => x.textContent === "Checking balance at end of day · future days are projected");
+        const bal = cells.map((b) => [...b.querySelectorAll("span.tabular-nums")][0])
+          .find((x) => x && /^\$/.test(x.textContent));
+        return p && bal ? [getComputedStyle(p).color === getComputedStyle(bal).color, getComputedStyle(p).fontSize] : null;
+      })(),
       cellZero: [cellZero?.textContent, /text-gray-400/.test(cellZero?.className ?? "")],
       washNet: [washNet?.textContent, /text-gray-400/.test(washNet?.className ?? "")],
       washAria: /no net change/.test(wash?.getAttribute("aria-label") ?? ""),
@@ -79,7 +85,10 @@ try {
         .filter((s) => s && /^\$/.test(s.textContent)).every((s) => !/text-expense/.test(s.className)),
     };
   });
-  eq("one gray line under the grid says what the numbers are", seen.legend, true);
+  eq("one line under the grid says what the numbers are", seen.legend, true);
+  // IN THE BALANCES' INK since 2026-11-07 (white in the dark theme,
+  // dark in light; this fixture is light). Was gray. Same 10px.
+  eq("...in the same ink as the balances, at the same size", seen.legendInk, [true, "10px"]);
   eq("a $0 occurrence in the cell is a gray $0", seen.cellZero, ["$0", true]);
   eq("a day that nets to nothing is a gray $0", seen.washNet, ["$0", true]);
   eq("...and says so in words", seen.washAria, true);

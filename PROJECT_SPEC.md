@@ -2508,6 +2508,17 @@ fifth tab never needs a migration.
   measured width that fits at the 0.75 floor. A new shape fails until
   someone measures it. `mobile/__tests__/calendar.test.tsx` checks the
   dollar sign in the cell, the bare +/- line, and the fit props.
+
+  **AMENDED 2026-11-07, the owner's call: the legend under the grid
+  ("Checking balance at end of day · future days are projected") is
+  white, not gray, on both clients.** Its size (10) and position are
+  unchanged. On the phone it is `T.text`. On the web it is
+  `text-gray-900 dark:text-gray-100`, the same ink as the cell balances,
+  so it is white in the dark theme and dark in the light one. In the
+  light theme, white would vanish against the page.
+  `calendar-ink.test.tsx` checks the phone. `drive_calendar_ink.mjs`
+  checks that the web legend's computed color equals a balance's; that
+  check fails on the old gray legend.
   Caps are 3 below `sm`, 5 above; below `sm` the cell also drops the net,
   which does not fit a ~45px cell, and shows it in the day detail instead.
   A **Planned spending** panel sits above the table (`SpendingMix.jsx`,

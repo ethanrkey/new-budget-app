@@ -272,7 +272,9 @@ export default function CalendarView({ state, ledger, trackerCategories = [], on
         })}
       </div>
 
-      <p className="mt-1 text-center text-[10px] text-gray-400">{COPY.legend}</p>
+      {/* IN INK, like the balances it explains (2026-11-07, the owner's
+          call): white in dark mode, dark in light. It was gray. */}
+      <p className="mt-1 text-center text-[10px] text-gray-900 dark:text-gray-100">{COPY.legend}</p>
 
       {selectedDay && (
         <DayDetail

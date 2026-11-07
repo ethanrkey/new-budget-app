@@ -377,7 +377,9 @@ const styles = StyleSheet.create({
   balanceLabel: { color: T.faint, fontSize: 12, flexShrink: 1 },
   balanceBig: { color: T.text, fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"], flexShrink: 0 },
   overdrawn: { color: T.expense },
-  legend: { color: T.faint, fontSize: 10, textAlign: "center", marginTop: 6, paddingHorizontal: 16 },
+  // IN INK, like the balances it explains (2026-11-07, the owner's
+  // call). It was T.faint. Same size and place.
+  legend: { color: T.text, fontSize: 10, textAlign: "center", marginTop: 6, paddingHorizontal: 16 },
   noForecast: { color: T.faint, fontSize: 12 },
   quiet: { color: T.faint, fontSize: 12 },
   detailRow: { flexDirection: "row", alignItems: "center", gap: 8 },

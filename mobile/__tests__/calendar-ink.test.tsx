@@ -59,10 +59,12 @@ async function mount(reveal = jest.fn()) {
   return reveal;
 }
 
-test("one quiet line under the grid says what the numbers are", async () => {
+test("one line under the grid says what the numbers are, in white", async () => {
   await mount();
   const legend = screen.getByText("Checking balance at end of day · future days are projected");
-  expect(flat(legend.props.style).color).toBe(T.faint);
+  // White like the balances since 2026-11-07; it was T.faint. Same size.
+  expect(flat(legend.props.style).color).toBe(T.text);
+  expect(flat(legend.props.style).fontSize).toBe(10);
 });
 
 test("the day card says whose balance it is", async () => {
