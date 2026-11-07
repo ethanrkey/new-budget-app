@@ -146,8 +146,16 @@ export default function BudgetScreen() {
           broken. */}
       <Text style={styles.hint}>A view of the plan. Edit anything on the Ledger.</Text>
 
-      {/* THE FROZEN MONTH ROW. Opaque, so rows scrolling up pass under it. */}
-      <View style={styles.headRow} testID="budget-head">
+      {/* THE FROZEN MONTH ROW. Opaque, so rows scrolling up pass under it.
+          THE STICKY CHILD CARRIES NO STYLE, and that is load-bearing. On
+          iOS, ScrollViewStickyHeader moves the sticky child's style onto
+          its own wrapper and gives the child `flex: 1` instead. OTA 28
+          put the row's style on the sticky child, so the row became a
+          column: MONTH on a line of its own with its rule under it, and
+          the months on a second line, one column to the left. The row
+          lives one level in, where its style is left alone. */}
+      <View testID="budget-head">
+      <View style={styles.headRow} testID="budget-head-row">
         <View style={[styles.cell, styles.headCell, { width: LABEL_W, alignItems: "flex-start" }]}>
           <Text style={styles.headText}>MONTH</Text>
         </View>
@@ -163,6 +171,7 @@ export default function BudgetScreen() {
             ))}
           </Animated.View>
         </View>
+      </View>
       </View>
 
       <View style={styles.sheet}>

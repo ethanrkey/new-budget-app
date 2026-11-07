@@ -21,17 +21,6 @@ const STICKY_COL =
   "after:bg-gradient-to-r after:from-gray-900/15 after:to-transparent " +
   "dark:after:from-black/50";
 
-// THE FROZEN MONTH ROW (2026-11-07, the owner's call; the phone has it
-// too). Every header cell is `sticky top-0` and opaque, above the body's
-// pinned column (z-10). MONTH is pinned both ways, so it sits on top of
-// both. The row's 2px rule is a pseudo-element on each cell, because a
-// border on the <tr> stays behind in a collapsed table when the cells
-// stick, and Chrome paints no box-shadow there (see STICKY_COL).
-const HEAD_CELL =
-  "sticky top-0 bg-white dark:bg-gray-900 " +
-  "before:content-[''] before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 " +
-  "before:h-0.5 before:bg-gray-300 dark:before:bg-gray-700";
-
 const money = (n) =>
   (n < 0 ? "-" : "") +
   Math.abs(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -88,7 +77,7 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
   // 2026-10-06. The layout still groups by category — that is `savingGroups`.
   const { otherIncome, sectionItems, savingGroups } =
     computeBudgetLayout(budget, trackerCategories, { billSort: settings.budgetBillSort });
-  const th = `py-2 px-3 text-right font-semibold whitespace-nowrap z-20 ${HEAD_CELL}`;
+  const th = "py-2 px-3 text-right font-semibold whitespace-nowrap";
   const editRow = (key) => onEditRow && (() => onEditRow(key));
 
   // Per-row arrow (▲▼) + drag-and-drop wiring, scoped to exactly `rows` —
@@ -167,19 +156,11 @@ export default function BudgetView({ budget, settings, setSettings, trackerCateg
           own padding, that padding stayed inside the scrollport and columns
           slid through the strip to the left of the pinned cell, which is
           pinned to the scrollport edge, not to the padding box. */}
-      {/* THE SCROLLER IS BOTH WAYS, NO TALLER THAN THE WINDOW (2026-11-07).
-          A sticky header sticks to its nearest scroller, and overflow-x
-          makes this box one in both directions. So `top-0` here can only
-          mean the top of this box, never the window's, and the month row
-          used to scroll off with the page. Capped at the window's height,
-          the rows scroll inside it under a frozen month row, like a
-          spreadsheet. Once the table reaches its end, the wheel goes on to
-          the page. */}
-      <div className="overflow-auto max-h-[calc(100dvh-2rem)] -mx-3 sm:-mx-4" data-budget-scroller>
+      <div className="overflow-x-auto -mx-3 sm:-mx-4">
       <table className="text-sm border-collapse min-w-full">
         <thead>
-          <tr className="text-gray-500">
-            <th className={`py-2 pr-3 text-left font-semibold ${STICKY_COL} ${HEAD_CELL} z-30`}>MONTH</th>
+          <tr className="text-gray-500 border-b-2 border-gray-300 dark:border-gray-700">
+            <th className={`py-2 pr-3 text-left font-semibold bg-white dark:bg-gray-900 ${STICKY_COL}`}>MONTH</th>
             {budget.map((c) => (
               <th key={c.key} className={th}>{c.label}</th>
             ))}

@@ -149,8 +149,17 @@ test("the month row is pinned at the top, outside the scrolling body", async () 
   const siblings = n.parent!.children;
   expect(siblings.indexOf(n)).toBe(1);
   expect(hasHint(siblings[0]!)).toBe(true);
+  // THE STICKY CHILD CARRIES NO STYLE. On iOS, ScrollViewStickyHeader
+  // moves that style to its own wrapper and gives the child { flex: 1 },
+  // which jest's ScrollView does not do. OTA 28 styled this element, and
+  // on the phone the row became a column: MONTH alone on the first line,
+  // the months on a second line, one column to the left.
+  expect(head.props.style).toBeUndefined();
+  const row = screen.getByTestId("budget-head-row");
+  expect(row.parent).toBe(head);
+  expect(styleOf(row).flexDirection).toBe("row");
   // Opaque, so rows scrolling up pass under it rather than through it.
-  expect(styleOf(head).backgroundColor).toBe(T.bg);
+  expect(styleOf(row).backgroundColor).toBe(T.bg);
   // MONTH and every month label are in it, and none in the body.
   const months = screen.getByTestId("budget-months");
   expect(screen.getAllByText("MONTH")).toHaveLength(1);

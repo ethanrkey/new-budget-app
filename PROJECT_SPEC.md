@@ -2523,16 +2523,13 @@ fifth tab never needs a migration.
   someone measures it. `mobile/__tests__/calendar.test.tsx` checks the
   dollar sign in the cell, the bare +/- line, and the fit props.
 
-  **AMENDED 2026-11-07, the owner's call: the legend under the grid
-  ("Checking balance at end of day · future days are projected") is
-  white, not gray, on both clients.** Its size (10) and position are
-  unchanged. On the phone it is `T.text`. On the web it is
-  `text-gray-900 dark:text-gray-100`, the same ink as the cell balances,
-  so it is white in the dark theme and dark in the light one. In the
-  light theme, white would vanish against the page.
-  `calendar-ink.test.tsx` checks the phone. `drive_calendar_ink.mjs`
-  checks that the web legend's computed color equals a balance's; that
-  check fails on the old gray legend.
+  **AMENDED 2026-11-07, the owner's call: on the PHONE the legend under
+  the grid ("Checking balance at end of day · future days are
+  projected") is white (`T.text`), not gray.** Its size (10) and
+  position are unchanged. `calendar-ink.test.tsx` checks it. The web
+  legend is gray: `99b5edc` made it white too, and the owner reverted
+  that the same day. `CalendarView.jsx` is exactly what it was before
+  `99b5edc`.
   Caps are 3 below `sm`, 5 above; below `sm` the cell also drops the net,
   which does not fit a ~45px cell, and shows it in the day detail instead.
   A **Planned spending** panel sits above the table (`SpendingMix.jsx`,
@@ -2619,25 +2616,11 @@ fifth tab never needs a migration.
   horizon slider, still the full 36 months — a monthly grid two years out is
   genuinely useful where a transaction list is not.
 
-  **THE MONTH ROW IS FROZEN (2026-11-07, the owner's call, both
-  clients).** Scrolling down keeps MONTH / Nov 2026 / … at the top, and
-  scrolling sideways keeps each label over its own column. A sticky cell
-  sticks to its nearest scroller, and the table's `overflow-x-auto` box
-  is one in both directions. So `top-0` could only ever mean the top of
-  that box, and the header used to scroll off with the page. The box is
-  now `overflow-auto max-h-[calc(100dvh-2rem)]`: the rows scroll inside
-  it, like a spreadsheet's frozen pane. Once the table reaches its end,
-  the wheel carries on to the page.
-  - Each header cell is `sticky top-0`, opaque, and z-20.
-  - MONTH is pinned both ways, at z-30.
-  - The row's 2px rule is a `before:` pseudo-element on each cell: a
-    border on the `<tr>` stays behind when the cells stick, and Chrome
-    paints no box-shadow here (point 3 below).
-
-  `scripts/drive_budget_head.mjs` (10 checks, Chrome) scrolls the box to
-  its end both ways. It checks that every header cell stays at the box's
-  top, over the rows, that each month label stays over its column, and
-  that MONTH stays in the corner. The old table fails 3 of them.
+  **The month row does NOT stick on the web (2026-11-07).** OTA 28's
+  commit (`5b4fb74`) froze it by turning the table's box into a scroller
+  of its own, capped at the window's height. The owner reverted that the
+  same day, and `BudgetView.jsx` is exactly what it was before
+  `5b4fb74`. Pinning the month row is phone only.
 
   The grid scrolls horizontally with the month column pinned (`STICKY_COL`),
   and three separate things had to be true for that to work (2026-09-29; all
@@ -6969,8 +6952,8 @@ Further out:
     free, and getting it wrong drifts labels out of line with their
     numbers.
 
-    **The month row is frozen too (2026-11-07, the owner's call; see
-    the Budget entry in section 4 for the web).** It is the outer
+    **The month row is frozen too (2026-11-07, the owner's call; phone
+    only, see the Budget entry in section 4).** It is the outer
     scroller's sticky header (`stickyHeaderIndices={[1]}`; the hint above
     it scrolls away). It stays at the top, under the checking pill, while
     the rows scroll up under it. It lives outside the horizontal scroller,
@@ -6986,7 +6969,33 @@ Further out:
 
     jest does not run the native driver, so that one test runs the same
     event on the JS driver, and asserts that the app asks for the native
-    one. Both tests fail on the old screen. Not checked on a device.
+    one. Both tests fail on the old screen.
+
+    **OTA 28 SHIPPED IT BROKEN, and the cause is a rule worth knowing:
+    the sticky child must carry no style.** On iOS,
+    `ScrollViewStickyHeader` moves the sticky child's style onto its
+    own wrapper and gives the child `{ flex: 1 }` instead (see its
+    source: "We transfer the child style to the wrapper"). OTA 28
+    styled the sticky child as the row, so on the phone the row became
+    a column:
+    - MONTH sat alone on the first line, with its rule under it;
+    - the month labels sat on a second line, starting at the left edge,
+      one column left of their numbers.
+
+    jest's ScrollView doesn't do the transfer, and neither does
+    react-native-web, so no test saw it. Now the sticky child is a bare
+    `<View>`, and the row (`budget-head-row`) is inside it. The test
+    asserts the sticky child has no style, and that fails on OTA 28.
+
+    **Checked by rendering, before OTA 29.** A Vite harness (not in the
+    repo) renders the Budget screen alone through react-native-web at
+    375pt, with fixture data and a `ScrollView` shim that does iOS's
+    style transfer. Under the shim, OTA 28 reproduced the owner's
+    report. The fix matched the pre-OTA-28 screen to the pixel at the
+    start and fully scrolled right: MONTH at x=20, each label's left
+    edge on its column's. Scrolled down, the row stayed at the top. The
+    rightmost column is cut by the screen edge until you swipe, exactly
+    as it was before. Not checked on a device.
   - **Charts are hand-rolled on `react-native-svg`**, not a chart library.
     The shapes are a donut, a sparkline and a horizontal bar;
     victory-native XL wants Skia and a lot of surface area, gifted-charts
