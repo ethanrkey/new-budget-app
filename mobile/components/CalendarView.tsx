@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { T, money } from "../lib/theme";
 import {
-  calendarMonths, buildCalendarMonth, addMonthKey, cellAmountCompact,
+  calendarMonths, buildCalendarMonth, addMonthKey, cellBalancePhone,
   netAmountCompact, netTone, rowTone, rowSign, isOverdrawn, type CalendarDay, type AmountTone,
 } from "../../src/engine/calendar.ts";
 import { categoryLabelOf, todayISO } from "../../src/engine/model.ts";
@@ -20,15 +20,20 @@ import type { BudgetState, LedgerRow, TrackerCategory } from "../../src/engine/t
 //    beside a seventh is the layout fighting the device.
 // 2. The day detail is a panel UNDER the grid, not a popover. Popovers
 //    on touch need dismiss affordances and cover the thing you tapped.
-// 3. THE CELL NUMBER IS SHORTENED — "2,545", "12.3k", no dollar sign
-//    and no cents. The narrowest iPhone that can run this is 375pt
-//    wide (deployment target 16.4, so iPhone SE 2nd gen / iPhone 8 is
-//    the floor; nothing 320pt gets past iOS 15). That makes the cell
-//    floor((375 − 32) / 7) = 49pt, and 43pt of it usable inside the
-//    padding. Measured in SF Pro with tabular figures at 11pt, the
-//    widest string the formatter can produce for a real balance,
-//    "-9,999", is 36.6pt, and the absurd billion-dollar "-1000m" is
-//    42.9pt. Both fit. At 12pt the second one does not.
+// 3. THE CELL BALANCE HAS A DOLLAR SIGN AND SHRINKS TO FIT
+//    (2026-11-07): "$2,864", "-$10", "$12,345", like the web, with no
+//    cents. From $100k up it is "$250k" / "$1.3m". The narrowest iPhone
+//    that can run this is 375pt wide (deployment target 16.4, so the
+//    iPhone SE 2nd gen / iPhone 8 is the floor). That makes the cell
+//    floor((375 − 32) / 7) = 49pt, 41pt of text inside the padding and
+//    a selected cell's 1pt border. Measured in SF Pro with tabular
+//    figures at 11pt: "$2,864" 38.3pt fits as is, "$12,345" 45.3pt and
+//    "-$1,234" 43.5pt shrink a little, and the widest, "-$99,999" at
+//    50.5pt, draws at 0.81 of 11pt. FIT's 0.75 floor leaves room above
+//    that, so a balance shrinks and is never cut off with "…". The
+//    +/- line under it stays short and has no dollar sign
+//    (cellAmountCompact). Until 2026-11-07 the balance had no dollar
+//    sign either, and shortened from $10k ("12.3k").
 //
 // Kept from the web because they are rules: identity never rests on
 // color, so the detail list names the category in words. A balance
@@ -224,8 +229,8 @@ export default function CalendarView({
                 // was dimmer on quiet days for one round and that
                 // read as two kinds of balance; the dots and the
                 // +/- line are what tell the two apart.
-                <Text style={[styles.bal, isOverdrawn(c.balance) && styles.overdrawn]} numberOfLines={1}>
-                  {cellAmountCompact(c.balance)}
+                <Text style={[styles.bal, isOverdrawn(c.balance) && styles.overdrawn]} {...FIT}>
+                  {cellBalancePhone(c.balance)}
                 </Text>
               )}
               {/* A past day the user recorded a balance on. JUST THE
@@ -235,8 +240,8 @@ export default function CalendarView({
                   one tap away, in the panel, and in the VoiceOver
                   label for anyone who cannot see the grid at all. */}
               {c.balance == null && c.logged != null && (
-                <Text style={[styles.bal, isOverdrawn(c.logged) && styles.overdrawn]} numberOfLines={1}>
-                  {cellAmountCompact(c.logged)}
+                <Text style={[styles.bal, isOverdrawn(c.logged) && styles.overdrawn]} {...FIT}>
+                  {cellBalancePhone(c.logged)}
                 </Text>
               )}
               {c.net != null && (
@@ -332,6 +337,11 @@ function ariaFor(c: CalendarDay): string {
   }
   return parts.join(", ");
 }
+
+// THE BALANCE SHRINKS, IT IS NEVER CUT OFF. One line, and iOS scales the
+// font down until it fits the cell, to no less than 0.75 of 11pt. See
+// note 3 at the top of the file for the measurements.
+const FIT = { numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75 } as const;
 
 // Direction's ink; zero is the faint gray the card's quiet text wears.
 const TONE_INK: Record<AmountTone, string> = { in: T.income, out: T.expense, zero: T.faint };

@@ -2470,6 +2470,33 @@ fifth tab never needs a migration.
   The formatter ROUNDS BEFORE IT BANDS, which is not a detail: the other
   way round gives "100.0k" at $99,950 and "1000k" at $999,600 — seven
   characters in a cell measured for six.
+
+  **AMENDED 2026-11-07, the owner's call: the phone's cell BALANCE has a
+  dollar sign, like the web.** "$2,864", "-$10", "$12,345", "-$1,234",
+  whole dollars (`cellBalancePhone`). It is the same string as
+  `cellAmountFull` below $100,000; from $100k up it is the short form
+  with a sign ("$250k", "$1.3m"). The red/green +/- line underneath is
+  unchanged: `netAmountCompact`, no dollar sign. That line is now the
+  only thing using `cellAmountCompact`.
+  THE TEXT SHRINKS, IT IS NEVER CUT OFF: one line,
+  `adjustsFontSizeToFit`, `minimumFontScale` 0.75. The measurements
+  were taken again in SF Pro, 11pt, tabular figures (macOS NSFont, the
+  same face; it reproduced the old 36.6pt and 42.9pt exactly). The text
+  room is 41pt on a 375pt phone: 49pt, minus 3pt padding each side,
+  minus a selected cell's 1pt border each side.
+  - "$2,864" is 38.3pt and fits as is.
+  - "-$1,234" is 43.5pt and draws at 0.94.
+  - "$12,345" is 45.3pt and draws at 0.91.
+  - "-$99,999" is 50.5pt, the widest, and draws at 0.81 (about 8.9pt).
+  - In full digits, "-$1,234,567" is 67.9pt and would need 0.60
+    (6.6pt), which nobody can read. That is why the short form starts
+    at $100k ("-$999k" is 39.3pt).
+
+  `tests/calendar.test.mjs` checks the strings, and checks that every
+  shape of 7 or more characters the formatter can produce has a
+  measured width that fits at the 0.75 floor. A new shape fails until
+  someone measures it. `mobile/__tests__/calendar.test.tsx` checks the
+  dollar sign in the cell, the bare +/- line, and the fit props.
   Caps are 3 below `sm`, 5 above; below `sm` the cell also drops the net,
   which does not fit a ~45px cell, and shows it in the day detail instead.
   A **Planned spending** panel sits above the table (`SpendingMix.jsx`,

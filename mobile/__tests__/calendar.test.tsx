@@ -172,7 +172,7 @@ test("a past day the user logged a balance on shows what they logged", async () 
   // THE CELL IS JUST THE NUMBER, like every other cell. A "logged"
   // tag shipped under it for one round and came back out: a second
   // thing to read in a 49pt box, in a grid built to be scanned.
-  expect(within(cell).getByText("2,750")).toBeOnTheScreen();
+  expect(within(cell).getByText("$2,750")).toBeOnTheScreen();
   expect(within(cell).queryByText(/logged/i)).toBeNull();
   // The distinction lives in the panel — and in the label, for
   // anyone who cannot see the grid at all.
@@ -277,8 +277,8 @@ test("every balance is the bright number, and the day is the muted one", async (
   const texts = (node: { findAllByType?: unknown }) => node;
   void texts;
   const { getAllByText } = within(bill);
-  // 4000 - 150, in the phone's compact format.
-  expect(flat(getAllByText("3,850")[0]!.props.style).color).toBe(T.text);
+  // 4000 - 150, with a dollar sign since 2026-11-07, like the web.
+  expect(flat(getAllByText("$3,850")[0]!.props.style).color).toBe(T.text);
   // ...and the day number beside it is the muted one.
   expect(flat(getAllByText(String(Number(BILL_DAY.slice(8))))[0]!.props.style).color)
     .not.toBe(T.text);
@@ -288,7 +288,7 @@ test("every balance is the bright number, and the day is the muted one", async (
   // the dots and the +/- line are what tell them apart.
   const quietDay = shift(BILL_DAY, 1);
   const quiet = screen.getByLabelText(new RegExp(`^${fmtLongDay(quietDay)}`));
-  expect(flat(within(quiet).getAllByText("3,850")[0]!.props.style).color).toBe(T.text);
+  expect(flat(within(quiet).getAllByText("$3,850")[0]!.props.style).color).toBe(T.text);
   expect(within(quiet).queryByText(/^[+\u2212]/)).toBeNull();
 });
 
@@ -306,4 +306,20 @@ test("a day that moves the balance says by how much, under it", async () => {
   // net at all rather than a 0 that did not happen.
   const quiet = within(screen.getByLabelText(new RegExp(`^${fmtLongDay(shift(BILL_DAY, 1))}`)));
   expect(quiet.queryByText("0")).toBeNull();
+});
+
+// 2026-11-07: THE CELL BALANCE CARRIES A DOLLAR SIGN, like the web, and
+// SHRINKS RATHER THAN TRUNCATES. The +/- line under it stays bare.
+test("the cell balance has a dollar sign; the +/- line under it does not", async () => {
+  await openCalendar();
+  const bill = within(screen.getByLabelText(new RegExp(`^${fmtLongDay(BILL_DAY)}`)));
+  const bal = bill.getAllByText("$3,850")[0]!;
+  expect(bill.queryByText("3,850")).toBeNull();
+  expect(bill.getByText("\u2212150")).toBeOnTheScreen();
+  expect(bill.queryByText(/\$150/)).toBeNull();
+  // One line, scaled down to fit, never cut off with an ellipsis.
+  expect(bal.props.numberOfLines).toBe(1);
+  expect(bal.props.adjustsFontSizeToFit).toBe(true);
+  expect(bal.props.minimumFontScale).toBe(0.75);
+  expect(bal.props.ellipsizeMode).toBeUndefined();
 });

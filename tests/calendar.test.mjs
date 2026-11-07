@@ -18,7 +18,7 @@ import { computeLedger } from "../src/engine/compute.ts";
 import { upsertItem, updateAccountBalance } from "../src/engine/mutate.ts";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, daysInMonth,
-  cellAmountCompact, cellAmountFull, netAmountCompact, netAmountFull,
+  cellAmountCompact, cellAmountFull, cellBalancePhone, netAmountCompact, netAmountFull,
   netTone, rowTone, rowSign, isOverdrawn,
 } from "../src/engine/calendar.ts";
 import { revealTarget } from "../src/shared/reveal.ts";
@@ -395,6 +395,40 @@ const at = (key, d) => cells(key).find((c) => c && c.day === d);
   }
   eq("no balance under two million is longer than six characters", longest, 6);
   eq("...and only two shapes get there", [...shapes].sort(), ["-9,999", "-99.9k"]);
+}
+
+// ---- 2026-11-07: the phone's cell balance has a dollar sign ---------
+{
+  eq("the phone cell balance carries the dollar sign", cellBalancePhone(2864.2), "$2,864");
+  eq("...a negative is a minus before it", cellBalancePhone(-10.4), "-$10");
+  eq("...zero is $0", cellBalancePhone(0), "$0");
+  eq("...twelve thousand keeps its digits now", cellBalancePhone(12345), "$12,345");
+  eq("...as does a four-digit negative", cellBalancePhone(-1234), "-$1,234");
+  eq("...and it matches the web below $100k", [5, -820.4, 9999.4, -45_600, 99_999].map(cellBalancePhone),
+    [5, -820.4, 9999.4, -45_600, 99_999].map(cellAmountFull));
+  eq("from $100k it is the short form, with the sign", cellBalancePhone(250_000), "$250k");
+  eq("...and the top of k rounds into m", cellBalancePhone(999_600), "$1.0m");
+  eq("...and a million is m", cellBalancePhone(-1_250_000), "-$1.3m");
+  eq("$99,999.60 rounds into $100k, not $100,000", cellBalancePhone(99_999.6), "$100k");
+
+  // THE BOUND THE CELL WAS MEASURED AGAINST (SF Pro, 11pt, tabular, on
+  // macOS 2026-11-07). The cell has 41pt of text on a 375pt phone and
+  // shrinks to no less than 0.75, so 54.7pt is the most it can hold.
+  // Every shape this can produce for a balance under a billion must be
+  // one of these, and each one fits.
+  const PT = { "-$99,999": 50.5, "-$9,999": 43.5, "-$99.9m": 46.2, "-$999k": 39.3, "-$999m": 42.9 };
+  const widest = {};
+  for (let v = -999_000_000; v <= 999_000_000; v += 9_973) {
+    for (const x of [v, v / 10_000]) {
+      const s = cellBalancePhone(x).replace(/\d/g, "9");
+      const neg = s.startsWith("-") ? s : `-${s}`;
+      widest[neg] = true;
+    }
+  }
+  const unmeasured = Object.keys(widest).filter((s) => s.length >= 7 && !(s in PT));
+  eq("every long shape has been measured", unmeasured, []);
+  eq("...and every measured shape fits at the 0.75 floor",
+    Object.entries(PT).filter(([, w]) => w * 0.75 > 41).map(([s]) => s), []);
 }
 
 // ---- 2026-11-02: zero is gray, an overdraft is red ------------------

@@ -91,9 +91,9 @@ test("a day whose ins and outs cancel is a gray 0, not a green one", async () =>
 test("a projected overdraft is red in the cell and in the card", async () => {
   await mount();
   // 100 - 900.
-  expect(flat(cell(OVER_DAY).getByText("-800").props.style).color).toBe(T.expense);
+  expect(flat(cell(OVER_DAY).getByText("-$800").props.style).color).toBe(T.expense);
   // ...and the day before it, still above zero, is not.
-  expect(flat(cell(WASH_DAY).getByText("100").props.style).color).toBe(T.text);
+  expect(flat(cell(WASH_DAY).getByText("$100").props.style).color).toBe(T.text);
   await userEvent.press(screen.getByLabelText(new RegExp(`^${fmtLongDay(OVER_DAY)}`)));
   expect(flat(screen.getByText("-$800.00").props.style).color).toBe(T.expense);
 });

@@ -249,7 +249,10 @@ export function cellAmountFull(n: number): string {
 }
 
 /**
- * The cell number on a PHONE: "2,545", "12.3k", "-820".
+ * The short number on a PHONE: "2,545", "12.3k", "-820". Since
+ * 2026-11-07 it is only the body of the +/- line (netAmountCompact);
+ * the balance above it is cellBalancePhone, with a dollar sign. What
+ * follows is why it was this shape when it was the balance too.
  *
  * No dollar sign and no cents, because the cell is about 39pt wide at
  * the narrowest iPhone this runs on and the column heading above it
@@ -273,6 +276,34 @@ export function cellAmountCompact(n: number): string {
   if (k !== null) return `${sign}${k}k`;
   const m = v / 1_000_000;
   return `${sign}${shorten(m) ?? Math.round(m)}m`;
+}
+
+/**
+ * The balance in a PHONE cell: "$2,864", "-$10", "$12,345", "$250k".
+ *
+ * 2026-11-07: THE DOLLAR SIGN IS BACK, to match the web calendar, and
+ * so are the digits up to $100,000. The cell shrinks the text to fit
+ * rather than shortening it (CalendarView's `bal`, minimumFontScale
+ * 0.75). From $100k up it is the short form with a dollar sign, because
+ * "-$1,234,567" would need 6.6pt to fit and nobody can read that.
+ *
+ * Measured in SF Pro, 11pt, tabular figures (macOS NSFont, which is the
+ * same face as iOS): the widest string this makes for a balance under a
+ * billion is "-$99,999" at 50.5pt. A 375pt phone leaves 41pt for text in
+ * a selected cell, so that is 0.81 of full size. At the 0.75 floor the
+ * cell takes 54.7pt, and nothing this returns is wider.
+ *
+ * The +/- line under it keeps cellAmountCompact, without the dollar sign.
+ */
+export function cellBalancePhone(n: number): string {
+  const r = Math.round(n);
+  const sign = r < 0 ? "-" : "";
+  const v = Math.abs(r);
+  if (v < 100_000) return `${sign}$${v.toLocaleString("en-US")}`;
+  const k = shorten(v / 1000);
+  if (k !== null) return `${sign}$${k}k`;
+  const m = v / 1_000_000;
+  return `${sign}$${shorten(m) ?? Math.round(m)}m`;
 }
 
 /** One decimal below 100, whole above it, null once it reaches 1000. */
