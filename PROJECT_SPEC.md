@@ -690,6 +690,13 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 28, 2026-11-07, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
+  `5058d002-9fae-4f09-afb1-86dabac5f843`, iOS update `01a1b7f9`,
+  commit `5b4fb74`. Published through `mobile/scripts/ota.mjs`, run
+  from `mobile/`, after CI passed on that commit. The Budget's month
+  row stays pinned when scrolling.
+
 - **OTA UPDATE 27, 2026-11-07, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
   `0b9c5e7e-b09e-461e-8f84-bbea6d5027e3`, iOS update `01a1b7f3`,
