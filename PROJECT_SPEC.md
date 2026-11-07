@@ -690,6 +690,17 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 26, 2026-11-07, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. The fingerprint was
+  checked before publishing and had not changed. Update group
+  `ad0372bb-cc01-45b3-b773-18f9271b5a5c`, iOS update `01a1b7e3`,
+  commit `82773fc`. Published through `mobile/scripts/ota.mjs`, run
+  from `mobile/`, after CI passed on that commit.
+
+  The phone calendar's cell balance has a dollar sign and shrinks to
+  fit ("$12,345"). See the 2026-11-07 amendment in the calendar
+  section.
+
 - **OTA UPDATE 25, 2026-11-03, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`** — fingerprint checked
   before publishing; unchanged. Update group
@@ -3984,6 +3995,11 @@ Plaid is open in which nothing has finished yet, now mints a second
 token. If both finish, the safety net removes the second Item, but on
 production that is a spent slot. It needs two tabs on the web; the
 phone's browser is modal.
+
+**Deployed 2026-11-05:** plaid-exchange v17 (`--no-verify-jwt`) and
+plaid-link-token v11 (JWT on). The owner also added the
+`item_reported_at` column. The sandbox OAuth retest passed: Platypus
+OAuth Bank connected and saved on the first try.
 
 **Clearing the stuck state.** Once the new plaid-exchange is deployed,
 the owner's session has no evidence, so Finishing goes away by itself.
