@@ -7005,6 +7005,27 @@ Further out:
     edge on its column's. Scrolled down, the row stayed at the top. The
     rightmost column is cut by the screen edge until you swipe, exactly
     as it was before. Not checked on a device.
+
+    **The months' scroll indicator is ours (2026-11-08, the owner's
+    report).** Scrolled fully right, iOS's own horizontal indicator
+    stopped short of the screen's right edge. UIKit draws it inside the
+    scroller, inset from the ends, and how far is not a prop. The
+    simulator would not start that day, so this was not measured. The
+    native indicators are now off on the months scroller, and a 3pt bar
+    is drawn in their place, at the bottom of the CUMULATIVE NET row:
+    - the track runs from the name column's edge (x=162 on a 375pt
+      phone) to the screen's edge, with no inset;
+    - the bar is the visible share of the months, never under 36pt;
+    - it is moved by the same native `scrollX` as the header, clamped so
+      a bounce can't carry it off the screen;
+    - like the native one, it shows on a drag or momentum scroll and
+      fades 500ms after.
+
+    `budget.test.tsx` checks that the native indicators are off, the
+    track is 162 to 0, the bar starts at 0, and it ends exactly at the
+    frame's right edge when fully scrolled and during a bounce. That test
+    fails on OTA 29. The harness render measured the bar at 162–221pt at
+    the start and 315.9–375pt fully right, on a 375pt screen.
   - **Charts are hand-rolled on `react-native-svg`**, not a chart library.
     The shapes are a donut, a sparkline and a horizontal bar;
     victory-native XL wants Skia and a lot of surface area, gifted-charts

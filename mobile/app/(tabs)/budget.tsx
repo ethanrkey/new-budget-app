@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Animated, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useBudget } from "../../components/StateProvider";
 import { T, money } from "../../lib/theme";
@@ -37,6 +37,10 @@ const ROW_H = 34;
 const SECTION_H = 28;
 const LABEL_W = 150;
 const COL_W = 108;
+// The months' scroll indicator: iOS's thickness, and never shorter than
+// this, however many months there are.
+const BAR_H = 3;
+const BAR_MIN = 36;
 
 type Cell = {
   key: string; label: string; values: (c: BudgetColumn) => number;
@@ -63,6 +67,35 @@ export default function BudgetScreen() {
     [scrollX],
   );
   const headShift = useMemo(() => Animated.multiply(scrollX, -1), [scrollX]);
+
+  // OUR OWN SCROLL INDICATOR for the months (2026-11-08, the owner's
+  // report). iOS draws its own inside the scroller, a few points in from
+  // each end, so when scrolled fully right it stopped short of the
+  // screen's edge. How far short is UIKit's business, not a prop. This
+  // bar's geometry is ours. The track is the months' frame, from the
+  // name column's edge to the screen's. The bar is the visible share of
+  // the months, and at full scroll right its right end is the screen's
+  // edge. It is driven by the same native scrollX as the header. Like
+  // the native one, it shows while you scroll and fades after.
+  const [frameW, setFrameW] = useState(0);
+  const [contentW, setContentW] = useState(0);
+  const maxScroll = Math.max(0, contentW - frameW);
+  const barW = maxScroll > 0 ? Math.max(BAR_MIN, (frameW * frameW) / contentW) : 0;
+  const barX = useMemo(
+    () => scrollX.interpolate({
+      inputRange: [0, Math.max(1, maxScroll)], outputRange: [0, Math.max(0, frameW - barW)],
+      extrapolate: "clamp",
+    }),
+    [scrollX, maxScroll, frameW, barW],
+  );
+  const barShown = useRef(new Animated.Value(0)).current;
+  const showBar = () => {
+    barShown.stopAnimation();
+    Animated.timing(barShown, { toValue: 1, duration: 100, useNativeDriver: true }).start();
+  };
+  const hideBar = () => {
+    Animated.timing(barShown, { toValue: 0, duration: 300, delay: 500, useNativeDriver: true }).start();
+  };
   // THE BUDGET IS READ-ONLY ON THE PHONE, decided 2026-10-13 after
   // fat-fingering into the transaction editor while scrolling.
   //
@@ -205,8 +238,15 @@ export default function BudgetScreen() {
 
         {/* (b) the months, the only thing that scrolls sideways */}
         <Animated.ScrollView
-          horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.monthsPad}
+          horizontal showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.monthsPad}
           onScroll={onMonthsScroll} scrollEventThrottle={16}
+          onLayout={(e) => setFrameW(e.nativeEvent.layout.width)}
+          onContentSizeChange={(w) => setContentW(w)}
+          onScrollBeginDrag={showBar}
+          onScrollEndDrag={hideBar}
+          onMomentumScrollBegin={showBar}
+          onMomentumScrollEnd={hideBar}
           testID="budget-months"
         >
           <View style={{ flexDirection: "row" }}>
@@ -253,6 +293,14 @@ export default function BudgetScreen() {
             ))}
           </View>
         </Animated.ScrollView>
+        {barW > 0 && (
+          <View style={styles.barTrack} pointerEvents="none" testID="budget-months-bar-track">
+            <Animated.View
+              testID="budget-months-bar"
+              style={[styles.bar, { width: barW, opacity: barShown, transform: [{ translateX: barX }] }]}
+            />
+          </View>
+        )}
       </View>
       <Text style={styles.foot}>Swipe the months sideways. The row names stay put.</Text>
     </ScrollView>
@@ -268,6 +316,10 @@ const styles = StyleSheet.create({
   // show through it as they scroll under.
   headRow: { flexDirection: "row", paddingLeft: 12, backgroundColor: T.bg },
   headClip: { flex: 1, overflow: "hidden" },
+  // Over the bottom of the months, where iOS drew its own: from the name
+  // column's right edge to the screen's right edge, with no inset.
+  barTrack: { position: "absolute", left: 12 + LABEL_W, right: 0, bottom: 2, height: BAR_H },
+  bar: { height: BAR_H, borderRadius: BAR_H / 2, backgroundColor: T.faint },
   monthsPad: { paddingRight: 12 },
   cell: {
     height: ROW_H, justifyContent: "center", alignItems: "flex-end", paddingHorizontal: 8,

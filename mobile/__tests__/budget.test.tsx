@@ -203,3 +203,41 @@ test("the month labels move sideways with the columns, and MONTH does not", asyn
   expect(within(screen.getByTestId("budget-head-months")).queryByText("MONTH")).toBeNull();
   spy.mockRestore();
 });
+
+// 2026-11-08: iOS's own indicator stopped short of the screen's right edge
+// when the months were scrolled fully right. It is off, and this bar
+// spans from the name column's edge to the screen's.
+test("the months' scroll bar reaches the screen's right edge when fully scrolled", async () => {
+  const { Animated, StyleSheet } = require("react-native");
+  const real = Animated.event;
+  const spy = jest.spyOn(Animated, "event").mockImplementation(
+    (...args: unknown[]) => real(args[0] as never, { ...(args[1] as object), useNativeDriver: false }));
+  await mount();
+  const { fireEvent } = require("@testing-library/react-native");
+  const months = screen.getByTestId("budget-months");
+  // The native indicators are off.
+  expect(months.props.showsHorizontalScrollIndicator).toBe(false);
+  expect(months.props.showsVerticalScrollIndicator).toBe(false);
+  // A 375pt phone: the months get 375 - 12 - 150 = 213pt for 12 columns.
+  const FRAME = 213, CONTENT = 12 * 108 + 12;
+  await fireEvent(months, "layout", { nativeEvent: { layout: { x: 162, y: 0, width: FRAME, height: 600 } } });
+  await fireEvent(months, "contentSizeChange", CONTENT, 600);
+  const track = screen.getByTestId("budget-months-bar-track");
+  const t = StyleSheet.flatten(track.props.style);
+  // The track runs from the name column's edge to the screen's, no inset.
+  expect([t.left, t.right]).toEqual([162, 0]);
+  const geo = () => {
+    const b = StyleSheet.flatten(screen.getByTestId("budget-months-bar").props.style);
+    return { x: b.transform[0].translateX, w: b.width };
+  };
+  expect(geo().x).toBe(0);
+  // Its share of the frame, never under 36pt.
+  expect(geo().w).toBeCloseTo(Math.max(36, (FRAME * FRAME) / CONTENT));
+  await fireEvent.scroll(months, { nativeEvent: { contentOffset: { x: CONTENT - FRAME, y: 0 } } });
+  const end = geo();
+  expect(end.x + end.w).toBeCloseTo(FRAME);
+  // A bounce past the end does not carry it off the screen.
+  await fireEvent.scroll(months, { nativeEvent: { contentOffset: { x: CONTENT - FRAME + 40, y: 0 } } });
+  expect(geo().x + geo().w).toBeCloseTo(FRAME);
+  spy.mockRestore();
+});
