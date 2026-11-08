@@ -690,6 +690,13 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 30, 2026-11-08, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
+  `9ef99f26-72b8-4793-a7f3-5c0c6f369639`, iOS update `01a1b9b3`,
+  commit `eba459b`. Published through `mobile/scripts/ota.mjs`, run
+  from `mobile/`, after CI passed on that commit. The Budget months'
+  scroll bar is our own and reaches the screen's right edge.
+
 - **OTA UPDATE 29, 2026-11-07, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
   `9781f4d5-2f52-492f-92e2-0707e432401d`, iOS update `01a1b810`,
