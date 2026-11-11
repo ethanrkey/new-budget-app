@@ -1,5 +1,5 @@
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
-import { Keyboard } from "react-native";
+import { Keyboard, StyleSheet } from "react-native";
 import SignIn from "../components/SignIn";
 import { authCalls, googleCalls, appleCalls } from "./setup";
 import { loadPrefs } from "../lib/prefs";
@@ -119,6 +119,23 @@ test("the code step appears after a send, and names the address", async () => {
   // screen looks identical to one that failed.
   expect(screen.getByPlaceholderText("000000")).toBeOnTheScreen();
   expect(screen.getByText("ethan@example.com")).toBeOnTheScreen();
+});
+
+// THE CODE'S SIX DIGITS ARE SPACED BY LAYOUT, NOT BY KERNING (2026-11-11).
+// The field kerned at 8 and iOS carried that kern into setup's fields
+// ("s p o t i f y"); see lib/fields.ts. The field now has no kern and
+// transparent text, and six cells under it draw what was typed.
+test("the code is drawn in six cells, and the field under them carries no kern", async () => {
+  await render(<SignIn />);
+  const field = await askForCode("ethan@example.com");
+  const cells = () => screen.getAllByTestId("code-cell", { includeHiddenElements: true }).map((c) => c.props.children);
+  expect(cells()).toEqual(["0", "0", "0", "0", "0", "0"]);
+  // Not the whole code, so it does not sign in under the test.
+  await userEvent.type(field, "482");
+  expect(cells()).toEqual(["4", "8", "2", "0", "0", "0"]);
+  const style = StyleSheet.flatten(field.props.style);
+  expect(style.letterSpacing ?? 0).toBe(0);
+  expect(style.color).toBe("transparent");
 });
 
 test("a failed send still advances, because the error would leak who has an account", async () => {
@@ -508,3 +525,4 @@ test("a token exchange that fails is recorded, and one that works clears it", as
   await userEvent.press(await screen.findByLabelText("Continue with Apple"));
   await waitFor(async () => expect((await loadPrefs()).appleLinkFailed).toBe(false));
 });
+

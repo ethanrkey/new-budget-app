@@ -23,6 +23,12 @@ const MAX_SCHEMA = 1;
 let currentUserId: string | null = null;
 let versions = new Map<string, number>();
 let baseline: Entity[] = [];
+// SET BY A CONFLICT, CLEARED ONLY BY A LOAD (2026-11-11). A conflict
+// means this device's picture is behind the server's, and a save planned
+// from a stale picture is how a tombstone gets written for a row the
+// screen merely failed to show. So nothing is written until the state
+// has been read again.
+let stale = false;
 
 export type SaveResult =
   | { ok: true }
@@ -32,6 +38,7 @@ export function resetStore() {
   currentUserId = null;
   versions = new Map();
   baseline = [];
+  stale = false;
 }
 
 export async function loadState(userId: string): Promise<BudgetState> {
@@ -65,6 +72,7 @@ export async function loadState(userId: string): Promise<BudgetState> {
   // categories for a new account, so diffing raw rows would make every load
   // write phantom rows it never had.
   baseline = splitState(state);
+  stale = false;
   return state;
 }
 
@@ -75,6 +83,7 @@ export async function loadState(userId: string): Promise<BudgetState> {
  */
 export async function saveState(userId: string, state: BudgetState): Promise<SaveResult> {
   if (userId !== currentUserId) return { ok: false, reason: "error", message: "Not loaded" };
+  if (stale) return { ok: false, reason: "conflict" };
 
   const next = splitState(state);
   const { ops, alarm } = planWrite(baseline, next, versions);
@@ -107,7 +116,7 @@ export async function saveState(userId: string, state: BudgetState): Promise<Sav
             .not("deleted_at", "is", null)
             .select("version").maybeSingle();
           if (revived.error) return { ok: false, reason: "error", message: revived.error.message };
-          if (!revived.data) return { ok: false, reason: "conflict" };
+          if (!revived.data) { stale = true; return { ok: false, reason: "conflict" }; }
           applyResult(versions, op, revived.data.version);
           continue;
         }
@@ -120,7 +129,7 @@ export async function saveState(userId: string, state: BudgetState): Promise<Sav
           .eq("version", op.version)
           .select("version").maybeSingle();
         if (error) return { ok: false, reason: netish(error) ? "offline" : "error", message: error.message };
-        if (!data) return { ok: false, reason: "conflict" };
+        if (!data) { stale = true; return { ok: false, reason: "conflict" }; }
         applyResult(versions, op, data.version);
       } else {
         let q = supabase
@@ -130,7 +139,7 @@ export async function saveState(userId: string, state: BudgetState): Promise<Sav
         if (op.version != null) q = q.eq("version", op.version);
         const { data, error } = await q.select("version").maybeSingle();
         if (error) return { ok: false, reason: netish(error) ? "offline" : "error", message: error.message };
-        if (!data) return { ok: false, reason: "conflict" };
+        if (!data) { stale = true; return { ok: false, reason: "conflict" }; }
         applyResult(versions, op, null);
       }
     } catch (err) {

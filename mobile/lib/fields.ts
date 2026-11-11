@@ -39,7 +39,18 @@ import type { TextStyle } from "react-native";
 // this first and then says so) and closes the hole rather than the one
 // hole somebody noticed.
 //
-// tests/mobile-fields.test.mjs fails if a TextInput is added without it.
+// NOT ENOUGH ON ITS OWN (2026-11-11). This fixed the placeholder, not
+// typed text: a tester's setup form still drew "s p o t i f y". React
+// Native copies a field's TYPING attributes from the text already in it
+// (RCTTextInputComponentView _updateTypingAttributes), UIKit keeps them
+// on the reused view, and nothing a later field's style says resets
+// them. So no field in this app kerns at all any more. The sign-in code
+// box was the only one, and it now spaces its digits by layout (cells
+// under a transparent field), so there is no kern anywhere for a
+// recycled view to carry. This pin stays as the second line.
+//
+// tests/mobile-fields.test.mjs fails if a TextInput is added without
+// it, and if any TextInput sets a letterSpacing other than 0.
 export const FIELD_TEXT: Pick<TextStyle, "letterSpacing" | "fontVariant"> = {
   letterSpacing: 0,
   fontVariant: [],

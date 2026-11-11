@@ -105,11 +105,32 @@ for (const file of files) {
 
 is("every TextInput in the app was reached", inputs >= 18);
 
-// The code box is the one field that overrides the pin, and it must
-// keep doing so — it is the reason the app has six separate digits
-// rather than a six-digit number.
+// NO FIELD KERNS AT ALL (2026-11-11). Pinning letterSpacing to 0 on
+// every field fixed the PLACEHOLDER ("0 . 0 0") and not typed text: a
+// tester's setup form still drew "s p o t i f y". What iOS reuses is the
+// field's typing attributes, which React Native copies from the text
+// already in the field and which no style on the next field resets. So
+// the only real guarantee is that no field ever holds a kern to hand
+// over. The code box, the one field that kerned, spaces its six digits
+// by layout now, in cells beside the field rather than in it.
+const KERN = /letterSpacing:\s*(?!0\s*[,}\n])/;
+let kerned = 0;
+for (const file of files) {
+  const src = readFileSync(file, "utf8");
+  for (const style of inputStyles(src)) {
+    if (style === null) continue;
+    const keys = [...style.matchAll(/styles\.([A-Za-z0-9_]+)/g)].map((m) => m[1]);
+    const bodies = [style, ...keys.map((k) => styleBody(src, k) ?? "")];
+    if (bodies.some((b) => KERN.test(b))) {
+      kerned++;
+      console.log(`      kerned field in ${file}: ${style.trim()}`);
+    }
+  }
+}
+is("no TextInput anywhere sets a letter spacing other than 0", kerned === 0);
 const signIn = readFileSync("mobile/components/SignIn.tsx", "utf8");
-is("the six-digit code box still kerns", (styleBody(signIn, "codeField") ?? "").includes("letterSpacing: 8"));
+is("the code box itself carries no kern", !KERN.test(styleBody(signIn, "codeField") ?? ""));
+is("...and still shows six separate digits, by layout", /codeCells/.test(signIn) && /codeDigit/.test(signIn));
 
 // AND WHAT THE PIN ACTUALLY SAYS. Every field spreading FIELD_TEXT
 // is worth nothing if FIELD_TEXT itself is wrong or empty — and

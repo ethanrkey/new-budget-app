@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
@@ -129,6 +129,12 @@ function MonthRow({
   const { state } = useBudget();
   const v = computeMonthVariance(item, state!.monthlyActuals, monthKey);
   const [draft, setDraft] = useState(v.actual != null ? String(v.actual) : "");
+  // THE BOX SHOWS WHAT IS SAVED whenever the saved value moves under it:
+  // a reload after a conflict, or a failed save rolled back (2026-11-11).
+  // It used to keep the typed draft, so after Reload it showed a number
+  // the server did not have. Typing does not move v.actual, so this
+  // never fights the keyboard.
+  useEffect(() => { setDraft(v.actual != null ? String(v.actual) : ""); }, [v.actual]);
 
   const save = () => {
     const label = `${item.name}, ${monthLabel(monthKey)}`;
@@ -162,9 +168,11 @@ function MonthRow({
           value={draft}
           editable={online}
           onChangeText={setDraft}
+          // ONE SAVE PER EDIT (2026-11-11): Done fires submit AND then
+          // blur, and both used to save. Blur alone covers Done, tapping
+          // away and switching tabs.
           onBlur={save}
           returnKeyType="done"
-          onSubmitEditing={save}
           accessibilityLabel={`Actual for ${item.name} in ${monthLabel(monthKey)}`}
         />
       </View>

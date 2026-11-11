@@ -19,8 +19,13 @@ export default function SaveFailure({
   if (!reason) return null;
   const conflict = reason === "conflict";
 
+  // A CONFLICT HAS ONE WAY OUT, AND IT IS RELOAD (2026-11-11). Dismiss
+  // left the screen rolled back while the store's baseline still had the
+  // write in it, and the next edit, of anything, deleted that entry.
+  // There is no honest way to keep working on a picture the server has
+  // moved past, so a conflict is acknowledged by taking the server's copy.
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={onDismiss}>
+    <Modal transparent animationType="fade" visible onRequestClose={conflict ? onReload : onDismiss}>
       <View style={styles.scrim}>
         <View style={styles.card}>
           <Text style={styles.title}>
@@ -32,9 +37,11 @@ export default function SaveFailure({
               : "Your changes couldn't be saved. Reconnect and try again."}
           </Text>
           <View style={styles.row}>
-            <Pressable style={[styles.btn, styles.ghost]} onPress={onDismiss}>
-              <Text style={styles.ghostText}>Dismiss</Text>
-            </Pressable>
+            {!conflict && (
+              <Pressable style={[styles.btn, styles.ghost]} onPress={onDismiss}>
+                <Text style={styles.ghostText}>Dismiss</Text>
+              </Pressable>
+            )}
             <Pressable style={[styles.btn, styles.primary]} onPress={conflict ? onReload : onRetry}>
               <Text style={styles.primaryText}>{conflict ? "Reload" : "Try again"}</Text>
             </Pressable>

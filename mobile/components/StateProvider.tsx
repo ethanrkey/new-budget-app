@@ -67,12 +67,16 @@ export function StateProvider({ userId, children }: { userId: string; children: 
   // algorithm to design. This flag is what the controls read.
   useEffect(() => NetInfo.addEventListener((s) => setOnline(!!s.isConnected)), []);
 
+  // The latest state, for commit (see the note above it).
+  const latest = useRef<BudgetState | null>(null);
+  const put = useCallback((s: BudgetState) => { latest.current = s; setState(s); }, []);
+
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    try { setState(await loadState(userId)); setError(null); return true; }
+    try { put(await loadState(userId)); setError(null); return true; }
     catch (e) { setError((e as Error).message); return false; }   // never fall back to a blank state
     finally { setRefreshing(false); }
-  }, [userId]);
+  }, [userId, put]);
 
   // Felt only when it actually fetched. A pull that came back empty
   // handed because the network is down has nothing to confirm.
@@ -122,43 +126,65 @@ export function StateProvider({ userId, children }: { userId: string; children: 
     return () => { canceled = true; };
   }, [userId]);
 
-  const commit = useCallback(async (fn: (s: BudgetState) => BudgetState, label: string, how: CommitFeel = "success") => {
-    if (!state) return false;
-    const before = state;
-    const next = fn(state);
+  // ONE WRITE AT A TIME, EACH FROM THE STATE THE LAST ONE LEFT
+  // (2026-11-11). Two commits used to start together from the same
+  // state, and that is a false "Someone else changed this": the
+  // Spending field saved on Done AND on the keyboard closing, both
+  // planned the same write, the first landed, and the second ran into
+  // it. Worse, the loser rolled the screen back to before the edit while
+  // the store had already kept the winner's state as its baseline, so
+  // the next edit, of anything, planned a TOMBSTONE for the entry the
+  // screen no longer showed.
+  //
+  // So commits queue, and each applies its change to the state as it is
+  // when its turn comes, never to the state the screen held when it was
+  // asked. A repeat of a change that already landed then plans no writes
+  // at all. The ref is that latest state; every setState goes through
+  // `put` so the two cannot disagree.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
 
-    // THE COPY IS WRITTEN BEFORE THE THING IT COPIES IS AT RISK. Awaited,
-    // so the ordering is real rather than hopeful — a few milliseconds of
-    // AsyncStorage before the screen updates. A hard kill inside that
-    // window still loses the write, which is the documented and accepted
-    // cost of not having a synchronous store on this platform.
-    await writeStash(userId, label, next);
+  const commit = useCallback((fn: (s: BudgetState) => BudgetState, label: string, how: CommitFeel = "success") => {
+    const run = async (): Promise<boolean> => {
+      const before = latest.current;
+      if (!before) return false;
+      const next = fn(before);
 
-    // Optimistic, then rolled back on failure. The alternative — waiting
-    // on the network before showing the change — makes every entry feel
-    // broken on cell service, and a rollback plus a visible popup is
-    // honest about what happened.
-    setState(next);
-    setSaving(true);
-    const res = await saveState(userId, next);
-    setSaving(false);
-    if (res.ok) {
-      pending.current = null;
-      await clearStash();
-      // Beside the toast and the changed number, never instead of
-      // them — see lib/haptics.ts.
-      if (how === "success") feel.success();
-      else if (how === "selection") feel.selection();
-      return true;
-    }
-    setState(before);
-    pending.current = { fn, label };
-    setFailure(res.reason);
-    // The rollback is visible and the modal explains it. This marks
-    // the moment the screen changed under them.
-    feel.failure();
-    return false;
-  }, [state, userId]);
+      // THE COPY IS WRITTEN BEFORE THE THING IT COPIES IS AT RISK. Awaited,
+      // so the ordering is real rather than hopeful — a few milliseconds of
+      // AsyncStorage before the screen updates. A hard kill inside that
+      // window still loses the write, which is the documented and accepted
+      // cost of not having a synchronous store on this platform.
+      await writeStash(userId, label, next);
+
+      // Optimistic, then rolled back on failure. The alternative — waiting
+      // on the network before showing the change — makes every entry feel
+      // broken on cell service, and a rollback plus a visible popup is
+      // honest about what happened.
+      put(next);
+      setSaving(true);
+      const res = await saveState(userId, next);
+      setSaving(false);
+      if (res.ok) {
+        pending.current = null;
+        await clearStash();
+        // Beside the toast and the changed number, never instead of
+        // them — see lib/haptics.ts.
+        if (how === "success") feel.success();
+        else if (how === "selection") feel.selection();
+        return true;
+      }
+      put(before);
+      pending.current = { fn, label };
+      setFailure(res.reason);
+      // The rollback is visible and the modal explains it. This marks
+      // the moment the screen changed under them.
+      feel.failure();
+      return false;
+    };
+    const turn = queue.current.then(run, run);
+    queue.current = turn.catch(() => {});
+    return turn;
+  }, [userId, put]);
 
   if (error) {
     return (
@@ -187,6 +213,7 @@ export function StateProvider({ userId, children }: { userId: string; children: 
       {children}
       <SaveFailure
         reason={failure}
+        // A conflict has no Dismiss: see SaveFailure.
         onDismiss={() => { setFailure(null); pending.current = null; void clearStash(); }}
         onRetry={() => { const p = pending.current; setFailure(null); if (p) commit(p.fn, p.label); }}
         // A conflict means THIS screen is the stale one, so the only

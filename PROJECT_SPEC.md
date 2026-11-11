@@ -3869,13 +3869,14 @@ secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
 
-### "Someone else changed this" with nobody else there (2026-11-11, the owner's phone) — FOUND, NOT FIXED
+### "Someone else changed this" with nobody else there (2026-11-11, the owner's phone) — FIXED the same day
 
 Reported: November's actual for Electric (161.29) entered on the
 Spending tab, Done pressed, and the conflict popup said the change
 wasn't saved. No other device had the app open. Reload showed 161.29.
-The bank had synced at 10:08 and this was 10:14. **Held for the
-owner's go: no code changed.**
+The bank had synced at 10:08 and this was 10:14. Found first and held
+for the owner's go; fixed the same day once he gave it (see **The fix**
+at the end).
 
 **Cause: one Done saved twice, and the second save conflicted with the
 first.** The actual's field in `mobile/app/(tabs)/spending.tsx` calls
@@ -3908,6 +3909,34 @@ the actual is missing from the screen's state, so it plans a TOMBSTONE
 for it. The repro shows it: popup, Dismiss, then an October actual
 typed in, and November's row was deleted. Reload avoids this by
 re-reading everything.
+
+**The fix (four parts, phone only):**
+- **Commits queue** (`StateProvider.commit`). They run one at a time,
+  and each applies its change to the latest state when its turn comes,
+  not to the state the screen held when it was asked. A repeat of a
+  change that already landed plans no writes. This covers any two
+  commits asked for together, not just this field.
+- **The field saves once.** `onSubmitEditing` is gone from the Spending
+  actual; Done blurs the field, and the blur saves.
+- **A conflict has only Reload.** `SaveFailure` shows no Dismiss for a
+  conflict, and Android's back acts as Reload. Dismiss stays for a
+  dropped connection, where the store's picture is still right.
+- **The store refuses to write after a conflict until the next load**
+  (`stale` in `lib/store.ts`). A save planned from a picture the server
+  has moved past is how the deletion happened, so it can't run even if
+  some future screen asks for one.
+- Also: the Spending box now shows the saved value whenever that value
+  moves (a Reload, or a failed save rolled back). It used to keep the
+  typed draft, so after Reload it showed a number the server didn't have.
+
+`mobile/__tests__/save-conflict.test.tsx` runs the real store against a
+stand-in `budget_entities` with the server's version and revive rules,
+and asserts what reached it: Done saves once with no popup; two commits
+asked for together make one write; two different edits in a row make an
+insert and an update; a real conflict (another device bumped the row)
+shows Reload only, the store refuses a write until Reload, and after
+Reload the box shows the server's value and saving works again. The
+first four fail on the code before the fix.
 
 ### Capital One, lost after Plaid and rescued with minutes left (2026-11-03, production)
 
@@ -8355,6 +8384,28 @@ the web does not need because its wizard is always one click away.
   printed the resolved style) and then reading the platform's own
   recycling code — and the owner's first guess, "letter-spacing meant
   for the 6-digit code box", was the right one.
+
+- **No text field on the phone kerns at all** (2026-11-11). A tester's
+  setup form drew typed text letter by letter, "s p o t i f y", on build
+  13, which already had `FIELD_TEXT` from 2026-10-17. That fix pinned
+  the field's DEFAULT text attributes, which is what the placeholder
+  ("0 . 0 0") is drawn with. Typed text is drawn with the field's TYPING
+  attributes. React Native copies those from the text already in the
+  field (`RCTTextInputComponentView _updateTypingAttributes`), UIKit
+  keeps them on the reused view, and `_setAttributedString` skips any
+  update whose text matches. Nothing a later field's style says resets
+  them. The simulator was busy installing that day, so this path was
+  read in the source, not watched on a device.
+  **So the kern has no source now.** The sign-in code box was the only
+  field that kerned (letterSpacing 8), and it is setup's direct
+  predecessor. It now draws its six digits in six cells, laid out with
+  gaps, under the real field, which has transparent text, a hidden caret
+  and no kern. The field still does the typing, the one-time-code
+  autofill and VoiceOver. `FIELD_TEXT` stays as the second line.
+  `tests/mobile-fields.test.mjs` now fails if ANY TextInput sets a
+  letterSpacing other than 0 (checked by putting the 8 back: it fails).
+  It also checks that the code box keeps its cells, and
+  `signin.test.tsx` checks that the cells show what was typed.
 
 - **The balance is setup's first question, and income is asked rather
   than assumed** (2026-10-17). Two changes to the same flow, for the

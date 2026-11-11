@@ -277,11 +277,31 @@ export default function SignIn() {
             A {CODE_LENGTH}-digit code is on its way to <Text style={styles.strong}>{clean}</Text>.
             It expires in an hour.
           </Text>
+          {/* SIX DIGITS DRAWN IN SIX CELLS, the field itself invisible on
+              top of them (2026-11-11). The gaps used to be letterSpacing
+              8 on the field, and that kern is what iOS carried into the
+              next screen's fields — "s p o t i f y" in setup — through
+              typing attributes that no style on the next field can
+              reset. Spacing by LAYOUT puts no kern on any text field, so
+              there is nothing left to carry. See lib/fields.ts. */}
+          <View style={styles.codeBox}>
+            <View style={styles.codeCells} pointerEvents="none"
+              accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              {Array.from({ length: CODE_LENGTH }, (_, i) => (
+                <Text key={i} testID="code-cell" style={[styles.codeDigit, !code[i] && styles.codeDigitEmpty]}>
+                  {code[i] ?? "0"}
+                </Text>
+              ))}
+            </View>
           <TextInput
             ref={codeField}
             style={[styles.field, styles.codeField]}
             placeholder="000000"
-            placeholderTextColor={T.faint}
+            // The cells draw the zeros and the digits; the field's own
+            // text and placeholder are there for VoiceOver and autofill.
+            placeholderTextColor="transparent"
+            caretHidden
+            selectionColor="transparent"
             keyboardType="number-pad"
             textContentType="oneTimeCode"
             autoComplete="one-time-code"
@@ -291,6 +311,7 @@ export default function SignIn() {
             onSubmitEditing={() => verify()}
             returnKeyType="go"
           />
+          </View>
           {error && <Text style={styles.err} accessibilityRole="alert">{error}</Text>}
           <Pressable
             style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed, (busy || !codeReady(code)) && styles.disabled]}
@@ -502,11 +523,21 @@ const styles = StyleSheet.create({
     backgroundColor: T.surface, borderColor: T.border, borderWidth: 1,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, color: T.text, fontSize: 16,
   },
-  // THE ONE FIELD IN THE APP THAT WANTS KERNING, and the reason
-  // lib/fields.ts exists: iOS recycles this view onto the next screen's
-  // fields, and until every field stated its own letterSpacing, this
-  // 8 followed the code box into setup's Amount box.
-  codeField: { fontSize: 28, letterSpacing: 8, textAlign: "center", fontVariant: ["tabular-nums"] },
+  // NO KERNING ON THE FIELD, EVER (2026-11-11). It had letterSpacing 8
+  // and that kern followed this view into setup's fields — see
+  // lib/fields.ts. The field now lies over the cells with its text
+  // transparent; the cells are the box you see.
+  codeBox: {
+    backgroundColor: T.surface, borderColor: T.border, borderWidth: 1, borderRadius: 12,
+    minHeight: 62, justifyContent: "center",
+  },
+  codeCells: { flexDirection: "row", justifyContent: "center", gap: 14 },
+  codeDigit: { color: T.text, fontSize: 28, fontVariant: ["tabular-nums"], width: 20, textAlign: "center" },
+  codeDigitEmpty: { color: T.faint },
+  codeField: {
+    position: "absolute", top: 0, right: 0, bottom: 0, left: 0,
+    backgroundColor: "transparent", borderWidth: 0, color: "transparent", fontSize: 28, textAlign: "center",
+  },
   sent: { color: T.dim, fontSize: 14, lineHeight: 20, marginBottom: 4 },
   strong: { color: T.text, fontWeight: "600" },
   err: { color: T.expense },
