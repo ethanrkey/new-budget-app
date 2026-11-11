@@ -2546,6 +2546,44 @@ fifth tab never needs a migration.
   legend is gray: `99b5edc` made it white too, and the owner reverted
   that the same day. `CalendarView.jsx` is exactly what it was before
   `99b5edc`.
+
+  **AMENDED 2026-11-11, the owner's call, PHONE ONLY: a swipe turns the
+  month, and the month follows the finger.** The grids for the months
+  before and after are drawn either side of the one shown, off screen,
+  on one strip. A sideways drag pulls the next month in beside this one
+  as the finger moves. Let go past a fifth of the width, or flick
+  (0.3pt/ms), and it slides the rest of the way in 280ms; otherwise it
+  slides back. Past the first or last month the grid moves a third as
+  far as the finger and comes back. The ‹ › arrows slide the same strip
+  the same way. The title, the picked day (the 1st) and the card change
+  when a slide lands, as the arrows did on the tap. Details:
+  - THE STRIP IS POSITIONED BY MONTH, NOT BY SLOT. Month i sits at
+    i × width and the strip is moved to −i × width. When a slide lands
+    and the neighbors are redrawn around the new month, the strip is
+    already in the right place, so nothing has to be reset. A reset
+    would leave one frame where the reset and the redraw disagree, which
+    is the flicker.
+  - A drag only counts when it is past 12pt and mostly sideways
+    (|dx| > 1.5 × |dy|), so taps stay taps and up/down scrolling stays
+    with the Ledger's list. The grid takes the touch in the capture
+    phase, because a cell has already taken it.
+  - The grid's height follows the strip, so a 6-week month sliding in
+    beside a 5-week one grows the grid as it comes. Height is layout, so
+    this runs on the JS driver, not the native one.
+  - The off-screen months are hidden from VoiceOver and can't be
+    touched. The arrows are still how VoiceOver changes month.
+  - Two quick arrow taps go two months: a slide still in flight lands
+    at once, and the next starts from there.
+  The rules are pure, in `mobile/lib/monthSwipe.ts`.
+  `mobile/__tests__/calendar-swipe.test.tsx` drives the real
+  PanResponder with hand-made touches and checks where the grids are on
+  screen: following the finger, sliding back, landing, a flick, the
+  rubber band at the first month, a vertical drag left alone, the arrows
+  animating to the same place, two quick taps, and the height. Checked
+  in the react-native-web harness at 375pt: mid-drag November and
+  December were side by side 150pt along, the slide eased into place,
+  and December stayed at x=0 across the landing, so nothing jumped. Not
+  checked on a device (the simulator still hangs).
   Caps are 3 below `sm`, 5 above; below `sm` the cell also drops the net,
   which does not fit a ~45px cell, and shows it in the day detail instead.
   A **Planned spending** panel sits above the table (`SpendingMix.jsx`,
@@ -3823,6 +3861,46 @@ Disconnect → `plaid_items`, `plaid_tokens` and every `plaid_%` Vault
 secret empty, `/item/remove` ok → toggle off → the plain `as of` bar
 and Update balance are back, with both pulled balances kept as
 ordinary history. One pull per open; the double pull is gone.
+
+### "Someone else changed this" with nobody else there (2026-11-11, the owner's phone) — FOUND, NOT FIXED
+
+Reported: November's actual for Electric (161.29) entered on the
+Spending tab, Done pressed, and the conflict popup said the change
+wasn't saved. No other device had the app open. Reload showed 161.29.
+The bank had synced at 10:08 and this was 10:14. **Held for the
+owner's go: no code changed.**
+
+**Cause: one Done saved twice, and the second save conflicted with the
+first.** The actual's field in `mobile/app/(tabs)/spending.tsx` calls
+`save` from both `onSubmitEditing` and `onBlur`. On iOS the Done key
+fires submit and then blur, so two `commit`s start in the same moment.
+Both read the same state, so the store (`mobile/lib/store.ts`) plans
+the same write twice from the same baseline and version map:
+- A first actual for a month is a new row, so both plan an insert. The
+  first lands. The second gets 23505, and tries to revive a deleted row.
+  None exists, because the row is live, so it reports `conflict`.
+- An actual that already had a value goes the same way, through the
+  version-guarded update: the first bumps the version, so the second
+  matches zero rows.
+
+Reproduced with a throwaway jest test: the real store against a fake
+`budget_entities` with the server's version and revive rules. Submit
+then blur gave one written insert, one 23505, one zero-row revive, and
+the popup. Blur alone gave one insert and no popup.
+
+**The bank sync is not the cause.** `plaid_write_balance` writes only
+`accountSnapshot` rows, never an actual's. The phone also re-reads its
+state after its own pull writes.
+
+**Was the entry at risk? Not as it went: the first write landed, which
+is why Reload showed it. But Dismiss would have put it at risk.** The
+failed second commit rolls the screen back to the state before the
+edit. The store, though, has already taken the first save's state as
+its baseline. Any later edit is then diffed against that baseline, and
+the actual is missing from the screen's state, so it plans a TOMBSTONE
+for it. The repro shows it: popup, Dismiss, then an October actual
+typed in, and November's row was deleted. Reload avoids this by
+re-reading everything.
 
 ### Capital One, lost after Plaid and rescued with minutes left (2026-11-03, production)
 
