@@ -690,6 +690,13 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 31, 2026-11-11, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
+  `b86264e1-70df-41a5-8109-11e9f7fad9c7`, iOS update `01a1cb47`,
+  commit `4a22fb8`. Published through `mobile/scripts/ota.mjs`, run
+  from `mobile/`, after CI passed on that commit. The calendar turns
+  months with a swipe that follows the finger, and the arrows slide.
+
 - **OTA UPDATE 30, 2026-11-08, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
   `9ef99f26-72b8-4793-a7f3-5c0c6f369639`, iOS update `01a1b9b3`,
