@@ -690,6 +690,14 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 32, 2026-11-11, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
+  `56cb9cb2-95aa-45ed-8c23-8d34924ce793`, iOS update `01a1cb69`,
+  commit `c5480de`. Published through `mobile/scripts/ota.mjs`, run
+  from `mobile/`, after CI passed on that commit. One save per edit,
+  Reload-only conflicts, and no field kerns (the sign-in code box draws
+  its digits in cells).
+
 - **OTA UPDATE 31, 2026-11-11, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
   `b86264e1-70df-41a5-8109-11e9f7fad9c7`, iOS update `01a1cb47`,
@@ -2043,6 +2051,19 @@ Conventions worth knowing before touching numbers:
   knowing: loan amortization reads payments from `buildAllEvents`, so it now
   amortizes the PLANNED payment rather than the logged one — reality for a
   loan comes from its logged balance, which is the anchor anyway.
+- **Every web Spending card uses the same columns** (2026-11-11, the
+  owner's report, web only). Each card's table was auto-layout, so it
+  sized Month / Expected / Actual / Difference from its own contents, and
+  Electric, Gas, Groceries and Discover Bill each put the numbers
+  somewhere different. Now it is `table-fixed` with one `<colgroup>` in
+  every card: Month takes what is left, and Expected (7rem), Actual
+  (8rem, for the 6rem box) and Difference (7rem) are fixed, so the
+  columns run straight down the page like one table. A 30rem minimum
+  keeps Month readable; narrower than that the card scrolls sideways, as
+  it already could. `scripts/drive_spending_columns.mjs` measures every
+  card's header and row cells on the real page at 1100px and 640px and
+  requires the same edges everywhere. It fails on the old markup. The
+  phone's Spending tab is unchanged.
 - **The Budget grid's starting-balance row is labeled with the account's
   name**, but the CSV export writes the fixed label `Checking` because
   `parseBudgetCSV` keys that number off the label. It also accepts the older
@@ -2640,7 +2661,13 @@ fifth tab never needs a migration.
   Open, the "Other" row is REPLACED by its children rather than sitting
   above them — the same $2,350 as a summary row and again as its parts read
   as double-counting — so the fold needs its own way back, a
-  "Fold N back into Other" control under the expanded rows. Both views still
+  "Fold N back into Other" control under the expanded rows (**web,
+  2026-11-11, the owner's call: just the caret, no text.** The words are
+  the button's `aria-label`, so a screen reader still says them, and its
+  `title`, so a mouse sees them on hover. Its padding keeps the target
+  bigger than the 12px caret. `scripts/drive_fold_caret.mjs` opens Other
+  on the real page and checks the control shows no text, is named, and
+  still folds.) Both views still
   show the same data; they already differ in how much of it is drawn versus
   listed. "Other" stays last in both while closed: it is a remainder, not a
   peer, which is why it keeps its position even when it outranks named
