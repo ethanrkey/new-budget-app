@@ -81,7 +81,23 @@ function VariableSpendingRow({ item, monthKeys, monthlyActuals, onSet, onDelete,
         </div>
       )}
       <div className="overflow-x-auto">
-        <table className="text-sm border-collapse w-full">
+        {/* ONE SET OF COLUMNS FOR EVERY CARD (2026-11-11, the owner's
+            report). An auto-layout table sizes its columns from its own
+            contents, so Electric, Gas, Groceries and Discover each put
+            Expected, Actual and Difference somewhere different. Fixed
+            layout with the same widths in every card lines them up down
+            the page like one table: Month takes what is left, the three
+            numbers take the same fixed width everywhere. The minimum
+            width keeps Month readable; narrower than that, the card
+            scrolls sideways as it already did. The phone is separate
+            and unchanged. */}
+        <table className="text-sm border-collapse w-full table-fixed min-w-[30rem]" data-testid="spending-table">
+          <colgroup>
+            <col />
+            <col className="w-28" />
+            <col className="w-32" />
+            <col className="w-28" />
+          </colgroup>
           <thead>
             <tr className="text-left text-gray-400">
               <th className="py-1 pr-3 font-medium">Month</th>
