@@ -210,15 +210,21 @@ function BarRow({ d, total, chevron }) {
     </div>
   );
 }
+// JUST THE CARET (2026-11-11, the owner's call, web only). It read
+// "Fold N back into Other"; the words are now the button's accessible
+// name, so a screen reader still says them, and the hover tooltip shows
+// them to a mouse. The padding keeps the target bigger than the caret.
 function Collapse({ n, onClick }) {
+  const label = `Fold ${n} back into Other`;
   return (
     <button
       onClick={onClick}
       aria-expanded
-      className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 py-1 -mx-1 px-1 rounded"
+      aria-label={label}
+      title={label}
+      className="flex items-center text-xs text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1.5 -mx-1.5 rounded"
     >
       <Chevron open />
-      Fold {n} back into Other
     </button>
   );
 }
