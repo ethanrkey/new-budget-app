@@ -690,6 +690,14 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 33, 2026-11-11, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
+  `4f76a159-3329-4ae9-bd50-d7cb1060377f`, iOS update `01a1cd93`,
+  commit `c36706c`. Published through `mobile/scripts/ota.mjs`, run
+  from `mobile/`, after CI passed on that commit. A sideways calendar
+  swipe locks the Ledger's scrolling until the month lands; a drag that
+  starts vertical stays a scroll.
+
 - **OTA UPDATE 32, 2026-11-11, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
   `56cb9cb2-95aa-45ed-8c23-8d34924ce793`, iOS update `01a1cb69`,
