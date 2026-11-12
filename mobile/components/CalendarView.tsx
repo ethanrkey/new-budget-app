@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated, Easing, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
 } from "react-native";
-import { SLIDE_MS, dragOffset, isMonthSwipe, releaseTarget } from "../lib/monthSwipe";
+import { SLIDE_MS, dragAxis, dragOffset, releaseTarget, type DragAxis } from "../lib/monthSwipe";
 import { T, money } from "../lib/theme";
 import {
   calendarMonths, buildCalendarMonth, addMonthKey, cellBalancePhone,
@@ -77,11 +77,25 @@ import type { BudgetState, LedgerRow, TrackerCategory } from "../../src/engine/t
 //    when the slide lands, like the arrows used to on the tap. The
 //    off-screen months are hidden from VoiceOver and cannot be
 //    touched; the arrows are still how VoiceOver changes month.
+// 7. ONE DIRECTION PER DRAG (2026-11-11). The owner, on iOS: once a
+//    sideways swipe had started, the Ledger scrolled up and down too as
+//    the finger drifted. Two reasons, two fixes. (a) The list is a
+//    native UIScrollView, and its pan runs on its own, whatever the JS
+//    responder says; so from the moment the swipe has the strip until
+//    the finger is up and the month has landed, `onSwipeLock` tells the
+//    Ledger to turn its scrolling off (and this ScrollView turns its own
+//    off). Turning it off cancels the pan iOS had started, and the
+//    Ledger puts the list back where it was when the finger went down,
+//    undoing the few points it slid before the swipe was sure. (b) The
+//    direction is decided ONCE per touch, at the first move past the
+//    slop (`dragAxis` in lib/monthSwipe.ts): a drag that starts out
+//    vertical is a scroll for good, and is never taken over by the
+//    strip however sideways it wanders after.
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export default function CalendarView({
-  state, rows, categories, onPick, reveal,
+  state, rows, categories, onPick, reveal, onSwipeLock,
 }: {
   state: BudgetState;
   rows: LedgerRow[];
@@ -91,6 +105,10 @@ export default function CalendarView({
    *  `settled` once the list has stopped moving (at once if it did not
    *  need to). */
   reveal?: (box: View, settled: () => void) => void;
+  /** A month swipe has the finger (true), or it has let go and the
+   *  month has landed (false). The enclosing list stops scrolling
+   *  between the two: see note 7. */
+  onSwipeLock?: (locked: boolean) => void;
 }) {
   const { width } = useWindowDimensions();
   const account = state.accounts[0]!;
@@ -206,8 +224,22 @@ export default function CalendarView({
   const heading = useRef<number | null>(null);
   const dragging = useRef(false);
   // What the gesture handlers read. They are made once, and these move.
-  const live = useRef({ slot, width, months });
-  live.current = { slot, width, months };
+  const live = useRef({ slot, width, months, onSwipeLock });
+  live.current = { slot, width, months, onSwipeLock };
+
+  // THE LOCK (note 7). While a swipe has the strip, nothing scrolls up
+  // or down: not this ScrollView, not the Ledger's list around it. Held
+  // from the grant until the finger is up AND the month has landed.
+  const [locked, setLocked] = useState(false);
+  const lockedRef = useRef(false);
+  function lock(on: boolean) {
+    if (lockedRef.current === on) return;
+    lockedRef.current = on;
+    setLocked(on);
+    live.current.onSwipeLock?.(on);
+  }
+  // Unmounted mid-swipe (the tab switched, the list changed): let go.
+  useEffect(() => () => { if (lockedRef.current) live.current.onSwipeLock?.(false); }, []);
 
   // AT REST, the strip sits on the month shown. This is what lines it up
   // on the first render, after a rotation, and when the list of months
@@ -242,6 +274,9 @@ export default function CalendarView({
     }).start(({ finished }) => {
       // An interrupted slide was replaced by another, which lands itself.
       if (finished && heading.current === to) land(to);
+      // Landed, or handed to the next slide: either way, if no finger
+      // is down the list may scroll again.
+      if (!dragging.current) lock(false);
     });
   }
 
@@ -264,13 +299,26 @@ export default function CalendarView({
 
   // The month the drag started on — the one under the finger at grant.
   const dragFrom = useRef(0);
+  // Which way this touch was decided to go (note 7); null until it has
+  // moved past the slop. Cleared when a finger goes down.
+  const axis = useRef<DragAxis>(null);
   const pan = useRef(PanResponder.create({
+    // Asked on every touch start, and never says yes: a new touch is a
+    // new decision.
+    onStartShouldSetPanResponderCapture: () => { axis.current = null; return false; },
     // CAPTURE, because the touch starts on a cell, and a cell is a
     // button that has already taken it. Asking on MOVE, never on start,
-    // is what leaves a tap a tap.
-    onMoveShouldSetPanResponderCapture: (_e, g) => live.current.months.length > 1 && isMonthSwipe(g.dx, g.dy),
+    // is what leaves a tap a tap. ONCE A DRAG IS VERTICAL IT STAYS
+    // VERTICAL: the list is scrolling, and a later sideways wander does
+    // not take it over.
+    onMoveShouldSetPanResponderCapture: (_e, g) => {
+      if (live.current.months.length < 2) return false;
+      axis.current = dragAxis(g.dx, g.dy, axis.current);
+      return axis.current === "x";
+    },
     onPanResponderGrant: () => {
       dragging.current = true;
+      lock(true);
       dragFrom.current = landNow();
     },
     onPanResponderMove: (_e, g) => {
@@ -315,7 +363,7 @@ export default function CalendarView({
   // number here would be the one that is wrong on a phone nobody has
   // tried yet.
   return (
-    <ScrollView>
+    <ScrollView scrollEnabled={!locked}>
       <View style={styles.monthBar}>
         <Pressable onPress={() => !atFirst && goMonth(-1)} hitSlop={12}
           accessibilityRole="button" accessibilityLabel="Previous month">

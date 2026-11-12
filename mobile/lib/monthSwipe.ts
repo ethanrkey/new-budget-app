@@ -29,6 +29,24 @@ export function isMonthSwipe(dx: number, dy: number): boolean {
   return Math.abs(dx) > SWIPE_SLOP && Math.abs(dx) > Math.abs(dy) * 1.5;
 }
 
+export type DragAxis = "x" | "y" | null;
+
+/**
+ * WHICH WAY THIS DRAG IS GOING, decided once (2026-11-11). Until the
+ * finger has moved past the slop either way, nothing is decided (null).
+ * The first move past it settles the drag for as long as the finger is
+ * down: "x" is a month swipe, "y" belongs to the list. Asked by the owner
+ * in those words: once a sideways swipe has started, the Ledger must not
+ * scroll as the finger drifts, and a drag that starts out vertical stays
+ * a scroll however sideways it later wanders. `decided` is the answer
+ * already given for this touch; it is kept, whatever the finger does.
+ */
+export function dragAxis(dx: number, dy: number, decided: DragAxis = null): DragAxis {
+  if (decided) return decided;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) <= SWIPE_SLOP) return null;
+  return isMonthSwipe(dx, dy) ? "x" : "y";
+}
+
 /**
  * Where the finger has pulled the page, in points, for the month at
  * `index` of `count`. Past the first or last month there is nothing

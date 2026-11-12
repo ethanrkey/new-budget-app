@@ -2612,6 +2612,41 @@ fifth tab never needs a migration.
   December were side by side 150pt along, the slide eased into place,
   and December stayed at x=0 across the landing, so nothing jumped. Not
   checked on a device (the simulator still hangs).
+
+  **AMENDED AGAIN 2026-11-11, the owner's call, PHONE ONLY: one direction
+  per drag.** Reported on iOS: once a sideways swipe had started, the
+  Ledger also scrolled up and down as the finger drifted. Asked for:
+  lock into the horizontal swipe until the finger is up and the month
+  lands, and let the list scroll only when the drag starts out vertical.
+  Two causes, two fixes (note 7 in `mobile/components/CalendarView.tsx`):
+  - The Ledger's list is a native UIScrollView, and its pan runs on its
+    own whatever the JS responder decides; `onPanResponderTerminationRequest:
+    false` never stopped it. So CalendarView now reports `onSwipeLock(true)`
+    when the swipe takes the grid, and `onSwipeLock(false)` only once the
+    finger is up AND the slide has landed (or slid back). In between, the
+    Ledger sets `scrollEnabled={false}` on its list (which cancels the pan
+    iOS had started) and the calendar does the same to its own ScrollView.
+    On the lock the Ledger also puts the list back where it was when the
+    finger went down (`onTouchStart` records it), undoing the few points
+    iOS slid it before the swipe passed the 12pt slop. Arrow taps never
+    lock.
+  - The direction is decided ONCE per touch, at the first move past 12pt
+    either way (`dragAxis` in `mobile/lib/monthSwipe.ts`), and cleared
+    when the next finger goes down. Before, the grid asked again on every
+    move, so a scroll that wandered sideways could be taken over mid-drag.
+    Now a drag that starts vertical is the list's for good.
+  Tests: `mobile/__tests__/ledger-swipe-lock.test.tsx` mounts the real
+  Ledger in calendar view and swipes it with the real PanResponder: the
+  list and the calendar's ScrollView are locked from the grant through
+  the drift and the release until the month lands, the list is scrolled
+  back to where the touch began, a short swipe unlocks once it has slid
+  back, a vertical-first drag that turns sideways never takes the grid or
+  locks anything, and the arrows don't lock. `calendar-swipe.test.tsx`
+  adds the `dragAxis` rules, the vertical-first drag, and the
+  `onSwipeLock` sequence. Five of these fail on the old code. Not checked
+  on a device (the simulator still hangs); jest's ScrollView is a
+  stand-in, so that `scrollEnabled={false}` cancels the live UIKit pan is
+  UIKit's documented behavior, not something these tests saw.
   Caps are 3 below `sm`, 5 above; below `sm` the cell also drops the net,
   which does not fit a ~45px cell, and shows it in the day detail instead.
   A **Planned spending** panel sits above the table (`SpendingMix.jsx`,

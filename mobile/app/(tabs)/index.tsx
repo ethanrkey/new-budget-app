@@ -50,6 +50,18 @@ export default function LedgerScreen() {
   const wrapRef = useRef<View>(null);
   const calListRef = useRef<SectionList<number>>(null);
   const calOffset = useRef(0);
+  // THE SWIPE LOCK (CalendarView note 7). While a month swipe has the
+  // finger the list does not scroll, and it goes back to where it was
+  // when the finger went down: iOS may have slid it a few points before
+  // the swipe was sure it was sideways.
+  const [swipeLocked, setSwipeLocked] = useState(false);
+  const touchOffset = useRef(0);
+  const onSwipeLock = useCallback((on: boolean) => {
+    setSwipeLocked(on);
+    if (on && calOffset.current !== touchOffset.current) {
+      calListRef.current?.getScrollResponder()?.scrollTo({ y: touchOffset.current, animated: false });
+    }
+  }, []);
   const calMoved = useRef(0);
   // THE SCROLL SETTLING (2026-11-03): the calendar holds the space under
   // its card while the list moves and lets it go when told it stopped.
@@ -284,6 +296,8 @@ export default function LedgerScreen() {
       {calendar ? (
         <SectionList
           ref={calListRef}
+          scrollEnabled={!swipeLocked}
+          onTouchStart={() => { touchOffset.current = calOffset.current; }}
           onScroll={(e) => { calOffset.current = e.nativeEvent.contentOffset.y; calMoved.current = Date.now(); }}
           scrollEventThrottle={16}
           sections={[{ title: "", data: [0] }]}
@@ -293,7 +307,7 @@ export default function LedgerScreen() {
           renderSectionHeader={() => null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} tintColor={T.brass} />}
           renderItem={() => (
-            <CalendarView state={state!} rows={rows} categories={state!.trackerCategories} reveal={revealCard} />
+            <CalendarView state={state!} rows={rows} categories={state!.trackerCategories} reveal={revealCard} onSwipeLock={onSwipeLock} />
           )}
         />
       ) : (

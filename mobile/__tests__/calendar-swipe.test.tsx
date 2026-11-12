@@ -4,7 +4,7 @@ import { normalize } from "../../src/engine/stateShape.ts";
 import { computeLedger } from "../../src/engine/compute.ts";
 import { fmtLongDay, fmtMonthYear } from "../../src/shared/dates.ts";
 import CalendarView from "../components/CalendarView";
-import { SLIDE_MS, SWIPE_SLOP, dragOffset, isMonthSwipe, releaseTarget } from "../lib/monthSwipe";
+import { SLIDE_MS, SWIPE_SLOP, dragAxis, dragOffset, isMonthSwipe, releaseTarget } from "../lib/monthSwipe";
 
 // SWIPE TO CHANGE MONTH, AND THE MONTH FOLLOWS THE FINGER (2026-11-11).
 //
@@ -150,6 +150,16 @@ describe("the rules (lib/monthSwipe.ts)", () => {
     expect(isMonthSwipe(30, 25)).toBe(false);
   });
 
+  test("a drag's direction is decided once, at the first move past the slop, and kept", () => {
+    expect(dragAxis(SWIPE_SLOP, 0)).toBeNull();
+    expect(dragAxis(3, SWIPE_SLOP)).toBeNull();
+    expect(dragAxis(SWIPE_SLOP + 1, 2)).toBe("x");
+    expect(dragAxis(4, SWIPE_SLOP + 1)).toBe("y");
+    // Decided is decided, whatever the finger does after.
+    expect(dragAxis(200, 10, "y")).toBe("y");
+    expect(dragAxis(20, 300, "x")).toBe("x");
+  });
+
   test("past either end the pull is a third as far", () => {
     expect(dragOffset(-90, 1, 4)).toBe(-90);
     expect(dragOffset(90, 0, 4)).toBe(30);      // no month before the first
@@ -263,6 +273,29 @@ describe("the strip", () => {
     expect(await f.move(15, 60)).toBe(false);
     expect(await f.move(25, 120)).toBe(false);
     expect(onScreen(OCT)).toBe(0);
+  });
+
+  test("a drag that starts out vertical stays the list's, however sideways it turns", async () => {
+    await mount();
+    const f = finger();
+    expect(await f.move(0, 20)).toBe(false);
+    expect(await f.move(-150, 25)).toBe(false);
+    expect(onScreen(OCT)).toBe(0);
+  });
+
+  test("the swipe tells its parent when it locks and when the month has landed", async () => {
+    const locks: boolean[] = [];
+    await render(<CalendarView state={state} rows={rows} categories={[]} onSwipeLock={(on) => locks.push(on)} />);
+    await screen.findByText(fmtMonthYear(OCT));
+    const f = finger();
+    await f.move(-20);
+    expect(locks).toEqual([true]);
+    await f.move(-W / 2, 40, 200);
+    await f.release();
+    expect(locks).toEqual([true]);
+    await settle();
+    expect(screen.getByText(fmtMonthYear(NOV))).toBeOnTheScreen();
+    expect(locks).toEqual([true, false]);
   });
 
   test("THE ARROWS SLIDE THE SAME STRIP, the same way", async () => {
