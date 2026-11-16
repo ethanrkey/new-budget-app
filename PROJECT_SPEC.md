@@ -4457,6 +4457,17 @@ nothing, and answered "written" anyway. Found at 10:17 PM. It reads
   today." Drawn only once the allowlist answer is in, so an allowlisted
   account never flashes it. Deliberately not "coming soon": App Review
   reads that as a placeholder.
+  **AMENDED 2026-11-16, the owner's call, PHONE ONLY: the phone shows
+  nothing at all off the list.** No "Connected features" label, no card,
+  no beta note: `Connected.tsx` returns null when `canSeeToggle` says no,
+  so Settings goes from Account straight to App. Allowlisted accounts are
+  unchanged. The web still shows `BETA_NOTE`. The App Review note
+  ("invite-only beta ... isn't available to reviewers") is still true and
+  unchanged. Tests: `mobile/__tests__/connected.test.tsx` mounts it off
+  the list, waits for the allowlist answer, and finds no label, no note,
+  no "beta" and no Connect (fails on the old code); the allowlisted case
+  now also checks the section label is still there.
+  `tests/connect.test.mjs` checks the phone no longer draws the note.
 - **Editing one date of a recurring item** (`OCCURRENCE_EDIT`, both
   clients): "Edit this instance only." and "Current recurring amount:
   $232.04". The paragraph about name, category, cadence and dates

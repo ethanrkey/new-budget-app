@@ -71,6 +71,7 @@ const mockServer = {
   noItem: false,
   invoked: 0,
   notListed: false,
+  allowlistAsked: 0,
   // What plaid-exchange's recover answers, and how many times it was asked.
   recover: { ok: false, code: "NO_OPEN_SESSION" } as Record<string, unknown>,
   recovers: 0,
@@ -83,6 +84,7 @@ jest.mock("../lib/supabase", () => {
   const table = (t: string) => ({
     select: () => ({
       maybeSingle: async () => {
+        if (t === "plaid_beta") mockServer.allowlistAsked++;
         if (t === "plaid_beta") return { data: mockServer.notListed ? null : { user_id: "u1" } };
         if (t === "plaid_items" && mockServer.holdItems) { const h = mockServer.holdItems; mockServer.holdItems = null; await h; }
         if (t === "plaid_items" && mockServer.noItem) return { data: null };
@@ -165,6 +167,7 @@ beforeEach(() => {
   mockServer.holdItems = null;
   mockServer.noItem = false;
   mockServer.invoked = 0;
+  mockServer.allowlistAsked = 0;
   mockServer.notListed = false;
   mockServer.recover = { ok: false, code: "NO_OPEN_SESSION" };
   mockServer.recovers = 0;
@@ -287,16 +290,24 @@ describe("Settings, for an account not on the allowlist", () => {
     );
   }
 
-  it("says the feature is a small private beta, and offers nothing to press", async () => {
+  // 2026-11-16, the owner's call: nothing at all, not even the label.
+  it("shows nothing: no section label, no card, no beta note, nothing to press", async () => {
     mockServer.notListed = true;
     await mountSettings();
-    expect(await screen.findByText(NOTE)).toBeTruthy();
-    expect(screen.queryByText("Connect your bank")).toBeNull();
+    // Wait for the allowlist answer to be in, then for anything to draw.
+    await waitFor(() => expect(mockServer.allowlistAsked).toBeGreaterThan(0));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(screen.queryByText("Connected features")).toBeNull();
+    expect(screen.queryByText(NOTE)).toBeNull();
+    expect(screen.queryByText(/beta/i)).toBeNull();
+    expect(screen.queryByText(/Connect your bank/)).toBeNull();
+    expect(screen.queryByLabelText("Connected features")).toBeNull();
   });
 
-  it("an allowlisted account sees the toggle and never the note", async () => {
+  it("an allowlisted account still sees the section and its toggle, and never the note", async () => {
     await mountSettings();
     expect(await screen.findByText("Connect your bank")).toBeTruthy();
+    expect(screen.getByText("Connected features")).toBeTruthy();
     expect(screen.queryByText(NOTE)).toBeNull();
   });
 });

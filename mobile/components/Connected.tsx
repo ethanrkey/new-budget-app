@@ -10,7 +10,7 @@ import { useBudget } from "./StateProvider";
 import NativeSheet from "./NativeSheet";
 import { fmtDate, fmtInstant } from "../../src/shared/dates.ts";
 import {
-  BETA_NOTE, CONNECT_CONSENT, CONNECT_REFUSED, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
+  CONNECT_CONSENT, CONNECT_REFUSED, CONNECT_TOGGLE, CONNECT_TOGGLE_SUB, DISCONNECT_NOTE,
   DIDNT_OPEN, FINISHING, OPENING, PLAID_PORTAL_URL, RECONNECT, TOGGLE_OFF_CONFIRM, connectRefusedText,
 } from "../../src/content/connect.ts";
 import type { Connection } from "../../src/shared/connect.ts";
@@ -174,22 +174,14 @@ export default function Connected() {
     return () => { sub.remove(); };
   }, [allowlisted, on, refreshConnection, resyncState, ask]);
 
-  // NOT ON THE LIST: one line saying the feature exists and is a small
-  // beta, and nothing to press. Nothing until the allowlist answer is
-  // in, so an allowlisted account never flashes the beta note.
-  if (!canSeeToggle(allowlistedNow() || allowlisted)) {
-    if (!loaded) return null;
-    return (
-      <>
-        <Text style={styles.sectionLabel}>Connected features</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Text style={[styles.rowSub, { flex: 1 }]}>{BETA_NOTE}</Text>
-          </View>
-        </View>
-      </>
-    );
-  }
+  // NOT ON THE LIST: NOTHING AT ALL (the owner's call, 2026-11-16,
+  // phone only). No section label, no card, no beta note: Settings goes
+  // from Account straight to App, as if the feature did not exist,
+  // which is what the paragraph above always said it should be. This
+  // used to draw BETA_NOTE; the web still does. Also nothing until the
+  // allowlist answer is in, so an allowlisted account never flashes a
+  // gap before its section.
+  if (!canSeeToggle(allowlistedNow() || allowlisted)) return null;
 
   async function setToggle(next: boolean) {
     if (next) {

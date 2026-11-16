@@ -875,14 +875,17 @@ console.log("\n== the pill while the connection is still being read ==");
   eq("once the row is here, connecting stops mattering", pillStateOf(conn(), "plaid", TODAY, TODAY, false, true), "synced");
 }
 
-console.log("\n== the beta note, for everyone not on the list ==");
+console.log("\n== the beta note: the web, for everyone not on the list ==");
 eq("the owner's words, verbatim", BETA_NOTE,
   "Bank connection — in a small private beta for now. Everything else works by hand, exactly as it does today.");
 {
   const web = readFileSync(new URL("../src/components/ConnectedAccount.jsx", import.meta.url), "utf8");
   const phone = readFileSync(new URL("../mobile/components/Connected.tsx", import.meta.url), "utf8");
   is("the web shows it", web.includes("{BETA_NOTE}"));
-  is("the phone shows it", phone.includes("{BETA_NOTE}"));
+  // 2026-11-16, the owner's call: on the phone an account not on the
+  // list sees NOTHING, not the note and not the section around it.
+  not("the phone does not show it", phone.includes("{BETA_NOTE}"));
+  is("...the phone draws nothing off the list", /if \(!canSeeToggle\(.*\)\) return null;/.test(phone));
   not("neither says 'coming soon', which App Review reads as a placeholder", /coming soon/i.test(BETA_NOTE));
 }
 
