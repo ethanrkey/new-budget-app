@@ -690,6 +690,14 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 34, 2026-11-16, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
+  `42325f33-c06a-4d4f-a7b0-b84b011b9c9f`, iOS update `01a1e54c`,
+  commit `b519049`. Published through `mobile/scripts/ota.mjs`, run
+  from `mobile/`, after CI passed on that commit. Settings shows nothing
+  (no Connected features label, card or beta note) for accounts off the
+  Plaid allowlist.
+
 - **OTA UPDATE 33, 2026-11-11, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
   `4f76a159-3329-4ae9-bd50-d7cb1060377f`, iOS update `01a1cd93`,
