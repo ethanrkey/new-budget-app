@@ -1864,13 +1864,19 @@ written here in the same sitting** — there is no other record of it.
   > the app's full function is available on the phone without visiting
   > the website. Account deletion is in Settings, at the root rather
   > than behind a submenu.
-  > Bank connection is an invite-only beta for the developer's family
-  > and friends and isn't available to reviewers; the app is fully
-  > functional without it.
+  > Bank connection is available only to invited users and isn't
+  > available to reviewers; the app is fully functional without it.
 
   The last two lines were added 2026-10-30, owner's wording, because
   the App Store copy and privacy label now mention a bank connection
-  and a reviewer who cannot reach it would otherwise ask to.
+  and a reviewer who cannot reach it would otherwise ask to. REWORDED
+  2026-11-16, the owner's call: no "beta" (it read as an unfinished
+  feature, and since OTA 34 an account off the allowlist sees nothing
+  of it on the phone). Was: "Bank connection is an invite-only beta for
+  the developer's family and friends and isn't available to reviewers;
+  the app is fully functional without it." This text lives only here:
+  it has to be pasted into App Store Connect's App Review Information by
+  hand.
 
   The standing rule that produced the old version still applies and is
   worth keeping: do not name a sign-in method before the build has it.
@@ -4470,8 +4476,8 @@ nothing, and answered "written" anyway. Found at 10:17 PM. It reads
   no beta note: `Connected.tsx` returns null when `canSeeToggle` says no,
   so Settings goes from Account straight to App. Allowlisted accounts are
   unchanged. The web still shows `BETA_NOTE`. The App Review note
-  ("invite-only beta ... isn't available to reviewers") is still true and
-  unchanged. Tests: `mobile/__tests__/connected.test.tsx` mounts it off
+  says reviewers can't reach bank connection, which is still true (it
+  was reworded the same day to drop "beta": see Review notes). Tests: `mobile/__tests__/connected.test.tsx` mounts it off
   the list, waits for the allowlist answer, and finds no label, no note,
   no "beta" and no Connect (fails on the old code); the allowlisted case
   now also checks the section label is still there.
