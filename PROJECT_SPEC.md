@@ -690,6 +690,15 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **OTA UPDATE 35, 2026-11-17, on build 13's runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`** (build 14's too). Update
+  group `c0a1ecbb-7655-43d3-a593-4133ff95ee48`, iOS update `01a1eb43`,
+  commit `2012ea5`. Published through `mobile/scripts/ota.mjs`, run from
+  `mobile/`, after CI passed on that commit. Hosted Link opens with the
+  completion URI so the browser closes itself when Link is done (once
+  plaid-link-token is deployed), and Settings shows a bank the webhook
+  saved. See "First connections: why they save through recover".
+
 - **1.0.0 (14), BUILT 2026-11-16, UPLOADED 2026-11-17, for App Store
   submission.** EAS build `9419b489-3231-4c52-ad0e-bec628c3cb2a`, profile
   production, channel production, commit `3d24846` (everything through
