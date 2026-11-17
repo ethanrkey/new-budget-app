@@ -690,6 +690,29 @@ written here in the same sitting** — there is no other record of it.
 
 **App Store Connect / TestFlight**
 
+- **1.0.0 (14), BUILT 2026-11-16, UPLOADED 2026-11-17, for App Store
+  submission.** EAS build `9419b489-3231-4c52-ad0e-bec628c3cb2a`, profile
+  production, channel production, commit `3d24846` (everything through
+  OTA 34, plus the reworded App Review note). **Runtime
+  `78c21cd112c8724cfb309601209499bcef5c6f02`, the same as build 13**, so
+  every OTA on that runtime reaches both builds. Built with
+  `npx eas-cli build --platform ios --profile production --non-interactive --no-wait`
+  from `mobile/`; no prompts (EAS holds the credentials).
+  - **Submitting** (`eas submit`): `--non-interactive` still refuses
+    without `ascAppId`, and the owner's `!` prompt has no readable stdin,
+    so the Apple ID prompt fails there. What worked: put
+    `"submit": {"production": {"ios": {"ascAppId": "6822133130"}}}` in
+    `mobile/eas.json` FOR THE SUBMIT ONLY, run
+    `npx eas-cli submit --platform ios --profile production --id <build id> --non-interactive`,
+    then `git checkout mobile/eas.json`. Never committed, so the
+    fingerprint never moves (see "The ASC App ID ... deliberately NOT in
+    eas.json"); the build's runtime was fixed when it was built.
+  - **Two failed attempts first**, both "A required Apple agreement is
+    missing or has expired". The owner accepted the agreements; the first
+    retry after that failed the same way, and the next, on 2026-11-17,
+    went through (submission `4ae34d93-f3cb-44d3-b12b-934631382f0a`).
+    Apple takes a while to see newly accepted agreements.
+
 - **OTA UPDATE 34, 2026-11-16, on build 13's runtime
   `78c21cd112c8724cfb309601209499bcef5c6f02`**. Update group
   `42325f33-c06a-4d4f-a7b0-b84b011b9c9f`, iOS update `01a1e54c`,
