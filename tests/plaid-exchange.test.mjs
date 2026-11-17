@@ -94,7 +94,7 @@ function makeDb(tables) {
     const q = { op: "select", filters: [], patch: null, row: null, order: null, limit: Infinity };
     const rows = () => tables[name] ?? (tables[name] = []);
     const match = (r) => q.filters.every(([k, f, v]) =>
-      f === "eq" ? r[k] === v : f === "is" ? (r[k] ?? null) === v : f === "gt" ? String(r[k]) > String(v)
+      f === "eq" ? r[k] === v : f === "is" ? (r[k] ?? null) === v : f === "gt" ? String(r[k]) > String(v) : f === "gte" ? String(r[k]) >= String(v)
         : f === "in" ? v.includes(r[k]) : true);
     const run = () => {
       if (q.op === "insert") {
@@ -114,6 +114,7 @@ function makeDb(tables) {
       eq(k, v) { q.filters.push([k, "eq", v]); return api; },
       is(k, v) { q.filters.push([k, "is", v]); return api; },
       gt(k, v) { q.filters.push([k, "gt", v]); return api; },
+      gte(k, v) { q.filters.push([k, "gte", v]); return api; },
       in(k, v) { q.filters.push([k, "in", v]); return api; },
       order(k, o) { q.order = { k, asc: o?.ascending !== false }; return api; },
       limit(n) { q.limit = n; return api; },
@@ -351,6 +352,7 @@ console.log("\n== the balance read while connecting is kept (no second pull) =="
 console.log("\n== plaid-link-token: an abandoned session does not hold Connect ==");
 const LT_FAKES = FAKES + `
 export const PRODUCTS = ["auth"];
+export const PLAID_COMPLETION_URI = "keybudget://plaid-done";
 export const ACCOUNT_FILTERS = {};
 export const betaIsFull = () => false;
 export const cooldownUntil = () => null;
@@ -399,6 +401,252 @@ async function mint(db, answers) {
   const reported = makeDb({ plaid_link_sessions: [{ ...session("lt-1", ago(1)), item_reported_at: ago(0) }] });
   eq("...and one an ITEM_ADD_RESULT webhook announced",
     (await mint(reported, { "lt-1": { link_sessions: [] } })).code, "ALREADY_STARTING");
+}
+
+// ======================================================================
+// 2026-11-16, production: Reeve's USAA. Saved by recover, with THREE
+// billed balance pulls in 30 seconds where one was meant. The fixes of
+// 2026-11-17, one section each, in the order the owner gave them.
+// ======================================================================
+
+// ---- plaid-balance, run the same way --------------------------------
+const BAL_FAKES = FAKES + `
+export const BALANCE_STALE_AFTER_HOURS = 6;
+export const MAX_MANUAL_REFRESHES_PER_DAY = 4;
+export const REFRESH_DEBOUNCE_SECONDS = 60;
+export const nextPullInSeconds = () => 0;
+export const needsReconnect = () => false;
+export const localDateIn = () => "2026-11-16";
+`;
+const balOut = await build({
+  entryPoints: [new URL("../supabase/functions/plaid-balance/index.ts", import.meta.url).pathname],
+  bundle: true, write: false, format: "esm", platform: "neutral", logLevel: "silent",
+  plugins: [{
+    name: "fakes",
+    setup(b) {
+      b.onResolve({ filter: /_shared\/(caller|plaid|webhookVerify)\.ts$/ }, () => ({ path: "fakes", namespace: "fakes" }));
+      b.onLoad({ filter: /.*/, namespace: "fakes" }, () => ({ contents: BAL_FAKES, loader: "js" }));
+    },
+  }],
+});
+const balFile = new URL("balance.mjs", cache);
+writeFileSync(balFile, balOut.outputFiles[0].text);
+await import(balFile.href);
+const balanceHandler = handler;
+handler = exchangeHandler;
+
+/** The claim RPCs as plaid.sql defines them, over the fake tables.
+ *  `atFns: false` is a database that has not had §9a run. */
+function withClaims(db, { atFns = true } = {}) {
+  const base = db.rpc;
+  let tick = 0;
+  db.rpc = async (fn, a) => {
+    const item = () => db.tables.plaid_items.find((i) => i.id === a.p_item_id);
+    if (fn === "plaid_claim_pull_at" && !atFns) return { data: null, error: { message: "function does not exist" } };
+    if (fn === "plaid_claim_pull" || fn === "plaid_claim_pull_at") {
+      db.rpcs.push(fn);
+      const i = item(); const prev = i.last_synced_at ?? null;
+      const stale = prev == null || Date.parse(prev) < Date.now() - a.p_min_seconds * 1000;
+      if (!stale) return { data: [], error: null };
+      i.last_synced_at = new Date(Date.now() + ++tick).toISOString();
+      return { data: [{ claimed: true, previous: prev, ...(fn === "plaid_claim_pull_at" ? { claimed_at: i.last_synced_at } : {}) }], error: null };
+    }
+    if (fn === "plaid_release_pull") { db.rpcs.push(fn); item().last_synced_at = a.p_previous; return { data: null, error: null }; }
+    if (fn === "plaid_release_pull_at") {
+      db.rpcs.push(fn);
+      if (item().last_synced_at === a.p_claimed_at) item().last_synced_at = a.p_previous;
+      return { data: null, error: null };
+    }
+    if (fn === "plaid_read_token") return { data: "at-x", error: null };
+    return base(fn, a);
+  };
+  return db;
+}
+async function pull(trigger, { db, plaid, caller = "u-poppy" }) {
+  globalThis.__db = db; globalThis.__plaid = plaid.fn; globalThis.__caller = caller;
+  const res = await balanceHandler(new Request("https://x/plaid-balance", { method: "POST", body: JSON.stringify({ trigger, timeZone: "America/New_York" }) }));
+  return await res.json();
+}
+const balanceCalls = (plaid) => plaid.calls.filter((c) => c === "/accounts/balance/get").length;
+const checkingEntity = { user_id: "u-poppy", entity_id: "e-chk", kind: "account", deleted_at: null, data: { id: "checking", kind: "checking" } };
+
+console.log("\n== 1. giving back a pull claim can't wipe a newer synced time ==");
+{
+  // A pull claims, then fails at Plaid. Meanwhile the connection's save
+  // stamps the Item synced. The give-back must leave that stamp alone.
+  const db = withClaims(makeDb({
+    plaid_items: [{ id: "item-1", user_id: "u-poppy", status: "ok", last_synced_at: null, env: "production" }],
+    plaid_accounts: [{ id: "acc-row", item_id: "item-1", plaid_account_id: "acc", is_checking: true }],
+    budget_entities: [checkingEntity],
+  }));
+  const SAVE_STAMP = "2026-11-16T02:20:38.000Z";
+  const plaid = makePlaid({});
+  const base = plaid.fn;
+  plaid.fn = async (c, endpoint, body) => {
+    if (endpoint === "/accounts/balance/get") {
+      db.tables.plaid_items[0].last_synced_at = SAVE_STAMP;   // the save lands while this pull waits
+      return { error: { code: "INTERNAL_SERVER_ERROR" } };
+    }
+    return base(c, endpoint, body);
+  };
+  await pull("open", { db, plaid });
+  eq("the save's stamp survives the failed pull giving its claim back", db.tables.plaid_items[0].last_synced_at, SAVE_STAMP);
+  eq("...because the give-back names the claim's own time", db.rpcs.includes("plaid_release_pull_at"), true);
+
+  // Nothing wrote in between: the give-back still puts the clock back.
+  const db2 = withClaims(makeDb({
+    plaid_items: [{ id: "item-1", user_id: "u-poppy", status: "ok", last_synced_at: null, env: "production" }],
+    plaid_accounts: [{ id: "acc-row", item_id: "item-1", plaid_account_id: "acc", is_checking: true }],
+  }));
+  const failing = makePlaid({});
+  failing.fn = async () => ({ error: { code: "INTERNAL_SERVER_ERROR" } });
+  await pull("open", { db: db2, plaid: failing });
+  eq("...and a failed pull with nothing newer still leaves the Item unsynced", db2.tables.plaid_items[0].last_synced_at, null);
+
+  // A database without §9a: the old pair, exactly as before.
+  const db3 = withClaims(makeDb({
+    plaid_items: [{ id: "item-1", user_id: "u-poppy", status: "ok", last_synced_at: null, env: "production" }],
+    plaid_accounts: [{ id: "acc-row", item_id: "item-1", plaid_account_id: "acc", is_checking: true }],
+    budget_entities: [checkingEntity],
+  }), { atFns: false });
+  const ok3 = makePlaid({});
+  const r3 = await pull("open", { db: db3, plaid: ok3 });
+  eq("before plaid.sql §9a is run, pulls still work through the old claim", [r3.synced, db3.rpcs.includes("plaid_claim_pull")], [true, true]);
+}
+
+console.log("\n== 2. no pull while a save for that bank is still in progress ==");
+{
+  // The exchange: while its balance call is out, there is no Item row
+  // for anything to pull against.
+  const db = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))], budget_entities: [checkingEntity] });
+  const plaid = makePlaid({ "lt-1": { link_sessions: [withItem("x", "pt-usaa")] } });
+  const base = plaid.fn;
+  let itemsDuringRead = null;
+  plaid.fn = async (c, endpoint, body) => {
+    if (endpoint === "/accounts/balance/get") itemsDuringRead = (db.tables.plaid_items ?? []).length;
+    return base(c, endpoint, body);
+  };
+  const r = await call({ recover: true, timeZone: "America/Indiana/Indianapolis" }, { db, plaid });
+  eq("the save reads the balance BEFORE the Item row exists", itemsDuringRead, 0);
+  eq("...then the Item is born synced, with the snapshot written", [r.body.synced, typeof db.tables.plaid_items[0].last_synced_at, db.writes.length], [true, "string", 1]);
+  eq("...and the account row carries the numbers just read", db.tables.plaid_accounts[0].last_available, 812.4);
+
+  // The pull-on-open that fired at 02:20:30 on 2026-11-16, now: the
+  // Item is fresh, so it makes no call.
+  const after = withClaims(db);
+  const p2 = makePlaid({});
+  const o = await pull("open", { db: after, plaid: p2 });
+  eq("the open pull right after finds it fresh and makes no Plaid call", [o.reason, balanceCalls(p2)], ["fresh", 0]);
+
+  // A webhook save has no zone: the Item is born unsynced, so the
+  // client's pull (which has one) brings the first balance.
+  const wdb = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))], budget_entities: [checkingEntity] });
+  await call({ webhook_type: "LINK", webhook_code: "SESSION_FINISHED", link_token: "lt-1" }, { db: wdb, plaid: makePlaid({ "lt-1": { link_sessions: [withItem("x", "pt-w")] } }) });
+  eq("a webhook save leaves the Item unsynced, for the client's pull", wdb.tables.plaid_items[0].last_synced_at ?? null, null);
+  const wp = makePlaid({});
+  const wpull = await pull("open", { db: withClaims(wdb), plaid: wp });
+  eq("...which then makes exactly one call", [wpull.synced, balanceCalls(wp)], [true, 1]);
+
+  // If the snapshot can't be written, the Item must not look synced.
+  const nodb = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });   // no checking account of ours
+  await call({ recover: true, timeZone: "America/New_York" }, { db: nodb, plaid: makePlaid({ "lt-1": { link_sessions: [withItem("x", "pt-n")] } }) });
+  eq("a first balance that could not be written leaves the Item unsynced", nodb.tables.plaid_items[0].last_synced_at, null);
+
+  // RECOVER DURING A SAVE says finishing, not "nothing here".
+  const saving = makeDb({
+    plaid_link_sessions: [session("lt-1", ago(1), ago(0))],   // claimed by the webhook
+    plaid_api_log: [{ user_id: "u-poppy", endpoint: "/item/public_token/exchange", ok: true, called_at: new Date(Date.now() - 5_000).toISOString() }],
+  });
+  const rs = await call({ recover: true }, { db: saving, plaid: makePlaid({}) });
+  const left = (Date.parse(rs.body.pending_until) - Date.now()) / 1000;
+  eq("recover while the webhook's save is running: finishing, for up to 2 minutes",
+    [rs.body.code, left > 100 && left <= 120], ["ALREADY_EXCHANGING", true]);
+  saving.tables.plaid_items = [{ id: "i", user_id: "u-poppy" }];
+  eq("...and once the Item is stored, nothing is finishing", (await call({ recover: true }, { db: saving, plaid: makePlaid({}) })).body.code, "NO_OPEN_SESSION");
+  const stale = makeDb({
+    plaid_link_sessions: [],
+    plaid_api_log: [{ user_id: "u-poppy", endpoint: "/item/public_token/exchange", ok: true, called_at: ago(5) }],
+  });
+  eq("an exchange five minutes ago with no Item is not a save in progress",
+    (await call({ recover: true }, { db: stale, plaid: makePlaid({}) })).body.code, "NO_OPEN_SESSION");
+}
+
+console.log("\n== 3. the account is checked before a pull is spent ==");
+{
+  const db = withClaims(makeDb({
+    plaid_items: [{ id: "item-1", user_id: "u-poppy", status: "ok", last_synced_at: null, env: "production" }],
+    plaid_accounts: [],
+  }));
+  const plaid = makePlaid({});
+  const r = await pull("open", { db, plaid });
+  eq("an Item with no account row: no Plaid call", [r.reason, balanceCalls(plaid)], ["no_account", 0]);
+  eq("...and nothing claimed, so the next pull is free to go", [db.tables.plaid_items[0].last_synced_at, db.rpcs.filter((f) => f.startsWith("plaid_claim")).length], [null, 0]);
+  const rf = await pull("refresh", { db, plaid });
+  eq("...a refresh too", [rf.reason, balanceCalls(plaid)], ["no_account", 0]);
+}
+
+console.log("\n== 4. webhooks for sessions already closed are logged ==");
+{
+  const inbound = (db) => (db.tables.plaid_api_log ?? []).filter((r) => r.trigger === "webhook-in").map((r) => [r.endpoint, r.error_code]);
+  const closed = makeDb({ plaid_link_sessions: [session("lt-1", ago(3), ago(1))] });
+  const c = await call({ webhook_type: "LINK", webhook_code: "SESSION_FINISHED", link_token: "lt-1" }, { db: closed, plaid: makePlaid({}) });
+  eq("a SESSION_FINISHED after recover saved the bank leaves a row", inbound(closed), [["(inbound) LINK/SESSION_FINISHED", "session_closed"]]);
+  eq("...still a 200, and nothing else done", [c.status, (closed.tables.plaid_items ?? []).length], [200, 0]);
+  const unknown = makeDb({ plaid_link_sessions: [] });
+  await call({ webhook_type: "LINK", webhook_code: "ITEM_ADD_RESULT", link_token: "lt-x" }, { db: unknown, plaid: makePlaid({}) });
+  eq("one for a token we never minted", inbound(unknown), [["(inbound) LINK/ITEM_ADD_RESULT", "session_unknown"]]);
+  const expired = makeDb({ plaid_link_sessions: [{ ...session("lt-1", ago(300)), expires_at: ago(60) }] });
+  await call({ webhook_type: "LINK", webhook_code: "SESSION_FINISHED", link_token: "lt-1" }, { db: expired, plaid: makePlaid({}) });
+  eq("one for an expired session", inbound(expired), [["(inbound) LINK/SESSION_FINISHED", "session_expired"]]);
+  const none = makeDb({});
+  await call({ webhook_type: "LINK", webhook_code: "SESSION_FINISHED" }, { db: none, plaid: makePlaid({}) });
+  eq("one with no link_token at all", inbound(none), [["(inbound) LINK/SESSION_FINISHED", "no_link_token"]]);
+}
+
+console.log("\n== 5. recover never closes a session while Link may still be open ==");
+{
+  // 02:18:47 on 2026-11-16: recover ran as iOS's sign-in prompt went
+  // away, a minute into Link. An OAuth bank's first link session can
+  // record an exit while the next is still running.
+  const db = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });
+  const answers = { "lt-1": { link_sessions: [exited("02:18:50"), empty("02:19:30")] } };
+  const r = await call({ recover: true }, { db, plaid: makePlaid(answers) });
+  eq("an exit a minute into Link does not close the session", [r.body.code, usedOf(db, "lt-1")], ["NO_ITEM_IN_SESSION", false]);
+  eq("...nor does it say finishing (an exit is not evidence)", "pending_until" in r.body, false);
+  answers["lt-1"] = { link_sessions: [exited("02:18:50"), withItem("02:20:20", "pt-usaa")] };
+  const r2 = await call({ recover: true }, { db, plaid: makePlaid(answers) });
+  eq("...so when the bank is added, recover still finds it", r2.body.ok, true);
+
+  const late = makeDb({ plaid_link_sessions: [session("lt-1", ago(59))] });
+  await call({ recover: true }, { db: late, plaid: makePlaid({ "lt-1": { link_sessions: [exited("x")] } }) });
+  eq("at 59 minutes it is still left open", usedOf(late, "lt-1"), false);
+  const old = makeDb({ plaid_link_sessions: [session("lt-1", ago(61))] });
+  await call({ recover: true }, { db: old, plaid: makePlaid({ "lt-1": { link_sessions: [exited("x")] } }) });
+  eq("past an hour an exited session is closed", usedOf(old, "lt-1"), true);
+  const sf = makeDb({ plaid_link_sessions: [session("lt-1", ago(1))] });
+  await call({ webhook_type: "LINK", webhook_code: "SESSION_FINISHED", link_token: "lt-1" }, { db: sf, plaid: makePlaid({ "lt-1": { link_sessions: [exited("x")] } }) });
+  eq("SESSION_FINISHED (Plaid: the flow is over) still closes it at once", usedOf(sf, "lt-1"), true);
+}
+
+console.log("\n== 6. Hosted Link redirects back into the app ==");
+{
+  const minted = async (body) => {
+    const db = makeDb({ plaid_link_sessions: [] });
+    let sent = null;
+    globalThis.__db = db; globalThis.__caller = "u-poppy";
+    globalThis.__plaid = async (_c, endpoint, b) => {
+      if (endpoint === "/link/token/create") { sent = b; return { data: { link_token: "lt-new", hosted_link_url: "https://hosted.plaid.com/x", expiration: FUTURE } }; }
+      return { data: {} };
+    };
+    await linkTokenHandler(new Request("https://x/plaid-link-token", { method: "POST", body: JSON.stringify(body) }));
+    return sent;
+  };
+  eq("the phone asking for it gets completion_redirect_uri",
+    (await minted({ hosted: true, return_to_app: true })).hosted_link, { completion_redirect_uri: "keybudget://plaid-done" });
+  eq("an app without the update gets Hosted Link exactly as before", (await minted({ hosted: true })).hosted_link, {});
+  eq("the web gets no Hosted Link at all", (await minted({})).hosted_link, undefined);
+  eq("...and never is_mobile_app (it needs a registered https redirect_uri)",
+    "is_mobile_app" in (await minted({ hosted: true, return_to_app: true })).hosted_link, false);
 }
 
 console.log(`\n${failures ? `FAILED ${failures} of ${checks}` : `ALL PASS (${checks} checks)`}`);

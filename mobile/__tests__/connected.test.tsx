@@ -370,6 +370,30 @@ describe("Settings, while a connection is still finishing", () => {
     expect(screen.queryByText(CONNECT)).toBeNull();
   });
 
+  // 2026-11-17: with the webhook saving the bank, recover answers
+  // NO_OPEN_SESSION. "Finishing" used to end there on Connect, over a
+  // bank that was saved, until something else happened to re-read it.
+  it("when the webhook saved it, the next ask shows the bank, not Connect", async () => {
+    jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate", "queueMicrotask", "Date", "performance", "hrtime",
+      "setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame"] });
+    try {
+      mockServer.noItem = true;
+      mockServer.recover = { ok: false, code: "ALREADY_EXCHANGING", pending_until: soon() };
+      await mountSettings();
+      await screen.findByText(FINISHING);
+      // The webhook's save finished between two asks.
+      mockServer.recover = { ok: false, code: "NO_OPEN_SESSION" };
+      mockServer.noItem = false;
+      mockServer.next = "fresh";
+      await act(async () => { jest.advanceTimersByTime(20_000); });
+      expect(await screen.findByText("First Platypus ••0000")).toBeTruthy();
+      expect(screen.queryByText(CONNECT)).toBeNull();
+      expect(screen.queryByText(FINISHING)).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("keeps asking every 20 seconds while it is open", async () => {
     // Only the interval is faked, from before it is set up; everything
     // the render and findBy wait on stays real.
@@ -412,6 +436,19 @@ describe("Connect, when Plaid does not open (2026-11-03, sandbox)", () => {
     fireEvent.press(cont);
     return () => sheet?.props.onDismiss();
   }
+
+  // 2026-11-17: Hosted Link sends the phone back when Link is over.
+  it("asks Plaid to redirect back into the app, and lets the browser close on it", async () => {
+    mockServer.noItem = true;
+    const { supabase } = require("../lib/supabase");
+    const WebBrowser = require("expo-web-browser");
+    await mountSettings();
+    await tapConnect();
+    await waitFor(() => expect(mockBrowser.opened.length).toBe(1));
+    const mint = supabase.functions.invoke.mock.calls.filter((c: unknown[]) => c[0] === "plaid-link-token").at(-1);
+    expect(mint[1].body).toEqual({ hosted: true, update: false, return_to_app: true });
+    expect(WebBrowser.openAuthSessionAsync.mock.calls.at(-1)).toEqual([mockBrowser.opened[0], "keybudget://plaid-done"]);
+  });
 
   it("says Opening Plaid…, not Opening your bank…", async () => {
     mockServer.noItem = true;

@@ -367,3 +367,11 @@ export function localDateIn(timeZone: string | null | undefined, now: Date = new
   }
   return now.toISOString().slice(0, 10);
 }
+
+/**
+ * Hosted Link's completion redirect for the phone (2026-11-17). See
+ * PLAID_COMPLETION_URI in src/shared/connect.ts, which must match it.
+ * A constant, never taken from the request: the client only asks for
+ * it (`return_to_app`), so nobody can point Plaid's redirect elsewhere.
+ */
+export const PLAID_COMPLETION_URI = "keybudget://plaid-done";

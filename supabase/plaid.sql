@@ -888,6 +888,42 @@ revoke all on function plaid_claim_pull(uuid, integer)        from public, anon,
 revoke all on function plaid_release_pull(uuid, timestamptz)  from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
+-- 9a. GIVING BACK A CLAIM CAN'T WIPE A NEWER SYNC (2026-11-17).
+--
+-- 2026-11-16, production, a first USAA connection. A pull-on-open
+-- claimed the Item while the connection's own save was still reading
+-- the balance, found no account row yet, and gave its claim back AFTER
+-- the save had stamped `last_synced_at`. plaid_release_pull put the
+-- clock back to null over the save's stamp, so the next open pull made
+-- a third billed call. A claim may only undo ITSELF: these two return
+-- and check the exact time the claim wrote, and the give-back does
+-- nothing if anything has written since. The old pair stays, so a
+-- function deployed before or after this runs keeps working.
+create or replace function plaid_claim_pull_at(p_item_id uuid, p_min_seconds integer)
+returns table (claimed boolean, previous timestamptz, claimed_at timestamptz) as $$
+begin
+  return query
+  with before as (select last_synced_at from plaid_items where id = p_item_id)
+  update plaid_items i
+     set last_synced_at = clock_timestamp(), updated_at = now()
+    from before
+   where i.id = p_item_id
+     and (i.last_synced_at is null
+          or i.last_synced_at < now() - make_interval(secs => p_min_seconds))
+  returning true, before.last_synced_at, i.last_synced_at;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+create or replace function plaid_release_pull_at(p_item_id uuid, p_claimed_at timestamptz, p_previous timestamptz)
+returns void as $$
+  update plaid_items set last_synced_at = p_previous
+   where id = p_item_id and last_synced_at = p_claimed_at;
+$$ language sql security definer set search_path = public;
+
+revoke all on function plaid_claim_pull_at(uuid, integer)                    from public, anon, authenticated;
+revoke all on function plaid_release_pull_at(uuid, timestamptz, timestamptz) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
 -- DRAINING THE REMOVAL QUEUE. The half that was missing on the Apple
 -- side for a month, written down here before it can be missing twice.
 --

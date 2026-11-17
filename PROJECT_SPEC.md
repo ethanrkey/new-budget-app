@@ -4045,6 +4045,105 @@ shows Reload only, the store refuses a write until Reload, and after
 Reload the box shows the server's value and saving works again. The
 first four fail on the code before the fix.
 
+### First connections: why they save through recover, and six fixes (2026-11-17, production)
+
+**What was found (2026-11-16, report only).** The last two real
+connections (Capital One on 11/3, USAA on 11/15 local / 02:20 UTC 11/16)
+both saved through `recover`. From `plaid_api_log` and
+`plaid_link_sessions`:
+- **iOS had no "app catches success" path at all.** The phone opened
+  Hosted Link with `openAuthSessionAsync(url)` and no completion URI,
+  so the browser never closed itself; the user closed it, the app learned
+  nothing from that, and recover ran. Recover was in practice the normal
+  iOS path.
+- **Plaid has never sent production a SESSION_FINISHED or
+  ITEM_ADD_RESULT.** Every inbound webhook ever logged: production got
+  `LINK/EVENTS` only (11/3 22:22:09, 11/16 02:20:17), which shows
+  delivery works; sandbox on 11/6 got a verified SESSION_FINISHED that
+  saved the Item. USAA's session has `item_reported_at` null. Whether
+  one arrived AFTER recover had closed the session can't be known: the
+  webhook answered "unknown session" before logging anything.
+- **Three billed `/accounts/balance/get` in 30 seconds**, where one was
+  meant: (1) 02:20:37 recover, the save's own read (12.5 s for USAA);
+  (2) 02:20:42 open, started about 02:20:30, because the Item row had
+  been written at 02:20:25, before that read, so the app's pull-on-open
+  saw a bank that had "never synced", reached Plaid, found no account
+  row (written 02:20:37) and threw the answer away; (3) 02:21:06 open,
+  because (2) then gave its claim back with `plaid_release_pull`, which
+  set `last_synced_at` back to null over the stamp the save had just
+  written.
+- Recover also ran at 02:18:47 and 02:19:28, mid-Link (iOS's sign-in
+  prompt and the OAuth trip to the bank both bring the app to the
+  front). Recover then closed any session whose Plaid answer showed an
+  exit and no Item, which in an OAuth flow (several link sessions under
+  one token) can be the session about to produce the Item.
+
+**The six fixes, on the owner's go, in his order:**
+1. **A give-back can't wipe a newer sync.** `plaid.sql` §9a adds
+   `plaid_claim_pull_at` (returns the exact time it wrote) and
+   `plaid_release_pull_at` (puts the clock back only `where
+   last_synced_at = p_claimed_at`). plaid-balance uses them and falls
+   back to the old pair on a database without §9a.
+2. **No pull while a save is in progress.** plaid-exchange reads the
+   balance BEFORE writing the Item, so the Item appears only with its
+   balance, already synced when the snapshot will be written (the
+   caller's zone known); otherwise unsynced, for the client's pull. A
+   snapshot that fails to write puts the Item back to unsynced (only if
+   nothing wrote since). Because the claimed session is closed and the
+   Item not yet written during those seconds, recover now reports a save
+   in progress as `ALREADY_EXCHANGING` with `pending_until` (evidence: a
+   successful `/item/public_token/exchange` for the user in the last 2
+   minutes and no Item), so Settings says "Finishing…" rather than
+   "Connect your bank". And Settings' `ask()` now re-reads the
+   connection whenever recover is no longer finishing, so a bank the
+   webhook saved (recover: NO_OPEN_SESSION) shows instead of Connect.
+3. **The account is checked before a pull is spent.** plaid-balance
+   answers `no_account` before claiming or calling Plaid.
+4. **Webhooks for closed sessions are logged.** `(inbound) <type>/<code>`
+   with `session_closed`, `session_expired`, `session_unknown` or
+   `no_link_token`, so a late SESSION_FINISHED is visible from now on.
+5. **Recover never closes a session while Link may still be open.** An
+   exited, Item-less session is left open (not counted as finishing)
+   until it is over an hour old (Hosted Link's URL lives 30 minutes by
+   default, plus a session started late in that window). SESSION_FINISHED,
+   Plaid saying the whole flow is over, still closes it at once.
+6. **Plaid redirects back into the app.** Plaid's Hosted Link docs
+   (plaid.com/docs/link/hosted-link, /docs/api/link#linktokencreate),
+   read 2026-11-17: `completion_redirect_uri` is where Hosted Link
+   redirects "upon completion of the Link flow"; it fires on success AND
+   exit ("you cannot assume that receiving this URI means a successful
+   connection"); a custom scheme is fine ("any value you'd like, as long
+   as it isn't a reserved one"); and "unlike the `redirect_uri` value,
+   this URI does not need to be registered with the Plaid Dashboard".
+   The docs recommend ASWebAuthenticationSession on iOS, which is what
+   `openAuthSessionAsync` uses. `is_mobile_app` was NOT set: it requires
+   an https `redirect_uri` registered in the Dashboard (a Universal Link)
+   and the app has none. So plaid-link-token adds
+   `completion_redirect_uri: "keybudget://plaid-done"` when the phone
+   sends `return_to_app: true`, and the phone opens the browser with that
+   URI as its callback, so the browser closes itself when Link is done.
+   An app without the OTA sends no flag and gets Hosted Link as before,
+   so the function and the OTA can ship in either order. What the docs
+   do NOT say: whether this makes SESSION_FINISHED arrive sooner, or at
+   all, in production; nothing says the redirect changes webhook timing.
+   Recover stays the backstop. Not seen on a device or against
+   production Plaid yet.
+
+**Tests.** `tests/plaid-exchange.test.mjs` runs the real plaid-exchange,
+plaid-link-token and now plaid-balance handlers against a fake database
+and a fake Plaid, one section per fix (16 of the new checks fail on the
+old functions). `mobile/__tests__/connected.test.tsx`: the webhook-saved
+bank shows after NO_OPEN_SESSION, and the browser opens with the
+completion URI after a mint carrying `return_to_app` (both fail on the
+old phone code). `tests/edge-functions.test.mjs`: the server's and the
+app's completion URI match and use the app's scheme; §9a is in
+plaid.sql and service-role only.
+
+**To make it live:** run plaid.sql §9a in the SQL editor (just that
+block; the functions fall back without it, so the order is not
+critical), then deploy plaid-exchange (`--no-verify-jwt`), plaid-balance
+and plaid-link-token. OTA 35 carries the phone half.
+
 ### Capital One, lost after Plaid and rescued with minutes left (2026-11-03, production)
 
 **What happened.** A tester (iOS build 13, OTA 23) connected Capital

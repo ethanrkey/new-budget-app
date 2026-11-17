@@ -361,3 +361,21 @@ export const LINK_OPEN_TIMEOUT_MS = 10_000;
 
 /** How often Settings asks again while a connection is finishing. */
 export const FINISHING_POLL_MS = 20_000;
+
+/**
+ * WHERE HOSTED LINK SENDS THE PHONE WHEN IT IS DONE (2026-11-17).
+ *
+ * Plaid's Hosted Link redirects here at the end of the flow, on success
+ * AND on exit ("you cannot assume that receiving this URI means a
+ * successful connection"), so it says only that Link is over: the
+ * result still comes from the server. iOS's in-app browser
+ * (ASWebAuthenticationSession) watches for this scheme and closes
+ * itself when it arrives, so a finished connection comes straight back
+ * to the app instead of waiting for the user to tap Cancel. Per Plaid's
+ * docs a completion URI may be any non-reserved custom scheme and,
+ * unlike an OAuth redirect_uri, does NOT need registering in the Plaid
+ * Dashboard. `keybudget` is the app's scheme (app.json), in every build
+ * since 13. Must match PLAID_COMPLETION_URI in
+ * supabase/functions/_shared/plaid.ts; a test checks that.
+ */
+export const PLAID_COMPLETION_URI = "keybudget://plaid-done";

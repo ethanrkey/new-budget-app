@@ -15,7 +15,7 @@ import {
 } from "../../src/content/connect.ts";
 import type { Connection } from "../../src/shared/connect.ts";
 import {
-  FINISHING_POLL_MS, LINK_OPEN_TIMEOUT_MS, canReconnect, canSeeToggle, isFinishing, shouldRestoreToggle,
+  FINISHING_POLL_MS, LINK_OPEN_TIMEOUT_MS, canReconnect, canSeeToggle, PLAID_COMPLETION_URI, isFinishing, shouldRestoreToggle,
 } from "../../src/shared/connect.ts";
 import {
   disconnect as apiDisconnect, pendingUntilNow, pullBalance, readConnection, recoverLink, startLink,
@@ -88,8 +88,14 @@ export default function Connected() {
   // the same way openLink finishes one.
   const ask = useCallback(async () => {
     const found = await recoverLink(supabase as never);
-    if (!found.ok) { setPendingUntil(found.pendingUntil); return null; }
-    setPendingUntil(null);
+    setPendingUntil(found.ok ? null : found.pendingUntil);
+    // Still finishing: nothing to read yet, ask again on the next tick.
+    if (!found.ok && found.pendingUntil) return null;
+    // NOT FINISHING ANY MORE IS ALSO WHEN TO LOOK (2026-11-17). When the
+    // webhook saved the bank, recover finds nothing open and answers
+    // NO_OPEN_SESSION; this used to stop there, so "Finishing your
+    // connection…" ended on "Connect your bank" over a saved bank until
+    // something else re-read it. One select on our own table.
     let row = await refreshConnection();
     if (row) {
       // Fresh already (the exchange kept the balance it read), so this
@@ -299,7 +305,12 @@ export default function Connected() {
     // The browser. A throw (iOS refused to start it) is "didn't open".
     browserUp = true;
     let opened = true;
-    try { await WebBrowser.openAuthSessionAsync(started.hostedUrl); } catch { opened = false; }
+    // WITH THE COMPLETION URI (2026-11-17): Plaid redirects to it when
+    // Link is over, success or exit, and the browser closes itself on
+    // it, so the user is back here the moment the bank is added rather
+    // than when they think to tap Cancel. Either way, what happened is
+    // asked of the server below; the redirect only says Link is done.
+    try { await WebBrowser.openAuthSessionAsync(started.hostedUrl, PLAID_COMPLETION_URI); } catch { opened = false; }
     done();
     if (stale()) return;
     if (!opened) {

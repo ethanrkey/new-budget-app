@@ -26,7 +26,9 @@ import { ALLOWED_ORIGINS, corsHeaders, preflight } from "../supabase/functions/_
 import {
   MAX_MANUAL_REFRESHES_PER_DAY, PLAID_ENDPOINTS, PLAID_SLOTS_RESERVED, PLAID_TRIAL_ITEMS,
   PRODUCTS, RECONNECT_COOLDOWN_DAYS, betaIsFull, cooldownUntil, localDateIn, nextPullInSeconds,
+  PLAID_COMPLETION_URI as SERVER_COMPLETION_URI,
 } from "../supabase/functions/_shared/plaid.ts";
+import { PLAID_COMPLETION_URI as APP_COMPLETION_URI } from "../src/shared/connect.ts";
 import {
   constantTimeEquals, sha256Hex, verifyPlaidWebhook,
 } from "../supabase/functions/_shared/webhookVerify.ts";
@@ -495,7 +497,7 @@ console.log("\n== a webhook is a backup, not the only way home ==");
   const chrome = readFileSync(new URL("../mobile/components/Chrome.tsx", import.meta.url), "utf8");
   const web = readFileSync(new URL("../src/components/ConnectedAccount.jsx", import.meta.url), "utf8");
   is("the phone asks the moment the browser closes",
-    connected.slice(connected.indexOf("openAuthSessionAsync(started.hostedUrl)")).includes("recoverLink("));
+    connected.slice(connected.indexOf("openAuthSessionAsync(started.hostedUrl")).includes("recoverLink("));
   // Through `ask` since 2026-11-03, which is recover plus "is it still
   // finishing?".
   is("...and again on foreground when it has no bank",
@@ -633,6 +635,23 @@ console.log("\n== how long until the next pull, by the server's clock ==");
   eq("rounded UP, so a client never asks a second early", nextPullInSeconds("2026-10-30T07:59:59.500Z", t), 12 * 3600);
   const bal = readFileSync(new URL("../supabase/functions/plaid-balance/index.ts", import.meta.url), "utf8");
   eq("plaid-balance sends it on the fresh answer, the cap and a pull", bal.split("next_pull_in_seconds").length - 1, 3);
+}
+
+// 2026-11-17: Hosted Link's completion redirect. The server tells Plaid
+// where to send the phone, and the phone's browser closes only on that
+// exact URI, so the two must never drift. And it is the app's own
+// scheme, which every build since 13 registers.
+{
+  eq("the server and the app name the same completion URI", SERVER_COMPLETION_URI, APP_COMPLETION_URI);
+  const app = JSON.parse(readFileSync(new URL("../mobile/app.json", import.meta.url), "utf8"));
+  eq("...on the app's own scheme", SERVER_COMPLETION_URI.split("://")[0], app.expo.scheme);
+  const sql = readFileSync(new URL("../supabase/plaid.sql", import.meta.url), "utf8");
+  is("plaid.sql defines the claim that knows its time", /create or replace function plaid_claim_pull_at\(/.test(sql));
+  is("...and a give-back that only undoes its own claim",
+    /function plaid_release_pull_at[\s\S]*?and last_synced_at = p_claimed_at/.test(sql));
+  is("...both service-role only",
+    sql.includes("revoke all on function plaid_claim_pull_at(uuid, integer)")
+      && sql.includes("revoke all on function plaid_release_pull_at(uuid, timestamptz, timestamptz)"));
 }
 
 console.log(failures === 0 ? `\nALL PASS (${checks} checks)` : `\n${failures} FAILURE(S) of ${checks}`);

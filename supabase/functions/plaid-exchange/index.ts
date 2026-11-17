@@ -67,6 +67,42 @@ const keyCache = new Map<string, PlaidJwk>();
  *  lives about thirty minutes, so past that there is nothing left to
  *  finish. */
 const PENDING_MINUTES = 30;
+/** How long after its successful /item/public_token/exchange a save
+ *  counts as still in progress, for a user with no Item row yet. The
+ *  balance read alone took 12.5 seconds on 2026-11-16. */
+const SAVING_MINUTES = 2;
+/** How long Link may still be open in a session's browser. Hosted Link's
+ *  URL lives 30 minutes by default (Plaid's url_lifetime_seconds), and
+ *  a session opened at minute 29 can run on; an hour covers both. Until
+ *  then recover never closes a session, whatever Plaid says about it so
+ *  far: see the recover loop. */
+const LINK_MAY_BE_OPEN_MINUTES = 60;
+
+/**
+ * A SAVE STILL IN PROGRESS, for recover to report as finishing.
+ *
+ * The Item row is written only once the balance has been read (see the
+ * shared path below), so for those seconds the claimed session is no
+ * longer open and there is no Item either. Without this, recover would
+ * answer NO_OPEN_SESSION and Settings would offer "Connect your bank"
+ * over a connection being saved: the invitation to a second Link, on a
+ * plan with ten Items for life. The evidence is our own call log: a
+ * successful exchange for this user in the last SAVING_MINUTES.
+ */
+// deno-lint-ignore no-explicit-any
+async function saveInProgress(admin: any, userId: string): Promise<string | null> {
+  try {
+    const { data: item } = await admin.from("plaid_items").select("id").eq("user_id", userId).maybeSingle();
+    if (item) return null;
+    const since = new Date(Date.now() - SAVING_MINUTES * 60_000).toISOString();
+    const { data: calls } = await admin.from("plaid_api_log").select("called_at")
+      .eq("user_id", userId).eq("endpoint", PLAID_ENDPOINTS.itemPublicTokenExchange).eq("ok", true)
+      .gt("called_at", since).order("called_at", { ascending: false }).limit(1);
+    const at = Date.parse(String(calls?.[0]?.called_at ?? ""));
+    return Number.isFinite(at) ? new Date(at + SAVING_MINUTES * 60_000).toISOString() : null;
+  } catch { return null; }
+}
+
 /** `pending_until` for a session with evidence created at `createdMs`, if still in the future. */
 function pendingFrom(createdMs: number): { pending_until?: string } {
   const until = Number.isFinite(createdMs) && createdMs > 0 ? createdMs + PENDING_MINUTES * 60_000 : 0;
@@ -234,19 +270,32 @@ Deno.serve(async (req) => {
     // the wrong credentials would fail an honest webhook. The one
     // thing it gives away is whether a link_token exists, to someone
     // who already guessed 52 random characters.
+    const code = String(payload.webhook_code);
+    const type = String(payload.webhook_type ?? "");
     const linkToken = String(payload.link_token ?? "");
-    if (!linkToken) return json(200, { ignored: "no link_token" });
+    if (!linkToken) {
+      await noteInbound(admin, code, "no_link_token", type);
+      return json(200, { ignored: "no link_token" });
+    }
     const { data: session } = await admin
       .from("plaid_link_sessions")
-      .select("user_id, env")
+      .select("user_id, env, used_at, expires_at")
       .eq("link_token", linkToken)
-      .is("used_at", null)
-      .gt("expires_at", new Date().toISOString())
       .maybeSingle();
-    // A link_token we did not mint, or one already spent. 200, because
-    // a webhook that gets a 4xx is retried, and there is nothing here
-    // worth retrying.
-    if (!session) return json(200, { ignored: "unknown session" });
+    // A link_token we did not mint, one already spent, or one past its
+    // expiry. 200, because a webhook that gets a 4xx is retried, and
+    // there is nothing here worth retrying.
+    //
+    // LOGGED, ALL THREE (2026-11-17). These returned before any record
+    // was written, so a SESSION_FINISHED or ITEM_ADD_RESULT that arrived
+    // after recover had already saved the bank left no trace, and on
+    // 2026-11-16 "did Plaid ever send it?" could not be answered. The
+    // verdict says which; still no body and nothing from the session.
+    if (!session || session.used_at || !(Date.parse(String(session.expires_at)) > Date.now())) {
+      const verdict = !session ? "session_unknown" : session.used_at ? "session_closed" : "session_expired";
+      await noteInbound(admin, code, verdict, type);
+      return json(200, { ignored: verdict === "session_unknown" ? "unknown session" : verdict.replace("_", " ") });
+    }
     userId = session.user_id;
     env = session.env ?? env;
 
@@ -363,7 +412,12 @@ Deno.serve(async (req) => {
       .limit(5);
     // Nothing unfinished is the ordinary answer, not an error: it is
     // what the client sees every time the webhook DID arrive first.
-    if (!opens?.length) return json(200, { ok: false, code: "NO_OPEN_SESSION" });
+    if (!opens?.length) {
+      // ...unless a save is still in progress (fix 2026-11-17, above).
+      const saving = await saveInProgress(admin, userId);
+      if (saving) return json(200, { ok: false, code: "ALREADY_EXCHANGING", pending_until: saving });
+      return json(200, { ok: false, code: "NO_OPEN_SESSION" });
+    }
 
     let found: { link_token: string; env: string | null; created_at: string } | null = null;
     // NO_RESULT: open, but Plaid has nothing for it and never said it
@@ -393,11 +447,26 @@ Deno.serve(async (req) => {
       const token = publicTokenOf(got.data);
       if (token) { publicToken = token; found = open; break; }
       if (hasEvidence(got.data, reported.get(open.link_token))) { evidence(open); lastCode = "ITEM_NOT_READY"; continue; }
-      // The user backed out of this one: close it, so it stops being
-      // asked about. Anything else is "not yet" and stays open.
+      // The user backed out of this one. CLOSED ONLY ONCE LINK CAN'T
+      // STILL BE OPEN (2026-11-17). Recover runs every time the app
+      // comes back to the front, and that happens mid-Link: iOS's
+      // "wants to use plaid.com to sign in" prompt, and an OAuth bank
+      // sending the user to its own app and back, both did it during
+      // the 2026-11-16 USAA connection (recover at 02:18:47 and
+      // 02:19:28, before the bank was added at 02:20). An OAuth flow
+      // is several link sessions under one token, and an exit recorded
+      // in one of them while the next is still running is not the end.
+      // Closing then would put the session that is about to produce the
+      // Item out of everyone's reach. So: left open, not counted as
+      // finishing (an exit is not evidence), and closed by a later
+      // recover once LINK_MAY_BE_OPEN_MINUTES have passed, or by
+      // SESSION_FINISHED, which is Plaid saying the whole flow is over.
       if (exitedWithNoItem(got.data)) {
-        await admin.from("plaid_link_sessions").update({ used_at: new Date().toISOString() })
-          .eq("link_token", open.link_token);
+        const age = Date.now() - Date.parse(String(open.created_at));
+        if (age > LINK_MAY_BE_OPEN_MINUTES * 60_000) {
+          await admin.from("plaid_link_sessions").update({ used_at: new Date().toISOString() })
+            .eq("link_token", open.link_token);
+        }
         lastCode = "NO_ITEM_IN_SESSION";
       }
     }
@@ -414,6 +483,8 @@ Deno.serve(async (req) => {
       // session with no result is an abandoned attempt; it stays open
       // (recover keeps asking about it, in case it lands after all)
       // but it does not hide Connect.
+      const saving = newestEvidence ? null : await saveInProgress(admin, userId);
+      if (saving) return json(200, { ok: false, code: "ALREADY_EXCHANGING", pending_until: saving });
       return json(200, { ok: false, code: lastCode, ...pendingFrom(newestEvidence) });
     }
     env = found.env ?? env;
@@ -496,11 +567,46 @@ Deno.serve(async (req) => {
     if (!("error" in inst)) institutionName = inst.data.institution?.name ?? null;
   }
 
+  // THE BALANCE IS READ BEFORE THE ITEM IS WRITTEN (2026-11-17).
+  //
+  // On 2026-11-16 (USAA, production) the Item row was written first
+  // and this call took 12.5 seconds after it. For those 12 seconds the
+  // app could see a bank that had "never synced", and its pull-on-open
+  // went to Plaid too: a second billed pull, thrown away for want of
+  // an account row, whose give-back then wiped this save's stamp and
+  // caused a third. Reading first means the Item becomes visible only
+  // once there is a balance to go with it, already marked synced when
+  // it will be written as the first snapshot, so no pull can start
+  // while this save is still in progress. The safety net above already
+  // covers a failure anywhere in here.
+  //
+  // Read from the balance endpoint because it is the one we are
+  // allowed to call; /accounts/get would do the same job and is not on
+  // the list.
+  const accounts = await callPlaid<BalanceAccounts>(conf.config, PLAID_ENDPOINTS.accountsBalanceGet,
+    { access_token }, { admin, userId, trigger });
+  const read = "error" in accounts ? [] : (accounts.data.accounts ?? []);
+
+  // THE BALANCE THAT CALL RETURNED IS KEPT (2026-11-03). It is a
+  // billed pull, so it is written here as the first snapshot, through
+  // the same writeBalance as plaid-balance, and the Item is born
+  // synced, so the open pull that follows finds it fresh and makes no
+  // call. ONLY WITH THE CALLER'S TIME ZONE: a snapshot's date is the
+  // forecast's anchor, and a webhook carries no zone (a connection
+  // finished at 8 PM Eastern would be filed under tomorrow in UTC).
+  // Without one the Item is born unsynced and the client's pull, which
+  // has a zone, brings the first balance.
+  const first = read[0];
+  const available = first?.balances?.available ?? first?.balances?.current ?? null;
+  const keep = !!first && available !== null && !!timeZone;
+  const at = new Date().toISOString();
+
   const { data: row, error: insertError } = await admin.from("plaid_items").insert({
     user_id: userId, plaid_item_id: item_id,
     institution_id: institutionId, institution_name: institutionName,
     // STORED WITH THE ITEM, because its token works nowhere else.
     env,
+    ...(keep ? { status: "ok", last_synced_at: at, updated_at: at, time_zone: timeZone } : {}),
   }).select("id").single();
 
   if (insertError || !row) {
@@ -527,48 +633,23 @@ Deno.serve(async (req) => {
     return json(200, { ok: false, code: "STORE_FAILED" });
   }
 
-  // Which account was picked. Read from the balance endpoint because
-  // it is the one we are allowed to call; /accounts/get would do the
-  // same job and is not on the list.
-  const accounts = await callPlaid<BalanceAccounts>(conf.config, PLAID_ENDPOINTS.accountsBalanceGet,
-    { access_token }, { admin, userId, trigger });
-  if (!("error" in accounts)) {
-    const rows = (accounts.data.accounts ?? []).map((a) => ({
-      item_id: row.id, user_id: userId, plaid_account_id: a.account_id,
-      name: a.name ?? null, mask: a.mask ?? null, type: a.type ?? null, subtype: a.subtype ?? null,
-      is_checking: true,
-    }));
-    if (rows.length) await admin.from("plaid_accounts").insert(rows);
+  // Which account was picked, with the numbers just read.
+  const rows = read.map((a) => ({
+    item_id: row.id, user_id: userId, plaid_account_id: a.account_id,
+    name: a.name ?? null, mask: a.mask ?? null, type: a.type ?? null, subtype: a.subtype ?? null,
+    is_checking: true,
+    ...(a === first && keep
+      ? { last_available: available, last_current: first.balances?.current ?? null, last_balance_at: at }
+      : {}),
+  }));
+  if (rows.length) await admin.from("plaid_accounts").insert(rows);
 
-    // THE BALANCE THAT CALL ALREADY RETURNED IS KEPT (2026-11-03).
-    // /accounts/balance/get is a billed pull, and this function threw
-    // its balance away: the client's pull-on-open then made a second
-    // one seconds later (recover 22:34:46, open 22:34:52, for the
-    // Capital One rescue). So it is written here as the first
-    // snapshot, through the same writeBalance as plaid-balance, and
-    // the Item is marked synced, so the open pull that follows finds
-    // it fresh and makes no call.
-    //
-    // ONLY WITH THE CALLER'S TIME ZONE. A snapshot's date is the
-    // forecast's anchor, and a webhook carries no zone: a connection
-    // finished at 8 PM Eastern would be filed under tomorrow in UTC.
-    // Without one, the first balance is left to the client's pull, as
-    // before.
-    const first = (accounts.data.accounts ?? [])[0];
-    const available = first?.balances?.available ?? first?.balances?.current ?? null;
-    if (first && available !== null && timeZone) {
-      const at = new Date().toISOString();
-      await admin.from("plaid_accounts")
-        .update({ last_available: available, last_current: first.balances?.current ?? null, last_balance_at: at })
-        .eq("item_id", row.id).eq("plaid_account_id", first.account_id);
-      const written = await writeBalance(admin, userId!, { plaid_account_id: first.account_id }, available, timeZone, false);
-      if (written.ok) {
-        await admin.from("plaid_items")
-          .update({ status: "ok", last_error_code: null, last_synced_at: at, updated_at: at, time_zone: timeZone })
-          .eq("id", row.id);
-        pulled = true;
-      }
-    }
+  if (keep) {
+    const written = await writeBalance(admin, userId!, { plaid_account_id: first!.account_id }, available!, timeZone, false);
+    if (written.ok) pulled = true;
+    // NOT WRITTEN: the Item must not look synced, or nothing would
+    // pull. Back to unsynced, but only if nothing has written since.
+    else await admin.from("plaid_items").update({ last_synced_at: null }).eq("id", row.id).eq("last_synced_at", at);
   }
 
   // THE SLOT LEDGER, which nothing ever deletes from.

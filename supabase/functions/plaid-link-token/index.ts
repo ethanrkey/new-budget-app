@@ -16,7 +16,7 @@
 //   npx supabase functions deploy plaid-link-token --project-ref <ref>
 // JWT verification stays ON: this mints a credential tied to a user.
 import {
-  PRODUCTS, ACCOUNT_FILTERS, PLAID_ENDPOINTS, betaIsFull, callPlaid, cooldownUntil,
+  PRODUCTS, ACCOUNT_FILTERS, PLAID_COMPLETION_URI, PLAID_ENDPOINTS, betaIsFull, callPlaid, cooldownUntil,
   defaultEnv, readConfig,
 } from "../_shared/plaid.ts";
 import { adminClient, callerId, isAllowlisted, responder } from "../_shared/caller.ts";
@@ -42,8 +42,18 @@ Deno.serve(async (req) => {
   const admin = adminClient();
   if (!await isAllowlisted(admin, userId)) return json(403, { error: "not available" });
 
-  let body: { hosted?: boolean; update?: boolean } = {};
+  let body: { hosted?: boolean; update?: boolean; return_to_app?: boolean } = {};
   try { body = await req.json(); } catch { /* an empty body means web */ }
+
+  // HOSTED LINK'S OPTIONS (2026-11-17). `completion_redirect_uri` only
+  // when the phone asks for it, so an app that has not had the update
+  // opening it (openAuthSessionAsync with the same URI) keeps today's
+  // behavior, and the function and the OTA can ship in either order.
+  // NOT `is_mobile_app`: Plaid requires an https, Dashboard-registered
+  // `redirect_uri` (a Universal Link) with it, and the app has none.
+  const hostedLink = body.hosted
+    ? { hosted_link: body.return_to_app ? { completion_redirect_uri: PLAID_COMPLETION_URI } : {} }
+    : {};
 
   const { data: existing } = await admin
     .from("plaid_items").select("id, status, env").eq("user_id", userId).maybeSingle();
@@ -88,7 +98,7 @@ Deno.serve(async (req) => {
       language: "en",
       access_token: accessToken,
       webhook: `${Deno.env.get("SUPABASE_URL")}/functions/v1/plaid-exchange`,
-      ...(body.hosted ? { hosted_link: {} } : {}),
+      ...hostedLink,
     }, { admin, userId, trigger: "reconnect" });
     if ("error" in repaired) return json(200, { ok: false, code: repaired.error.code });
 
@@ -189,7 +199,7 @@ Deno.serve(async (req) => {
     // Where SESSION_FINISHED lands. Required for Hosted Link, harmless
     // for web, and the same URL for both so there is one handler.
     webhook: `${Deno.env.get("SUPABASE_URL")}/functions/v1/plaid-exchange`,
-    ...(body.hosted ? { hosted_link: {} } : {}),
+    ...hostedLink,
   }, { admin, userId, trigger: "connect" });
 
   if ("error" in created) {

@@ -102,6 +102,17 @@ Deno.serve(async (req) => {
     .from("plaid_accounts").select("id, plaid_account_id, last_available")
     .eq("item_id", item.id).eq("is_checking", true).maybeSingle();
 
+  // NO ACCOUNT ROW, NO PULL (2026-11-17). Checked before the claim and
+  // before Plaid, because a pull with nowhere to put the balance is a
+  // billed call thrown away: on 2026-11-16 a pull-on-open reached Plaid
+  // while the connection's save had not stored the account yet, spent
+  // 12 seconds and a call, and answered "no_account". Nothing is
+  // claimed, so the save, or the next pull once it has finished, is
+  // free to go.
+  if (!account && trigger !== "adopt") {
+    return json(200, { connected: true, status: item.status, synced: false, reason: "no_account", last_synced_at: item.last_synced_at });
+  }
+
   // ---- "Use bank balance": no Plaid call, no cost, no cap ----
   if (trigger === "adopt") {
     if (!account || account.last_available == null) {
@@ -148,7 +159,15 @@ Deno.serve(async (req) => {
   const minSeconds = trigger === "refresh" || trigger === "reconnect"
     ? REFRESH_DEBOUNCE_SECONDS
     : BALANCE_STALE_AFTER_HOURS * 3600;
-  const { data: claim } = await admin.rpc("plaid_claim_pull", { p_item_id: item.id, p_min_seconds: minSeconds });
+  // THE CLAIM THAT KNOWS ITS OWN TIME (2026-11-17, plaid.sql §9a), so
+  // giving it back can only undo this claim and never a newer sync.
+  // The old pair is the fallback for a database that has not had §9a
+  // run yet; it behaves exactly as before.
+  const at = await admin.rpc("plaid_claim_pull_at", { p_item_id: item.id, p_min_seconds: minSeconds });
+  const claimedAt = !at.error;
+  const { data: claim } = claimedAt
+    ? at
+    : await admin.rpc("plaid_claim_pull", { p_item_id: item.id, p_min_seconds: minSeconds });
   const got = Array.isArray(claim) ? claim[0] : claim;
   if (!got?.claimed) {
     return json(200, {
@@ -164,7 +183,12 @@ Deno.serve(async (req) => {
   // is not a successful pull has to put the clock back — or a failed
   // pull leaves the Item looking synced.
   const previousSync: string | null = got.previous ?? null;
-  const release = () => admin.rpc("plaid_release_pull", { p_item_id: item.id, p_previous: previousSync });
+  // ONLY IF NOTHING HAS WRITTEN SINCE. On 2026-11-16 a pull gave its
+  // claim back after the connection's save had stamped the Item synced,
+  // and the stamp went back to null: a third billed pull followed.
+  const release = () => claimedAt && got.claimed_at
+    ? admin.rpc("plaid_release_pull_at", { p_item_id: item.id, p_claimed_at: got.claimed_at, p_previous: previousSync })
+    : admin.rpc("plaid_release_pull", { p_item_id: item.id, p_previous: previousSync });
 
   // The one path from ciphertext to plaintext, and it is a function
   // call rather than a select: the token is encrypted at rest and

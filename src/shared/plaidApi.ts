@@ -139,7 +139,12 @@ export async function readConnection(sb: {
 export async function startLink(sb: FunctionCaller, hosted: boolean, update = false): Promise<
   { linkToken: string; hostedUrl: string | null; update: boolean } | { error: string; until?: string }
 > {
-  const { data, error } = await sb.functions.invoke("plaid-link-token", { body: { hosted, update } });
+  // `return_to_app`: Hosted Link redirects to PLAID_COMPLETION_URI when
+  // it is done, and the phone's in-app browser closes on it. Only with
+  // Hosted Link, which only the phone uses.
+  const { data, error } = await sb.functions.invoke("plaid-link-token", {
+    body: hosted ? { hosted, update, return_to_app: true } : { hosted, update },
+  });
   if (error || !data) return { error: "unreachable" };
   const d = data as {
     ok?: boolean; code?: string; link_token?: string; hosted_link_url?: string | null; until?: string;
